@@ -1,13 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getMe } from '../api/authService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
-  const { isAuthenticated, isLoading, hasRole, hasTenantType } = useAuth();
+  const { isAuthenticated, isLoading, hasRole, hasTenantType, logout } = useAuth();
   const location = useLocation();
+  const [isValidating, setIsValidating] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    const validateToken = async () => {
+      if (isAuthenticated) {
+        setIsValidating(true);
+        try {
+          await getMe();
+        } catch (error) {
+          // Token is invalid, logout user
+          logout();
+        } finally {
+          setIsValidating(false);
+        }
+      }
+    };
+
+    validateToken();
+  }, [isAuthenticated, logout]);
+
+  if (isLoading || isValidating) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <LoadingSpinner size={40} fullPage />

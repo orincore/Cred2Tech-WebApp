@@ -52,9 +52,21 @@ const AppRouter = () => (
 
           {/* Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/users" element={<UsersListPage />} />
+            <Route path="/" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER']}>
+                <DashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER']}>
+                <ProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/users" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+                <UsersListPage />
+              </ProtectedRoute>
+            } />
             <Route
               path="/users/create"
               element={
@@ -71,8 +83,16 @@ const AppRouter = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/users/:id" element={<UserDetailPage />} />
-            <Route path="/users/:id/edit" element={<EditUserPage />} />
+            <Route path="/users/:id" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+                <UserDetailPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/users/:id/edit" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+                <EditUserPage />
+              </ProtectedRoute>
+            } />
             <Route
               path="/tenants"
               element={
@@ -81,7 +101,11 @@ const AppRouter = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/hierarchy" element={<HierarchyPage />} />
+            <Route path="/hierarchy" element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+                <HierarchyPage />
+              </ProtectedRoute>
+            } />
 
             {/* Superadmin Dashboards */}
             <Route path="/admin/vendors" element={

@@ -1,266 +1,198 @@
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { Zap, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { getErrorMessage } from '../utils/helpers';
+import { ThemeToggle } from '../components/ThemeToggle';
+import Logo from '../components/Logo';
+import TravelingBorderButton from '../components/TravelingBorderButton';
 
 const LoginPage = () => {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [errors, setErrors] = useState({});
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const { theme, mounted } = useTheme();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [loginState, setLoginState] = useState('idle');
   const [apiError, setApiError] = useState('');
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
-  const validate = () => {
-    const e = {};
-    if (!form.email.trim()) e.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email';
-    if (!form.password) e.password = 'Password is required';
-    else if (form.password.length < 6) e.password = 'Minimum 6 characters';
-    return e;
-  };
-
-  const handleChange = (e) => {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-    if (errors[e.target.name]) setErrors((p) => ({ ...p, [e.target.name]: '' }));
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      setApiError('Email and password are required.');
+      return;
+    }
+    setLoginState('loading');
     setApiError('');
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    setIsLoading(true);
     try {
-      const user = await login(form.email, form.password);
+      const user = await login(email, password);
+      setLoginState('success');
       toast.success(`Welcome back, ${user?.name || 'User'}!`);
-      navigate('/');
+      setTimeout(() => navigate('/'), 900);
     } catch (err) {
-      setApiError(getErrorMessage(err));
-    } finally {
-      setIsLoading(false);
+      setLoginState('error');
+      const msg = getErrorMessage(err);
+      setApiError(msg);
+      toast.error(msg);
+      setTimeout(() => setLoginState('idle'), 1200);
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleLogin();
+  };
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #0F172A 100%)',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Background decoration */}
-      <div style={{
-        position: 'absolute', top: -100, right: -100,
-        width: 400, height: 400, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', bottom: -150, left: -100,
-        width: 500, height: 500, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(79,70,229,0.15) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
 
-      {/* Left branding panel */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-        padding: '60px',
-        maxWidth: 520,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 48 }}>
-          <div style={{
-            width: 42, height: 42, background: 'var(--primary)',
-            borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(79,70,229,0.5)',
-          }}>
-            <Zap size={22} color="white" />
+      {/* Left Sidebar - Hidden on small screens, takes 40% on desktop */}
+      <div className="hidden md:flex flex-col w-2/5 max-w-[480px] bg-indigo-600 dark:bg-indigo-900 relative overflow-hidden shrink-0">
+        <div className="p-10 flex flex-col h-full z-10">
+          <div className="mb-8">
+            <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
           </div>
-          <span style={{ color: 'white', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em' }}>
-            DSA CRM
-          </span>
-        </div>
 
-        <h1 style={{ fontSize: 36, fontWeight: 800, color: 'white', lineHeight: 1.2, marginBottom: 16, letterSpacing: '-0.02em' }}>
-          Internal Operations<br />
-          <span style={{ color: 'var(--primary-light)' }}>Management Platform</span>
-        </h1>
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16, lineHeight: 1.7, maxWidth: 380 }}>
-          A role-based admin platform for managing your supply chain network, DSA hierarchy, and partner ecosystem.
-        </p>
-
-        <div style={{ display: 'flex', gap: 24, marginTop: 48 }}>
-          {['ADMIN', 'DSA', 'EMPLOYEE'].map((role) => (
-            <div key={role} style={{ textAlign: 'center' }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
-                color: 'rgba(255,255,255,0.35)',
-                textTransform: 'uppercase',
-              }}>
-                {role}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right login form */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px',
-      }}>
-        <div style={{
-          background: 'rgba(255,255,255,0.97)',
-          borderRadius: 20,
-          padding: 44,
-          width: '100%',
-          maxWidth: 420,
-          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
-        }}>
-          <div style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>
-              Sign in
+          <div className="mt-12 text-white">
+            <h2 className="text-3xl font-bold leading-tight mb-4">
+              Welcome Back
             </h2>
-            <p style={{ fontSize: 14, color: 'var(--text-tertiary)' }}>
-              Enter your credentials to access the platform
+            <p className="text-indigo-100 text-[15px] leading-relaxed opacity-90">
+              Sign in to manage your fintech pipeline, track applications, and access enterprise-grade analytics seamlessly.
             </p>
           </div>
 
+          <div className="relative mt-auto w-full flex items-center justify-center flex-1">
+            <lottie-player
+              src="/lottie/data_recolored.json"
+              background="transparent"
+              speed="1"
+              loop
+              autoplay
+              style={{ width: '130%', height: '130%', filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.1))', transform: 'scale(1.2)' }}
+              className="relative z-10"
+            />
+          </div>
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-indigo-800/50 dark:from-black/40 via-transparent to-transparent pointer-events-none z-20" />
+      </div>
+
+      {/* Right Content */}
+      <div className="flex-1 flex flex-col relative h-screen overflow-y-auto">
+        {/* Mobile Header */}
+        <div className="flex md:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+          <Logo size="large" />
+          <ThemeToggle />
+        </div>
+
+        {/* Desktop Theme Toggle */}
+        <div className="hidden md:flex absolute top-6 right-6 z-50">
+          <ThemeToggle />
+        </div>
+
+        <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center max-w-xl mx-auto w-full">
+          <div className="mb-10">
+            <h1 className="text-[28px] md:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
+              Sign In
+            </h1>
+            <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] md:text-[15px]">
+              Access your secure Cred2Tech portal
+            </p>
+          </div>
+
+          {/* Error banner */}
           {apiError && (
-            <div className="notice notice-error" style={{ marginBottom: 20 }}>
-              <AlertCircle size={16} style={{ marginTop: 1, flexShrink: 0 }} />
-              <span>{apiError}</span>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+              <span className="material-symbols-outlined text-[15px]">error</span>
+              {apiError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="email">
-                Email address <span className="required">*</span>
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                className={`form-control${errors.email ? ' error-input' : ''}`}
-                value={form.email}
-                onChange={handleChange}
-                placeholder="admin@platform.com"
-                autoFocus
-              />
-              {errors.email && <span className="form-error"><AlertCircle size={12} />{errors.email}</span>}
+          {/* Form Fields */}
+          <div className="space-y-8 mb-8">
+            {/* Email */}
+            <div>
+              <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Email *</label>
+              <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setApiError(''); }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="name@company.com"
+                  className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
+                />
+              </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="password">
-                Password <span className="required">*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  className={`form-control${errors.password ? ' error-input' : ''}`}
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  style={{ paddingRight: 42 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  style={{
-                    position: 'absolute', right: 12, top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            {/* Password */}
+            <div className="relative">
+              <div className="flex justify-between items-end mb-1.5">
+                <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8]">Password *</label>
+                <button className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer" type="button">
+                  Forgot password?
                 </button>
               </div>
-              {errors.password && <span className="form-error"><AlertCircle size={12} />{errors.password}</span>}
+              <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setApiError(''); }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="••••••••"
+                  className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 pr-8 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
+                />
+              </div>
+              <button
+                onClick={() => setShowPwd(p => !p)}
+                type="button"
+                className="absolute right-0 bottom-3 text-[#4a5d73] dark:text-[#94a3b8] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
+              </button>
             </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg"
-              disabled={isLoading}
-              style={{ marginTop: 4, justifyContent: 'center' }}
-            >
-              {isLoading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                  Signing in…
-                </span>
-              ) : 'Sign in'}
-            </button>
-          </form>
-
-          {/* Test credentials hint */}
-          <div style={{
-            marginTop: 24,
-            padding: '14px 16px',
-            background: 'var(--primary-subtle)',
-            borderRadius: 'var(--radius)',
-            border: '1px solid rgba(99,102,241,0.2)',
-          }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-              Demo Credentials
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-              <strong>Admin:</strong> admin@platform.com<br />
-              <strong>DSA:</strong> admin@dsacompany.com<br />
-              <strong>Password:</strong> password123
-            </p>
           </div>
 
-          {/* DSA Self-registration CTA */}
-          <div style={{ marginTop: 20, textAlign: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, whiteSpace: 'nowrap' }}>New to the platform?</span>
-              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            </div>
-            <button
-              type="button"
-              id="register-dsa-btn"
-              onClick={() => navigate('/register-dsa')}
-              style={{
-                width: '100%',
-                padding: '11px 20px',
-                background: 'transparent',
-                border: '1.5px solid rgba(99,102,241,0.5)',
-                borderRadius: 10,
-                color: 'var(--primary)',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                transition: 'all 0.2s',
-              }}
-              onMouseOver={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
-              onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)'; }}
-            >
-              🏢 Register as a New DSA
-            </button>
+          <TravelingBorderButton
+            onClick={handleLogin}
+            disabled={loginState === 'loading'}
+            className="w-full py-3.5 text-[15px] rounded-[10px]"
+          >
+            {loginState === 'loading' ? (
+              <div className="flex justify-center items-center w-full h-full">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              </div>
+            ) : loginState === 'success' ? (
+              <div className="flex items-center justify-center gap-2 w-full h-full">
+                <span className="material-symbols-outlined text-[18px]">check</span>
+                <span>Access Granted</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 w-full h-full">
+                <span>Sign In</span>
+              </div>
+            )}
+          </TravelingBorderButton>
+
+          {/* Trust */}
+          <div className="flex items-center justify-center gap-1.5 mt-8 text-[11px] text-[#4a5d73] dark:text-[#94a3b8]">
+            <span className="material-symbols-outlined text-[13px] text-indigo-600">lock</span>
+            256-bit encryption · Trusted by 10,000+ businesses
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
+            <p className="text-[13px] text-[#4a5d73] dark:text-[#94a3b8]">
+              New to the platform?
+              <button
+                className="text-indigo-600 dark:text-indigo-400 font-bold ml-1 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer bg-transparent border-0"
+                onClick={() => navigate('/register-dsa')}
+              >
+                Register as Partner
+              </button>
+            </p>
           </div>
         </div>
       </div>

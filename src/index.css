@@ -1,12 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ============================================================
    DSA CRM Admin Platform — Global Styles
    Design: Modern B2B SaaS Dashboard
    ============================================================ */
 
+/* Hikasami Font */
+@font-face {
+  font-family: 'Hikasami';
+  src: url('/fonts/Hikasami-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Hikasami';
+  src: url('/fonts/Hikasami-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Hikasami';
+  src: url('/fonts/Hikasami-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Hikasami';
+  src: url('/fonts/Hikasami-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+/* View Transitions for Theme Toggle */
+.wipe-to-dark::view-transition-new(root) {
+  animation: reveal-top-left 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wipe-to-light::view-transition-new(root) {
+  animation: reveal-top-right 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes reveal-top-left {
+  from { clip-path: polygon(0 0, 0 0, 0 0); }
+  to { clip-path: polygon(0 0, 200% 0, 0 200%); }
+}
+
+@keyframes reveal-top-right {
+  from { clip-path: polygon(100% 0, 100% 0, 100% 0); }
+  to { clip-path: polygon(100% 0, 100% 200%, -100% 0); }
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html, body {
+  font-family: 'Hikasami', system-ui, -apple-system, sans-serif;
 }
 
 :root {
