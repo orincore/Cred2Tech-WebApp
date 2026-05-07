@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,10 @@ const LoginPage = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [loginState, setLoginState] = useState('idle');
   const [apiError, setApiError] = useState('');
+
+  useEffect(() => {
+    document.title = 'Cred2Tech | Login';
+  }, []);
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 

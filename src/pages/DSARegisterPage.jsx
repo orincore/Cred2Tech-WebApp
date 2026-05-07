@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { publicRegisterDSA } from '../api/tenantService';
-import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -41,19 +40,20 @@ const countryOptions = countries.map(c => ({
   label: `${c.emoji} ${c.name} (${c.dialCode})`
 }));
 
-const CustomDropdown = ({ 
-  value, 
-  onChange, 
-  onBlur, 
-  options, 
-  placeholder, 
-  hasError, 
+const CustomDropdown = ({
+  value,
+  onChange,
+  onBlur,
+  options,
+  placeholder,
+  hasError,
   className,
   isPhoneCode = false,
   name
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const focusRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -68,9 +68,10 @@ const CustomDropdown = ({
 
   return (
     <div className={`relative ${isPhoneCode ? 'shrink-0' : 'w-full'} ${className || ''}`} ref={dropdownRef}>
-      <div 
+      <div
+        ref={focusRef}
         tabIndex={0}
-        onBlur={() => {}}
+        onBlur={() => { }}
         className={`flex items-center justify-between ${isPhoneCode ? 'w-auto gap-1 p-0 pr-1 pb-0.5' : 'w-full pb-3 border-b'} bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} cursor-pointer transition-colors`}
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(e) => {
@@ -87,23 +88,33 @@ const CustomDropdown = ({
           expand_more
         </span>
       </div>
-      
+
       {isOpen && (
         <div className={`absolute z-50 ${isPhoneCode ? 'min-w-[280px] max-w-[320px]' : 'w-full min-w-[120px]'} top-[calc(100%+4px)] left-0 bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-lg shadow-xl max-h-60 overflow-y-auto custom-scrollbar overflow-x-hidden`}>
           {options.map((opt, idx) => {
             const optValue = typeof opt === 'object' ? opt.value : opt;
             const optLabel = typeof opt === 'object' ? opt.label : opt;
             const isSelected = value === optValue;
-            
+
             return (
-              <div 
+              <div
                 key={`${optValue}-${idx}`}
                 className={`px-4 py-2.5 text-[14px] cursor-pointer transition-colors truncate
                   ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-[#4a5d73] dark:text-[#e6edf7] hover:bg-gray-50 dark:hover:bg-white/5'}`}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   onChange({ target: { name, value: optValue } });
                   setIsOpen(false);
-                  if (onBlur) onBlur();
+                  
+                  // Use setTimeout to ensure focus removal happens after state updates
+                  setTimeout(() => {
+                    if (focusRef.current) {
+                      focusRef.current.blur();
+                    }
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                  }, 0);
                 }}
               >
                 {optLabel}
@@ -118,40 +129,99 @@ const CustomDropdown = ({
 
 const DSARegisterPage = () => {
   const navigate = useNavigate();
-  const { theme, mounted } = useTheme();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [success, setSuccess] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const [isPincodeFetching, setIsPincodeFetching] = useState(false);
 
-  
+
   const [step, setStep] = useState(1);
 
+  useEffect(() => {
+    document.title = 'Cred2Tech | DSA Registration';
+  }, []);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+
+    // Character limits & formatting
+    if (name === 'pan_number') {
+      value = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    } else if (name === 'gst_number') {
+      value = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+    } else if (name === 'pincode') {
+      value = value.replace(/\D/g, '').slice(0, 6);
+    } else if (name === 'city') {
+      value = value.replace(/[^a-zA-Z\s\-]/g, '');
+    }
+
     setForm((p) => ({ ...p, [name]: value }));
     if (errors[name]) setErrors((p) => ({ ...p, [name]: '' }));
     setApiError('');
+
+    // Trigger Pincode Lookup
+    if (name === 'pincode' && value.length === 6) {
+      fetchLocationData(value);
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+  };
+
+  const fetchLocationData = async (pincode) => {
+    setIsPincodeFetching(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      const data = await res.json();
+
+      if (data && data[0] && data[0].Status === 'Success') {
+        const postOffice = data[0].PostOffice[0];
+        const state = postOffice.State;
+        const city = postOffice.Name; // Using Name for more precise locality/city
+
+        setForm(p => ({
+          ...p,
+          state: state,
+          city: city
+        }));
+
+        // Clear errors for these fields if they were set
+        setErrors(p => ({ ...p, state: '', city: '' }));
+        toast.success(`Location detected: ${city}, ${state}`);
+      } else {
+        toast.error('Invalid Pincode or no data found.');
+      }
+    } catch (err) {
+      console.error('Pincode fetch error:', err);
+      toast.error('Could not autofill location. Please enter manually.');
+    } finally {
+      setIsPincodeFetching(false);
+    }
   };
 
   const handlePhoneChange = (field, value) => {
-    setForm((p) => ({ ...p, [field]: value }));
+    // Only digits and limit to exactly 10
+    const cleaned = value.replace(/\D/g, '').slice(0, 10);
+    setForm((p) => ({ ...p, [field]: cleaned }));
     if (errors[field]) setErrors((p) => ({ ...p, [field]: '' }));
     setApiError('');
   };
 
   const handleCountryCodeChange = (field, value) => {
     setForm((p) => ({ ...p, [field]: value }));
+    // Re-validate phone when country code changes
+    const phoneField = field === 'mobile_country_code' ? 'mobile' : 'admin_mobile';
+    if (form[phoneField]) handleFieldBlur(phoneField);
+
     if (errors[field]) setErrors((p) => ({ ...p, [field]: '' }));
     setApiError('');
   };
 
-  const handleFieldBlur = (field) => {
-    const value = form[field];
-    if (!value || !value.trim()) return;
-
+  const handleFieldBlur = (field, directValue = null) => {
+    const value = directValue !== null ? directValue : (form[field] || '');
     let errorMsg = '';
 
     switch (field) {
@@ -161,10 +231,11 @@ const DSARegisterPage = () => {
           /^(test|demo|sample|example|abc|xyz|temp|fake|spam)@/i,
           /@(test|demo|sample|example|temp|fake)\./i,
           /^(admin|user|email|mail|info)@/i,
-          /123456|abcdef|qwerty|password/i
         ];
-        if (spamEmailPatterns.some(pattern => pattern.test(value))) {
-          errorMsg = 'Please enter a valid email address (not a test/spam email)';
+        if (!value.trim()) {
+          errorMsg = 'Email is required';
+        } else if (spamEmailPatterns.some(pattern => pattern.test(value))) {
+          errorMsg = 'Please enter a valid business email address';
         } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
           errorMsg = 'Invalid email format (e.g. abc@xyz.com)';
         }
@@ -172,54 +243,71 @@ const DSARegisterPage = () => {
 
       case 'mobile':
       case 'admin_mobile':
-        const spamPhonePatterns = [
-          /^1234567890$/, /^9876543210$/, /^0000000000$/,
-          /^1111111111$/, /^2222222222$/, /^9999999999$/, /^0123456789$/
-        ];
-        if (spamPhonePatterns.some(pattern => pattern.test(value.replace(/\s/g, '')))) {
-          errorMsg = 'Please enter a valid phone number (not a test/spam number)';
+        if (!value.trim()) {
+          errorMsg = 'Mobile number is required';
+        } else if (value.length !== 10) {
+          errorMsg = 'Mobile number must be exactly 10 digits';
+        } else if (/^(.)\1{9}$/.test(value)) {
+          errorMsg = 'Please enter a valid mobile number (repeated digits detected)';
+        } else if (/^0123456789$|^9876543210$|^1234567890$/.test(value)) {
+          errorMsg = 'Please enter a valid mobile number (sequential digits detected)';
         } else {
           const countryCode = field === 'mobile' ? form.mobile_country_code : form.admin_mobile_country_code;
           const fullMobile = countryCode + value.replace(/\s/g, '');
-          if (!/^\+[1-9]\d{1,3}[6-9]\d{9}$/.test(fullMobile)) {
-            errorMsg = 'Invalid mobile format (e.g. +91 9876543210)';
+          // Basic check for valid mobile start digits if country code is +91
+          if (countryCode === '+91' && !/^[6-9]\d{9}$/.test(value)) {
+            errorMsg = 'Indian mobile numbers must start with 6-9';
+          } else if (!/^\+[1-9]\d{1,3}[1-9]\d{4,12}$/.test(fullMobile)) {
+            errorMsg = 'Invalid mobile format';
           }
         }
         break;
 
       case 'pan_number':
-        if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.toUpperCase())) {
+        if (!value.trim()) {
+          errorMsg = 'PAN number is required';
+        } else if (value.length !== 10) {
+          errorMsg = 'PAN must be exactly 10 characters';
+        } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.toUpperCase())) {
           errorMsg = 'Invalid PAN format (e.g. ABCDE1234F)';
         }
         break;
 
       case 'gst_number':
-        if (value.trim() && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value.toUpperCase().replace(/\s/g, ''))) {
-          errorMsg = 'Invalid GST format (e.g. 27AAACR5055K1Z7)';
+        if (value.trim()) {
+          if (value.length !== 15) {
+            errorMsg = 'GST number must be 15 characters';
+          } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(value.toUpperCase())) {
+            errorMsg = 'Invalid GST format';
+          }
         }
         break;
 
       case 'pincode':
-        if (!/^[1-9][0-9]{5}$/.test(value)) {
-          errorMsg = 'Invalid 6-digit pincode';
+        if (!value.trim()) {
+          errorMsg = 'Pincode is required';
+        } else if (value.length !== 6) {
+          errorMsg = 'Pincode must be exactly 6 digits';
+        } else if (!/^[1-9][0-9]{5}$/.test(value)) {
+          errorMsg = 'Invalid pincode format';
         }
         break;
 
       case 'admin_password':
-        const weakPasswords = ['123456', 'password', 'qwerty', 'abc123', 'admin', 'test123', '12345678', 'password123', 'admin123'];
-        if (weakPasswords.includes(value.toLowerCase())) {
-          errorMsg = 'Password is too weak. Please use a stronger password';
+        if (!value) {
+          errorMsg = 'Password is required';
         } else if (value.length < 8) {
           errorMsg = 'Minimum 8 characters required';
-        } else if (!/[A-Z]/.test(value)) {
-          errorMsg = 'Must contain at least one uppercase letter';
-        } else if (!/[a-z]/.test(value)) {
-          errorMsg = 'Must contain at least one lowercase letter';
-        } else if (!/[0-9]/.test(value)) {
-          errorMsg = 'Must contain at least one number';
-        } else if (!/[!@#$%^&*(),.?":{}|<>]/.test(value)) {
-          errorMsg = 'Must contain at least one special character';
+        } else if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[!@#$%^&*]/.test(value)) {
+          errorMsg = 'Password must include uppercase, lowercase, number and special char';
         }
+        break;
+
+      case 'company_type':
+      case 'state':
+      case 'pincode':
+        // Don't show "required" error on blur for these to avoid unnecessary distraction
+        // Validation will still happen during form submission or step progression
         break;
 
       default:
@@ -228,24 +316,44 @@ const DSARegisterPage = () => {
         }
     }
 
-    if (errorMsg) {
-      setErrors((p) => ({ ...p, [field]: errorMsg }));
-    } else {
-      setErrors((p) => ({ ...p, [field]: '' }));
-    }
+    setErrors((p) => ({ ...p, [field]: errorMsg }));
+  };
+
+  const getPasswordRequirements = (pwd = '') => {
+    return {
+      length: pwd.length >= 8,
+      upper: /[A-Z]/.test(pwd),
+      lower: /[a-z]/.test(pwd),
+      number: /[0-9]/.test(pwd),
+      special: /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
+    };
+  };
+
+  const allPasswordRequirementsMet = (pwd) => {
+    const reqs = getPasswordRequirements(pwd);
+    return Object.values(reqs).every(Boolean);
+  };
+
+  const hasStepErrors = () => {
+    const stepFields = {
+      1: ['name', 'email', 'mobile', 'pan_number', 'company_type'],
+      2: ['state', 'city', 'pincode'],
+      3: ['admin_name', 'admin_email', 'admin_mobile', 'admin_password']
+    };
+    return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
   };
 
   const validateStep = (s) => {
     const e = {};
     if (s === 1) {
       if (!form.name.trim()) e.name = 'Organization name is required';
-      
+
       if (!form.email.trim()) e.email = 'Organization email is required';
       else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.email)) e.email = 'Invalid email format (e.g. abc@xyz.com)';
-      
+
       if (!form.pan_number.trim()) e.pan_number = 'PAN required for compliance';
       else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.pan_number.toUpperCase())) e.pan_number = 'Invalid PAN format (e.g. ABCDE1234F)';
-      
+
       if (!form.mobile.trim()) e.mobile = 'Business mobile is required';
       else {
         const fullMobile = form.mobile_country_code + form.mobile.replace(/\s/g, '');
@@ -253,13 +361,13 @@ const DSARegisterPage = () => {
           e.mobile = 'Invalid mobile format (e.g. +91 9876543210)';
         }
       }
-      
+
       if (form.gst_number && form.gst_number.trim()) {
         if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(form.gst_number.toUpperCase().replace(/\s/g, ''))) {
           e.gst_number = 'Invalid GST format (e.g. 27AAACR5055K1Z7)';
         }
       }
-      
+
       if (!form.company_type) e.company_type = 'Company type is required';
     }
     if (s === 2) {
@@ -270,10 +378,10 @@ const DSARegisterPage = () => {
     }
     if (s === 3) {
       if (!form.admin_name.trim()) e.admin_name = 'Admin name is required';
-      
+
       if (!form.admin_email.trim()) e.admin_email = 'Admin email is required';
       else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.admin_email)) e.admin_email = 'Invalid email format (e.g. abc@xyz.com)';
-      
+
       if (!form.admin_mobile.trim()) e.admin_mobile = 'Admin mobile is required';
       else {
         const fullAdminMobile = form.admin_mobile_country_code + form.admin_mobile.replace(/\s/g, '');
@@ -281,9 +389,9 @@ const DSARegisterPage = () => {
           e.admin_mobile = 'Invalid mobile format (e.g. +91 9876543210)';
         }
       }
-      
+
       if (!form.admin_password) e.admin_password = 'Password is required';
-      else if (form.admin_password.length < 8) e.admin_password = 'Minimum 8 characters';
+      else if (!allPasswordRequirementsMet(form.admin_password)) e.admin_password = 'Password requirements not met';
     }
     return e;
   };
@@ -294,10 +402,19 @@ const DSARegisterPage = () => {
     return e;
   };
 
+  const [showDevPopup, setShowDevPopup] = useState(false);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validateForm();
     if (Object.keys(errs).length) { setErrors(errs); return; }
+
+    // Restrict registration if not in production
+    if (import.meta.env.VITE_APP_ENV !== 'production') {
+      setShowDevPopup(true);
+      return;
+    }
+
     setIsLoading(true);
     setApiError('');
     try {
@@ -360,9 +477,9 @@ const DSARegisterPage = () => {
               {/* Left Column: Circle & Connecting Line */}
               <div className="flex flex-col items-center w-10 shrink-0">
                 {/* Step Circle */}
-                <div 
+                <div
                   className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 ease-out z-10
-                    ${isActive ? 'bg-white border-white scale-110 shadow-[0_0_20px_rgba(255,255,255,0.3)] text-indigo-600' : 
+                    ${isActive ? 'bg-white border-white scale-110 shadow-[0_0_20px_rgba(255,255,255,0.3)] text-indigo-600' :
                       isCompleted ? 'bg-white/90 border-white/90 text-indigo-600' : 'bg-[#4f46e5] dark:bg-[#312e81] border-white/30 text-white/40'}`}
                 >
                   {isCompleted ? (
@@ -375,13 +492,13 @@ const DSARegisterPage = () => {
                     </span>
                   )}
                 </div>
-                
+
                 {/* Flexible Connecting Line */}
                 {!isLast && (
                   <div className="w-[2px] flex-1 my-2 bg-white/10 dark:bg-white/5 rounded-full relative">
                     {/* Animated Progress Fill */}
-                    <div 
-                      className="absolute top-0 left-0 w-full bg-white rounded-full transition-all duration-700 ease-in-out" 
+                    <div
+                      className="absolute top-0 left-0 w-full bg-white rounded-full transition-all duration-700 ease-in-out"
                       style={{ height: step > s.num ? '100%' : '0%' }}
                     />
                   </div>
@@ -412,57 +529,18 @@ const DSARegisterPage = () => {
           padding: 0;
           overflow-x: hidden;
         }
-        .material-symbols-outlined {
-          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-          line-height: 1;
-        }
-        /* Button Traveling Border Animation */
-        .button-wrapper {
-          position: relative;
-        }
-        .button-wrapper svg {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-          overflow: visible;
-          opacity: 0;
-          transition: opacity 0.3s;
-        }
-        .button-wrapper:hover:not(:disabled) svg {
-          opacity: 1;
-        }
-        .button-wrapper svg rect {
-          x: 0;
-          y: 0;
-          width: 100%;
-          height: 100%;
-          rx: 12;
-          ry: 12;
-          fill: none;
-          stroke: #ffffff;
-          stroke-width: 3;
-          stroke-dasharray: 140 1000;
-          stroke-dashoffset: 140;
-          transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .button-wrapper:hover:not(:disabled) svg rect {
-          stroke-dashoffset: -500;
-        }
       `}</style>
-
       <div className="min-h-screen flex flex-col md:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
-        
+
         {/* Left Sidebar - Hidden on small screens, takes 40% on desktop */}
         <div className="hidden md:flex flex-col w-2/5 max-w-[480px] bg-indigo-600 dark:bg-indigo-900 relative overflow-hidden shrink-0">
-           <div className="p-10 flex-1 z-10">
-             <div className="mb-8">
-               <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
-             </div>
-             {renderStepIndicator()}
-           </div>
-           {/* Illustration at bottom */}
+          <div className="p-10 flex-1 z-10">
+            <div className="mb-8">
+              <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
+            </div>
+            {renderStepIndicator()}
+          </div>
+          {/* Illustration at bottom */}
           <div className="relative mt-auto w-full flex items-end justify-center pointer-events-none pb-8 pt-12 overflow-hidden">
             <img src="/lottie/registration.gif" alt="Registration" className="w-full max-w-[420px] object-contain opacity-90 scale-125 origin-bottom translate-y-2" />
             <div className="absolute inset-0 bg-gradient-to-t from-indigo-600 dark:from-indigo-900 via-transparent to-transparent opacity-60" />
@@ -523,7 +601,7 @@ const DSARegisterPage = () => {
             </div>
 
             <form onSubmit={step === 3 ? handleSubmit : nextStep} className="flex-1 flex flex-col">
-              
+
               {/* Fields */}
               <div className="flex-1">
                 {step === 1 && (
@@ -541,7 +619,7 @@ const DSARegisterPage = () => {
                     <div>
                       <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Business Mobile *</label>
                       <div className={`flex items-center pb-3 border-b ${errors.mobile ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
-                        <CustomDropdown 
+                        <CustomDropdown
                           name="mobile_country_code"
                           value={form.mobile_country_code}
                           onChange={(e) => handleCountryCodeChange('mobile_country_code', e.target.value)}
@@ -580,28 +658,42 @@ const DSARegisterPage = () => {
 
                 {step === 2 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                    <div>
+                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Pin Code *</label>
+                      <div className="relative">
+                        <input name="pincode" placeholder="123 456" maxLength={6} value={form.pincode} onChange={handleChange} onBlur={(e) => handleFieldBlur('pincode', e.target.value)} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                        {isPincodeFetching && (
+                          <div className="absolute right-0 bottom-3 w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+                        )}
+                      </div>
+                      {errors.pincode && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pincode}</span>}
+                    </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">State *</label>
+                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#4a5d73] dark:text-[#94a3b8]'}`}>State *</label>
                       <CustomDropdown
                         name="state"
                         value={form.state}
                         onChange={handleChange}
                         onBlur={() => handleFieldBlur('state')}
                         options={indianStates}
-                        placeholder="Select State…"
+                        placeholder={form.pincode.length < 6 ? "Enter pincode first…" : "Select State…"}
                         hasError={!!errors.state}
+                        className={form.pincode.length < 6 ? 'opacity-50 pointer-events-none' : ''}
                       />
                       {errors.state && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.state}</span>}
                     </div>
-                    <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">City *</label>
-                      <input name="city" placeholder="e.g. Bangalore" value={form.city} onChange={(e) => handleChange({ target: { name: 'city', value: e.target.value.replace(/[^a-zA-Z\s\-]/g, '') } })} onBlur={() => handleFieldBlur('city')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.city ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                    <div className="md:col-span-2">
+                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#4a5d73] dark:text-[#94a3b8]'}`}>City *</label>
+                      <input
+                        name="city"
+                        placeholder={form.pincode.length < 6 ? "Enter pincode first…" : "e.g. Bangalore"}
+                        value={form.city}
+                        disabled={form.pincode.length < 6}
+                        onChange={(e) => handleChange({ target: { name: 'city', value: e.target.value.replace(/[^a-zA-Z\s\-]/g, '') } })}
+                        onBlur={() => handleFieldBlur('city')}
+                        className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.city ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${form.pincode.length < 6 ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      />
                       {errors.city && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.city}</span>}
-                    </div>
-                    <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Pin Code *</label>
-                      <input name="pincode" placeholder="123 456" maxLength={6} value={form.pincode} onChange={handleChange} onBlur={() => handleFieldBlur('pincode')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
-                      {errors.pincode && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pincode}</span>}
                     </div>
                   </div>
                 )}
@@ -621,7 +713,7 @@ const DSARegisterPage = () => {
                     <div>
                       <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Admin Mobile *</label>
                       <div className={`flex items-center pb-3 border-b ${errors.admin_mobile ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
-                        <CustomDropdown 
+                        <CustomDropdown
                           name="admin_mobile_country_code"
                           value={form.admin_mobile_country_code}
                           onChange={(e) => handleCountryCodeChange('admin_mobile_country_code', e.target.value)}
@@ -634,13 +726,33 @@ const DSARegisterPage = () => {
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Password *</label>
-                      <div className={`flex items-center pb-3 border-b ${errors.admin_password ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
+                      <div className={`flex items-center pb-3 border-b ${errors.admin_password && form.admin_password.length > 0 && !allPasswordRequirementsMet(form.admin_password) ? 'border-gray-200 dark:border-gray-700' : errors.admin_password ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
                         <input type={showPwd ? 'text' : 'password'} name="admin_password" placeholder="Create password" value={form.admin_password} onChange={handleChange} onBlur={() => handleFieldBlur('admin_password')} className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0" />
                         <span onClick={() => setShowPwd(!showPwd)} className="material-symbols-outlined text-[18px] text-[#4a5d73] dark:text-[#94a3b8] cursor-pointer hover:text-indigo-600 transition-colors ml-2">
                           {showPwd ? 'visibility_off' : 'visibility'}
                         </span>
                       </div>
-                      {errors.admin_password && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.admin_password}</span>}
+
+                      {/* Password Requirements Checklist */}
+                      <div className="mt-6 flex flex-col gap-2.5">
+                        {Object.entries({
+                          length: 'At least 8 characters',
+                          upper: 'One uppercase letter',
+                          lower: 'One lowercase letter',
+                          number: 'One number',
+                          special: 'One special character'
+                        }).map(([key, label]) => {
+                          const isMet = getPasswordRequirements(form.admin_password)[key];
+                          return (
+                            <div key={key} className={`flex items-center gap-2.5 text-[12px] font-medium transition-colors duration-300 ${isMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-500'}`}>
+                              <span className="material-symbols-outlined text-[16px] shrink-0">
+                                {isMet ? 'check_circle' : 'cancel'}
+                              </span>
+                              {label}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -650,15 +762,15 @@ const DSARegisterPage = () => {
               <div className="mt-10 mb-6">
                 <TravelingBorderButton
                   type="submit"
-                  disabled={isLoading}
+                  disabled={hasStepErrors(step) || isLoading || isPincodeFetching || (step === 3 && !allPasswordRequirementsMet(form.admin_password))}
                   solid
                   showIcon={false}
                   size="md"
-                  className="w-full py-4 text-[15px] flex items-center justify-center font-bold uppercase tracking-wider"
+                  className="w-full py-4 text-[15px] flex items-center justify-center font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? 'Processing…' : step === 3 ? 'Register Now' : 'Continue'}
+                  {isLoading ? 'Processing…' : isPincodeFetching ? 'Fetching Address…' : step === 3 ? 'Register Now' : 'Continue'}
                 </TravelingBorderButton>
-                
+
                 {step === 1 && (
                   <p className="text-center text-sm mt-6 text-slate-500 dark:text-slate-400">
                     Already have an account?{' '}
@@ -675,6 +787,27 @@ const DSARegisterPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Dev Popup Modal */}
+      {showDevPopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-8 max-w-md w-full shadow-2xl transform transition-all text-center">
+            <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 dark:text-indigo-400">
+              <span className="material-symbols-outlined text-3xl">build</span>
+            </div>
+            <h3 className="text-2xl font-bold text-[#0a1628] dark:text-white mb-4">Under Development</h3>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-8 text-[15px]">
+              Oops! We know that you are interested in our platform to onboard. Our team is currently developing this platform and will be able to serve you at the earliest. Sorry for the inconvenience.
+            </p>
+            <button
+              onClick={() => setShowDevPopup(false)}
+              className="w-full py-3.5 bg-[#0a1628] dark:bg-white text-white dark:text-[#0a1628] font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+            >
+              Okay, I understand
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 };
