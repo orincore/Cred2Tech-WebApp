@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Shield } from 'lucide-react';
+import { User, Shield, LogOut } from 'lucide-react';
 import { getMe } from '../api/authService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -19,7 +19,7 @@ const useResponsive = () => {
 };
 
 const ProfilePage = () => {
-  const { user: authUser, token } = useAuth();
+  const { user: authUser, token, logout } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { isMobile } = useResponsive();
@@ -42,6 +42,7 @@ const ProfilePage = () => {
   });
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const sidebarItems = [
     { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
@@ -322,13 +323,23 @@ const ProfilePage = () => {
               </div>
 
               {/* Update Button */}
-              <div style={{ display: 'flex', width: '140px' }}>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <TravelingBorderButton
                   onClick={() => console.log('Update profile')}
                   size="sm"
-                  className="flex-1"
                 >
                   Update
+                </TravelingBorderButton>
+                <TravelingBorderButton
+                  onClick={() => setShowLogoutConfirm(true)}
+                  size="sm"
+                  color="red"
+                  showIcon={false}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <LogOut size={16} />
+                    Logout
+                  </div>
                 </TravelingBorderButton>
               </div>
                 </div>
@@ -483,6 +494,86 @@ const ProfilePage = () => {
           </div>
         </div>
       </div>
+
+      {/* Logout Confirmation Popup */}
+      {showLogoutConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.15s ease'
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff',
+            borderRadius: 20,
+            boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32,
+            maxWidth: 400,
+            width: '90%',
+            animation: 'slideUp 0.2s ease'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              {/* Warning Icon */}
+              <div style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px'
+              }}>
+                <LogOut size={32} color="#dc2626" />
+              </div>
+
+              {/* Title */}
+              <h3 style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: isDark ? '#e6edf7' : '#0a1628',
+                marginBottom: 8
+              }}>
+                Confirm Logout
+              </h3>
+
+              {/* Message */}
+              <p style={{
+                fontSize: 14,
+                color: isDark ? '#94a3b8' : '#4a5d73',
+                marginBottom: 24
+              }}>
+                Are you sure you want to logout? You will need to sign in again to access your account.
+              </p>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton
+                  onClick={() => setShowLogoutConfirm(false)}
+                  size="sm"
+                >
+                  Cancel
+                </TravelingBorderButton>
+                <TravelingBorderButton
+                  onClick={() => {
+                    logout();
+                    setShowLogoutConfirm(false);
+                  }}
+                  size="sm"
+                  color="red"
+                >
+                  Logout
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

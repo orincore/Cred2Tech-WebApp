@@ -180,7 +180,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         gap: 12,
         cursor: 'pointer',
       }}
-      onClick={() => navigate(`/users/${user?.id}`)}
+      onClick={() => navigate('/profile')}
       title="View profile"
       >
         {/* Avatar */}

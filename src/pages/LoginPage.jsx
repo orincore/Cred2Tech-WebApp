@@ -134,13 +134,8 @@ const LoginPage = () => {
 
             {/* Password */}
             <div className="relative">
-              <div className="flex justify-between items-end mb-1.5">
-                <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8]">Password *</label>
-                <button className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer" type="button">
-                  Forgot password?
-                </button>
-              </div>
-              <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
+              <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Password *</label>
+              <div className="relative flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
                 <input
                   type={showPwd ? 'text' : 'password'}
                   value={password}
@@ -149,14 +144,19 @@ const LoginPage = () => {
                   placeholder="••••••••"
                   className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 pr-8 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
                 />
+                <button
+                  onClick={() => setShowPwd(p => !p)}
+                  type="button"
+                  className="absolute right-0 text-[#4a5d73] dark:text-[#94a3b8] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                </button>
               </div>
-              <button
-                onClick={() => setShowPwd(p => !p)}
-                type="button"
-                className="absolute right-0 bottom-3 text-[#4a5d73] dark:text-[#94a3b8] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
-              </button>
+              <div className="flex justify-end mt-2">
+                <button className="text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer" type="button">
+                  Forgot password?
+                </button>
+              </div>
             </div>
           </div>
 
