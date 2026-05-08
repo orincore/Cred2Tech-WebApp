@@ -13,7 +13,11 @@ const StatCard = ({ title, value, subtitle, icon: Icon = TrendingUp, color = 'va
   }
 
   return (
-    <div className="card card-padded" style={{
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--outline)',
+      borderRadius: 0,
+      padding: 24,
       display: 'flex',
       flexDirection: 'column',
       gap: 8,
@@ -26,25 +30,25 @@ const StatCard = ({ title, value, subtitle, icon: Icon = TrendingUp, color = 'va
         top: 0, left: 0, right: 0,
         height: 3,
         background: color,
-        borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+        borderRadius: 0,
       }} />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 4 }}>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+          <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, margin: 0 }}>
             {title}
           </p>
-          <p style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
+          <p style={{ fontSize: 26, fontWeight: 700, color: 'var(--on-surface)', lineHeight: 1, margin: '6px 0 0 0' }}>
             {value ?? '—'}
           </p>
           {subtitle && (
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>{subtitle}</p>
+            <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, margin: '4px 0 0 0' }}>{subtitle}</p>
           )}
         </div>
         <div style={{
           width: 44,
           height: 44,
-          borderRadius: 'var(--radius)',
+          borderRadius: 0,
           background: `${color}15`,
           display: 'flex',
           alignItems: 'center',

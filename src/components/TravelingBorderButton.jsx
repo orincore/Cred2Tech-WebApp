@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
-const TravelingBorderButton = ({ onClick, type = 'button', children, className = '', showIcon = true, size = 'normal', theme: themeOverride, solid = false, disabled = false }) => {
+const TravelingBorderButton = ({ onClick, type = 'button', children, className = '', showIcon = true, size = 'normal', theme: themeOverride, solid = false, disabled = false, width }) => {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -22,8 +22,8 @@ const TravelingBorderButton = ({ onClick, type = 'button', children, className =
           x="0" y="0" 
           width="100%" 
           height="100%" 
-          rx={size === 'sm' ? "10" : "14"} 
-          ry={size === 'sm' ? "10" : "14"} 
+          rx={className.includes('rounded-none') ? "0" : (size === 'sm' ? "10" : "14")} 
+          ry={className.includes('rounded-none') ? "0" : (size === 'sm' ? "10" : "14")} 
           fill="none" 
           stroke={solid ? (isLight ? "white" : "#0a1628") : (isLight ? "#0a1628" : "white")}
           strokeWidth="3" 
@@ -46,7 +46,9 @@ const TravelingBorderButton = ({ onClick, type = 'button', children, className =
     </>
   );
 
-  const baseClasses = `relative inline-flex items-center justify-center gap-2.5 font-bold transition-all duration-300 group overflow-visible shadow-lg hover:scale-[1.03] active:scale-95 ${textColor} ${
+  const baseClasses = `relative items-center justify-center gap-2.5 font-bold transition-all duration-300 group overflow-visible shadow-lg hover:scale-[1.03] active:scale-95 ${textColor} ${
+    width ? 'flex' : 'inline-flex'
+  } ${
     size === 'sm' ? 'px-6 py-2.5 text-[13px] rounded-[10px]' : 'px-10 py-4 text-[17px] rounded-[14px]'
   } ${disabled ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''} ${className}`;
   
@@ -55,6 +57,7 @@ const TravelingBorderButton = ({ onClick, type = 'button', children, className =
       ? (isLight ? '#0a1628' : '#ffffff') 
       : (isLight ? 'rgba(10, 22, 40, 0.03)' : 'rgba(255,255,255,0.03)'),
     border: `2px solid ${solid ? 'transparent' : (isLight ? 'rgba(10, 22, 40, 0.05)' : 'rgba(255,255,255,0.05)')}`,
+    width: width,
   };
 
   return (

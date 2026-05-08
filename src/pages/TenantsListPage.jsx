@@ -1,17 +1,38 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, X, MapPin, Hash, Wallet, Activity } from 'lucide-react';
+import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, X, MapPin, Hash, Wallet, Activity, Building2, ShieldCheck } from 'lucide-react';
 import { getTenants, getTenantSummary } from '../api/tenantService';
 import { MOCK_TENANTS } from '../constants/mockData';
 import { STATUS_OPTIONS } from '../constants/roles';
-import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
-import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { formatDate } from '../utils/helpers';
+import { formatDate, getInitials } from '../utils/helpers';
+import { useTheme } from '../context/ThemeContext';
+import TravelingBorderButton from '../components/TravelingBorderButton';
+import DataTable from '../components/DataTable';
+
+// Responsive hook
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { isMobile, isTablet };
+};
 
 const TenantsListPage = () => {
   const navigate = useNavigate();
+  const { isMobile, isTablet } = useResponsive();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -65,156 +86,269 @@ const TenantsListPage = () => {
     });
   }, [tenants, search, filterType, filterStatus]);
 
-  const SelectFilter = ({ value, onChange, options, placeholder }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="form-control" style={{ width: 'auto', minWidth: 130 }}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-    </select>
-  );
+  const hasFilters = search || filterType || filterStatus;
+
+  const avatarPalette = [
+    ['#ede9fe', '#4f46e5'], ['#dbeafe', '#1d4ed8'],
+    ['#fce7f3', '#be185d'], ['#d1fae5', '#065f46'], ['#fef3c7', '#92400e'],
+  ];
+  const avatarColors = (name = '') => avatarPalette[(name.charCodeAt(0) || 0) % avatarPalette.length];
+
+  /* ---- label style shared across filters ---- */
+  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const underlineInput = (active) => ({
+    background: 'transparent', border: 'none',
+    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+    outline: 'none', width: '100%', padding: '6px 0',
+    fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
+    transition: 'border-color 0.2s',
+  });
 
   return (
-    <div>
-      <PageHeader
-        title="Manage DSAs"
-        subtitle="All registered DSA entities"
-        breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Manage DSA' }]}
-        actions={
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/tenants/create')}>
-            <Building size={15} /> Create DSA
-          </button>
-        }
-      />
+    <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      {/* ─── Top header ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+            Admin › Manage DSAs
+          </p>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+            Manage DSAs
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
+            All registered DSA entities
+          </p>
+        </div>
 
+        <TravelingBorderButton
+          onClick={() => navigate('/tenants/create')}
+          size={isMobile ? 'sm' : 'sm'}
+          solid
+          showIcon={false}
+          className={isMobile ? 'px-4 py-2 text-xs' : ''}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
+            <Building size={isMobile ? 12 : 14} /> Create DSA
+          </div>
+        </TravelingBorderButton>
+      </div>
+
+      {/* ─── Info bar ─── */}
+      <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <ShieldCheck size={16} color="#4f46e5" />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit, or deactivate DSAs.
+          DSAs receive wallet balance and API access upon registration.
+        </p>
+      </div>
+
+      {/* ─── Error ─── */}
       {error && (
-        <div className="notice notice-warning" style={{ marginBottom: 20 }}>
-          <RefreshCw size={15} />
-          <span>{error}</span>
+        <div style={{ padding: '10px 20px', background: '#fff7ed', borderBottom: '1px solid #fed7aa', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <RefreshCw size={13} color="#c2410c" />
+          <span style={{ fontSize: 12, color: '#c2410c', fontWeight: 500 }}>{error}</span>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="card card-padded" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-            <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+      {/* ─── Filter row ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+
+        {/* Search */}
+        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+          <span style={labelSm}>Search</span>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
             <input
               type="text"
-              className="form-control"
-              placeholder="Search by DSA name or PAN…"
+              placeholder="DSA name or PAN…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ paddingLeft: 36 }}
+              onChange={e => setSearch(e.target.value)}
+              style={{ ...underlineInput(false), paddingLeft: 20 }}
+              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <SlidersHorizontal size={15} color="var(--text-tertiary)" />
-            <SelectFilter value={filterType} onChange={setFilterType} options={['DSA', 'INTERNAL']} placeholder="All Types" />
-            <SelectFilter value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} placeholder="All Status" />
-            {(search || filterType || filterStatus) && (
-              <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); }}>
-                Clear
-              </button>
-            )}
-          </div>
         </div>
+
+        {/* Type */}
+        <div style={{ flex: 1, minWidth: 130 }}>
+          <span style={labelSm}>Type</span>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            style={{ ...underlineInput(!!filterType), appearance: 'none', cursor: 'pointer', borderBottomColor: filterType ? '#4f46e5' : 'var(--outline)', color: filterType ? '#4f46e5' : 'var(--on-surface)' }}>
+            <option value="">All Types</option>
+            <option value="DSA">DSA</option>
+            <option value="INTERNAL">INTERNAL</option>
+          </select>
+        </div>
+
+        {/* Status */}
+        <div style={{ flex: 1, minWidth: 120 }}>
+          <span style={labelSm}>Status</span>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ ...underlineInput(!!filterStatus), appearance: 'none', cursor: 'pointer', borderBottomColor: filterStatus ? '#4f46e5' : 'var(--outline)', color: filterStatus ? '#4f46e5' : 'var(--on-surface)' }}>
+            <option value="">All Status</option>
+            {STATUS_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+          </select>
+        </div>
+
+        {hasFilters && (
+          <button
+            onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); }}
+            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#f43f5e'}
+            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+          >
+            Clear all
+          </button>
+        )}
       </div>
 
-      {/* Table */}
+      {/* ─── Content ─── */}
       {loading ? (
-        <div className="card" style={{ padding: 48 }}><LoadingSpinner fullPage /></div>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
+          <LoadingSpinner fullPage />
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            title="No DSAs found"
-            description="Try adjusting your search or filters, or create a new DSA."
-            action={<button className="btn btn-primary btn-sm" onClick={() => navigate('/tenants/create')}><Building size={14} /> Create DSA</button>}
-          />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+          <Building2 size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No DSAs found</h3>
+          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>Try adjusting your filters or create a new DSA.</p>
+          <TravelingBorderButton
+            onClick={() => navigate('/tenants/create')}
+            size="sm"
+            solid
+            showIcon={false}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Building size={14} /> Create DSA
+            </div>
+          </TravelingBorderButton>
         </div>
       ) : (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>DSA NAME</th>
-                <th>PAN</th>
-                <th>CITY</th>
-                <th>WALLET</th>
-                <th>API CALLS (MTD)</th>
-                <th>LEAD SUB</th>
-                <th>STATUS</th>
-                <th>ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id} onClick={() => openSummary(t.id)} style={{ cursor: 'pointer' }} className="hover-row">
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: '6px',
-                        background: 'var(--primary-subtle)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'var(--primary)', flexShrink: 0
-                      }}>
-                        <Building size={16} />
-                      </div>
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--primary)', margin: 0 }}>{t.name}</p>
-                        <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>
-                          {t.city} · Since {new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{t.pan_number || '—'}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{t.city || '—'}</td>
-                  <td>
-                    <span style={{ fontWeight: 700, color: (t.wallet_balance || 0) < 500 ? '#C53030' : '#2F855A', fontSize: 13 }}>
-                      ₹{Number(t.wallet_balance || 0).toLocaleString()}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
-                    {t.api_calls_mtd || 0}
-                  </td>
-                  <td>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600,
-                      color: t.type === 'DSA' ? '#2F855A' : '#718096',
-                      background: t.type === 'DSA' ? '#F0FFF4' : '#EDF2F7',
-                      padding: '2px 8px', borderRadius: 4
+        <>
+          {/* Sub-header */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>DSA Information</span>
+            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} of {tenants.length} DSAs</span>
+          </div>
+
+          {/* Table */}
+          <DataTable
+            columns={[
+              { key: 'name', label: 'DSA Name', render: (t) => {
+                const [avatarBg, avatarClr] = avatarColors(t.name);
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                      background: avatarBg, color: avatarClr,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 800,
                     }}>
-                      {t.type === 'DSA' ? 'Active' : 'None'}
+                      {getInitials(t.name)}
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.name || '—'}
                     </span>
-                  </td>
-                  <td><Badge type="status" value={t.status} /></td>
-                  <td>
-                    <button className="btn btn-outline btn-xs" style={{ fontSize: 11, padding: '2px 10px' }} onClick={(e) => { e.stopPropagation(); openSummary(t.id); }}>
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                );
+              }},
+              { key: 'pan_number', label: 'PAN', render: (t) => t.pan_number || '—' },
+              { key: 'city', label: 'City', render: (t) => t.city || '—' },
+              { key: 'wallet_balance', label: 'Wallet', render: (t) => (
+                <span style={{ fontSize: 12, fontWeight: 700, color: (t.wallet_balance || 0) < 500 ? '#f43f5e' : '#10b981' }}>
+                  ₹{Number(t.wallet_balance || 0).toLocaleString()}
+                </span>
+              )},
+              { key: 'api_calls_mtd', label: 'API Calls', render: (t) => t.api_calls_mtd || 0 },
+              { key: 'type', label: 'Type', render: (t) => (
+                <span style={{
+                  background: t.type === 'DSA' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#334155' : '#f1f5f9'),
+                  color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : (isDark ? '#94a3b8' : '#64748b'),
+                  padding: '3px 8px', borderRadius: 4,
+                  fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                }}>
+                  {t.type || 'DSA'}
+                </span>
+              )},
+              { key: 'status', label: 'Status', render: (t) => {
+                const isActive = (t.status || 'ACTIVE') === 'ACTIVE';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? '#10b981' : '#f43f5e', flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? '#10b981' : '#f43f5e', whiteSpace: 'nowrap' }}>
+                      {t.status || 'ACTIVE'}
+                    </span>
+                  </div>
+                );
+              }},
+              { key: 'action', label: 'Action', align: 'center', render: (t) => (
+                <button
+                  onClick={(e) => { e.stopPropagation(); openSummary(t.id); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: 'transparent', border: 'none',
+                    padding: '5px 10px', fontSize: 11, fontWeight: 700,
+                    color: 'var(--on-surface)', cursor: 'pointer', transition: 'all 0.15s',
+                    borderRadius: 4, whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#4f46e5'; e.currentTarget.style.background = 'var(--surface-low)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--on-surface)'; e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Eye size={11} />
+                  View
+                </button>
+              )},
+            ]}
+            data={filtered}
+            isMobile={isMobile}
+            hoverRows={true}
+          />
+        </>
       )}
 
       {/* Slide-out Drawer for DSA Summary */}
       {selectedTenantId && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }} onClick={() => setSelectedTenantId(null)}>
-          <div style={{ background: '#fff', width: '500px', height: '100%', padding: '24px', boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: isDark ? '#1e293b' : '#fff', width: '500px', height: '100%', padding: '24px', boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
                   <Building size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{summaryData?.tenant_name || 'DSA Details'}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: 0 }}>Detailed analytics and profile</p>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>{summaryData?.tenant_name || 'DSA Details'}</h3>
+                  <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>Detailed analytics and profile</p>
                 </div>
               </div>
-              <button className="btn btn-ghost btn-icon" onClick={() => setSelectedTenantId(null)}>
-                <X size={20} />
+              <button 
+                onClick={() => setSelectedTenantId(null)}
+                style={{ 
+                  width: 28, 
+                  height: 28, 
+                  border: '1px solid var(--outline)', 
+                  borderRadius: 6, 
+                  background: 'transparent', 
+                  cursor: 'pointer', 
+                  color: 'var(--on-muted)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  flexShrink: 0,
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#ef4444';
+                  e.currentTarget.style.color = '#ef4444';
+                  e.currentTarget.style.background = '#fef2f2';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--outline)';
+                  e.currentTarget.style.color = 'var(--on-muted)';
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <X size={16} />
               </button>
             </div>
 
@@ -222,103 +356,103 @@ const TenantsListPage = () => {
               <div style={{ padding: 40, textAlign: 'center' }}><LoadingSpinner /></div>
             ) : summaryData ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div className="card" style={{ padding: 20, background: 'var(--bg-secondary)' }}>
+                <div style={{ padding: 20, background: isDark ? '#0f172a' : 'var(--bg-secondary)', borderRadius: 8 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                     <div>
-                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', margin: '0 0 4px 0' }}>Wallet Balance</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)', margin: 0 }}>₹{Number(summaryData.wallet_balance).toLocaleString()}</p>
+                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--on-muted)', margin: '0 0 4px 0' }}>Wallet Balance</p>
+                      <p style={{ fontSize: 20, fontWeight: 800, color: '#4f46e5', margin: 0 }}>₹{Number(summaryData.wallet_balance).toLocaleString()}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', margin: '0 0 4px 0' }}>Total API Calls</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>{summaryData.total_api_usage}</p>
+                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--on-muted)', margin: '0 0 4px 0' }}>Total API Calls</p>
+                      <p style={{ fontSize: 20, fontWeight: 800, margin: 0, color: 'var(--on-surface)' }}>{summaryData.total_api_usage}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="card" style={{ padding: 16 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Profile</h4>
+                <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', color: 'var(--on-muted)' }}>Profile</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 2px 0' }}>PAN</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{summaryData.pan_number || '—'}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>PAN</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.pan_number || '—'}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 2px 0' }}>GSTIN</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{summaryData.gst_number || '—'}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>GSTIN</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.gst_number || '—'}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 2px 0' }}>Phone</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{summaryData.mobile || '—'}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>Phone</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.mobile || '—'}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 2px 0' }}>Email</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{summaryData.email || '—'}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>Email</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.email || '—'}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: '0 0 2px 0' }}>City</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{summaryData.city || '—'}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>City</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.city || '—'}</p>
                     </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div className="card" style={{ padding: 16 }}>
+                  <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                      <Activity size={16} color="var(--primary)" />
-                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Activity (MTD)</h4>
+                      <Activity size={16} color="#4f46e5" />
+                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Activity (MTD)</h4>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>ITR Calls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.itr_pulls}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>ITR Calls</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.itr_pulls}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>GST Calls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.gst_pulls}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>GST Calls</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.gst_pulls}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Bureau Pulls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.bureau_pulls}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Bureau Pulls</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.bureau_pulls}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="card" style={{ padding: 16 }}>
+                  <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                      <Building size={16} color="var(--primary)" />
-                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Portfolio</h4>
+                      <Building size={16} color="#4f46e5" />
+                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Portfolio</h4>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Customers</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.total_customers}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Customers</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.total_customers}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Total Cases</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.total_cases}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Total Cases</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.total_cases}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Team Size</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{summaryData.team_size}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Team Size</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.team_size}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                  <div style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Recent Wallet Activity</h4>
+                <div style={{ padding: 0, overflow: 'hidden', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
+                  <div style={{ padding: '12px 16px', background: isDark ? '#1e293b' : 'var(--bg-secondary)', borderBottom: '1px solid var(--outline)' }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Recent Wallet Activity</h4>
                   </div>
                   {summaryData.recent_wallet_transactions?.length > 0 ? (
-                    <table style={{ margin: 0, border: 'none' }}>
+                    <table style={{ margin: 0, border: 'none', width: '100%' }}>
                       <tbody style={{ border: 'none' }}>
                         {summaryData.recent_wallet_transactions.map(tx => (
-                          <tr key={tx.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <tr key={tx.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                             <td style={{ padding: '10px 16px', fontSize: 12 }}>
-                              <p style={{ margin: 0, fontWeight: 500 }}>{tx.remarks || tx.api_code || 'Wallet Update'}</p>
-                              <p style={{ margin: 0, fontSize: 10, color: 'var(--text-tertiary)' }}>{formatDate(tx.created_at)}</p>
+                              <p style={{ margin: 0, fontWeight: 500, color: 'var(--on-surface)' }}>{tx.remarks || tx.api_code || 'Wallet Update'}</p>
+                              <p style={{ margin: 0, fontSize: 10, color: 'var(--on-muted)' }}>{formatDate(tx.created_at)}</p>
                             </td>
-                            <td style={{ padding: '10px 16px', fontSize: 12, textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)' }}>
+                            <td style={{ padding: '10px 16px', fontSize: 12, textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
                               {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
                             </td>
                           </tr>
@@ -326,13 +460,13 @@ const TenantsListPage = () => {
                       </tbody>
                     </table>
                   ) : (
-                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 12 }}>No recent transactions</div>
+                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
                   )}
                 </div>
 
               </div>
             ) : (
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Failed to load DSA metrics.</p>
+              <p style={{ color: 'var(--on-muted)', fontSize: 14 }}>Failed to load DSA metrics.</p>
             )}
           </div>
         </div>

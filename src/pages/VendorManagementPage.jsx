@@ -1,11 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import PageHeader from '../components/ui/PageHeader';
-import { Network, BarChart2, ShieldAlert, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Network, BarChart2, ShieldAlert, X, Edit, Plus } from 'lucide-react';
 import { getVendors, updateVendor, updateVendorSlabs } from '../api/vendor.api';
+import { useTheme } from '../context/ThemeContext';
+import DataTable from '../components/DataTable';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import TravelingBorderButton from '../components/TravelingBorderButton';
+
+// Responsive hook
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { isMobile, isTablet };
+};
 
 const VendorManagementPage = () => {
+  const navigate = useNavigate();
+  const { isMobile, isTablet } = useResponsive();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [vendors, setVendors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   // Modal states
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -108,264 +134,275 @@ const VendorManagementPage = () => {
   const totalPayable = invoiceData.reduce((acc, curr) => acc + curr.payable, 0);
   const totalDiscount = invoiceData.reduce((acc, curr) => acc + curr.slabDiscount, 0);
 
+  const filtered = useMemo(() => {
+    return vendors.filter((v) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q ||
+        v.name?.toLowerCase().includes(q) ||
+        v.apiType?.toLowerCase().includes(q) ||
+        v.website?.toLowerCase().includes(q);
+      return matchSearch;
+    });
+  }, [vendors, search]);
+
+  /* ---- label style shared across filters ---- */
+  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const underlineInput = (active) => ({
+    background: 'transparent', border: 'none',
+    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+    outline: 'none', width: '100%', padding: '6px 0',
+    fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
+    transition: 'border-color 0.2s',
+  });
+
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 60, position: 'relative' }}>
-      <PageHeader
-        title="Vendor Management"
-        subtitle="API vendor contracts, billing slabs & monthly invoicing — Super Admin only"
-        breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Vendor Management' }]}
-        actions={
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-             <div className="btn-group">
-                <button className="btn btn-ghost btn-sm active">Today</button>
-                <button className="btn btn-ghost btn-sm">MTD</button>
-                <button className="btn btn-ghost btn-sm">YTD</button>
-            </div>
-          </div>
-        }
-      />
+    <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      {/* ─── Top header ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+            Admin › Vendor Management
+          </p>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+            Vendor Management
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
+            API vendor contracts, billing slabs & monthly invoicing
+          </p>
+        </div>
+      </div>
 
-      <div style={{ 
-        background: '#FFFBEB', 
-        border: '1px solid #FDE68A', 
-        borderRadius: '8px', 
-        padding: '12px 20px', 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 12, 
-        marginBottom: 24,
-        color: '#92400E'
-      }}>
-        <ShieldAlert size={18} />
-        <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
-          <span style={{ fontWeight: 700 }}>Super Admin only.</span> Vendor cost changes are versioned and do not affect past invoices. Billing slabs are evaluated per monthly volume. Monthly invoices auto-calculated on the 1st of each month.
+      {/* ─── Info bar ─── */}
+      <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <ShieldAlert size={16} color="#4f46e5" />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Vendor cost changes are versioned and do not affect past invoices. Billing slabs are evaluated per monthly volume.
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 24 }}>
-        <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#F1F5F9', padding: 8, borderRadius: 8 }}>
-              <Network size={20} color="#334155" />
-            </div>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px 0', color: '#0F172A' }}>{vendors.length}</h2>
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>Active Vendors<br/><span style={{fontSize:11, color:'#10B981'}}>4 primary · 2 backup</span></p>
-          </div>
-        </div>
-
-        <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#F1F5F9', padding: 8, borderRadius: 8 }}>
-              <BarChart2 size={20} color="#334155" />
-            </div>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px 0', color: '#0F172A' }}>{totalCalls.toLocaleString()}</h2>
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>API Calls (MTD)<br/><span style={{fontSize:11, color:'#10B981'}}>28 failed / refunded</span></p>
-          </div>
-        </div>
-
-        <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#F1F5F9', padding: 8, borderRadius: 8 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#334155' }}>₹</span>
-            </div>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px 0', color: '#0F172A' }}>₹{totalCost.toLocaleString()}</h2>
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>Vendor Cost (MTD)<br/><span style={{fontSize:11, color:'#EF4444'}}>Invoice due Apr 1</span></p>
+      {/* ─── Filter row ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+        {/* Search */}
+        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+          <span style={labelSm}>Search</span>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="Vendor name, API type or website…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ ...underlineInput(false), paddingLeft: 20 }}
+              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
+            />
           </div>
         </div>
       </div>
 
-      {/* VENDOR REGISTRY */}
-      <div className="card" style={{ marginBottom: 24, overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#334155' }}>Vendor Registry<br/><span style={{fontWeight: 400, fontSize: 12, color:'#64748B'}}>All API vendors · contract status · MTD cost auto-calculated from billing slabs</span></h3>
+      {/* ─── Content ─── */}
+      {isLoading ? (
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
+          <LoadingSpinner fullPage />
         </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+          <Network size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No vendors found</h3>
+          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Try adjusting your search.</p>
+        </div>
+      ) : (
+        <>
+          {/* Sub-header */}
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Vendor Registry</span>
+            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} vendors</span>
+          </div>
 
-        <div className="table-wrapper" style={{ margin: 0 }}>
-          <table style={{ margin: 0 }}>
-            <thead style={{ background: '#F8FAFC' }}>
-              <tr>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', width: 60 }}>#</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Vendor Name</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>API Type</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Role</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Contract Period</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Billing Model</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>MTD Calls</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>MTD Cost (₹)</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'center' }}>Status</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan="10" style={{ textAlign: 'center', padding: '32px' }}>Loading vendor data...</td>
-                </tr>
-              ) : vendors.length === 0 ? (
-                <tr>
-                  <td colSpan="10" style={{ textAlign: 'center', padding: '32px' }}>No vendors configured.</td>
-                </tr>
-              ) : (
-                vendors.map((v) => (
-                <tr key={v.id} className="hover-row">
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#64748B' }}>{v.id}</td>
-                  <td style={{ padding: '16px 24px' }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1E293B' }}>{v.name}</div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>{v.website}</div>
-                  </td>
-                  <td style={{ padding: '16px 24px' }}>
-                    <span style={{ color: '#3B82F6', fontSize: 12, fontWeight: 600 }}>{v.apiType}</span>
-                  </td>
-                  <td style={{ padding: '16px 24px' }}>
-                    <span style={{ background: v.role === 'Primary' ? '#ECFDF5' : '#FFF1F2', color: v.role === 'Primary' ? '#10B981' : '#F43F5E', padding: '4px 12px', borderRadius: '20px', fontSize: 11, fontWeight: 700 }}>
-                      {v.role}
+          {/* Table */}
+          <DataTable
+            columns={[
+              { key: 'name', label: 'Vendor Name', render: (v) => (
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{v.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{v.website}</div>
+                </div>
+              )},
+              { key: 'apiType', label: 'API Type', render: (v) => (
+                <span style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>{v.apiType}</span>
+              )},
+              { key: 'role', label: 'Role', render: (v) => (
+                <span style={{
+                  background: v.role === 'Primary' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#7f1d1d' : '#fee2e2'),
+                  color: v.role === 'Primary' ? (isDark ? '#6ee7b7' : '#15803d') : (isDark ? '#fca5a5' : '#dc2626'),
+                  padding: '3px 8px', borderRadius: 4,
+                  fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                }}>
+                  {v.role}
+                </span>
+              )},
+              { key: 'period', label: 'Contract Period', render: (v) => v.period || '—' },
+              { key: 'billingModel', label: 'Billing Model', render: (v) => v.billingModel || '—' },
+              { key: 'mtdCalls', label: 'MTD Calls', render: (v) => v.mtdCalls.toLocaleString() },
+              { key: 'mtdCost', label: 'MTD Cost (₹)', render: (v) => `₹${v.mtdCost.toLocaleString()}` },
+              { key: 'status', label: 'Status', render: (v) => {
+                const isActive = v.status === 'Active';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? '#10b981' : '#f43f5e', flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? '#10b981' : '#f43f5e', whiteSpace: 'nowrap' }}>
+                      {v.status}
                     </span>
-                  </td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#64748B' }}>{v.period}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#64748B' }}>{v.billingModel}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#1E293B', fontWeight: 700, textAlign: 'right' }}>{v.mtdCalls.toLocaleString()}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#1E293B', fontWeight: 700, textAlign: 'right' }}>₹{v.mtdCost.toLocaleString()}</td>
-                  <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                    <span style={{ color: v.status === 'Active' ? '#10B981' : '#64748B', fontWeight: 700, fontSize: 12 }}>{v.status}</span>
-                  </td>
-                  <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                      <button className="btn btn-outline btn-xs" onClick={() => handleEditClick(v)} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 600 }}>Edit</button>
-                      <button className="btn btn-outline btn-xs" onClick={() => handleEditClick(v)} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 600 }}>Slabs ▾</button>
-                    </div>
-                  </td>
-                </tr>
-              )))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* MONTHLY INVOICE SUMMARY */}
-      <div className="card" style={{ marginBottom: 24, overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#334155' }}>Monthly Invoice Summary — March 2026</h3>
-            <div style={{display: 'flex', gap: 12}}>
-              <span style={{background: '#FFEDD5', color: '#C2410C', padding: '4px 12px', borderRadius: '4px', fontSize: 12, fontWeight: 600}}>Invoice due Apr 1</span>
-              <button className="btn btn-outline btn-sm">Export CSV</button>
-            </div>
-        </div>
-
-        <div className="table-wrapper" style={{ margin: 0 }}>
-          <table style={{ margin: 0 }}>
-            <thead style={{ background: '#F8FAFC' }}>
-              <tr>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Vendor</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>API Type</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>Total Calls</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>Base Rate</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>Slab Discount</th>
-                <th style={{ padding: '12px 24px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', textAlign: 'right' }}>Payable (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoiceData.map((v) => (
-                <tr key={v.id} className="hover-row">
-                  <td style={{ padding: '16px 24px', fontWeight: 500, fontSize: 13, color: '#1E293B' }}>{v.vendorName}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#64748B' }}>{v.apiType}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#1E293B', textAlign: 'right' }}>{v.totalCalls.toLocaleString()}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#64748B', textAlign: 'right' }}>₹{v.baseRate}/call</td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#10B981', fontWeight: 600, textAlign: 'right' }}>
-                    {v.slabDiscount > 0 ? `-₹${v.slabDiscount.toLocaleString()}` : `-₹0`}
-                  </td>
-                  <td style={{ padding: '16px 24px', fontSize: 13, color: '#1E293B', fontWeight: 700, textAlign: 'right' }}>₹{v.payable.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot style={{ background: '#F8FAFC', borderTop: '2px solid #E2E8F0' }}>
-               <tr>
-                  <td colSpan="2" style={{ padding: '16px 24px', fontSize: 14, fontWeight: 800, color: '#1E293B' }}>TOTAL PAYABLE — March 2026</td>
-                  <td style={{ padding: '16px 24px', fontSize: 14, fontWeight: 800, color: '#1E293B', textAlign: 'right' }}>{totalCalls.toLocaleString()}</td>
-                  <td style={{ padding: '16px 24px' }}></td>
-                  <td style={{ padding: '16px 24px', fontSize: 14, fontWeight: 800, color: '#10B981', textAlign: 'right' }}>-₹{totalDiscount.toLocaleString()}</td>
-                  <td style={{ padding: '16px 24px', fontSize: 16, fontWeight: 800, color: '#8B5CF6', textAlign: 'right' }}>₹{totalPayable.toLocaleString()}</td>
-               </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      <div style={{ 
-        background: '#EFF6FF', 
-        border: '1px solid #BFDBFE', 
-        borderRadius: '8px', 
-        padding: '12px 20px', 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 12, 
-        color: '#1E3A8A'
-      }}>
-        <div style={{background: '#3B82F6', width: 4, height: 16, borderRadius: 2}}></div>
-        <p style={{ fontSize: 13, fontWeight: 500, margin: 0 }}>
-          Slab discounts apply where monthly volume crosses slab thresholds. Failed / refunded API calls (28 this month) are excluded from billing. Invoice raised on 1st April 2026.
-        </p>
-      </div>
+                  </div>
+                );
+              }},
+              { key: 'action', label: 'Action', align: 'center', render: (v) => (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleEditClick(v); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: 'transparent', border: 'none',
+                    padding: '5px 10px', fontSize: 11, fontWeight: 700,
+                    color: 'var(--on-surface)', cursor: 'pointer', transition: 'all 0.15s',
+                    borderRadius: 4, whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#4f46e5'; e.currentTarget.style.background = 'var(--surface-low)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--on-surface)'; e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Edit size={11} />
+                  Edit
+                </button>
+              )},
+            ]}
+            data={filtered}
+            isMobile={isMobile}
+            hoverRows={true}
+          />
+        </>
+      )}
 
       {/* UNIFIED EDIT VENDOR MODAL */}
       {editModalOpen && selectedVendor && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(15,23,42,0.6)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: isMobile ? 16 : 24
         }}>
-          <div style={{ background: '#fff', borderRadius: 12, width: 700, overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-             <div style={{ background: '#1E40AF', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', color: '#fff' }}>
+          <div style={{ background: isDark ? '#1e293b' : '#fff', borderRadius: 12, width: isMobile ? '100%' : 700, maxWidth: isMobile ? '100%' : 700, overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+             <div style={{ background: '#4f46e5', padding: isMobile ? '12px 16px' : '16px 20px', display: 'flex', justifyContent: 'space-between', color: '#fff' }}>
               <div>
-                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Edit Vendor</h3>
-                 <p style={{ margin: 0, fontSize: 12, color: '#BFDBFE', fontWeight: 500 }}>Super Admin only — billing slab changes effective from next cycle</p>
+                 <h3 style={{ margin: 0, fontSize: isMobile ? 14 : 16, fontWeight: 700 }}>Edit Vendor</h3>
+                 <p style={{ margin: 0, fontSize: isMobile ? 11 : 12, color: '#c7d2fe', fontWeight: 500 }}>Super Admin only — billing slab changes effective from next cycle</p>
               </div>
-              <X size={20} cursor="pointer" onClick={() => setEditModalOpen(false)} style={{background: '#1E3A8A', padding: 4, borderRadius: 4, width: 28, height: 28}} />
+              <button
+                onClick={() => setEditModalOpen(false)}
+                style={{
+                  width: 28,
+                  height: 28,
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#ef4444';
+                  e.currentTarget.style.color = '#ef4444';
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                  e.currentTarget.style.color = '#fff';
+                  e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <X size={16} />
+              </button>
             </div>
-            
-            <div style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto' }}>
-               
+
+            <div style={{ padding: isMobile ? 16 : 24, maxHeight: '80vh', overflowY: 'auto' }}>
+
                {/* FORM TOP SECTION */}
-               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16}}>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Vendor Name</label>
-                    <input type="text" className="form-control" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}} />
+               <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24, marginBottom: 16}}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Vendor Name</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={e => setEditForm({...editForm, name: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    />
                   </div>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>API Type</label>
-                    <select className="form-control" value={editForm.apiType} onChange={e => setEditForm({...editForm, apiType: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>API Type</label>
+                    <select
+                      value={editForm.apiType}
+                      onChange={e => setEditForm({...editForm, apiType: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    >
                         <option value="ITR">ITR</option>
                         <option value="GST">GST</option>
                         <option value="Banking">Banking</option>
                         <option value="Bureau">Bureau</option>
                     </select>
                   </div>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Role</label>
-                    <select className="form-control" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Role</label>
+                    <select
+                      value={editForm.role}
+                      onChange={e => setEditForm({...editForm, role: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    >
                         <option value="Primary">Primary</option>
                         <option value="Backup">Backup</option>
                     </select>
                   </div>
                </div>
 
-               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24}}>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Contract Start</label>
-                    <input type="text" className="form-control" value={editForm.contract_start} onChange={e => setEditForm({...editForm, contract_start: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}} />
+               <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24, marginBottom: 24}}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Contract Start</label>
+                    <input
+                      type="text"
+                      value={editForm.contract_start}
+                      onChange={e => setEditForm({...editForm, contract_start: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    />
                   </div>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Contract End</label>
-                    <input type="text" className="form-control" value={editForm.contract_end} onChange={e => setEditForm({...editForm, contract_end: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}} />
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Contract End</label>
+                    <input
+                      type="text"
+                      value={editForm.contract_end}
+                      onChange={e => setEditForm({...editForm, contract_end: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    />
                   </div>
-                  <div className="form-group">
-                    <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>Billing Cycle</label>
-                    <select className="form-control" value={editForm.billingModel} onChange={e => setEditForm({...editForm, billingModel: e.target.value})} style={{background: '#fff', fontSize: 13, padding: '8px 12px'}}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Billing Cycle</label>
+                    <select
+                      value={editForm.billingModel}
+                      onChange={e => setEditForm({...editForm, billingModel: e.target.value})}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+                    >
                         <option value="Volume Slabs">Monthly Volume-Based</option>
                         <option value="Per Call (Flat)">Per Call (Flat)</option>
                     </select>
@@ -373,39 +410,84 @@ const VendorManagementPage = () => {
                </div>
 
                {/* BILLING SLABS SECTION */}
-               <div style={{background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 16}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+               <div style={{background: isDark ? '#0f172a' : '#F8FAFC', border: '1px solid var(--outline)', borderRadius: 8, padding: isMobile ? 12 : 16}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0}}>
                     <div>
-                      <h4 style={{margin: 0, fontSize: 14, fontWeight: 700, color: '#1E293B'}}>Billing Slabs</h4>
-                      <p style={{margin: 0, fontSize: 12, color: '#64748B'}}>Rate per API call based on monthly volume. Last slab covers all calls above its From value.</p>
+                      <h4 style={{margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--on-surface)'}}>Billing Slabs</h4>
+                      <p style={{margin: 0, fontSize: 12, color: 'var(--on-muted)'}}>Rate per API call based on monthly volume. Last slab covers all calls above its From value.</p>
                     </div>
-                    <button className="btn btn-outline btn-xs" onClick={addSlabRow} style={{fontWeight: 600, color: '#0F172A', borderColor: '#CBD5E1', display: 'flex', alignItems: 'center', gap: 4}}>
+                    <button
+                      onClick={addSlabRow}
+                      style={{
+                        padding: '8px 16px', background: 'transparent', border: '2px solid var(--outline)',
+                        borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
+                        cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+                      }}
+                      onMouseEnter={e => e.target.style.borderColor = '#4f46e5'}
+                      onMouseLeave={e => e.target.style.borderColor = 'var(--outline)'}
+                    >
                       <span style={{fontSize: 14}}>+</span> Add Slab
                     </button>
                   </div>
 
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8}}>
-                    <div style={{fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase'}}>From (calls)</div>
-                    <div style={{fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase'}}>To (calls)</div>
-                    <div style={{fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase'}}>Rate (₹ per call)</div>
+                  <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr 1fr 40px' : '1fr 1fr 1fr 40px', gap: isMobile ? 8 : 12, marginBottom: 8}}>
+                    <div style={{fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase'}}>From (calls)</div>
+                    <div style={{fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase'}}>To (calls)</div>
+                    <div style={{fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase'}}>Rate (₹ per call)</div>
                     <div></div>
                   </div>
 
                   {editingSlabs.map((slab, i) => (
-                    <div key={i} style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8}}>
-                      <input type="number" className="form-control" value={slab.from} onChange={e => updateSlab(i, 'from', e.target.value)} style={{background: '#fff'}} />
-                      <input type="text" className="form-control" placeholder="To (blank = unl)" value={slab.to === null ? '' : slab.to} onChange={e => updateSlab(i, 'to', e.target.value)} style={{background: '#fff'}} />
-                      <input type="number" className="form-control" value={slab.rate} onChange={e => updateSlab(i, 'rate', e.target.value)} style={{background: '#fff'}} />
-                      <button className="btn btn-outline btn-xs" style={{color: '#EF4444', borderColor: '#FECACA', background: '#FEF2F2', padding: 0, width: 32, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center'}} onClick={() => removeSlab(i)}>✕</button>
+                    <div key={i} style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr 1fr 40px' : '1fr 1fr 1fr 40px', gap: isMobile ? 8 : 12, marginBottom: 8}}>
+                      <input
+                        type="number"
+                        value={slab.from}
+                        onChange={e => updateSlab(i, 'from', e.target.value)}
+                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="To (blank = unl)"
+                        value={slab.to === null ? '' : slab.to}
+                        onChange={e => updateSlab(i, 'to', e.target.value)}
+                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                      />
+                      <input
+                        type="number"
+                        value={slab.rate}
+                        onChange={e => updateSlab(i, 'rate', e.target.value)}
+                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                      />
+                      <button
+                        onClick={() => removeSlab(i)}
+                        style={{
+                          color: '#EF4444', borderColor: '#FECACA', background: '#FEF2F2',
+                          padding: 0, width: 32, height: 36, display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', border: '1px solid', borderRadius: 6, cursor: 'pointer',
+                          fontSize: 16, fontWeight: 700
+                        }}
+                      >✕</button>
                     </div>
                   ))}
                </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
-                <button className="btn btn-outline" onClick={() => setEditModalOpen(false)} style={{fontWeight: 600, color: '#0F172A', borderColor: '#CBD5E1'}}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSaveVendor} style={{fontWeight: 600, background: '#F97316', borderColor: '#EA580C', display: 'flex', alignItems: 'center', gap: 6}}>
-                   <span style={{fontSize: 16}}>💾</span> Save Vendor
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--outline)', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                <button
+                  onClick={() => setEditModalOpen(false)}
+                  style={{
+                    padding: '8px 20px', background: 'transparent', border: '2px solid var(--outline)',
+                    borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
+                    cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                >
+                  Cancel
                 </button>
+                <TravelingBorderButton
+                  onClick={handleSaveVendor}
+                  className="px-6 py-2.5 text-[13px] rounded-[10px]"
+                >
+                  Save Vendor
+                </TravelingBorderButton>
               </div>
             </div>
           </div>

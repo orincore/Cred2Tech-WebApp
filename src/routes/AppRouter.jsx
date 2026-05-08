@@ -53,24 +53,24 @@ const AppRouter = () => (
           {/* Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <DashboardPage />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <ProfilePage />
               </ProtectedRoute>
             } />
             <Route path="/users" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <UsersListPage />
               </ProtectedRoute>
             } />
             <Route
               path="/users/create"
               element={
-                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                   <CreateUserPage />
                 </ProtectedRoute>
               }
@@ -84,12 +84,12 @@ const AppRouter = () => (
               }
             />
             <Route path="/users/:id" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <UserDetailPage />
               </ProtectedRoute>
             } />
             <Route path="/users/:id/edit" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <EditUserPage />
               </ProtectedRoute>
             } />
@@ -102,7 +102,7 @@ const AppRouter = () => (
               }
             />
             <Route path="/hierarchy" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <HierarchyPage />
               </ProtectedRoute>
             } />

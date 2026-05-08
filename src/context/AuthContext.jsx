@@ -20,8 +20,15 @@ export const AuthProvider = ({ children }) => {
           if (finalUser && finalUser.tenant && !finalUser.tenant_type) {
              finalUser.tenant_type = finalUser.tenant.type;
           }
-          if (finalUser && finalUser.role && finalUser.role.name) {
-             finalUser.role = finalUser.role.name;
+          // Normalize role - handle both object and string formats
+          if (finalUser && finalUser.role) {
+             if (typeof finalUser.role === 'object' && finalUser.role.name) {
+               finalUser.role = finalUser.role.name;
+             }
+             // Ensure role is uppercase to match navItems
+             if (typeof finalUser.role === 'string') {
+               finalUser.role = finalUser.role.toUpperCase();
+             }
           }
           setUser(finalUser);
         } catch {
@@ -43,7 +50,16 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('token', newToken);
     setToken(newToken);
     if (newUser && newUser.tenant && !newUser.tenant_type) newUser.tenant_type = newUser.tenant.type;
-    if (newUser && newUser.role && newUser.role.name) newUser.role = newUser.role.name;
+    // Normalize role - handle both object and string formats
+    if (newUser && newUser.role) {
+      if (typeof newUser.role === 'object' && newUser.role.name) {
+        newUser.role = newUser.role.name;
+      }
+      // Ensure role is uppercase to match navItems
+      if (typeof newUser.role === 'string') {
+        newUser.role = newUser.role.toUpperCase();
+      }
+    }
     setUser(newUser);
     return newUser;
   }, []);

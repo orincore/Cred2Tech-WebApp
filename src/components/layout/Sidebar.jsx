@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Zap } from 'lucide-react';
+import { LogOut, Search, ChevronUp, MoreHorizontal, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from '../../constants/navItems';
 import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
+import Logo from '../Logo';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -15,61 +18,122 @@ const Sidebar = () => {
     navigate('/login');
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
+    if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
+  // Determine sidebar visibility
+  const sidebarVisible = isMobile ? showMobile : isOpen;
+  
+  // Handle link click for mobile - close sidebar
+  const handleLinkClick = () => {
+    if (isMobile && onClose) {
+      onClose();
+    }
+  };
+  
   return (
     <aside style={{
       width: 'var(--sidebar-width)',
       background: 'var(--sidebar-bg)',
       minHeight: '100vh',
+      height: '100vh',
       position: 'fixed',
       top: 0,
-      left: 0,
+      left: sidebarVisible ? 0 : 'calc(-1 * var(--sidebar-width))',
       bottom: 0,
       display: 'flex',
       flexDirection: 'column',
-      zIndex: 100,
+      zIndex: isMobile ? 200 : 100,
       borderRight: '1px solid var(--sidebar-border)',
+      transition: 'left 0.3s ease',
+      boxShadow: isMobile && sidebarVisible ? '4px 0 16px rgba(0,0,0,0.3)' : 'none',
     }}>
-      {/* Logo */}
+      {/* Header / Logo */}
       <div style={{
-        padding: '20px 20px 18px',
-        borderBottom: '1px solid var(--sidebar-border)',
+        padding: '24px 20px 16px',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        justifyContent: 'space-between',
       }}>
+        <Logo size="medium" />
+        <MoreHorizontal size={16} color="#94a3b8" />
+      </div>
+
+      {/* Search Bar & Theme Toggle */}
+      <div style={{ padding: '0 12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
-          width: 34,
-          height: 34,
-          background: 'var(--primary)',
-          borderRadius: 10,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          boxShadow: '0 4px 12px rgba(79,70,229,0.4)',
+          gap: 6,
+          background: 'var(--surface)',
+          border: '1px solid var(--outline)',
+          borderRadius: 8,
+          padding: '6px 10px',
+          flex: 1,
+          minWidth: 0,
         }}>
-          <Zap size={18} color="white" />
+          <Search size={14} color="var(--on-muted)" />
+          <input
+            type="text"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              fontSize: 12,
+              color: 'var(--on-surface)',
+              flex: 1,
+              width: '100%',
+            }}
+          />
         </div>
-        <div>
-          <p style={{ color: 'white', fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>Platform UI</p>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>RBAC Management</p>
-        </div>
+
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            background: 'var(--surface)',
+            border: '1px solid var(--outline)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'var(--on-surface)',
+            transition: 'all 0.2s ease',
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--surface-low)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--surface)';
+          }}
+          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+        >
+          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+        </button>
       </div>
 
       {/* Nav section label */}
-      <div style={{ padding: '18px 20px 6px' }}>
-        <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+      <div style={{ padding: '10px 20px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <ChevronUp size={12} color="#94a3b8" />
+        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Navigation
         </p>
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }} className="custom-scrollbar">
         {visibleItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -77,50 +141,25 @@ const Sidebar = () => {
               key={item.id}
               to={item.path}
               end={item.path === '/'}
-              onClick={item.disabled ? (e) => e.preventDefault() : undefined}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '9px 12px',
-                borderRadius: 'var(--radius)',
-                color: isActive ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
-                background: isActive ? 'var(--sidebar-active-bg)' : 'transparent',
-                fontSize: 14,
-                fontWeight: isActive ? 600 : 400,
-                transition: 'all 0.15s',
+              onClick={item.disabled ? (e) => e.preventDefault() : handleLinkClick}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              style={{
                 opacity: item.disabled ? 0.45 : 1,
                 cursor: item.disabled ? 'not-allowed' : 'pointer',
-                textDecoration: 'none',
-                position: 'relative',
-              })}
-              className={({ isActive }) => isActive ? 'nav-active' : ''}
+              }}
             >
               {({ isActive }) => (
                 <>
-                  {/* Active indicator */}
-                  {isActive && (
-                    <div style={{
-                      position: 'absolute',
-                      left: -10,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 3,
-                      height: '60%',
-                      background: 'var(--primary-light)',
-                      borderRadius: '0 4px 4px 0',
-                    }} />
-                  )}
-                  <Icon size={17} style={{ flexShrink: 0 }} />
+                  <Icon size={16} color={isActive ? 'var(--on-surface)' : 'var(--on-muted)'} style={{ flexShrink: 0 }} />
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.badge && (
                     <span style={{
                       fontSize: 10,
-                      fontWeight: 600,
-                      background: 'rgba(255,255,255,0.1)',
-                      color: 'var(--sidebar-text)',
-                      padding: '2px 7px',
-                      borderRadius: 99,
+                      fontWeight: 700,
+                      background: 'var(--bg)',
+                      color: 'var(--on-muted)',
+                      padding: '2px 6px',
+                      borderRadius: 4,
                     }}>
                       {item.badge}
                     </span>
@@ -134,50 +173,57 @@ const Sidebar = () => {
 
       {/* User section */}
       <div style={{
-        padding: '14px 14px',
+        padding: '16px 20px',
         borderTop: '1px solid var(--sidebar-border)',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-      }}>
+        gap: 12,
+        cursor: 'pointer',
+      }}
+      onClick={() => navigate(`/users/${user?.id}`)}
+      title="View profile"
+      >
         {/* Avatar */}
         <div style={{
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           borderRadius: '50%',
-          background: 'var(--primary)',
+          background: 'var(--on-surface)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 13,
+          fontSize: 12,
           fontWeight: 700,
-          color: 'white',
+          color: 'var(--surface)',
           flexShrink: 0,
-          letterSpacing: '0.03em',
         }}>
           {getInitials(user?.name || 'U')}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
-            color: 'var(--sidebar-text-active)',
+            color: 'var(--on-surface)',
             fontSize: 13,
-            fontWeight: 600,
+            fontWeight: 700,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            lineHeight: 1.2,
           }}>
             {user?.name || 'User'}
           </p>
-          <Badge type="role" value={user?.role} />
+          <p style={{
+            color: 'var(--on-muted)',
+            fontSize: 11,
+            fontWeight: 500,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            marginTop: 2,
+          }}>
+            {user?.email || 'user@cred2tech.com'}
+          </p>
         </div>
-        <button
-          className="btn btn-ghost btn-icon"
-          onClick={handleLogout}
-          title="Log out"
-          style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}
-        >
-          <LogOut size={16} />
-        </button>
+        <MoreHorizontal size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
       </div>
     </aside>
   );

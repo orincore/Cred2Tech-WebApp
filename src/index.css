@@ -108,13 +108,13 @@ html, body {
   --role-msme-bg: #FCE7F3;
 
   /* Sidebar */
-  --sidebar-bg: #0F172A;
-  --sidebar-text: #94A3B8;
-  --sidebar-text-active: #FFFFFF;
-  --sidebar-active-bg: rgba(99, 102, 241, 0.15);
-  --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
-  --sidebar-border: rgba(255, 255, 255, 0.07);
-  --sidebar-width: 260px;
+  --sidebar-bg: var(--bg);
+  --sidebar-text: var(--on-muted);
+  --sidebar-text-active: var(--on-surface);
+  --sidebar-active-bg: var(--surface);
+  --sidebar-hover-bg: var(--surface);
+  --sidebar-border: var(--outline);
+  --sidebar-width: 250px;
   --topbar-height: 64px;
 
   /* Spacing */
@@ -141,6 +141,35 @@ body {
   min-height: 100vh;
 }
 
+/* ---- Sidebar Nav ---- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--on-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--surface-low);
+  color: var(--on-surface);
+}
+
+.nav-item.active {
+  color: var(--on-surface);
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  font-weight: 600;
+}
+
 /* ---- Scrollbar ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -163,21 +192,25 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 /* ---- App Layout ---- */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-main {
   flex: 1;
   margin-left: var(--sidebar-width);
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .page-content {
   flex: 1;
-  padding: 32px;
-  margin-top: var(--topbar-height);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---- Cards ---- */
@@ -351,7 +384,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--bg-surface);
+  background: var(--surface);
 }
 
 thead th {
@@ -359,26 +392,26 @@ thead th {
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--on-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
+  border-bottom: 1px solid var(--outline);
   white-space: nowrap;
 }
 
 tbody tr {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--outline);
   transition: background 0.1s;
 }
 
 tbody tr:last-child { border-bottom: none; }
-tbody tr:hover { background: var(--bg-elevated); }
+tbody tr:hover { background: var(--surface-low); }
 
 tbody td {
   padding: 14px 16px;
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--on-surface);
   vertical-align: middle;
 }
 

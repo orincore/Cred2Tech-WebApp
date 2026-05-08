@@ -1,9 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
-import { Settings, Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronRight, CheckCircle2 } from 'lucide-react';
-import PageHeader from '../components/ui/PageHeader';
+import { Settings, Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronRight, CheckCircle2, Search, Edit, ShieldAlert } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
+import { useTheme } from '../context/ThemeContext';
+import DataTable from '../components/DataTable';
+
+// Responsive hook
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { isMobile, isTablet };
+};
 
 const StatCard = ({ icon: Icon, value, label, sublabel, color }) => (
   <div className="card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
@@ -22,10 +40,14 @@ const StatCard = ({ icon: Icon, value, label, sublabel, color }) => (
 );
 
 const SuperadminPricingPage = () => {
+  const { isMobile, isTablet } = useResponsive();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [pricing, setPricing] = useState([]);
   const [discounts, setDiscounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
   
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -109,263 +131,289 @@ const SuperadminPricingPage = () => {
     return { live, avgRate, avgMargin };
   }, [pricing]);
 
+  const filtered = useMemo(() => {
+    return pricing.filter((p) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q ||
+        p.api_name?.toLowerCase().includes(q) ||
+        p.api_code?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q);
+      return matchSearch;
+    });
+  }, [pricing, search]);
+
+  /* ---- label style shared across filters ---- */
+  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const underlineInput = (active) => ({
+    background: 'transparent', border: 'none',
+    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+    outline: 'none', width: '100%', padding: '6px 0',
+    fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
+    transition: 'border-color 0.2s',
+  });
+
   if (loading) return <LoadingSpinner fullPage />;
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 60 }}>
-      <PageHeader
-        title="API Pricing & Credit Rules"
-        subtitle="DSA charges & discount tiers — Super Admin only"
-        breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'API Pricing' }]}
-        actions={
-            <div style={{ display: 'flex', gap: 8 }}>
-                <div className="btn-group">
-                    <button className="btn btn-ghost btn-sm active">Today</button>
-                    <button className="btn btn-ghost btn-sm">MTD</button>
-                    <button className="btn btn-ghost btn-sm">YTD</button>
-                </div>
-            </div>
-        }
-      />
+    <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      {/* ─── Top header ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+            Admin › API Pricing
+          </p>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+            API Pricing & Credit Rules
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
+            DSA charges & discount tiers
+          </p>
+        </div>
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      {/* ─── Info bar ─── */}
+      <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <ShieldAlert size={16} color="#4f46e5" />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
+        </p>
+      </div>
+
+      {/* ─── Stats cards ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', padding: isMobile ? '16px' : '20px 20px', background: 'var(--bg)', flexShrink: 0 }}>
         <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" />
         <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. Rate / Call" color="#059669" />
         <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. Gross Margin" color="#D97706" />
         <StatCard icon={Building2} value="₹1,150" label="Direct MSME Price" color="#7C3AED" />
       </div>
 
-      <div className="card" style={{ marginBottom: 32, overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)' }}>
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>API Rate Card — DSA Pricing</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0 0' }}>Per-call rates deducted from DSA wallet - edit C2T Rate and press Save</p>
+      {/* ─── Filter row ─── */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+        {/* Search */}
+        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+          <span style={labelSm}>Search</span>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
+            <input
+              type="text"
+              placeholder="API name, code or description…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ ...underlineInput(false), paddingLeft: 20 }}
+              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
+            />
           </div>
-          <button className="btn btn-primary btn-sm" style={{ boxShadow: '0 4px 12px rgba(79,70,229,0.3)' }} disabled={!editingId || saving}>
-            <Save size={14} /> Save Rates
-          </button>
+        </div>
+      </div>
+
+      {/* ─── Pricing table section ─── */}
+      <>
+        {/* Sub-header */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — DSA Pricing</span>
+          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} APIs</span>
+        </div>
+
+        {/* Table */}
+        <DataTable
+          columns={[
+            { key: 'api_name', label: 'API Service', render: (p, idx) => (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{p.api_name || p.api_code}</span>
+                <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
+              </div>
+            )},
+            { key: 'description', label: 'Description', render: (p) => {
+              const isEditing = editingId === p.id;
+              return isEditing ? (
+                <input 
+                  className="form-control form-control-sm" 
+                  value={editForm.description} 
+                  onChange={e => setEditForm({...editForm, description: e.target.value})}
+                  style={{ background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 12 }}
+                />
+              ) : (
+                p.description || '—'
+              );
+            }},
+            { key: 'vendor_cost', label: 'Vendor Cost (₹)', render: (p) => {
+              const isEditing = editingId === p.id;
+              const current = isEditing ? editForm : p;
+              return isEditing ? (
+                <input 
+                  type="number" 
+                  className="form-control form-control-sm" 
+                  value={editForm.vendor_cost} 
+                  onChange={e => setEditForm({...editForm, vendor_cost: parseFloat(e.target.value)})}
+                  style={{ width: 80, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 12 }}
+                />
+              ) : (
+                `₹${p.vendor_cost.toFixed(2)}`
+              );
+            }},
+            { key: 'default_credit_cost', label: 'C2T Rate (₹)', render: (p) => {
+              const isEditing = editingId === p.id;
+              const current = isEditing ? editForm : p;
+              return isEditing ? (
+                <input 
+                  type="number" 
+                  className="form-control" 
+                  value={editForm.default_credit_cost} 
+                  onChange={e => setEditForm({...editForm, default_credit_cost: parseInt(e.target.value) || 0})}
+                  style={{ width: 100, fontWeight: 700, borderColor: '#4f46e5', background: isDark ? '#1e293b' : '#fff', color: 'var(--on-surface)' }} 
+                />
+              ) : (
+                <div style={{ background: isDark ? '#1e293b' : '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
+                  {p.default_credit_cost.toFixed(2)}
+                </div>
+              );
+            }},
+            { key: 'margin', label: 'Margin (₹)', render: (p) => {
+              const isEditing = editingId === p.id;
+              const current = isEditing ? editForm : p;
+              const margin = current.default_credit_cost - current.vendor_cost;
+              return (
+                <span style={{ fontWeight: 700, color: '#059669', fontSize: 13 }}>
+                  ₹{margin.toFixed(2)}
+                </span>
+              );
+            }},
+            { key: 'margin_pct', label: 'Margin %', render: (p) => {
+              const isEditing = editingId === p.id;
+              const current = isEditing ? editForm : p;
+              const margin = current.default_credit_cost - current.vendor_cost;
+              const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
+              return (
+                <span style={{ 
+                  fontSize: 11, fontWeight: 700, color: '#059669',
+                  background: isDark ? '#064e3b' : '#ECFDF5', padding: '2px 8px', borderRadius: '4px'
+                }}>
+                  {marginPct.toFixed(1)}%
+                </span>
+              );
+            }},
+            { key: 'is_active', label: 'Status', render: (p) => (
+              <span style={{ 
+                display: 'flex', alignItems: 'center', gap: 4, 
+                fontSize: 11, fontWeight: 700, color: p.is_active ? '#10b981' : '#f43f5e' 
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? '#10b981' : '#f43f5e' }} />
+                {p.is_active ? 'Live' : 'Disabled'}
+              </span>
+            )},
+            { key: 'action', label: 'Action', align: 'center', render: (p) => {
+              const isEditing = editingId === p.id;
+              return isEditing ? (
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                  <button 
+                    className="btn btn-primary btn-xs" 
+                    onClick={() => handleSavePricing(p.id)} 
+                    disabled={saving}
+                    style={{ fontSize: 11 }}
+                  >
+                    Save
+                  </button>
+                  <button 
+                    className="btn btn-ghost btn-xs" 
+                    onClick={() => setEditingId(null)}
+                    style={{ fontSize: 11 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  className="btn btn-outline btn-xs" 
+                  onClick={() => startEdit(p)}
+                  style={{ fontSize: 11 }}
+                >
+                  Edit
+                </button>
+              );
+            }},
+          ]}
+          data={filtered}
+          isMobile={isMobile}
+          hoverRows={true}
+        />
+      </>
+
+      {/* ─── Volume Package Discounts ─── */}
+      <div style={{ padding: isMobile ? '16px' : '20px 20px', background: 'var(--bg)', flexShrink: 0 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isDark ? '#0f172a' : '#F8FAFC', borderRadius: 8, marginBottom: 16 }}>
+          <div>
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Volume Package Discounts</h3>
+            <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when DSA top-up crosses threshold</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              style={{ border: '1px solid var(--outline)', fontSize: 11, color: 'var(--on-surface)' }} 
+              onClick={handleAddSlab}
+            >
+              <Plus size={14} /> Add Slab
+            </button>
+            <button 
+              className="btn btn-primary btn-sm" 
+              onClick={handleSaveDiscounts} 
+              disabled={saving}
+              style={{ fontSize: 11 }}
+            >
+              <Save size={14} /> Save
+            </button>
+          </div>
         </div>
         
-        <div className="table-wrapper">
-          <table style={{ margin: 0 }}>
-            <thead>
-              <tr>
-                <th style={{ width: 50 }}>#</th>
-                <th>API SERVICE</th>
-                <th>DESCRIPTION</th>
-                <th>VENDOR COST (₹)</th>
-                <th>C2T RATE / CALL (₹)</th>
-                <th style={{ textAlign: 'right' }}>MARGIN (₹)</th>
-                <th style={{ textAlign: 'right' }}>MARGIN %</th>
-                <th>STATUS</th>
-                <th>ACTION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pricing.map((p, idx) => {
-                const isEditing = editingId === p.id;
-                const current = isEditing ? editForm : p;
-                const margin = current.default_credit_cost - current.vendor_cost;
-                const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
-                
-                return (
-                  <tr key={p.id} className="hover-row">
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{idx + 1}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{p.api_name || p.api_code}</span>
-                        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>{p.api_code}</span>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 200 }}>
-                        {isEditing ? (
-                            <input className="form-control form-control-sm" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} />
-                        ) : (
-                            p.description || '—'
-                        )}
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        {isEditing ? (
-                            <input type="number" className="form-control form-control-sm" value={editForm.vendor_cost} onChange={e => setEditForm({...editForm, vendor_cost: parseFloat(e.target.value)})} style={{ width: 80 }} />
-                        ) : (
-                            `₹${p.vendor_cost.toFixed(2)}`
-                        )}
-                    </td>
-                    <td>
-                      {isEditing ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+            {discounts.map(d => (
+                <div key={d.id} style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '1fr 1fr 1fr auto', 
+                  gap: 12, 
+                  padding: '12px 16px', 
+                  background: isDark ? '#1e293b' : '#fff', 
+                  border: '1px solid var(--outline)', 
+                  borderRadius: 8,
+                  alignItems: 'center'
+                }}>
+                    <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: 'var(--on-muted)', fontSize: 12 }}>₹</span>
                         <input 
                           type="number" 
                           className="form-control" 
-                          value={editForm.default_credit_cost} 
-                          onChange={e => setEditForm({...editForm, default_credit_cost: parseInt(e.target.value) || 0})}
-                          style={{ width: 100, fontWeight: 700, borderColor: 'var(--primary)' }} 
+                          value={d.min_topup_amount} 
+                          onChange={e => handleSlabChange(d.id, 'min_topup_amount', parseFloat(e.target.value) || 0)} 
+                          style={{ width: 120, background: 'transparent', border: '1px solid var(--outline)', fontWeight: 600, color: 'var(--on-surface)', fontSize: 13 }} 
                         />
-                      ) : (
-                        <div style={{ background: '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
-                          {p.default_credit_cost.toFixed(2)}
-                        </div>
-                      )}
+                        <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>and above</span>
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: 13 }}>
-                      ₹{margin.toFixed(2)}
+                    <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input 
+                              type="number" 
+                              className="form-control" 
+                              value={d.bonus_percentage} 
+                              onChange={e => handleSlabChange(d.id, 'bonus_percentage', parseFloat(e.target.value) || 0)} 
+                              style={{ width: 60, textAlign: 'center', fontWeight: 700, background: 'transparent', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }} 
+                            />
+                            <span style={{ fontWeight: 600, color: 'var(--on-surface)', fontSize: 13 }}>%</span>
+                        </div>
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--on-muted)' }}>
+                        Top up ₹{Number(d.min_topup_amount).toLocaleString()} → get ₹{Number(d.min_topup_amount * d.bonus_percentage / 100).toLocaleString()} bonus
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <span style={{ 
-                        fontSize: 11, fontWeight: 700, color: '#059669',
-                        background: '#ECFDF5', padding: '2px 8px', borderRadius: '4px'
-                      }}>
-                        {marginPct.toFixed(1)}%
-                      </span>
+                        <button className="btn btn-ghost btn-icon" style={{ color: '#ef4444' }} onClick={() => handleRemoveSlab(d.id)}>
+                            <Trash2 size={14} />
+                        </button>
                     </td>
-                    <td>
-                      <span style={{ 
-                        display: 'flex', alignItems: 'center', gap: 4, 
-                        fontSize: 11, fontWeight: 700, color: p.is_active ? '#059669' : 'var(--text-tertiary)' 
-                      }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? '#059669' : 'var(--text-tertiary)' }} />
-                        {p.is_active ? 'Live' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td>
-                      {isEditing ? (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                            <button className="btn btn-primary btn-xs" onClick={() => handleSavePricing(p.id)} disabled={saving}>Save</button>
-                            <button className="btn btn-ghost btn-xs" onClick={() => setEditingId(null)}>Cancel</button>
-                        </div>
-                      ) : (
-                        <button className="btn btn-outline btn-xs" onClick={() => startEdit(p)}>Edit</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </div>
+            ))}
         </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 32 }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)' }}>
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Volume Package Discounts</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0 0' }}>Bonus wallet credits when DSA top-up crosses threshold - highest applicable slab wins, not stackable</p>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-ghost btn-sm" style={{ border: '1px solid var(--border)' }} onClick={handleAddSlab}>
-              <Plus size={14} /> Add Slab
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={handleSaveDiscounts} disabled={saving}>
-                <Save size={14} /> Save
-            </button>
-          </div>
-        </div>
-        
-        <div className="table-wrapper">
-            <table style={{ margin: 0 }}>
-                <thead>
-                    <tr>
-                        <th>WALLET TOP-UP AMOUNT (₹)</th>
-                        <th>BONUS CREDIT %</th>
-                        <th>EFFECTIVE BENEFIT</th>
-                        <th style={{ textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {discounts.map(d => (
-                        <tr key={d.id}>
-                            <td style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ color: 'var(--text-tertiary)' }}>₹</span>
-                                <input 
-                                  type="number" 
-                                  className="form-control" 
-                                  value={d.min_topup_amount} 
-                                  onChange={e => handleSlabChange(d.id, 'min_topup_amount', parseFloat(e.target.value) || 0)} 
-                                  style={{ width: 120, background: 'transparent', border: '1px solid var(--border)', fontWeight: 600 }} 
-                                />
-                                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>and above</span>
-                            </td>
-                            <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <input 
-                                      type="number" 
-                                      className="form-control" 
-                                      value={d.bonus_percentage} 
-                                      onChange={e => handleSlabChange(d.id, 'bonus_percentage', parseFloat(e.target.value) || 0)} 
-                                      style={{ width: 60, textAlign: 'center', fontWeight: 700 }} 
-                                    />
-                                    <span style={{ fontWeight: 600 }}>%</span>
-                                </div>
-                            </td>
-                            <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                Top up ₹{Number(d.min_topup_amount).toLocaleString()} → get ₹{Number(d.min_topup_amount * d.bonus_percentage / 100).toLocaleString()} bonus credits
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                                <button className="btn btn-ghost btn-icon" style={{ color: 'var(--error)' }} onClick={() => handleRemoveSlab(d.id)}>
-                                    <Trash2 size={16} />
-                                </button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-        <div style={{ padding: '12px 24px', background: '#F8FAFC', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ padding: '12px 16px', background: isDark ? '#0f172a' : '#F8FAFC', borderRadius: 8, marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Info size={14} color="#3B82F6" />
-            <p style={{ fontSize: 11, color: '#475569', margin: 0 }}>Discount applied as bonus credits at time of top-up. Discount slabs apply to wallet recharges — not individual API calls.</p>
-        </div>
-      </div>
-
-      <div className="card">
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)' }}>
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Individual MSME — Direct Access Price</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0 0' }}>MSMEs who self-onboard without a DSA - flat fee covers full credit assessment bundle</p>
-          </div>
-          <button className="btn btn-primary btn-sm">
-            <Save size={14} /> Save Price
-          </button>
-        </div>
-        
-        <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-          <div className="card" style={{ padding: '20px', border: '1px solid var(--primary-subtle)', background: 'rgba(79, 70, 229, 0.02)' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 12 }}>Flat Fee per MSME</p>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>₹ 1150</span>
-                <div style={{ width: 100, height: 2, background: 'var(--primary-subtle)' }} />
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 8 }}>Current effective price</p>
-          </div>
-
-          <div className="card" style={{ padding: '20px' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 12 }}>Bundle Includes</p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {['GST Verification', 'ITR Analysis', 'Banking Analysis', 'Bureau / Credit'].map(item => (
-                    <li key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
-                        <CheckCircle2 size={14} color="#059669" />
-                        {item}
-                    </li>
-                ))}
-            </ul>
-          </div>
-
-          <div className="card" style={{ padding: '20px' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 12 }}>Margin Analysis</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Bundle Revenue</span>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>₹1,150</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total Vendor Cost</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--error)' }}>₹54.50</span>
-                </div>
-                <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>Net Margin</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: '#059669' }}>₹1095.50</span>
-                </div>
-            </div>
-          </div>
+            <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: 0 }}>Discount applied as bonus credits at time of top-up. Discount slabs apply to wallet recharges — not individual API calls.</p>
         </div>
       </div>
     </div>

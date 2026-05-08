@@ -4,13 +4,30 @@ import {
    getProductMatrix, createScheme, getParameterMaster,
    updateSchemeParameter, updateScheme, deleteScheme
 } from '../api/lenderService';
-import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Settings, Plus, Files, Trash, X, Lock } from 'lucide-react';
+import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useTheme } from '../context/ThemeContext';
+
+// Responsive hook
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setIsTablet(window.innerWidth > 768 && window.innerWidth <= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return { isMobile, isTablet };
+};
 
 // Embedded Modal for JSON Slab editing
-const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel }) => {
+const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel, isDark }) => {
    const [slabs, setSlabs] = useState([]);
 
    useEffect(() => {
@@ -36,41 +53,97 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel 
 
    return (
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-         <div style={{ background: '#fff', width: '600px', borderRadius: '8px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+         <div style={{ background: isDark ? '#1e293b' : '#fff', width: '600px', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-               <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Configure Structured Slabs / Logic</h3>
-               <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={20} /></button>
+               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: isDark ? '#fff' : '#1e293b' }}>Configure Structured Slabs / Logic</h3>
+               <button 
+                  className="btn btn-ghost btn-icon" 
+                  onClick={onClose}
+                  style={{ color: isDark ? '#fff' : '#64748b' }}
+               >
+                  <X size={18} />
+               </button>
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>Editing engine rule for: <strong>{parameterLabel}</strong></p>
+            <p style={{ fontSize: 12, color: isDark ? '#94a3b8' : '#64748b', marginBottom: 20 }}>Editing engine rule for: <strong style={{ color: isDark ? '#fff' : '#1e293b' }}>{parameterLabel}</strong></p>
 
             <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 20 }}>
-               <table className="w-full text-sm">
+               <table style={{ width: '100%', fontSize: 12 }}>
                   <thead>
-                     <tr style={{ background: '#f9fafb' }}>
-                        <th className="p-2 text-left">Min Threshold</th>
-                        <th className="p-2 text-left">Max Threshold</th>
-                        <th className="p-2 text-left">Rule / Multiplier</th>
-                        <th className="p-2 w-10"></th>
+                     <tr style={{ background: isDark ? '#0f172a' : '#f9fafb' }}>
+                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Min Threshold</th>
+                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Max Threshold</th>
+                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Rule / Multiplier</th>
+                        <th style={{ padding: 8, width: 40 }}></th>
                      </tr>
                   </thead>
                   <tbody>
                      {slabs.map((slab, idx) => (
-                        <tr key={idx} className="border-b">
-                           <td className="p-2"><input type="number" className="form-control form-control-sm w-full" value={slab.min} onChange={e => updateSlab(idx, 'min', e.target.value)} /></td>
-                           <td className="p-2"><input type="number" className="form-control form-control-sm w-full" value={slab.max} onChange={e => updateSlab(idx, 'max', e.target.value)} /></td>
-                           <td className="p-2"><input type="text" className="form-control form-control-sm w-full" value={slab.value} onChange={e => updateSlab(idx, 'value', e.target.value)} /></td>
-                           <td className="p-2"><button className="btn btn-ghost btn-icon" onClick={() => removeRow(idx)}><Trash size={14} color="var(--danger)" /></button></td>
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--outline)' }}>
+                           <td style={{ padding: 8 }}>
+                              <input 
+                                 type="number" 
+                                 className="form-control form-control-sm" 
+                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
+                                 value={slab.min} 
+                                 onChange={e => updateSlab(idx, 'min', e.target.value)} 
+                              />
+                           </td>
+                           <td style={{ padding: 8 }}>
+                              <input 
+                                 type="number" 
+                                 className="form-control form-control-sm" 
+                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
+                                 value={slab.max} 
+                                 onChange={e => updateSlab(idx, 'max', e.target.value)} 
+                              />
+                           </td>
+                           <td style={{ padding: 8 }}>
+                              <input 
+                                 type="text" 
+                                 className="form-control form-control-sm" 
+                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
+                                 value={slab.value} 
+                                 onChange={e => updateSlab(idx, 'value', e.target.value)} 
+                              />
+                           </td>
+                           <td style={{ padding: 8 }}>
+                              <button 
+                                 className="btn btn-ghost btn-icon" 
+                                 onClick={() => removeRow(idx)}
+                                 style={{ color: '#ef4444' }}
+                              >
+                                 <Trash size={12} />
+                              </button>
+                           </td>
                         </tr>
                      ))}
                   </tbody>
                </table>
             </div>
 
-            <button className="btn btn-outline btn-sm mb-4" onClick={addRow}>+ Add Slab Tier</button>
+            <button 
+               className="btn btn-outline btn-sm mb-4" 
+               onClick={addRow}
+               style={{ fontSize: 11, color: isDark ? '#fff' : '#1e293b', borderColor: isDark ? '#475569' : '#cbd5e1' }}
+            >
+               + Add Slab Tier
+            </button>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #eee', paddingTop: 20 }}>
-               <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-               <button className="btn btn-primary" onClick={() => onSave(slabs)}>Apply Structure</button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid var(--outline)', paddingTop: 20 }}>
+               <button 
+                  className="btn btn-outline" 
+                  onClick={onClose}
+                  style={{ fontSize: 12, color: isDark ? '#fff' : '#1e293b', borderColor: isDark ? '#475569' : '#cbd5e1' }}
+               >
+                  Cancel
+               </button>
+               <button 
+                  className="btn btn-primary" 
+                  onClick={() => onSave(slabs)}
+                  style={{ fontSize: 12 }}
+               >
+                  Apply Structure
+               </button>
             </div>
          </div>
       </div>
@@ -78,6 +151,9 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel 
 };
 
 const LenderConfigPage = () => {
+   const { isMobile, isTablet } = useResponsive();
+   const { theme } = useTheme();
+   const isDark = theme === 'dark';
    const [lenders, setLenders] = useState([]);
    const [selectedLenderId, setSelectedLenderId] = useState('');
    const [products, setProducts] = useState([]);
@@ -258,98 +334,224 @@ const LenderConfigPage = () => {
    }, [parameters]);
 
    return (
-      <div className="space-y-6">
-         <PageHeader
-            title="Lender Configuration Engine"
-            subtitle="Manage exact engine structural matrices per Lender Product"
-            actions={
-               <button className="btn btn-outline btn-sm">
-                  <Settings size={15} /> Global Rule Overrides
-               </button>
-            }
-         />
+      <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+         {/* ─── Top header ─── */}
+         <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+            <div>
+               <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+                  Admin › Lender Configuration
+               </p>
+               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+                  Lender Configuration Engine
+               </h1>
+               <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
+                  Manage exact engine structural matrices per Lender Product
+               </p>
+            </div>
+            <button className="btn btn-outline btn-sm" style={{ fontSize: 11, color: 'var(--on-surface)', borderColor: 'var(--outline)' }}>
+               <Settings size={14} /> Global Rule Overrides
+            </button>
+         </div>
 
-         <div className="card card-padded flex items-center gap-4 bg-white">
-            <div className="flex-1">
-               <label className="block text-sm font-medium text-gray-700 mb-1">Target Lender</label>
-               <div className="flex gap-2">
-                  <select className="form-control flex-1" value={selectedLenderId} onChange={handleLenderChange}>
+         {/* ─── Info bar ─── */}
+         <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <ShieldAlert size={16} color="#4f46e5" />
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to lender configuration affect eligibility calculations immediately.
+            </p>
+         </div>
+
+         {/* ─── Filter row (Lender/Product selectors) ─── */}
+         <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+               <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Lender</span>
+               <div style={{ display: 'flex', gap: 8 }}>
+                  <select 
+                     className="form-control" 
+                     style={{ flex: 1, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }}
+                     value={selectedLenderId} 
+                     onChange={handleLenderChange}
+                  >
                      <option value="">-- Select Lender --</option>
                      {lenders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
-                  <button className="btn btn-outline" onClick={addLender} title="Add Lender"><Plus size={16} /></button>
+                  <button 
+                     className="btn btn-outline" 
+                     onClick={addLender} 
+                     title="Add Lender"
+                     style={{ padding: '8px 12px', fontSize: 11, color: 'var(--on-surface)', borderColor: 'var(--outline)' }}
+                  >
+                     <Plus size={14} />
+                  </button>
                </div>
             </div>
-            <div className="flex-1">
-               <label className="block text-sm font-medium text-gray-700 mb-1">Target Product Line</label>
-               <div className="flex gap-2">
-                  <select className="form-control flex-1" value={selectedProductId} onChange={handleProductChange} disabled={!selectedLenderId}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+               <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Product Line</span>
+               <div style={{ display: 'flex', gap: 8 }}>
+                  <select 
+                     className="form-control" 
+                     style={{ flex: 1, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }}
+                     value={selectedProductId} 
+                     onChange={handleProductChange} 
+                     disabled={!selectedLenderId}
+                  >
                      <option value="">-- Select Product --</option>
                      {products.map(p => <option key={p.id} value={p.id}>{p.product_type} - {p.status}</option>)}
                   </select>
-                  <button className="btn btn-outline" onClick={addProduct} disabled={!selectedLenderId} title="Add Product"><Plus size={16} /></button>
+                  <button 
+                     className="btn btn-outline" 
+                     onClick={addProduct} 
+                     disabled={!selectedLenderId} 
+                     title="Add Product"
+                     style={{ padding: '8px 12px', fontSize: 11, color: 'var(--on-surface)', borderColor: 'var(--outline)' }}
+                  >
+                     <Plus size={14} />
+                  </button>
                </div>
             </div>
          </div>
 
-         {loading && <div className="p-10 text-center"><LoadingSpinner /></div>}
-
-         {!loading && selectedProductId && (
-            <div className="card shadow rounded-lg overflow-hidden bg-white" style={{ maxWidth: '100vw', overflowX: 'auto', border: '1px solid #e2e8f0' }}>
-
-               <div style={{ backgroundColor: '#fffbe6', border: '1px solid #ffe58f', padding: '12px 16px', margin: '16px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div className="flex items-center gap-2 text-yellow-800 text-sm font-medium">
-                     <span role="img" aria-label="edit">✏️</span> <strong>Edit Mode Active</strong> — Tap any cell to modify it. Changed cells are auto-saved.
+         {/* ─── Content ─── */}
+         {loading ? (
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
+               <LoadingSpinner fullPage />
+            </div>
+         ) : !selectedProductId ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+               <Settings size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
+               <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>Select a Lender and Product</h3>
+               <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Choose a lender and product line to view configuration matrix</p>
+            </div>
+         ) : (
+            <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px' : '20px', background: 'var(--bg)' }}>
+               {/* Edit Mode Banner */}
+               <div style={{ 
+                  backgroundColor: isDark ? '#7c2d12' : '#fffbe6', 
+                  border: `1px solid ${isDark ? '#9a3412' : '#ffe58f'}`, 
+                  padding: '12px 16px', 
+                  borderRadius: 8, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: 16
+               }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: isDark ? '#fed7aa' : '#b45309' }}>
+                     <span>✏️</span> <strong>Edit Mode Active</strong> — Tap any cell to modify it. Changed cells are auto-saved.
                   </div>
-                  <div className="text-yellow-700 text-xs flex items-center gap-1">
-                     <span role="img" aria-label="lightning">⚡</span> Saves affect all future eligibility calculations
+                  <div style={{ fontSize: 11, color: isDark ? '#fdba74' : '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                     <span>⚡</span> Saves affect all future eligibility calculations
                   </div>
                </div>
 
-               <div className="px-4 pb-4 flex justify-end items-center">
-                  <button className="btn btn-primary btn-sm flex items-center gap-2 shadow-sm" onClick={addScheme} style={{ background: '#0d6efd' }}><Plus size={16} /> Add Scheme Column</button>
+               {/* Add Scheme Button */}
+               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                  <button 
+                     className="btn btn-primary btn-sm" 
+                     onClick={addScheme} 
+                     style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                     <Plus size={14} /> Add Scheme Column
+                  </button>
                </div>
 
-               <div style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', position: 'relative', padding: '0 16px 16px' }}>
-                  <table className="min-w-full divide-y divide-gray-200" style={{ borderCollapse: 'separate', borderSpacing: 0, border: '1px solid #dee2e6' }}>
-                     <thead className="sticky top-0 z-10" style={{ zIndex: 10 }}>
+               {/* Matrix Table */}
+               <div style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', position: 'relative', border: '1px solid var(--outline)', borderRadius: 8 }}>
+                  <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '100%' }}>
+                     <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                         <tr>
-                           <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-b min-w-[250px] sticky left-0 z-20" style={{ backgroundColor: '#0d6efd', color: '#fff' }}>
+                           <th style={{ 
+                              padding: '12px 16px', 
+                              textAlign: 'left', 
+                              fontSize: 11, 
+                              fontWeight: 700, 
+                              textTransform: 'uppercase', 
+                              letterSpacing: '0.05em', 
+                              borderRight: '1px solid var(--outline)', 
+                              borderBottom: '1px solid var(--outline)', 
+                              minWidth: '250px', 
+                              position: 'sticky', 
+                              left: 0, 
+                              zIndex: 20,
+                              background: '#4f46e5',
+                              color: '#fff'
+                           }}>
                               PARAMETER
                            </th>
                            {schemes.map(sch => (
-                              <th key={sch.id} className="px-4 py-2 border-r border-b text-center min-w-[150px]" style={{ backgroundColor: '#0d6efd', color: '#fff' }}>
-                                 <div className="text-xs font-bold uppercase tracking-wider" style={{ color: '#fff' }}>{sch.scheme_name}</div>
-                                 <div className="mt-1 flex justify-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-                                    <button onClick={() => duplicateScheme(sch.id)} title="Clone Structure"><Files size={12} /></button>
-                                    <button onClick={() => deactivateScheme(sch.id)} title="Deactivate"><Trash size={12} /></button>
+                              <th key={sch.id} style={{ 
+                                 padding: '10px 16px', 
+                                 borderRight: '1px solid var(--outline)', 
+                                 borderBottom: '1px solid var(--outline)', 
+                                 textAlign: 'center', 
+                                 minWidth: '150px',
+                                 background: '#4f46e5',
+                                 color: '#fff'
+                              }}>
+                                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#fff' }}>{sch.scheme_name}</div>
+                                 <div style={{ marginTop: 6, display: 'flex', justifyContent: 'center', gap: 8, opacity: 0.8 }}>
+                                    <button onClick={() => duplicateScheme(sch.id)} title="Clone Structure" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 2 }}><Files size={12} /></button>
+                                    <button onClick={() => deactivateScheme(sch.id)} title="Deactivate" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 2 }}><Trash size={12} /></button>
                                  </div>
                               </th>
                            ))}
                         </tr>
                      </thead>
-                     <tbody className="bg-white divide-y divide-gray-200">
+                     <tbody>
                         {Object.entries(categorizedParams).map(([category, params]) => (
                            <React.Fragment key={category}>
-                              <tr className="border-b" style={{ backgroundColor: '#f8f9fa' }}>
-                                 <td colSpan={schemes.length + 1} className="px-4 py-2 text-xs font-bold uppercase tracking-wider sticky left-0" style={{ color: '#0d6efd', borderRight: '1px solid #dee2e6', backgroundColor: '#f8f9fa' }}>
-                                    <span role="img" aria-label="cat" className="mr-2">📐</span> {category}
+                              <tr style={{ borderBottom: '1px solid var(--outline)' }}>
+                                 <td colSpan={schemes.length + 1} style={{ 
+                                    padding: '10px 16px', 
+                                    fontSize: 11, 
+                                    fontWeight: 700, 
+                                    textTransform: 'uppercase', 
+                                    letterSpacing: '0.05em',
+                                    position: 'sticky', 
+                                    left: 0,
+                                    borderRight: '1px solid var(--outline)',
+                                    background: isDark ? '#0f172a' : '#f8f9fa',
+                                    color: '#4f46e5'
+                                 }}>
+                                    <span style={{ marginRight: 6 }}>📐</span> {category}
                                  </td>
                               </tr>
                               {params.map(p => (
-                                 <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-4 py-3 border-r bg-white text-sm font-medium text-gray-800 sticky left-0 z-10 whitespace-nowrap shadow-[1px_0_0_0_#e5e7eb]">
+                                 <tr key={p.id} style={{ borderBottom: '1px solid var(--outline)' }}>
+                                    <td style={{ 
+                                       padding: '12px 16px', 
+                                       borderRight: '1px solid var(--outline)', 
+                                       fontSize: 13, 
+                                       fontWeight: 600, 
+                                       color: 'var(--on-surface)', 
+                                       position: 'sticky', 
+                                       left: 0, 
+                                       zIndex: 5, 
+                                       whiteSpace: 'nowrap',
+                                       background: isDark ? '#1e293b' : '#fff',
+                                       boxShadow: '1px 0 0 0 var(--outline)'
+                                    }}>
                                        {p.parameter_label}
-                                       <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.parameter_key}</div>
+                                       <div style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace', marginTop: 2 }}>{p.parameter_key}</div>
                                     </td>
 
                                     {schemes.map(sch => {
                                        const val = matrixData[`${sch.id}_${p.id}`] || '';
                                        return (
-                                          <td key={sch.id} className="p-1 border-r text-center align-middle relative group">
+                                          <td key={sch.id} style={{ padding: 4, borderRight: '1px solid var(--outline)', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>
                                              {p.data_type === 'json_slab' ? (
                                                 <button
-                                                   className="w-full text-xs py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 font-medium transition-colors"
+                                                   style={{
+                                                      width: '100%',
+                                                      fontSize: 11,
+                                                      padding: '6px 8px',
+                                                      background: isDark ? '#1e3a8a' : '#eff6ff',
+                                                      color: isDark ? '#93c5fd' : '#1d4ed8',
+                                                      border: `1px solid ${isDark ? '#1e40af' : '#bfdbfe'}`,
+                                                      borderRadius: 4,
+                                                      fontWeight: 600,
+                                                      cursor: 'pointer',
+                                                      transition: 'all 0.15s'
+                                                   }}
                                                    onClick={() => openSlabEditor(sch.id, p.id, p.parameter_label)}
                                                 >
                                                    {Array.isArray(val) && val.length > 0 ? `Slab Set (${val.length} rules)` : 'Configure Slabs'}
@@ -357,10 +559,22 @@ const LenderConfigPage = () => {
                                              ) : (
                                                 <input
                                                    type="text"
-                                                   className="w-full h-full p-2 text-sm text-center bg-transparent border-0 ring-1 ring-transparent focus:ring-blue-500 focus:bg-white rounded transition-all focus:outline-none placeholder-gray-300"
+                                                   style={{
+                                                      width: '100%',
+                                                      height: '100%',
+                                                      padding: '8px',
+                                                      fontSize: 12,
+                                                      textAlign: 'center',
+                                                      background: 'transparent',
+                                                      border: 'none',
+                                                      color: 'var(--on-surface)',
+                                                      transition: 'all 0.15s'
+                                                   }}
                                                    defaultValue={typeof val === 'object' ? JSON.stringify(val) : val}
                                                    onBlur={(e) => handleCellBlur(sch.id, p.id, p.data_type === 'integer' ? parseInt(e.target.value) || 0 : p.data_type === 'boolean' ? e.target.value === 'true' : e.target.value)}
                                                    placeholder="---"
+                                                   onFocus={e => e.target.style.background = isDark ? '#0f172a' : '#f9fafb'}
+                                                   onBlurCapture={e => e.target.style.background = 'transparent'}
                                                 />
                                              )}
                                           </td>
@@ -383,6 +597,7 @@ const LenderConfigPage = () => {
             initialData={slabModalInfo?.initialData}
             onSave={handleSlabSave}
             parameterLabel={slabModalInfo?.label}
+            isDark={isDark}
          />
       </div>
    );

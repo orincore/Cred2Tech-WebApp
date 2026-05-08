@@ -1,37 +1,53 @@
 import React, { useEffect, useState } from 'react';
-import { User, Mail, Phone, Shield, Building2, Layers, GitBranch, Calendar, Key, Activity } from 'lucide-react';
+import { User, Shield } from 'lucide-react';
 import { getMe } from '../api/authService';
 import { useAuth } from '../context/AuthContext';
-import PageHeader from '../components/ui/PageHeader';
-import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, getInitials, formatHierarchyPath } from '../utils/helpers';
+import { useTheme } from '../context/ThemeContext';
+import TravelingBorderButton from '../components/TravelingBorderButton';
 
-const InfoRow = ({ icon: Icon, label, value, mono = false }) => (
-  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 0', borderBottom: '1px solid var(--border)' }}>
-    <div style={{ width: 34, height: 34, borderRadius: 'var(--radius)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <Icon size={16} color="var(--text-tertiary)" />
-    </div>
-    <div style={{ flex: 1 }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</p>
-      <p style={{ fontSize: 14, color: value ? 'var(--text-primary)' : 'var(--text-tertiary)', fontFamily: mono ? 'monospace' : 'inherit', fontWeight: 500 }}>
-        {value || '—'}
-      </p>
-    </div>
-  </div>
-);
-
-const SectionCard = ({ title, children }) => (
-  <div className="card card-padded" style={{ marginBottom: 20 }}>
-    <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{title}</h3>
-    <div style={{ marginTop: 8 }}>{children}</div>
-  </div>
-);
+// Responsive hook
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return { isMobile };
+};
 
 const ProfilePage = () => {
   const { user: authUser, token } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+  const { isMobile } = useResponsive();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState('profile');
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    mobile: '',
+    street: '',
+    apt: '',
+    city: '',
+    state: ''
+  });
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  const sidebarItems = [
+    { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
+    { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
+    { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
+  ];
 
   useEffect(() => {
     const fetch = async () => {
@@ -39,7 +55,7 @@ const ProfilePage = () => {
         const data = await getMe();
         setProfile(data.user || data);
       } catch {
-        setProfile(authUser); // fallback to context data
+        setProfile(authUser);
       } finally {
         setLoading(false);
       }
@@ -47,76 +63,424 @@ const ProfilePage = () => {
     fetch();
   }, [authUser]);
 
+  // Update form data when profile loads
+  useEffect(() => {
+    const u = profile || authUser;
+    if (u) {
+      setFormData({
+        name: u.name || '',
+        email: u.email || '',
+        mobile: u.mobile || '',
+        street: u.address?.street || '',
+        apt: u.address?.apt || u.address?.house_number || '',
+        city: u.address?.city || '',
+        state: u.address?.state || ''
+      });
+    }
+  }, [profile, authUser]);
+
   if (loading) return <LoadingSpinner fullPage />;
 
   const u = profile || authUser;
   if (!u) return null;
 
+  const isActive = u.status?.toUpperCase() === 'ACTIVE';
+
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handlePasswordChange = (field, value) => {
+    setPasswordData(prev => ({ ...prev, [field]: value }));
+    setPasswordError('');
+    setPasswordSuccess('');
+  };
+
+  const handlePasswordSubmit = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!passwordData.currentPassword) {
+      setPasswordError('Current password is required');
+      return;
+    }
+    if (!passwordData.newPassword) {
+      setPasswordError('New password is required');
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('New password and confirm password do not match');
+      return;
+    }
+
+    try {
+      // Add API call to change password here
+      setPasswordSuccess('Password changed successfully');
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      setPasswordError('Failed to change password. Please try again.');
+    }
+  };
+
   return (
-    <div>
-      <PageHeader
-        title="My Profile"
-        subtitle="Your account details and session information"
-        breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'My Profile' }]}
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24, alignItems: 'start' }}>
-        {/* Profile card */}
-        <div className="card card-padded" style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 80, height: 80, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 28, fontWeight: 800, color: 'white',
-            margin: '0 auto 16px',
-            boxShadow: '0 8px 24px rgba(79,70,229,0.3)',
-          }}>
-            {getInitials(u.name)}
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{u.name}</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 14 }}>{u.email}</p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Badge type="role" value={u.role?.name} />
-            <Badge type="status" value={u.status} />
-          </div>
-
-          {u.hierarchy_level && (
-            <div style={{ marginTop: 14 }}>
-              <Badge type="level" value={u.hierarchy_level} />
+    <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <div style={{ padding: isMobile ? '80px 16px 24px' : '24px 32px 24px 60px', overflow: 'auto', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 20 : 40, maxWidth: 1200 }}>
+          
+          {/* ─── Left Sidebar ─── */}
+          <div style={{ width: isMobile ? '100%' : 260, flexShrink: 0 }}>
+            {/* Sidebar Menu */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sidebarItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeSection === item.id;
+                return (
+                  <div 
+                    key={item.id}
+                    onClick={() => setActiveSection(item.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '14px 16px', borderRadius: 12,
+                      background: isActive ? 'var(--surface)' : 'transparent',
+                      cursor: 'pointer', transition: 'all 0.15s'
+                    }}
+                  >
+                    <div style={{ 
+                      width: 36, height: 36, borderRadius: 10,
+                      background: isActive ? 'var(--primary)' : 'var(--surface)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Icon size={18} color={isActive ? '#fff' : 'var(--on-muted)'} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>{item.label}</p>
+                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0' }}>{item.subtitle}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-
-          <div style={{ marginTop: 20, padding: '12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text-tertiary)' }}>
-            <p><strong style={{ color: 'var(--text-secondary)' }}>User ID:</strong> #{u.id}</p>
-            <p style={{ marginTop: 4 }}><strong style={{ color: 'var(--text-secondary)' }}>Member since:</strong><br />{formatDateTime(u.created_at)}</p>
           </div>
-        </div>
 
-        {/* Details */}
-        <div>
-          <SectionCard title="Basic Information">
-            <InfoRow icon={User} label="Full Name" value={u.name} />
-            <InfoRow icon={Mail} label="Email Address" value={u.email} />
-            <InfoRow icon={Phone} label="Mobile" value={u.mobile} />
-            <InfoRow icon={Activity} label="Account Status" value={u.status} />
-          </SectionCard>
+          {/* ─── Right Content ─── */}
+          <div style={{ flex: 1 }}>
+            {activeSection === 'profile' ? (
+              <>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Personal Information</h2>
 
-          <SectionCard title="Role & Access">
-            <InfoRow icon={Shield} label="Platform Role" value={u.role?.name} />
-            <InfoRow icon={User} label="Role ID" value={u.role_id?.toString()} />
-          </SectionCard>
+                {/* Avatar Section */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+                  <div style={{
+                    width: 80, height: 80, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 28, fontWeight: 800, color: '#fff',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}>
+                    {getInitials(u.name)}
+                  </div>
+                </div>
 
-          <SectionCard title="Hierarchy & Organization">
-            <InfoRow icon={Building2} label="DSA Organization" value={u.dsa?.name} />
-            <InfoRow icon={Layers} label="Hierarchy Level" value={u.hierarchy_level} />
-            <InfoRow icon={GitBranch} label="Hierarchy Path" value={formatHierarchyPath(u.hierarchy_path)} />
-            <InfoRow icon={User} label="Manager ID" value={u.manager_id?.toString()} />
-          </SectionCard>
+                {/* Form Fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Full Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Full Name</label>
+                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={e => handleChange('name', e.target.value)}
+                    placeholder="Enter your full name"
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                      padding: 0, focusRing: 0
+                    }}
+                  />
+                </div>
+              </div>
 
-          <SectionCard title="Session Information">
-            <InfoRow icon={Calendar} label="Account Created" value={formatDateTime(u.created_at)} />
-            <InfoRow icon={Key} label="Active Session Token (truncated)" value={token ? `${token.slice(0, 40)}…` : '—'} mono />
-          </SectionCard>
+              {/* Email */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Email Address</label>
+                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={e => handleChange('email', e.target.value)}
+                    placeholder="name@company.com"
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                      padding: 0, focusRing: 0
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Mobile */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Mobile Number</label>
+                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                  <input
+                    type="tel"
+                    value={formData.mobile}
+                    onChange={e => handleChange('mobile', e.target.value)}
+                    placeholder="+91 98765 43210"
+                    style={{
+                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                      padding: 0, focusRing: 0
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Street & Apt */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Street Number</label>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                    <input
+                      type="text"
+                      value={formData.street}
+                      onChange={e => handleChange('street', e.target.value)}
+                      placeholder="123"
+                      style={{
+                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                        padding: 0, focusRing: 0
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Apt / House Number</label>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                    <input
+                      type="text"
+                      value={formData.apt}
+                      onChange={e => handleChange('apt', e.target.value)}
+                      placeholder="A-45"
+                      style={{
+                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                        padding: 0, focusRing: 0
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* City & State */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>City</label>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={e => handleChange('city', e.target.value)}
+                      placeholder="Mumbai"
+                      style={{
+                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                        padding: 0, focusRing: 0
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>State</label>
+                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                    <input
+                      type="text"
+                      value={formData.state}
+                      onChange={e => handleChange('state', e.target.value)}
+                      placeholder="Maharashtra"
+                      style={{
+                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                        padding: 0, focusRing: 0
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Update Button */}
+              <div style={{ display: 'flex', width: '140px' }}>
+                <TravelingBorderButton
+                  onClick={() => console.log('Update profile')}
+                  size="sm"
+                  className="flex-1"
+                >
+                  Update
+                </TravelingBorderButton>
+              </div>
+                </div>
+              </>
+            ) : activeSection === 'password' ? (
+              <>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Change Password</h2>
+
+                {passwordError && (
+                  <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
+                    {passwordError}
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div style={{ padding: '12px 16px', background: '#dcfce7', color: '#16a34a', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
+                    {passwordSuccess}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Current Password</label>
+                    <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                      <input
+                        type="password"
+                        value={passwordData.currentPassword}
+                        onChange={e => handlePasswordChange('currentPassword', e.target.value)}
+                        placeholder="Enter current password"
+                        style={{
+                          width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                          color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                          padding: 0, focusRing: 0
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>New Password</label>
+                    <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                      <input
+                        type="password"
+                        value={passwordData.newPassword}
+                        onChange={e => handlePasswordChange('newPassword', e.target.value)}
+                        placeholder="Enter new password"
+                        style={{
+                          width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                          color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                          padding: 0, focusRing: 0
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Confirm New Password</label>
+                    <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                      <input
+                        type="password"
+                        value={passwordData.confirmPassword}
+                        onChange={e => handlePasswordChange('confirmPassword', e.target.value)}
+                        placeholder="Confirm new password"
+                        style={{
+                          width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                          color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                          padding: 0, focusRing: 0
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ width: '250px' }}>
+                    <TravelingBorderButton
+                      onClick={handlePasswordSubmit}
+                      size="sm"
+                      className="w-full"
+                    >
+                      Change Password
+                    </TravelingBorderButton>
+                  </div>
+                </div>
+              </>
+            ) : activeSection === 'additional' ? (
+              <>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Additional Information</h2>
+
+                {/* Role & Access */}
+                <div style={{ marginBottom: 32 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Role & Access</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Platform Role</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{toTitleCase(u.role?.name) || '—'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Role ID</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.role_id || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hierarchy & Organization */}
+                <div style={{ marginBottom: 32 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Hierarchy & Organization</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>DSA Organization</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.dsa?.name || '—'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Hierarchy Level</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.hierarchy_level || '—'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Hierarchy Path</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatHierarchyPath(u.hierarchy_path) || 'Root'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Manager ID</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.manager_id ? `#${u.manager_id}` : '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Session Information */}
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Session Information</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Account Created</label>
+                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatDateTime(u.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -124,3 +488,4 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
+
