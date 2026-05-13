@@ -431,17 +431,6 @@ const CreateUserPage = () => {
                 {rolesError && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
                 <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Determines what the user can access on the platform</div>
               </div>
-              <div>
-                <label style={labelStyle}>Tenant Scope</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={`Locked to Tenant ID: ${currentUser.tenant_id}`}
-                  disabled
-                  style={{ ...inputStyle, opacity: 0.6 }}
-                />
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Users are strictly locked to your organizational tenant</div>
-              </div>
             </div>
           </div>
 

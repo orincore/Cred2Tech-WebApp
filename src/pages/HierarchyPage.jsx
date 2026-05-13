@@ -65,42 +65,56 @@ const buildTree = (users) => {
 };
 
 // Assign x/y positions to each node via tree layout
+// Uses a two-pass approach: 1) compute subtree widths bottom-up, 2) assign positions top-down
 const layoutTree = (nodes, startX = 0, startY = 0) => {
   const positioned = [];
+
+  // Pass 1: compute subtree widths bottom-up
+  const computeWidth = (node) => {
+    if (!node._children || node._children.length === 0) {
+      node._subtreeWidth = NODE_W;
+      return NODE_W;
+    }
+    const childWidths = node._children.map(c => computeWidth(c));
+    const totalWidth = childWidths.reduce((s, w) => s + w, 0) + H_GAP * (node._children.length - 1);
+    node._subtreeWidth = Math.max(NODE_W, totalWidth);
+    return node._subtreeWidth;
+  };
+
+  nodes.forEach(root => computeWidth(root));
+
+  // Pass 2: assign positions top-down
   const assignPos = (node, x, y) => {
     const result = { ...node, x, y };
-    if (!node._children || node._children.length === 0) {
-      result._subtreeWidth = NODE_W;
-      positioned.push(result);
-      return result;
-    }
-    const laid = node._children.map((c, i) => assignPos(c, 0, y + NODE_H + V_GAP));
-    const totalWidth = laid.reduce((s, c) => s + c._subtreeWidth, 0) + H_GAP * (laid.length - 1);
-    result._subtreeWidth = Math.max(NODE_W, totalWidth);
-    let cx = x - totalWidth / 2;
-    laid.forEach((c, i) => {
-      const cw = c._subtreeWidth;
-      const newX = cx + cw / 2;
-      c.x = newX;
-      repositionSubtree(c, positioned, newX - c.x);
-      cx += cw + H_GAP;
-    });
-    result._subtreeWidth = Math.max(NODE_W, totalWidth);
     positioned.push(result);
-    return result;
+
+    if (!node._children || node._children.length === 0) {
+      return;
+    }
+
+    // Total width of all children
+    const totalChildrenWidth = node._children.reduce((s, c) => s + c._subtreeWidth, 0) + H_GAP * (node._children.length - 1);
+
+    // Center children under the parent
+    // Start from parent's x minus half of children's total width
+    let cx = x - totalChildrenWidth / 2;
+
+    node._children.forEach(child => {
+      const childX = cx + child._subtreeWidth / 2;
+      const childY = y + NODE_H + V_GAP;
+      assignPos(child, childX, childY);
+      cx += child._subtreeWidth + H_GAP;
+    });
   };
 
-  const repositionSubtree = (node, list, dx) => {
-    const idx = list.findIndex(n => n.id === node.id);
-    if (idx >= 0) list[idx].x += dx;
-    if (node._children) node._children.forEach(c => repositionSubtree(c, list, dx));
-  };
-
+  // Position each root tree side by side
   let cx = startX;
   nodes.forEach((root) => {
-    const laid = assignPos(root, cx + (root._subtreeWidth || NODE_W) / 2, startY);
-    cx += (laid._subtreeWidth || NODE_W) + H_GAP * 2;
+    const rootX = cx + root._subtreeWidth / 2;
+    assignPos(root, rootX, startY);
+    cx += root._subtreeWidth + H_GAP * 3; // extra gap between separate trees
   });
+
   return positioned;
 };
 
