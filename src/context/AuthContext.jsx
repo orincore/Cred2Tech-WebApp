@@ -3,15 +3,38 @@ import { login as loginApi, getMe } from '../api/authService';
 
 const AuthContext = createContext(null);
 
+// Cookie helper functions
+const setCookie = (name, value, days) => {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  const cookieValue = `${name}=${value}; expires=${expires.toUTCString()}; path=/; domain=.cred2tech.com; SameSite=Lax; Secure`;
+  document.cookie = cookieValue;
+};
+
+const getCookie = (name) => {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+};
+
+const deleteCookie = (name) => {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.cred2tech.com`;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [token, setToken] = useState(() => localStorage.getItem('token') || getCookie('cred2tech_token'));
   const [isLoading, setIsLoading] = useState(true);
 
   // On mount, try to rehydrate current user from stored token
   useEffect(() => {
     const initializeAuth = async () => {
-      const storedToken = localStorage.getItem('token');
+      const storedToken = localStorage.getItem('token') || getCookie('cred2tech_token');
       if (storedToken) {
         try {
           const userData = await getMe();
@@ -35,6 +58,7 @@ export const AuthProvider = ({ children }) => {
           // Token is invalid/expired — clear everything
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          deleteCookie('cred2tech_token');
           setToken(null);
           setUser(null);
         }
@@ -47,7 +71,13 @@ export const AuthProvider = ({ children }) => {
   const login = useCallback(async (email, password) => {
     const data = await loginApi(email, password);
     const { token: newToken, user: newUser } = data;
+    
+    // Store in localStorage for backward compatibility
     localStorage.setItem('token', newToken);
+    
+    // Set cookie for cross-domain sharing
+    setCookie('cred2tech_token', newToken, 7); // 7 days expiry
+    
     setToken(newToken);
     if (newUser && newUser.tenant && !newUser.tenant_type) newUser.tenant_type = newUser.tenant.type;
     // Normalize role - handle both object and string formats
@@ -67,6 +97,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    deleteCookie('cred2tech_token');
     setToken(null);
     setUser(null);
   }, []);
