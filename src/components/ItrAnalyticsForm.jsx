@@ -125,8 +125,8 @@ const ItrAnalyticsForm = ({
     return (
         <div style={{
             backgroundColor: 'var(--bg-base)',
-            border: `1px solid ${status === 'COMPLETED' ? '#86efac' : status === 'FAILED' ? '#fca5a5' : status === 'PROCESSING' ? '#fcd34d' : '#e2e8f0'}`,
-            borderRadius: 'var(--radius)',
+            border: `1px solid ${status === 'COMPLETED' ? 'var(--success)' : status === 'FAILED' ? 'var(--error)' : status === 'PROCESSING' ? 'var(--warning)' : 'var(--border)'}`,
+            borderRadius: 0,
             overflow: 'hidden'
         }}>
             {/* Summary Row */}
@@ -148,12 +148,12 @@ const ItrAnalyticsForm = ({
                     {status === 'INITIATED' && 'No ITR analytics fetched yet'}
                     {status === 'PROCESSING' && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <RefreshCw size={13} color="#92400e" />
+                            <RefreshCw size={13} color="var(--warning)" />
                             Processing... click "Check Status" when ready
                         </span>
                     )}
                     {status === 'COMPLETED' && summary && (
-                        <span style={{ color: '#166534' }}>
+                        <span style={{ color: 'var(--success)' }}>
                             Taxable Income: {formatINR(summary.taxableIncome || summary.salaryIncome)}
                             {summary.profit != null && ` · Profit: ${formatINR(summary.profit)}`}
                             {summary.year && ` (FY ${summary.year})`}
@@ -167,19 +167,19 @@ const ItrAnalyticsForm = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
                     {/* Status Pill */}
                     {status === 'COMPLETED' ? (
-                        <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CheckCircle2 size={13} /> Done
                         </span>
                     ) : status === 'PROCESSING' ? (
-                        <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #fde68a' }}>
+                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
                             Processing
                         </span>
                     ) : status === 'FAILED' ? (
-                        <span style={{ background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600 }}>
                             Failed
                         </span>
                     ) : (
-                        <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #fde68a' }}>
+                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
                             Pending
                         </span>
                     )}
@@ -188,7 +188,7 @@ const ItrAnalyticsForm = ({
                     {status === 'PROCESSING' ? (
                         <button
                             type="button"
-                            style={{ backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fcd34d', border: '1px solid', padding: '6px 16px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                            className="btn btn-secondary btn-sm"
                             onClick={handleSync}
                             disabled={loading}
                         >
@@ -199,20 +199,20 @@ const ItrAnalyticsForm = ({
                             {documentId ? (
                                 <button
                                     type="button"
-                                    style={{ backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #86efac', padding: '6px 14px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                                    className="btn btn-secondary btn-sm"
                                     onClick={() => downloadDocument(documentId, `itr_analytics.xlsx`).catch(e => toast.error('Download failed: ' + e.message))}
                                 >
                                     <Download size={13} /> Excel
                                 </button>
                             ) : excelUrl ? (
                                 // Fallback for records ingested before document storage was implemented
-                                <a href={excelUrl} target="_blank" rel="noreferrer" style={{ backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #86efac', padding: '6px 14px', borderRadius: 6, fontWeight: 600, fontSize: 13, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <a href={excelUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
                                     <FileText size={13} /> Excel
                                 </a>
                             ) : null}
                             <button
                                 type="button"
-                                style={{ backgroundColor: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', padding: '6px 14px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                                className="btn btn-secondary btn-sm"
                                 onClick={() => setIsOpen(!isOpen)}
                             >
                                 {isOpen ? 'Hide' : 'View Details'}
@@ -221,7 +221,7 @@ const ItrAnalyticsForm = ({
                     ) : (
                         <button
                             type="button"
-                            style={{ backgroundColor: '#7c3aed', color: 'white', border: 'none', padding: '6px 20px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                            className="btn btn-primary btn-sm"
                             onClick={() => setIsOpen(!isOpen)}
                         >
                             {status === 'FAILED' ? 'Retry' : 'Fetch ITR'}
@@ -232,23 +232,23 @@ const ItrAnalyticsForm = ({
 
             {/* Expando: Input Form OR Analytics Summary */}
             {isOpen && (
-                <div style={{ padding: 24, backgroundColor: '#f8fafc', borderTop: '1px solid var(--border)' }}>
+                <div style={{ padding: 24, backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                     {status !== 'COMPLETED' ? (
                         <>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                                 <span style={{ fontWeight: 600, fontSize: 14 }}>Enter ITR Portal Credentials</span>
-                                <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }} onClick={() => setIsOpen(false)}>
+                                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setIsOpen(false)}>
                                     <X size={16} />
                                 </button>
                             </div>
 
                             {walletBalance < itrCost && (
-                                <div style={{ padding: 12, borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
+                                <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
                                     <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {itrCost}.
                                 </div>
                             )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--bg-base)', padding: 16, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
                                 <FormField label="PAN / ITR Username" required>
                                     <input
                                         type="text"
@@ -256,7 +256,7 @@ const ItrAnalyticsForm = ({
                                         value={pan}
                                         onChange={e => setPan(e.target.value.toUpperCase())}
                                         placeholder="ABCDE1234F"
-                                        style={{ backgroundColor: '#f1f5f9', border: 'none', textTransform: 'uppercase' }}
+                                        style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', textTransform: 'uppercase' }}
                                     />
                                 </FormField>
                                 <FormField label="ITR Portal Password" required>
@@ -266,16 +266,16 @@ const ItrAnalyticsForm = ({
                                         value={password}
                                         onChange={e => setPassword(e.target.value)}
                                         placeholder="Enter portal password"
-                                        style={{ backgroundColor: '#f1f5f9', border: 'none', borderLeft: '3px solid #7c3aed' }}
+                                        style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', borderLeft: '3px solid var(--primary)' }}
                                     />
                                 </FormField>
                             </div>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
-                                <button type="button" style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13 }} onClick={() => setIsOpen(false)}>Cancel</button>
+                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsOpen(false)}>Cancel</button>
                                 <button
                                     type="button"
-                                    style={{ backgroundColor: '#7c3aed', color: 'white', border: 'none', padding: '8px 24px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: (loading || walletBalance < itrCost) ? 0.6 : 1 }}
+                                    className="btn btn-primary"
                                     onClick={handleAnalyze}
                                     disabled={loading || walletBalance < itrCost}
                                 >
@@ -297,7 +297,7 @@ const ItrAnalyticsForm = ({
                                         { label: 'Salary Income', value: formatINR(summary.salaryIncome) },
                                         { label: 'Assessment Year', value: summary.year ? `FY ${summary.year}` : '—' }
                                     ].map(item => (
-                                        <div key={item.label} style={{ padding: 12, background: 'var(--bg-base)', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                        <div key={item.label} style={{ padding: 12, background: 'var(--bg-base)', borderRadius: 0, border: '1px solid var(--border)' }}>
                                             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{item.label}</div>
                                             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{item.value}</div>
                                         </div>
@@ -308,13 +308,13 @@ const ItrAnalyticsForm = ({
                                 <button
                                     type="button"
                                     onClick={() => downloadDocument(documentId, 'itr_analytics.xlsx').catch(e => toast.error('Download failed: ' + e.message))}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #86efac', padding: '8px 16px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                                    className="btn btn-secondary"
                                 >
                                     <Download size={14} /> Download Full Excel Report
                                 </button>
                             ) : excelUrl ? (
                                 // Fallback for records without document storage
-                                <a href={excelUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #86efac', padding: '8px 16px', borderRadius: 6, fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+                                <a href={excelUrl} target="_blank" rel="noreferrer" className="btn btn-secondary">
                                     <FileText size={14} /> Download Full Excel Report
                                 </a>
                             ) : null}

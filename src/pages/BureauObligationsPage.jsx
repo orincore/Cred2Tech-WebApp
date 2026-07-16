@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import { PlusCircle, ChevronLeft, Zap } from 'lucide-react';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -94,6 +95,7 @@ export default function BureauObligationsPage() {
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', paddingBottom: 60 }}>
+      <CaseWizardStepper currentStep={5} caseId={caseId} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>

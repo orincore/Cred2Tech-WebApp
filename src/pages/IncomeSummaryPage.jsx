@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import { PlusCircle, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 
 const INCOME_TYPES = [
@@ -103,6 +104,7 @@ export default function IncomeSummaryPage() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: 60 }}>
+      <CaseWizardStepper currentStep={4} caseId={caseId} />
       {/* Page Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>

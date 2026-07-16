@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import {
   ChevronLeft, Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, Square, UploadCloud,
@@ -752,6 +753,7 @@ export default function ProposalPage() {
 
   return (
     <div style={{ maxWidth: 940, margin: '0 auto', paddingBottom: 100 }}>
+      <CaseWizardStepper currentStep={7} caseId={caseId} proposalId={proposalId} />
       {/* ── Page Header ────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>

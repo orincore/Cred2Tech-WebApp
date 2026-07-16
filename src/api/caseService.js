@@ -6,6 +6,12 @@ export const caseService = {
     return response.data;
   },
 
+  // Pipeline (List, Filter, Sort, Pagination)
+  getPipeline: async (params) => {
+    const response = await axiosInstance.get('/cases/pipeline', { params });
+    return response.data;
+  },
+
   getCaseById: async (id) => {
     const response = await axiosInstance.get(`/cases/${id}`);
     return response.data;
@@ -18,6 +24,16 @@ export const caseService = {
 
   addApplicant: async (caseId, applicantData) => {
     const response = await axiosInstance.post(`/cases/${caseId}/add-applicant`, applicantData);
+    return response.data;
+  },
+
+  removeApplicant: async (caseId, applicantId) => {
+    const response = await axiosInstance.delete(`/cases/${caseId}/applicants/${applicantId}`);
+    return response.data;
+  },
+
+  reuseApplicant: async (caseId, source_applicant_id) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/applicants/reuse`, { source_applicant_id });
     return response.data;
   },
 
@@ -125,5 +141,64 @@ export const caseService = {
   cloneProposal: async (caseId, proposalId, payload) => {
     const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/clone`, payload);
     return response.data;
+  },
+
+  updateCaseStage: async (id, stage) => {
+    const response = await axiosInstance.patch(`/cases/${id}/stage`, { stage });
+    return response.data;
+  },
+
+  rollbackCaseStage: async (id, payload) => {
+    const response = await axiosInstance.post(`/cases/${id}/stage-rollback`, payload);
+    return response.data;
+  },
+
+  // ─── Sanction & Disbursement Flow ──────────────────────────────────────────
+  sanctionCase: async (caseId, payload) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/sanction`, payload);
+    return response.data;
+  },
+  recordDisbursement: async (caseId, payload, idempotencyKey) => {
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const response = await axiosInstance.post(`/cases/${caseId}/disbursements`, payload, { headers });
+    return response.data;
+  },
+  getDisbursementSummary: async (caseId) => {
+    const response = await axiosInstance.get(`/cases/${caseId}/disbursements`);
+    return response.data;
+  },
+  getPartialDisbursements: async () => {
+    const response = await axiosInstance.get('/disbursements/partial');
+    return response.data;
+  },
+
+  allocateDsaUser: async (caseId, userId) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/allocate-dsa-user`, { assigned_dsa_user_id: userId });
+    return response.data;
+  },
+
+  downloadLoanApplicationSummary: async (caseId) => {
+    const response = await axiosInstance.get(`/cases/${caseId}/loan-application-summary.xlsx`, {
+      responseType: 'blob'
+    });
+
+    const disposition = response.headers?.['content-disposition'] || '';
+    const utf8FileName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const quotedFileName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+    const fileName = utf8FileName
+      ? decodeURIComponent(utf8FileName)
+      : (quotedFileName || 'Loan Application Summary.xlsx');
+
+    const blob = new Blob([response.data], {
+      type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };

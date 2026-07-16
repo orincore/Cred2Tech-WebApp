@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsers } from '../api/userService';
+import api from '../api/axiosInstance';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
 import { getInitials } from '../utils/helpers';
@@ -40,12 +41,12 @@ const QuickAction = ({ icon: IconSVG, label, desc, color, onClick }) => (
       gap: 12,
       width: '100%',
     }}
-    onMouseEnter={(e) => { 
-      e.currentTarget.style.borderColor = color; 
+    onMouseEnter={(e) => {
+      e.currentTarget.style.borderColor = color;
       e.currentTarget.style.background = 'var(--surface-low)';
     }}
-    onMouseLeave={(e) => { 
-      e.currentTarget.style.borderColor = 'var(--outline)'; 
+    onMouseLeave={(e) => {
+      e.currentTarget.style.borderColor = 'var(--outline)';
       e.currentTarget.style.background = 'transparent';
     }}
   >
@@ -76,9 +77,8 @@ const DashboardPage = () => {
         if (user.role === 'SUPER_ADMIN') {
           // SUPER_ADMIN Dashboard requirements: Show aggregated tenant-level performance only. Do not display individual user-level data.
           // They don't fetch users here. They fetch analytics.
-          const res = await fetch('http://localhost:3000/analytics/dsa-performance', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          const analytics = await res.json();
-          setUsers(analytics || []);
+          const res = await api.get('/analytics/dsa-performance');
+          setUsers(res.data || []);
         } else {
           const data = await getUsers();
           setUsers(Array.isArray(data) ? data : data.users || []);
@@ -186,7 +186,7 @@ const DashboardPage = () => {
                 </p>
               </div>
               {user?.role !== 'SUPER_ADMIN' && (
-                <button 
+                <button
                   onClick={() => navigate('/users')}
                   style={{
                     background: 'var(--surface)',
@@ -205,7 +205,7 @@ const DashboardPage = () => {
                 </button>
               )}
             </div>
-            
+
             {loading ? (
               <div style={{ padding: 24, color: 'var(--on-muted)' }}>Loading data...</div>
             ) : user?.role === 'SUPER_ADMIN' ? (

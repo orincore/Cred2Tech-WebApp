@@ -128,7 +128,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     // RENDER HORIZONTAL ROW
     return (
-        <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid #f97316', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+        <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--warning)', borderRadius: 0, overflow: 'hidden' }}>
             {/* Summary Row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: 16, alignItems: 'center', padding: '16px 24px', backgroundColor: 'var(--bg-base)' }}>
                 {/* Left: Name and Type */}
@@ -152,11 +152,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
                     {/* Status Pills */}
                     {(status === 'COMPLETED' || status === 'FAILED_DOWNLOAD') ? (
-                        <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <CheckCircle2 size={14} /> Uploaded
                         </span>
                     ) : (
-                        <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #fde68a' }}>
+                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
                             {status === 'ANALYZING' ? 'Processing' : 'Pending'}
                         </span>
                     )}
@@ -186,13 +186,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                     <button
                                         type="button"
                                         className="btn btn-ghost btn-sm"
-                                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: '#64748b' }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: 'var(--text-tertiary)' }}
                                         onClick={() => downloadDocument(documentIds.json, 'bank_statement.json').catch(e => toast.error(e.message))}
                                     >
                                         <FileText size={14} /> JSON
                                     </button>
                                 ) : (
-                                    <a href={sourceUrls.json} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: '#64748b' }}>
+                                    <a href={sourceUrls.json} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: 'var(--text-tertiary)' }}>
                                         <FileText size={14} /> JSON
                                     </a>
                                 )
@@ -202,20 +202,20 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                     {loading ? 'Fetching...' : 'Fetch Reports'}
                                 </button>
                             )}
-                            <button type="button" className="btn btn-secondary btn-sm" style={{ fontWeight: 600, backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }} onClick={() => setIsUploadOpen(!isUploadOpen)}>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
                                 Replace
                             </button>
                         </div>
                     ) : status === 'FAILED_DOWNLOAD' ? (
-                        <button type="button" className="btn btn-sm" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fca5a5', fontWeight: 600 }} onClick={() => { setDownloadAttempted(false); fetchDownloads(); }} disabled={loading}>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => { setDownloadAttempted(false); fetchDownloads(); }} disabled={loading}>
                             {loading ? '...' : 'Retry Download'}
                         </button>
                     ) : status === 'ANALYZING' ? (
-                        <button type="button" className="btn btn-sm" style={{ backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fcd34d', fontWeight: 600 }} onClick={pollStatus} disabled={loading}>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={pollStatus} disabled={loading}>
                             {loading ? '...' : 'Check Status'}
                         </button>
                     ) : (
-                        <button type="button" className="btn btn-primary btn-sm" style={{ backgroundColor: '#7c3aed', borderColor: '#7c3aed', padding: '6px 20px', borderRadius: 6, fontWeight: 600 }} onClick={() => setIsUploadOpen(!isUploadOpen)}>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
                             Upload PDF
                         </button>
                     )}
@@ -224,21 +224,21 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
             {/* Expando File UI (Only visible when isUploadOpen is true) */}
             {isUploadOpen && (
-                <div style={{ padding: '24px', backgroundColor: '#f8fafc', borderTop: '1px solid var(--border)' }}>
+                <div style={{ padding: '24px', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                        <UploadCloud size={18} color="#64748b" />
+                        <UploadCloud size={18} color="var(--text-tertiary)" />
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
                     </div>
 
                     {walletBalance < analyzeCost && (
-                        <div style={{ padding: 12, borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
+                        <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
                             <AlertCircle size={16} /> Insufficient credits. Wallet has {walletBalance}, needs {analyzeCost}.
                         </div>
                     )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {files.map((file, index) => (
-                            <div key={index} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-base)', padding: 16, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                            <div key={index} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Select Bank Statement</label>
@@ -247,7 +247,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                             accept=".pdf,.xlsx,.xls"
                                             className="form-control"
                                             onChange={e => handleFileUpload(index, e)}
-                                            style={{ backgroundColor: '#f1f5f9', border: '1px dashed #cbd5e1', padding: '10px' }}
+                                            style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
                                         />
                                         {file.fileName && <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>✓ Attached: {file.fileName}</div>}
                                     </div>
@@ -258,7 +258,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                         placeholder="PDF Password (Optional - if your bank locks the statement)"
                                         value={file.password}
                                         onChange={e => handleFileChange(index, 'password', e.target.value)}
-                                        style={{ backgroundColor: '#f1f5f9', border: 'none', borderLeft: '3px solid #fcd34d' }}
+                                        style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', borderLeft: '3px solid var(--warning)' }}
                                     />
                                 </div>
                                 {files.length > 1 && (
@@ -271,12 +271,12 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-                        <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }} onClick={addFile}>
+                        <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }} onClick={addFile}>
                             <Plus size={16} /> Add Another File
                         </button>
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-secondary btn-sm" style={{ borderColor: '#cbd5e1', backgroundColor: '#ffffff', color: '#334155' }} onClick={handleAnalyze} disabled={loading || walletBalance < analyzeCost}>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || walletBalance < analyzeCost}>
                                 {loading ? 'Wait...' : `Analyze (~${analyzeCost} Cr)`}
                             </button>
                         </div>

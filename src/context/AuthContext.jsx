@@ -7,7 +7,10 @@ const AuthContext = createContext(null);
 const setCookie = (name, value, days) => {
   const expires = new Date();
   expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
-  const cookieValue = `${name}=${value}; expires=${expires.toUTCString()}; path=/; domain=.cred2tech.com; SameSite=Lax; Secure`;
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const domain = isLocalhost ? '' : '; domain=.cred2tech.com';
+  const secure = isLocalhost ? '' : '; Secure';
+  const cookieValue = `${name}=${value}; expires=${expires.toUTCString()}; path=/${domain}; SameSite=Lax${secure}`;
   document.cookie = cookieValue;
 };
 
@@ -23,7 +26,10 @@ const getCookie = (name) => {
 };
 
 const deleteCookie = (name) => {
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.cred2tech.com`;
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const domain = isLocalhost ? '' : '; domain=.cred2tech.com';
+  const secure = isLocalhost ? '' : '; Secure';
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/${domain}; SameSite=Lax${secure}`;
 };
 
 export const AuthProvider = ({ children }) => {

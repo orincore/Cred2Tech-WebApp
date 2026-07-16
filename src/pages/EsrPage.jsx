@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import { CheckCircle, XCircle, RefreshCw, ChevronLeft, Calculator,
          Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone } from 'lucide-react';
 import { sendCaseToLender, sendCaseToOtherLender, getTenantLenders } from '../api/tenantLenderService';
@@ -557,6 +558,7 @@ export default function EsrPage() {
 
   return (
     <div style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
+      <CaseWizardStepper currentStep={6} caseId={caseId} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>

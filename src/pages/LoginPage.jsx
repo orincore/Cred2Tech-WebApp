@@ -30,6 +30,10 @@ const LoginPage = () => {
       setApiError('Email and password are required.');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setApiError('Enter a valid email address.');
+      return;
+    }
     setLoginState('loading');
     setApiError('');
     try {
@@ -153,7 +157,11 @@ const LoginPage = () => {
                 </button>
               </div>
               <div className="flex justify-end mt-2">
-                <button className="text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer" type="button">
+                <button
+                  className="text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer"
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                >
                   Forgot password?
                 </button>
               </div>

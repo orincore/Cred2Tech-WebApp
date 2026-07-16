@@ -137,6 +137,47 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dark-mode overrides for the legacy token set above (--primary, --bg-surface, --text-primary, etc).
+   ThemeContext only syncs the newer --bg/--surface/--on-surface set onto <html>; pages still on
+   the legacy set (e.g. AddCustomerWizardPage) rendered light-only without this block. */
+:root.dark {
+  --primary: #6366F1;
+  --primary-dark: #818CF8;
+  --primary-light: #A5B4FC;
+  --primary-subtle: #1E1B4B;
+
+  --bg-base: #0a1628;
+  --bg-surface: #162048;
+  --bg-elevated: #1e2a5c;
+  --border: #2d3a6c;
+  --border-strong: #3d4a7c;
+
+  --text-primary: #e6edf7;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-inverse: #FFFFFF;
+
+  --success: #6ee7b7;
+  --success-bg: #064e3b;
+  --warning: #fcd34d;
+  --warning-bg: #78350F;
+  --error: #fca5a5;
+  --error-bg: #7f1d1d;
+  --info: #7dd3fc;
+  --info-bg: #0c4a6e;
+
+  --role-admin: #c4b5fd;
+  --role-admin-bg: #4c1d95;
+  --role-dsa: #7dd3fc;
+  --role-dsa-bg: #0c4a6e;
+  --role-employee: #6ee7b7;
+  --role-employee-bg: #064e3b;
+  --role-partner: #fcd34d;
+  --role-partner-bg: #78350F;
+  --role-msme: #f9a8d4;
+  --role-msme-bg: #831843;
+}
+
 body {
   min-height: 100vh;
 }

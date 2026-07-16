@@ -7,6 +7,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 // Lazy-load pages for better performance
 const LoginPage = lazy(() => import('../pages/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
@@ -21,6 +23,7 @@ const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const DSARegisterPage = lazy(() => import('../pages/DSARegisterPage'));
 const CustomersListPage = lazy(() => import('../pages/CustomersListPage'));
 const AddCustomerWizardPage = lazy(() => import('../pages/AddCustomerWizardPage'));
+const AddSalariedCustomerWizardPage = lazy(() => import('../pages/AddSalariedCustomerWizardPage'));
 const CustomerProfilePage = lazy(() => import('../pages/CustomerProfilePage'));
 const SuperadminPricingPage = lazy(() => import('../pages/SuperadminPricingPage'));
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
@@ -28,6 +31,7 @@ const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetai
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
 const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'));
 const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
+const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
 const IncomeSummaryPage = lazy(() => import('../pages/IncomeSummaryPage'));
 const BureauObligationsPage = lazy(() => import('../pages/BureauObligationsPage'));
 const EsrPage = lazy(() => import('../pages/EsrPage'));
@@ -47,6 +51,8 @@ const AppRouter = () => (
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
@@ -145,6 +151,14 @@ const AppRouter = () => (
               }
             />
             <Route
+              path="/customers/salaried/add"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                  <AddSalariedCustomerWizardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/customers/:customer_id"
               element={
                 <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
@@ -154,6 +168,14 @@ const AppRouter = () => (
             />
 
             {/* Phase 1 — Onboarding continuation pages */}
+            <Route
+              path="/cases/:id"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
+                  <CaseDetailPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/cases/:id/income-summary"
               element={

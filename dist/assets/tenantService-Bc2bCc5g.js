@@ -1,0 +1,1 @@
+import{c as t,v as e}from"./index-luezNqQp.js";const r=async()=>(await t.get("/tenants")).data,o=async s=>(await t.post("/tenants",s)).data,c=async s=>(await e.post(`${t.defaults.baseURL||""}/tenants/public-register`,s)).data,p=async s=>(await t.get(`/admin/tenants/${s}/summary`)).data;export{p as a,o as c,r as g,c as p};

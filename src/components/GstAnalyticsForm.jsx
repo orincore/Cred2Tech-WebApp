@@ -5,10 +5,25 @@ import FormField from './ui/FormField';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
-const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
+const MONTHS = [
+    { v: '01', l: 'Jan' }, { v: '02', l: 'Feb' }, { v: '03', l: 'Mar' },
+    { v: '04', l: 'Apr' }, { v: '05', l: 'May' }, { v: '06', l: 'Jun' },
+    { v: '07', l: 'Jul' }, { v: '08', l: 'Aug' }, { v: '09', l: 'Sep' },
+    { v: '10', l: 'Oct' }, { v: '11', l: 'Nov' }, { v: '12', l: 'Dec' }
+];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 7 }, (_, i) => (CURRENT_YEAR - 4 + i).toString());
+
+const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete }) => {
     const [mode, setMode] = useState('IN_SYSTEM');
-    const [authType, setAuthType] = useState('OTP');
-    
+    const authType = 'PASSWORD';
+    const [isManualGstin, setIsManualGstin] = useState(false);
+
+    const [fromMonth, setFromMonth] = useState('04');
+    const [fromYear, setFromYear] = useState('2022');
+    const [toMonth, setToMonth] = useState('03');
+    const [toYear, setToYear] = useState('2025');
+
     const [formData, setFormData] = useState({
         gstin: '',
         username: '',
@@ -28,6 +43,17 @@ const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
             fetchRequests();
         }
     }, [caseId]);
+
+    useEffect(() => {
+        if (linkedGstins && linkedGstins.length > 0 && !formData.gstin) {
+            const activeGstin = linkedGstins.find(g => g.status === 'Active')?.gstin || linkedGstins[0].gstin;
+            setFormData(prev => ({ ...prev, gstin: activeGstin }));
+        }
+    }, [linkedGstins]);
+
+    useEffect(() => {
+        setFormData(prev => ({ ...prev, from_date: `${fromMonth}${fromYear}`, to_date: `${toMonth}${toYear}` }));
+    }, [fromMonth, fromYear, toMonth, toYear]);
 
     const fetchRequests = async () => {
         try {
@@ -136,8 +162,38 @@ const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                <FormField label="GSTIN" required>
-                    <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
+                <FormField label="SELECT GSTIN" required>
+                    {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <select
+                                className="form-control"
+                                value={formData.gstin}
+                                onChange={e => {
+                                    if (e.target.value === '__manual__') {
+                                        setIsManualGstin(true);
+                                        setFormData({ ...formData, gstin: '' });
+                                    } else {
+                                        setFormData({ ...formData, gstin: e.target.value });
+                                    }
+                                }}
+                            >
+                                <option value="">Select GSTIN</option>
+                                {linkedGstins.map(g => (
+                                    <option key={g.gstin} value={g.gstin}>
+                                        {g.gstin} ({g.registration_name || 'No Name'}) - {g.status}
+                                    </option>
+                                ))}
+                                <option value="__manual__">Enter manually...</option>
+                            </select>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
+                            {linkedGstins && linkedGstins.length > 0 && (
+                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsManualGstin(false)}>Cancel</button>
+                            )}
+                        </div>
+                    )}
                 </FormField>
                 
                 {mode === 'IN_SYSTEM' && (
@@ -146,33 +202,35 @@ const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
                     </FormField>
                 )}
                 
-                <FormField label="From Date (MMYYYY)" required>
-                    <input type="text" value={formData.from_date} onChange={e => setFormData({...formData, from_date: e.target.value})} className="form-control" placeholder="042022" />
+                <FormField label="From Date" required>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <select className="form-control" value={fromMonth} onChange={e => setFromMonth(e.target.value)} style={{ flex: 1 }}>
+                            {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                        </select>
+                        <select className="form-control" value={fromYear} onChange={e => setFromYear(e.target.value)} style={{ flex: 1 }}>
+                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
                 </FormField>
-                
-                <FormField label="To Date (MMYYYY)" required>
-                    <input type="text" value={formData.to_date} onChange={e => setFormData({...formData, to_date: e.target.value})} className="form-control" placeholder="032025" />
+
+                <FormField label="To Date" required>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <select className="form-control" value={toMonth} onChange={e => setToMonth(e.target.value)} style={{ flex: 1 }}>
+                            {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                        </select>
+                        <select className="form-control" value={toYear} onChange={e => setToYear(e.target.value)} style={{ flex: 1 }}>
+                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
                 </FormField>
             </div>
 
             {mode === 'IN_SYSTEM' && (
-                 <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 8 }}>
+                 <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
                     <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                                <input type="radio" name="authType" value="OTP" checked={authType === 'OTP'} onChange={() => setAuthType('OTP')} />
-                                OTP Mode
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                                <input type="radio" name="authType" value="PASSWORD" checked={authType === 'PASSWORD'} onChange={() => setAuthType('PASSWORD')} />
-                                Password Mode
-                            </label>
-                        </div>
-                        {authType === 'PASSWORD' && (
-                             <FormField label="GST Password" required>
-                                 <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="form-control" />
-                             </FormField>
-                        )}
+                         <FormField label="GST Password" required>
+                             <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="form-control" />
+                         </FormField>
                     </div>
                 </div>
             )}
@@ -197,12 +255,12 @@ const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
                     <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 20 }}>Active GST Journeys</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {activeRequests.map(req => (
-                            <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, background: req.status === 'REPORT_READY' || req.status === 'COMPLETED' ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
+                            <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: req.status === 'REPORT_READY' || req.status === 'COMPLETED' ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                                     <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
                                         {req.gstin} 
-                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border)', textTransform: 'uppercase' }}>{req.mode}</span>
-                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: 'var(--primary)', color: 'white' }}>{req.status}</span>
+                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border)', textTransform: 'uppercase' }}>{req.mode}</span>
+                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--primary)', color: 'white' }}>{req.status}</span>
                                     </div>
                                     <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                                         {new Date(req.created_at).toLocaleString()}
@@ -211,7 +269,7 @@ const GstAnalyticsForm = ({ caseId, customerId, onComplete }) => {
                                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{req.provider_message}</p>
                                 
                                 {req.mode === 'AUTH_LINK' && req.auth_link && ['AUTH_LINK_CREATED', 'INITIATED'].includes(req.status) && (
-                                    <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-elevated)', borderRadius: 6, fontSize: 13 }}>
+                                    <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 13 }}>
                                         <strong>Link: </strong> <a href={req.auth_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{req.auth_link}</a>
                                         <p style={{ marginTop: 6, color: 'var(--text-tertiary)' }}>Awaiting webhook callback once customer completes auth.</p>
                                     </div>
