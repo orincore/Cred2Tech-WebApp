@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     CheckCircle2, AlertCircle, RefreshCw,
@@ -65,7 +65,6 @@ const ItrAnalyticsForm = ({
 
     const handleSync = async () => {
         if (!referenceId) return;
-        setLoading(true);
         try {
             const res = await api.post('/external/itr/sync', { reference_id: referenceId });
             const data = res.data;
@@ -80,15 +79,19 @@ const ItrAnalyticsForm = ({
             } else if (data.status === 'FAILED') {
                 setStatus('FAILED');
                 toast.error('ITR analytics processing failed at provider');
-            } else {
-                toast('Still processing... try again shortly', { icon: '⏳' });
             }
+            // else still processing — the background poller below will check again automatically
         } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
-        } finally {
-            setLoading(false);
+            console.error('[ITR auto-sync]', error.response?.data?.error || error.message);
         }
     };
+
+    // Auto-poll while processing — no manual "Check Status" click needed.
+    useEffect(() => {
+        if (status !== 'PROCESSING') return;
+        const interval = setInterval(handleSync, 15000);
+        return () => clearInterval(interval);
+    }, [status, referenceId]);
 
     // Extract key analytics summary for display
     const getSummary = () => {
@@ -149,7 +152,7 @@ const ItrAnalyticsForm = ({
                     {status === 'PROCESSING' && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <RefreshCw size={13} color="var(--warning)" />
-                            Processing... click "Check Status" when ready
+                            Processing... checking automatically
                         </span>
                     )}
                     {status === 'COMPLETED' && summary && (
@@ -185,16 +188,7 @@ const ItrAnalyticsForm = ({
                     )}
 
                     {/* Action Button */}
-                    {status === 'PROCESSING' ? (
-                        <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={handleSync}
-                            disabled={loading}
-                        >
-                            {loading ? '...' : 'Check Status'}
-                        </button>
-                    ) : status === 'COMPLETED' ? (
+                    {status === 'PROCESSING' ? null : status === 'COMPLETED' ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                             {documentId ? (
                                 <button

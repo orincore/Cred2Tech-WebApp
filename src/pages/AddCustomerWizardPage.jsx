@@ -1044,7 +1044,7 @@ const AddCustomerWizardPage = () => {
                       onComplete={(data) => setFormData(prev => ({...prev, itr_completed: true, itr_analytics: data}))}
                   />
 
-                  {formData.applicants && formData.applicants.filter(a => a.employment_type !== 'SALARIED').map((coApp, idx) => (
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED').map((coApp, idx) => (
                       <ItrAnalyticsForm
                           key={idx}
                           caseId={caseId}
@@ -1088,8 +1088,8 @@ const AddCustomerWizardPage = () => {
                       onComplete={(status, payload) => console.log('Primary bank complete')}
                   />
                   
-                  {formData.applicants && formData.applicants.map((coApp, idx) => (
-                      <BankStatementUpload 
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT').map((coApp, idx) => (
+                      <BankStatementUpload
                           key={idx}
                           caseId={caseId}
                           customerId={formData.customer_id}
@@ -1109,14 +1109,14 @@ const AddCustomerWizardPage = () => {
                </div>
             </div>
 
-            {formData.applicants.some(a => a.employment_type === 'SALARIED') && (
+            {formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED') && (
               <div className="card">
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Salary Slip OCR</h3>
                   <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Upload the last 3 salary slips for salaried applicants — parsed automatically via OCR</p>
                 </div>
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  {formData.applicants.filter(a => a.employment_type === 'SALARIED').map((app, idx) => (
+                  {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
                     <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 16 : 0 }}>
                       <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
                       <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={app.name || app.pan_number} />

@@ -81,7 +81,6 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     const pollStatus = async () => {
         try {
-            setLoading(true);
             const res = await api.post(`/external/bank/sync`, { report_id: reportId });
             const data = res.data;
 
@@ -92,12 +91,18 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             } else if (data.status === 'FAILED') {
                 toast.error(`Analysis failed at provider: ${data.rawStatus || 'Unknown Error'}`);
             }
+            // else still analyzing — the background poller below will check again automatically
         } catch (error) {
             console.error("Sync error:", error.response?.data?.error || error.message);
-        } finally {
-            setLoading(false);
         }
     };
+
+    // Auto-poll while analyzing — no manual "Check Status" click needed.
+    useEffect(() => {
+        if (status !== 'ANALYZING') return;
+        const interval = setInterval(pollStatus, 15000);
+        return () => clearInterval(interval);
+    }, [status, reportId]);
 
     const fetchDownloads = async () => {
         setStatus('LOADING_LINKS');
@@ -210,11 +215,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <button type="button" className="btn btn-danger btn-sm" onClick={() => { setDownloadAttempted(false); fetchDownloads(); }} disabled={loading}>
                             {loading ? '...' : 'Retry Download'}
                         </button>
-                    ) : status === 'ANALYZING' ? (
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={pollStatus} disabled={loading}>
-                            {loading ? '...' : 'Check Status'}
-                        </button>
-                    ) : (
+                    ) : status === 'ANALYZING' ? null : (
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
                             Upload PDF
                         </button>

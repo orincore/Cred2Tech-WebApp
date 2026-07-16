@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { CheckCircle2, AlertCircle, RefreshCw, FileText, Download } from 'lucide-react';
 import FormField from './ui/FormField';
@@ -36,11 +36,31 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
 
     const [activeRequests, setActiveRequests] = useState([]);
     const [loading, setLoading] = useState(false);
+    const activeRequestsRef = useRef(activeRequests);
+
+    useEffect(() => {
+        activeRequestsRef.current = activeRequests;
+    }, [activeRequests]);
 
     useEffect(() => {
         if (caseId) {
             fetchRequests();
         }
+    }, [caseId]);
+
+    // Auto-poll pending GST journeys in the background — no manual "check status" needed.
+    useEffect(() => {
+        if (!caseId) return;
+        let cancelled = false;
+
+        const tick = async () => {
+            const pollable = activeRequestsRef.current.filter(r => ['PROCESSING', 'DATA_READY', 'CALLBACK_RECEIVED'].includes(r.status));
+            await Promise.allSettled(pollable.map(r => silentSync(r.id)));
+            if (!cancelled) timeoutId = setTimeout(tick, 15000);
+        };
+
+        let timeoutId = setTimeout(tick, 15000);
+        return () => { cancelled = true; clearTimeout(timeoutId); };
     }, [caseId]);
 
     useEffect(() => {
@@ -100,32 +120,30 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
 
             toast.success("GST Request initiated successfully");
             await fetchRequests();
-            
+
             // clear sensitive
             setFormData(prev => ({...prev, password: ''}));
         } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
+            const message = error.response?.data?.error || error.message;
+            toast.error(`GST request failed: ${message}`, { duration: 8000 });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSync = async (requestId) => {
-        setLoading(true);
+    // Background poll — does not touch the shared `loading` flag so it never disables the
+    // "Initialize GST Request" button, and only surfaces a toast once there's real news.
+    const silentSync = async (requestId) => {
         try {
             const res = await api.post(`/external/gst/sync`, { request_id: requestId });
             const data = res.data;
 
             if (data.dataSynced || data.status === 'REPORT_READY') {
-                toast.success("Data synced successfully!");
-            } else {
-                toast("Status: " + data.status, { icon: 'ℹ️' });
+                toast.success("GST report ready!");
             }
             await fetchRequests();
         } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
-        } finally {
-            setLoading(false);
+            console.error('[GST auto-sync]', error.response?.data?.error || error.message);
         }
     };
 
@@ -258,10 +276,8 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                                 )}
 
                                 {['PROCESSING', 'DATA_READY', 'CALLBACK_RECEIVED'].includes(req.status) && (
-                                    <div style={{ marginBottom: 12 }}>
-                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleSync(req.id)} disabled={loading}>
-                                            <RefreshCw size={14} style={{ marginRight: 6 }} /> Manual Sync / Poll Data
-                                        </button>
+                                    <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <RefreshCw size={13} className="spin" /> Checking automatically...
                                     </div>
                                 )}
 
