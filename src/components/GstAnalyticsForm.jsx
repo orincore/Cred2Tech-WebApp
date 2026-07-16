@@ -36,7 +36,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
 
     const [activeRequests, setActiveRequests] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [otpInputs, setOtpInputs] = useState({}); // mapped by requestId
 
     useEffect(() => {
         if (caseId) {
@@ -104,23 +103,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
             
             // clear sensitive
             setFormData(prev => ({...prev, password: ''}));
-        } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSubmitOtp = async (requestId) => {
-        const otp = otpInputs[requestId];
-        if (!otp) return toast.error("Enter OTP");
-
-        setLoading(true);
-        try {
-            await api.post(`/external/gst/submit-otp`, { request_id: requestId, otp });
-
-            toast.success("OTP Verified. Authorizing sync...");
-            await fetchRequests();
         } catch (error) {
             toast.error(error.response?.data?.error || error.message);
         } finally {
@@ -250,11 +232,11 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 {loading ? 'Creating...' : 'Initialize GST Request (~1 Credit)'}
             </button>
 
-            {activeRequests.length > 0 && (
+            {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).length > 0 && (
                 <div>
                     <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 20 }}>Active GST Journeys</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {activeRequests.map(req => (
+                        {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).map(req => (
                             <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: req.status === 'REPORT_READY' || req.status === 'COMPLETED' ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                                     <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -272,13 +254,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                                     <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 13 }}>
                                         <strong>Link: </strong> <a href={req.auth_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{req.auth_link}</a>
                                         <p style={{ marginTop: 6, color: 'var(--text-tertiary)' }}>Awaiting webhook callback once customer completes auth.</p>
-                                    </div>
-                                )}
-
-                                {req.status === 'OTP_PENDING' && req.auth_type === 'OTP' && (
-                                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                                        <input type="text" placeholder="Enter OTP from Portal" className="form-control" value={otpInputs[req.id] || ''} onChange={e => setOtpInputs({...otpInputs, [req.id]: e.target.value})} style={{ maxWidth: 200 }} />
-                                        <button type="button" className="btn btn-secondary" onClick={() => handleSubmitOtp(req.id)} disabled={loading}>Submit OTP</button>
                                     </div>
                                 )}
 
