@@ -106,6 +106,14 @@ html, body {
   --role-partner-bg: #FEF3C7;
   --role-msme: #DB2777;
   --role-msme-bg: #FCE7F3;
+  --role-super-admin: #DC2626;
+  --role-super-admin-bg: #FEF2F2;
+  --role-cred2tech: #0891B2;
+  --role-cred2tech-bg: #ECFEFF;
+  --role-dsa-admin: #0369A1;
+  --role-dsa-admin-bg: #E0F2FE;
+  --role-dsa-member: #0284C7;
+  --role-dsa-member-bg: #E0F2FE;
 
   /* Sidebar */
   --sidebar-bg: var(--bg);
@@ -176,6 +184,14 @@ html, body {
   --role-partner-bg: #78350F;
   --role-msme: #f9a8d4;
   --role-msme-bg: #831843;
+  --role-super-admin: #fca5a5;
+  --role-super-admin-bg: #7f1d1d;
+  --role-cred2tech: #67e8f9;
+  --role-cred2tech-bg: #164e63;
+  --role-dsa-admin: #bae6fd;
+  --role-dsa-admin-bg: #0c4a6e;
+  --role-dsa-member: #7dd3fc;
+  --role-dsa-member-bg: #0c4a6e;
 }
 
 body {

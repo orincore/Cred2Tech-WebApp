@@ -40,6 +40,16 @@ export const formatHierarchyPath = (path) => {
   return path.replace(/^\//, '').replace(/\/$/, '').split('/').join(' → ');
 };
 
+// Format a rupee amount compactly (Cr / L / K), matching Indian numbering
+export const formatCompactINR = (amount) => {
+  const n = Number(amount) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  if (abs >= 1e3) return `₹${(n / 1e3).toFixed(1)}K`;
+  return `₹${n.toLocaleString('en-IN')}`;
+};
+
 // Get the error message from an axios error
 export const getErrorMessage = (error) => {
   return (

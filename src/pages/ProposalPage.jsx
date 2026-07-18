@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import {
-  ChevronLeft, Send, Save, CheckCircle2, Clock, XCircle,
+  Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, Square, UploadCloud,
   X, Mail, Phone
 } from 'lucide-react';
@@ -53,7 +53,8 @@ function Section({ emoji, title, subtitle, children, rightSlot }) {
     }}>
       <div style={{
         padding: '16px 22px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 8
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -105,7 +106,7 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
   return (
     <div>
       {/* Inputs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+      <div className="pp-grid-3" style={{ marginBottom: 20 }}>
         <div>
           <label style={labelStyle}>LOAN AMOUNT (₹ LAKHS) *</label>
           <input value={amount} onChange={e => { setAmount(e.target.value); onChange?.({ amount_lakhs: e.target.value, tenor_years: tenor }); }}
@@ -126,7 +127,7 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
       </div>
 
       {/* EMI Result Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      <div className="pp-grid-4">
         <div style={{
           gridColumn: 'span 1', background: 'linear-gradient(135deg,#FAF0FF,#EBF4FF)',
           border: '2px solid #C6A7F7', borderRadius: 10, padding: '14px 18px', textAlign: 'center'
@@ -240,7 +241,7 @@ function ApplicantCard({ applicant, isPrimary, index }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+      <div className="pp-grid-4-sm">
         <InfoCell label="PAN" value={applicant.pan_number || '—'} />
         <InfoCell label="Mobile" value={applicant.mobile || '—'} />
         <InfoCell label="CIBIL Score" value={applicant.cibil_score || '—'} />
@@ -277,7 +278,7 @@ function FinancialSummary({ summary, prefill }) {
           }}>GST</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST TURNOVER SUMMARY</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
+        <div className="pp-grid-5">
           {[
             { label: 'Avg Monthly Turnover', value: fmtINR(gst?.avg_monthly_turnover) },
             { label: `Annual Turnover (${gst?.fy_latest || 'FY Latest'})`, value: fmtINR(gst?.turnover_latest) },
@@ -306,7 +307,8 @@ function FinancialSummary({ summary, prefill }) {
             }}>ITR</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>INCOME TAX RETURN SUMMARY</span>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', borderBottom: '2px solid var(--border)' }}>
                 {['Assessment Year', 'Gross Turnover / Receipts', 'Net Profit (After Tax)', 'Filing Status'].map(h => (
@@ -330,6 +332,7 @@ function FinancialSummary({ summary, prefill }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -392,7 +395,7 @@ function FinancialSummary({ summary, prefill }) {
 function AddressSection({ addresses, onChange, readOnly }) {
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="pp-grid-2" style={{ marginBottom: 16 }}>
         <div>
           <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
             CURRENT RESIDENTIAL ADDRESS
@@ -752,26 +755,38 @@ export default function ProposalPage() {
   const pendingKyc = allDocs.filter(d => !d.is_attached && ['PAN_CARD', 'AADHAAR'].includes(d.document_type)).length;
 
   return (
-    <div style={{ maxWidth: 940, margin: '0 auto', paddingBottom: 100 }}>
-      <CaseWizardStepper currentStep={7} caseId={caseId} proposalId={proposalId} />
+    <div className="proposal-page" style={{ maxWidth: 940, margin: '0 auto', padding: '0 20px 100px' }}>
+      <style>{`
+        /* Responsive grids — collapse fixed columns on smaller screens */
+        .proposal-page .pp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .proposal-page .pp-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+        .proposal-page .pp-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .proposal-page .pp-grid-4-sm { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .proposal-page .pp-grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .proposal-page .pp-ref-row { display: grid; grid-template-columns: 1fr 180px 220px; gap: 12px; margin-bottom: 10px; }
+        .proposal-page .pp-span-2 { grid-column: span 2; }
+        @media (max-width: 900px) {
+          .proposal-page .pp-grid-4, .proposal-page .pp-grid-4-sm { grid-template-columns: repeat(2, 1fr); }
+          .proposal-page .pp-grid-5 { grid-template-columns: repeat(3, 1fr); }
+          .proposal-page .pp-ref-row { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 640px) {
+          .proposal-page .pp-grid-2, .proposal-page .pp-grid-3, .proposal-page .pp-ref-row { grid-template-columns: 1fr; }
+          .proposal-page .pp-grid-5 { grid-template-columns: repeat(2, 1fr); }
+          .proposal-page .pp-span-2 { grid-column: auto; }
+          .proposal-page { padding-bottom: 220px !important; }
+        }
+      `}</style>
       {/* ── Page Header ────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 6 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>
-          Prepare Proposal · Loan details, documents, addresses &amp; references
-        </div>
-      </div>
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        marginBottom: 22, flexWrap: 'wrap', gap: 12
+        marginTop: 24, marginBottom: 22, flexWrap: 'wrap', gap: 12
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/esr`)}
-              style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-              <ChevronLeft size={14} /> Back
-            </button>
-          </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Prepare Proposal</h1>
+          <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 4 }}>
+            Step 7 of 7 — Loan details, documents, addresses &amp; references
+          </div>
           <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
             <strong style={{ color: 'var(--text-primary)' }}>{prefill?.entity_name || 'Entity'}</strong>
             {' '}—{' '}
@@ -782,25 +797,9 @@ export default function ProposalPage() {
             {scheme_name && <span style={{ color: 'var(--text-tertiary)' }}> · {scheme_name}</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Badge status={proposal.lender_submission_status || proposal.proposal_status} />
-          {!isSubmitted && (
-            <>
-              <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Save size={14} /> {saving ? 'Saving…' : 'Save Draft'}
-              </button>
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'linear-gradient(135deg,#2B6CB0,#553C9A)', padding: '9px 20px'
-                }}>
-                <Send size={14} /> {submitting ? 'Submitting…' : 'Submit to Lender'}
-              </button>
-            </>
-          )}
-        </div>
+        <Badge status={proposal.lender_submission_status || proposal.proposal_status} />
       </div>
+      <CaseWizardStepper currentStep={7} caseId={caseId} proposalId={proposalId} />
 
       {/* ── 1. Loan Details (EMI Calculator) ────────────────────────── */}
       <Section emoji="💰" title="Loan Details"
@@ -885,7 +884,7 @@ export default function ProposalPage() {
 
       {/* ── 6. Remarks ───────────────────────────────────────────────── */}
       <Section emoji="📝" title="Remarks &amp; Loan Purpose">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="pp-grid-2">
           <div>
             <label style={labelStyle}>LOAN PURPOSE</label>
             <textarea rows={3} value={form.loan_purpose}
@@ -900,7 +899,7 @@ export default function ProposalPage() {
               disabled={isSubmitted} style={inputStyle}
               placeholder="e.g. Salaried, SENP, SEP, NRI..." />
           </div>
-          <div style={{ gridColumn: 'span 2' }}>
+          <div className="pp-span-2">
             <label style={labelStyle}>ADDITIONAL REMARKS / NOTES FOR LENDER</label>
             <textarea rows={4} value={form.remarks}
               onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
@@ -928,7 +927,7 @@ export default function ProposalPage() {
             }}>
               Reference {idx + 1}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px 220px', gap: 12, marginBottom: 10 }}>
+            <div className="pp-ref-row">
               <div>
                 <label style={labelStyle}>FULL NAME</label>
                 <input
@@ -994,8 +993,9 @@ export default function ProposalPage() {
         }}>
           {/* Lender branding bar */}
           <div style={{
-            background: '#1A202C', padding: '10px 32px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+            background: '#1A202C', padding: '10px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexWrap: 'wrap', gap: 10
           }}>
             <div>
               <div style={{ fontSize: 11, color: '#A0AEC0', marginBottom: 2 }}>Ready to send to</div>
@@ -1003,7 +1003,7 @@ export default function ProposalPage() {
                 {lender?.name || 'Lender'}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/esr`)}
                 style={{ color: '#A0AEC0', fontSize: 12 }}>Cancel</button>
               <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, RefreshCw, UploadCloud, FileText, Briefcase, Plus, X, Download } from 'lucide-react';
+import { CheckCircle2, AlertCircle, UploadCloud, FileText, Briefcase, Plus, X, Download } from 'lucide-react';
+import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
@@ -104,17 +105,34 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         return () => clearInterval(interval);
     }, [status, reportId]);
 
+    // Recover resumed cases that were left "COMPLETED" without secure links
+    // (from before auto-retry existed) — fetch them automatically instead of
+    // requiring a manual click.
+    useEffect(() => {
+        if (status === 'COMPLETED' && reportId && !documentIds.excel && !documentIds.json && !sourceUrls.excel && !sourceUrls.json) {
+            fetchDownloads();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Auto-retry fetching the secure report links — no manual "Fetch Reports"
+    // click needed. The provider can take a few minutes to finish generating
+    // the report after analysis completes, so this keeps polling silently.
+    useEffect(() => {
+        if (status !== 'AWAITING_LINKS') return;
+        const interval = setInterval(fetchDownloads, 15000);
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status, reportId]);
+
     const fetchDownloads = async () => {
-        setStatus('LOADING_LINKS');
+        setStatus((s) => (s === 'AWAITING_LINKS' ? s : 'LOADING_LINKS'));
         try {
             const res = await api.post(`/external/bank/download`, { report_id: reportId });
             const data = res.data;
 
             if (res.status === 202 || data.success === false) {
-                setStatus('COMPLETED'); // Keep state as COMPLETED so button remains
-                toast(data.message || 'Report is still generating. Please click Fetch Reports again in a few minutes.', {
-                    icon: '⏳',
-                });
+                setStatus('AWAITING_LINKS'); // keeps auto-retrying every 15s, no manual click needed
                 return;
             }
 
@@ -145,11 +163,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 {/* Middle: State indicator */}
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                     {status === 'INITIATED' && "No statement uploaded yet"}
-                    {status === 'ANALYZING' && <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><RefreshCw size={14} className="spin" color="var(--warning)" /> Auto-Scanning Statements...</span>}
+                    {status === 'ANALYZING' && <PullingIndicator label="Pulling your bank statement information…" />}
                     {status === 'FAILED' && <span style={{ color: 'var(--error)' }}>Failed to process. Try again.</span>}
                     {status === 'FAILED_DOWNLOAD' && <span style={{ color: 'var(--error)' }}>Analysis Complete but Failed to retrieve secure links.</span>}
                     {status === 'COMPLETED' && "Statement processed and analysed"}
-                    {status === 'LOADING_LINKS' && "Retrieving secure reports..."}
+                    {(status === 'LOADING_LINKS' || status === 'AWAITING_LINKS') && <PullingIndicator label="Retrieving your reports…" />}
                 </div>
 
                 {/* Right: Actions */}
@@ -162,7 +180,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </span>
                     ) : (
                         <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
-                            {status === 'ANALYZING' ? 'Processing' : 'Pending'}
+                            {['ANALYZING', 'LOADING_LINKS', 'AWAITING_LINKS'].includes(status) ? 'Processing' : 'Pending'}
                         </span>
                     )}
 
@@ -203,9 +221,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                 )
                             )}
                             {(!documentIds.excel && !documentIds.json && !sourceUrls.excel && !sourceUrls.json) && (
-                                <button type="button" className="btn btn-primary btn-sm" style={{ fontWeight: 600 }} onClick={fetchDownloads} disabled={loading}>
-                                    {loading ? 'Fetching...' : 'Fetch Reports'}
-                                </button>
+                                <PullingIndicator label="Retrieving your reports…" />
                             )}
                             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
                                 Replace

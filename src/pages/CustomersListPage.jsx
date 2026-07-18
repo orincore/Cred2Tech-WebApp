@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Search, AlertTriangle, ChevronRight } from 'lucide-react';
+import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -65,9 +65,9 @@ const STAGE_COLORS = {
   DRAFT:                { light: ['#F3F4F6', '#6B7280'], dark: ['#1f2937', '#9ca3af'] },
 };
 
-const ENTITY_TYPES = ['All Entity Types', 'Partnership', 'Pvt Ltd', 'LLP', 'Proprietorship', 'Public Ltd'];
-const LENDERS = ['All Lenders', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'];
-const ALERT_TYPES = ['All Alerts', 'PDD_PENDING'];
+const ENTITY_TYPE_OPTIONS = ['Partnership', 'Pvt Ltd', 'LLP', 'Proprietorship', 'Public Ltd'].map(v => ({ value: v, label: v }));
+const LENDER_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
+const ALERT_OPTIONS = [{ value: 'PDD_PENDING', label: 'PDD Pending' }];
 const SORT_OPTIONS = [
   { label: 'Newest First', by: 'lead_date', order: 'desc' },
   { label: 'Oldest First', by: 'lead_date', order: 'asc' },
@@ -76,6 +76,10 @@ const SORT_OPTIONS = [
   { label: 'Amount (High-Low)', by: 'loan_amount', order: 'desc' },
 ];
 const LIMIT = 10;
+// Cases are fetched once (search + sort only) and then faceted client-side,
+// since the backend's pipeline filters only accept a single value each.
+// This ceiling keeps that one fetch bounded.
+const FETCH_CEILING = 1000;
 
 const formatCurrency = (val) => {
   if (!val) return '—';
@@ -112,7 +116,7 @@ const getCibilColor = (score, isDark) => {
   return isDark ? '#fca5a5' : '#EF4444';
 };
 
-const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+const labelSm = (isDark) => ({ fontSize: 11, fontWeight: 700, color: isDark ? '#fff' : '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 });
 const underlineInput = (active) => ({
   background: 'transparent', border: 'none',
   borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -121,11 +125,69 @@ const underlineInput = (active) => ({
   transition: 'border-color 0.2s',
 });
 
+// Checkbox dropdown allowing zero-or-more selections. Empty selection reads
+// as "All" (no filter applied) — matches the previous single-select's
+// "All ..." sentinel option, just without needing a literal sentinel value.
+const MultiSelectFilter = ({ label, options, selected, onChange, allLabel, isDark }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (value) => onChange(
+    selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]
+  );
+
+  const displayText = selected.length === 0
+    ? allLabel
+    : selected.length === 1
+      ? (options.find((o) => o.value === selected[0])?.label || selected[0])
+      : `${selected.length} selected`;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <span style={labelSm(isDark)}>{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ ...underlineInput(selected.length > 0), textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'transparent' }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayText}</span>
+        <ChevronDown size={13} style={{ flexShrink: 0, marginLeft: 6, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: isDark ? '#fff' : 'var(--on-muted)' }} />
+      </button>
+      {open && (
+        <div className="hide-scrollbar" style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 30,
+          background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', minWidth: 200, maxWidth: 260, maxHeight: 260, overflowY: 'auto', padding: 6,
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer', borderBottom: '1px solid var(--outline)', marginBottom: 4 }}>
+            <input type="checkbox" checked={selected.length === 0} onChange={() => onChange([])} />
+            {allLabel}
+          </label>
+          {options.map((opt) => (
+            <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', cursor: 'pointer', borderRadius: 6 }}>
+              <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => toggle(opt.value)} />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CustomersListPage = () => {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useResponsive();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const mutedColor = isDark ? '#fff' : 'var(--on-muted)';
 
   const [cases, setCases] = useState([]);
   const [stats, setStats] = useState({ totalCases: 0, totalCustomers: 0 });
@@ -133,42 +195,41 @@ const CustomersListPage = () => {
 
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [activeTab, setActiveTab] = useState('All');
-  const [entityType, setEntityType] = useState('All Entity Types');
-  const [lender, setLender] = useState('All Lenders');
-  const [alertFilter, setAlertFilter] = useState('All Alerts');
+  // Each of these holds zero or more selected values — empty means "All".
+  const [selectedStages, setSelectedStages] = useState([]);
+  const [selectedEntityTypes, setSelectedEntityTypes] = useState([]);
+  const [selectedLenders, setSelectedLenders] = useState([]);
+  const [selectedAlerts, setSelectedAlerts] = useState([]);
   const [sortIndex, setSortIndex] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
 
+  // Only search + sort go to the backend — stage/lender/entity/alert are
+  // faceted client-side below, since the pipeline endpoint only accepts one
+  // value per filter and multi-select needs OR-within-a-facet.
   const fetchPipeline = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         search,
-        stage: STAGE_MAPPING[activeTab] || 'All',
-        entity_type: entityType,
-        lender,
-        alert: alertFilter,
+        stage: 'All',
         sort_by: SORT_OPTIONS[sortIndex].by,
         sort_order: SORT_OPTIONS[sortIndex].order,
-        page,
-        limit: LIMIT,
+        page: 1,
+        limit: FETCH_CEILING,
       };
       const data = await caseService.getPipeline(params);
       setCases(Array.isArray(data.cases) ? data.cases : []);
-      setStats({ totalCases: data.total_cases || 0, totalCustomers: data.total_customers || 0 });
-      setTotalPages(data.total_pages || 1);
+      setStats((s) => ({ ...s, totalCustomers: data.total_customers || 0 }));
     } catch (error) {
       toast.error('Failed to load pipeline data.');
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [search, activeTab, entityType, lender, alertFilter, sortIndex, page]);
+  }, [search, sortIndex]);
 
   useEffect(() => { fetchPipeline(); }, [fetchPipeline]);
 
@@ -177,8 +238,24 @@ const CustomersListPage = () => {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  const handleTabChange = (tab) => { setActiveTab(tab); setPage(1); };
-  const handleFilterChange = (setter) => (e) => { setter(e.target.value); setPage(1); };
+  const filteredCases = useMemo(() => cases.filter((c) =>
+    (selectedStages.length === 0 || selectedStages.includes(c.stage)) &&
+    (selectedEntityTypes.length === 0 || selectedEntityTypes.includes(c.entity_type || c.customer?.entity_type)) &&
+    (selectedLenders.length === 0 || selectedLenders.includes(c.lender_name)) &&
+    (selectedAlerts.length === 0 || selectedAlerts.includes(c.alert_flag))
+  ), [cases, selectedStages, selectedEntityTypes, selectedLenders, selectedAlerts]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCases.length / LIMIT));
+  const pagedCases = useMemo(() => filteredCases.slice((page - 1) * LIMIT, page * LIMIT), [filteredCases, page]);
+
+  useEffect(() => { setStats((s) => ({ ...s, totalCases: filteredCases.length })); }, [filteredCases]);
+  useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
+
+  const handleStageToggle = (val) => {
+    setSelectedStages((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
+    setPage(1);
+  };
+  const handleFacetChange = (setter) => (next) => { setter(next); setPage(1); };
 
   const goToCase = (c) => {
     if (c.stage === 'DRAFT') {
@@ -193,23 +270,25 @@ const CustomersListPage = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <style>{`
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .add-customer-btn-compact { padding: 5px 14px !important; font-size: 12px !important; }
+      `}</style>
       {/* ─── Top header ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            My Pipeline
-          </p>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
             Customers & Pipeline
           </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: mutedColor }}>
             {stats.totalCases} active cases · {stats.totalCustomers} customers
           </p>
         </div>
 
-        <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <UserPlus size={14} /> Add New Customer
+        <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <UserPlus size={13} /> Add New Customer
           </div>
         </TravelingBorderButton>
       </div>
@@ -219,9 +298,9 @@ const CustomersListPage = () => {
       {/* ─── Filter row ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
         <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
-          <span style={labelSm}>Search</span>
+          <span style={labelSm(isDark)}>Search</span>
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: isDark ? '#fff' : '#94a3b8' }} />
             <input
               type="text"
               placeholder="Name, Case ID, lender, PAN…"
@@ -232,53 +311,65 @@ const CustomersListPage = () => {
           </div>
         </div>
 
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <MultiSelectFilter
+            label="Entity Type" allLabel="All Entity Types" isDark={isDark}
+            options={ENTITY_TYPE_OPTIONS} selected={selectedEntityTypes}
+            onChange={handleFacetChange(setSelectedEntityTypes)}
+          />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <MultiSelectFilter
+            label="Lender" allLabel="All Lenders" isDark={isDark}
+            options={LENDER_OPTIONS} selected={selectedLenders}
+            onChange={handleFacetChange(setSelectedLenders)}
+          />
+        </div>
+
         <div style={{ flex: 1, minWidth: 140 }}>
-          <span style={labelSm}>Entity Type</span>
-          <select value={entityType} onChange={handleFilterChange(setEntityType)}
-            style={{ ...underlineInput(entityType !== 'All Entity Types'), appearance: 'none', cursor: 'pointer' }}>
-            {ENTITY_TYPES.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <span style={labelSm}>Lender</span>
-          <select value={lender} onChange={handleFilterChange(setLender)}
-            style={{ ...underlineInput(lender !== 'All Lenders'), appearance: 'none', cursor: 'pointer' }}>
-            {LENDERS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 120 }}>
-          <span style={labelSm}>Alert</span>
-          <select value={alertFilter} onChange={handleFilterChange(setAlertFilter)}
-            style={{ ...underlineInput(alertFilter !== 'All Alerts'), appearance: 'none', cursor: 'pointer' }}>
-            {ALERT_TYPES.map(a => <option key={a} value={a}>{a === 'PDD_PENDING' ? 'PDD Pending' : a}</option>)}
-          </select>
+          <MultiSelectFilter
+            label="Alert" allLabel="All Alerts" isDark={isDark}
+            options={ALERT_OPTIONS} selected={selectedAlerts}
+            onChange={handleFacetChange(setSelectedAlerts)}
+          />
         </div>
 
         <div style={{ flex: 1, minWidth: 160 }}>
-          <span style={labelSm}>Sort</span>
-          <select value={sortIndex} onChange={handleFilterChange(setSortIndex)}
+          <span style={labelSm(isDark)}>Sort</span>
+          <select value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
             style={{ ...underlineInput(sortIndex !== 0), appearance: 'none', cursor: 'pointer' }}>
             {SORT_OPTIONS.map((opt, i) => <option key={i} value={i}>{opt.label}</option>)}
           </select>
         </div>
       </div>
 
-      {/* ─── Stage tabs ─── */}
-      <div style={{ padding: isMobile ? '12px 16px' : '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 8, overflowX: 'auto', flexShrink: 0 }}>
-        {Object.keys(STAGE_MAPPING).map(tab => {
-          const active = activeTab === tab;
+      {/* ─── Stage tabs (multi-select, compact) ─── */}
+      <div className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
+        <button
+          onClick={() => { setSelectedStages([]); setPage(1); }}
+          style={{
+            background: selectedStages.length === 0 ? '#4f46e5' : 'transparent',
+            color: selectedStages.length === 0 ? '#fff' : mutedColor,
+            border: `1px solid ${selectedStages.length === 0 ? '#4f46e5' : 'var(--outline)'}`,
+            padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', lineHeight: 1.6,
+          }}
+        >
+          All
+        </button>
+        {Object.entries(STAGE_MAPPING).filter(([tab]) => tab !== 'All').map(([tab, enumVal]) => {
+          const active = selectedStages.includes(enumVal);
           return (
             <button
               key={tab}
-              onClick={() => handleTabChange(tab)}
+              onClick={() => handleStageToggle(enumVal)}
               style={{
                 background: active ? '#4f46e5' : 'transparent',
-                color: active ? '#fff' : 'var(--on-muted)',
+                color: active ? '#fff' : mutedColor,
                 border: `1px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
-                padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700,
-                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+                padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', lineHeight: 1.6,
               }}
             >
               {tab}
@@ -292,16 +383,16 @@ const CustomersListPage = () => {
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
           <LoadingSpinner fullPage />
         </div>
-      ) : cases.length === 0 ? (
+      ) : filteredCases.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No cases found</h3>
-          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Try adjusting your filters or search term.</p>
+          <p style={{ fontSize: 13, color: mutedColor, margin: 0 }}>Try adjusting your filters or search term.</p>
         </div>
       ) : isMobile ? (
         /* ─── Mobile: stacked cards — never scrolls horizontally ─── */
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {cases.map((c) => {
+        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {pagedCases.map((c) => {
             const stageColors = STAGE_COLORS[c.stage] || STAGE_COLORS.DRAFT;
             const [stageBg, stageColor] = isDark ? stageColors.dark : stageColors.light;
             return (
@@ -310,7 +401,7 @@ const CustomersListPage = () => {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</div>
                     {c.parent_case_id && (
-                      <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>↳ From CASE-{c.parent_case_id}</div>
+                      <div style={{ fontSize: 11, color: mutedColor, marginTop: 2 }}>↳ From CASE-{c.parent_case_id}</div>
                     )}
                   </div>
                   <span style={{ background: stageBg, color: stageColor, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -319,24 +410,24 @@ const CustomersListPage = () => {
                 </div>
 
                 <div
-                  style={{ fontWeight: 700, color: '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
+                  style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
                   onClick={() => navigate(`/customers/${c.customer_id}`)}
                 >
                   {c.customer_name || c.customer?.business_name || '—'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--on-muted)', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: mutedColor, marginBottom: 12 }}>
                   {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12, marginBottom: c.alert_flag === 'PDD_PENDING' ? 10 : 0 }}>
-                  <div><div style={labelSm}>Employee</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.customer?.created_by?.name || '—'}</div></div>
-                  <div><div style={labelSm}>CIBIL</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
-                  <div><div style={labelSm}>Lender</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.lender_name || '—'}</div></div>
-                  <div><div style={labelSm}>Product</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.product_type || '—'}</div></div>
-                  <div><div style={labelSm}>Requested</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.loan_amount || c.parent_case?.loan_amount)}</div></div>
-                  <div><div style={labelSm}>Sanctioned</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div></div>
-                  <div><div style={labelSm}>Disbursed</div><div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700 }}>{formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div></div>
-                  <div><div style={labelSm}>Updated</div><div style={{ color: 'var(--on-surface)' }}>{formatRelative(c.updated_at)}</div></div>
+                  <div><div style={labelSm(isDark)}>Employee</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.customer?.created_by?.name || '—'}</div></div>
+                  <div><div style={labelSm(isDark)}>CIBIL</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
+                  <div><div style={labelSm(isDark)}>Lender</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.lender_name || '—'}</div></div>
+                  <div><div style={labelSm(isDark)}>Product</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.product_type || '—'}</div></div>
+                  <div><div style={labelSm(isDark)}>Requested</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.loan_amount || c.parent_case?.loan_amount)}</div></div>
+                  <div><div style={labelSm(isDark)}>Sanctioned</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div></div>
+                  <div><div style={labelSm(isDark)}>Disbursed</div><div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700 }}>{formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div></div>
+                  <div><div style={labelSm(isDark)}>Updated</div><div style={{ color: 'var(--on-surface)' }}>{formatRelative(c.updated_at)}</div></div>
                 </div>
 
                 {c.alert_flag === 'PDD_PENDING' && (
@@ -362,7 +453,7 @@ const CustomersListPage = () => {
         </div>
       ) : (
         /* ─── Tablet / Desktop: fixed-layout table, wraps instead of overflowing — never scrolls horizontally ─── */
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <colgroup>
               <col style={{ width: '9%' }} /><col style={{ width: '21%' }} /><col style={{ width: '14%' }} />
@@ -370,16 +461,21 @@ const CustomersListPage = () => {
               <col style={{ width: '11%' }} /><col style={{ width: '6%' }} />
             </colgroup>
             <thead>
-              <tr style={{ background: 'var(--bg)', borderBottom: '2px solid var(--outline)' }}>
+              <tr style={{ background: 'var(--bg)' }}>
                 {['Case', 'Customer', 'Lender / Product', 'CIBIL', 'Amounts (Req / Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
-                  <th key={h} style={{ padding: '10px 8px', fontSize: 10, fontWeight: 800, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>
+                  <th key={h} style={{
+                    position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)',
+                    padding: '10px 8px', fontSize: 10, fontWeight: 800, color: mutedColor,
+                    textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center',
+                    borderBottom: '2px solid var(--outline)', boxShadow: '0 2px 0 var(--outline)',
+                  }}>
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => {
+              {pagedCases.map((c) => {
                 const stageColors = STAGE_COLORS[c.stage] || STAGE_COLORS.DRAFT;
                 const [stageBg, stageColor] = isDark ? stageColors.dark : stageColors.light;
                 const cellStyle = { padding: '12px 8px', verticalAlign: 'middle', fontSize: 12, wordBreak: 'break-word', whiteSpace: 'normal', textAlign: 'center' };
@@ -387,20 +483,20 @@ const CustomersListPage = () => {
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</div>
-                      {c.parent_case_id && <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
+                      {c.parent_case_id && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
+                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
                         {c.customer_name || c.customer?.business_name || '—'}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 2 }}>
+                      <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>
                         {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 2 }}>{c.customer?.created_by?.name || ''}</div>
+                      <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.customer?.created_by?.name || ''}</div>
                     </td>
                     <td style={cellStyle}>
                       <div style={{ color: 'var(--on-surface)' }}>{c.lender_name || '—'}</div>
-                      <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 2 }}>{c.product_type || '—'}</div>
+                      <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.product_type || '—'}</div>
                     </td>
                     <td style={cellStyle}>
                       <span style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</span>
@@ -423,8 +519,8 @@ const CustomersListPage = () => {
                       </div>
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ color: 'var(--on-muted)' }}>{formatDate(c.lead_date)}</div>
-                      <div style={{ color: 'var(--on-muted)', marginTop: 2 }}>{formatRelative(c.updated_at)}</div>
+                      <div style={{ color: mutedColor }}>{formatDate(c.lead_date)}</div>
+                      <div style={{ color: mutedColor, marginTop: 2 }}>{formatRelative(c.updated_at)}</div>
                     </td>
                     <td style={cellStyle}>
                       <button
@@ -442,11 +538,11 @@ const CustomersListPage = () => {
         </div>
       )}
 
-      {!loading && cases.length > 0 && (
+      {!loading && filteredCases.length > 0 && (
         <>
           {totalPages > 1 && (
             <div style={{ padding: '14px 20px', borderTop: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>
+              <span style={{ fontSize: 12, color: mutedColor }}>
                 Showing {(page - 1) * LIMIT + 1} to {Math.min(page * LIMIT, stats.totalCases)} of {stats.totalCases} results
               </span>
               <div style={{ display: 'flex', gap: 8 }}>

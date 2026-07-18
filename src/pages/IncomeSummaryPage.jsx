@@ -2,9 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseWizardStepper from '../components/ui/CaseWizardStepper';
-import { PlusCircle, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
+import Panel from '../components/ui/Panel';
+import MetricTile from '../components/ui/MetricTile';
+import { PlusCircle, Trash2, ChevronRight, BarChart3, PenLine } from 'lucide-react';
 
 const INCOME_TYPES = [
   'Director Salary', "Partner's Salary", 'Interest on Capital',
@@ -15,9 +18,20 @@ const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'Bank Credit', 'N
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
+
 export default function IncomeSummaryPage() {
   const { id: caseId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -102,31 +116,44 @@ export default function IncomeSummaryPage() {
   const fyLatestLabel = api.gst_turnover?.fy_latest || api.net_profit?.fy_latest || api.avg_bank_balance?.fy_latest || 'Latest Year';
   const fyPrevLabel   = api.gst_turnover?.fy_prev   || api.net_profit?.fy_prev   || api.avg_bank_balance?.fy_prev   || 'Previous Year';
 
+  const addEntryGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1.5fr 2fr auto';
+
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', paddingBottom: 60 }}>
-      <CaseWizardStepper currentStep={4} caseId={caseId} />
+    <div className="income-summary-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', maxWidth: 960, margin: '0 auto', padding: '0 20px 60px' }}>
+      <style>{`
+        .income-summary-page .card,
+        .income-summary-page .btn,
+        .income-summary-page .form-control { border-radius: 0 !important; }
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
       {/* Page Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 24, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
+      >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Income Summary</h1>
-          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Review API-pulled income and add any manual entries</p>
+          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Step 4 of 7 — Review API-pulled income and add any manual entries</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost" onClick={() => navigate(`/customers/add?caseId=${caseId}`)}><ChevronLeft size={16} /> Back</button>
-          <button className="btn btn-primary" onClick={handleNext} disabled={saving} style={{ padding: '10px 24px' }}>
-            {saving ? 'Saving...' : <>Next: Bureau Details <ChevronRight size={16} /></>}
-          </button>
-        </div>
-      </div>
+      </motion.div>
+      <CaseWizardStepper currentStep={4} caseId={caseId} />
 
       {/* API-Pulled Income Table */}
-      <div className="card" style={{ marginBottom: 24, borderLeft: '3px solid var(--success)' }}>
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700 }}>📊 Income from API Pulls</h3>
-          <span style={{ background: '#F0FFF4', color: 'var(--success)', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #9AE6B4' }}>Auto-generated</span>
-        </div>
-        <div style={{ padding: 0, overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Panel
+        icon={BarChart3}
+        accentColor="var(--success)"
+        title="Income from API Pulls"
+        bodyPadding={0}
+        delay={0}
+        headerRight={<span style={{ background: '#F0FFF4', color: 'var(--success)', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #9AE6B4' }}>Auto-generated</span>}
+        className="mb-24"
+        style={{ marginBottom: 24 }}
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: isMobile ? 560 : '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)' }}>
                 {['Item', `Latest Year (${fyLatestLabel})`, `Previous Year (${fyPrevLabel})`, 'Source'].map(h => (
@@ -151,78 +178,84 @@ export default function IncomeSummaryPage() {
           </table>
         </div>
         {/* Footer strip */}
-        <div style={{ padding: '14px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', display: 'flex', gap: 40 }}>
-          {[
-            { label: 'Net Profit (Latest Year)', value: fmt(api.net_profit?.latest), color: 'var(--success)' },
-            { label: 'Avg Monthly Bank Balance', value: fmt(api.avg_bank_balance?.latest), color: 'var(--text-primary)' },
-            { label: 'Combined EMI Obligations', value: fmt(totalEmi), color: 'var(--error)' }
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{label}</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color }}>{value}</div>
-            </div>
-          ))}
+        <div style={{ padding: '14px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+          <MetricTile label="Net Profit (Latest Year)" value={fmt(api.net_profit?.latest)} color="var(--success)" delay={0.1} />
+          <MetricTile label="Avg Monthly Bank Balance" value={fmt(api.avg_bank_balance?.latest)} color="var(--text-primary)" delay={0.15} />
+          <MetricTile label="Combined EMI Obligations" value={fmt(totalEmi)} color="var(--error)" delay={0.2} />
         </div>
-      </div>
+      </Panel>
 
       {/* Manual Income Addition */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ fontSize: 15, fontWeight: 700 }}>✏️ Manual Income Addition</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>Add income not captured via API — Director salary, rental, agriculture, other</p>
-          </div>
+      <Panel
+        icon={PenLine}
+        title="Manual Income Addition"
+        subtitle="Add income not captured via API — Director salary, rental, agriculture, other"
+        bodyPadding={0}
+        delay={0.08}
+        style={{ marginBottom: 24 }}
+        headerRight={
           <button className="btn btn-secondary btn-sm" onClick={() => setAdding(v => !v)}>
-            <PlusCircle size={14} /> {adding ? 'Cancel' : '+ Add Entry'}
+            <PlusCircle size={14} /> {adding ? 'Cancel' : 'Add Entry'}
           </button>
-        </div>
-
+        }
+      >
         {/* Add new entry inline form */}
-        {adding && (
-          <div style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1.5fr 2fr auto', gap: 12, alignItems: 'end' }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
-                <select className="form-control" value={newEntry.income_type} onChange={e => setNewEntry({ ...newEntry, income_type: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {INCOME_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+        <AnimatePresence initial={false}>
+          {adding && (
+            <motion.div
+              key="add-entry-form"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: addEntryGridCols, gap: 12, alignItems: 'end' }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
+                    <select className="form-control" value={newEntry.income_type} onChange={e => setNewEntry({ ...newEntry, income_type: e.target.value })}>
+                      <option value="">— Select —</option>
+                      {INCOME_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>APPLICANT</label>
+                    <select className="form-control" value={newEntry.applicant_id} onChange={e => {
+                      const app = applicants.find(a => a.id === parseInt(e.target.value));
+                      setNewEntry({ ...newEntry, applicant_id: e.target.value, applicant_label: app ? (app.name || app.pan_number || app.type) : '' });
+                    }}>
+                      <option value="">Entity Level</option>
+                      {applicants.map(a => <option key={a.id} value={a.id}>{a.name || a.pan_number || a.type}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ANNUAL AMOUNT (₹) *</label>
+                    <input type="number" className="form-control" placeholder="e.g. 840000" value={newEntry.annual_amount} onChange={e => setNewEntry({ ...newEntry, annual_amount: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>SUPPORTING DOC</label>
+                    <select className="form-control" value={newEntry.supporting_doc_type} onChange={e => setNewEntry({ ...newEntry, supporting_doc_type: e.target.value })}>
+                      {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>REMARKS</label>
+                    <input className="form-control" placeholder="Optional note" value={newEntry.remarks} onChange={e => setNewEntry({ ...newEntry, remarks: e.target.value })} />
+                  </div>
+                  <button className="btn btn-primary" onClick={handleAddEntry} disabled={saving} style={{ whiteSpace: 'nowrap', height: 38 }}>
+                    {saving ? '...' : 'Add'}
+                  </button>
+                </div>
               </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>APPLICANT</label>
-                <select className="form-control" value={newEntry.applicant_id} onChange={e => {
-                  const app = applicants.find(a => a.id === parseInt(e.target.value));
-                  setNewEntry({ ...newEntry, applicant_id: e.target.value, applicant_label: app ? (app.name || app.pan_number || app.type) : '' });
-                }}>
-                  <option value="">Entity Level</option>
-                  {applicants.map(a => <option key={a.id} value={a.id}>{a.name || a.pan_number || a.type}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ANNUAL AMOUNT (₹) *</label>
-                <input type="number" className="form-control" placeholder="e.g. 840000" value={newEntry.annual_amount} onChange={e => setNewEntry({ ...newEntry, annual_amount: e.target.value })} />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>SUPPORTING DOC</label>
-                <select className="form-control" value={newEntry.supporting_doc_type} onChange={e => setNewEntry({ ...newEntry, supporting_doc_type: e.target.value })}>
-                  {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>REMARKS</label>
-                <input className="form-control" placeholder="Optional note" value={newEntry.remarks} onChange={e => setNewEntry({ ...newEntry, remarks: e.target.value })} />
-              </div>
-              <button className="btn btn-primary" onClick={handleAddEntry} disabled={saving} style={{ whiteSpace: 'nowrap', height: 38 }}>
-                {saving ? '...' : 'Add'}
-              </button>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Existing entries table */}
         {data?.manual_entries?.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', minWidth: isMobile ? 560 : '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)' }}>
                   {['Income Type', 'Applicant', 'Annual Amount', 'Supporting Doc', 'Remarks', ''].map(h => (
@@ -231,26 +264,35 @@ export default function IncomeSummaryPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.manual_entries.map(entry => (
-                  <tr key={entry.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>{entry.income_type}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.applicant_label || 'Entity'}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--success)' }}>{fmt(entry.annual_amount)}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.supporting_doc_type || '—'}</td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-tertiary)', fontSize: 12 }}>{entry.remarks || '—'}</td>
-                    <td style={{ padding: '8px 16px' }}>
-                      <button onClick={() => handleDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }} title="Remove">
-                        <Trash2 size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                <AnimatePresence initial={false}>
+                  {data.manual_entries.map(entry => (
+                    <motion.tr
+                      key={entry.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ borderBottom: '1px solid var(--border)' }}
+                    >
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{entry.income_type}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.applicant_label || 'Entity'}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--success)' }}>{fmt(entry.annual_amount)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.supporting_doc_type || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-tertiary)', fontSize: 12 }}>{entry.remarks || '—'}</td>
+                      <td style={{ padding: '8px 16px' }}>
+                        <button onClick={() => handleDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }} title="Remove">
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               </tbody>
             </table>
           </div>
         ) : !adding ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-            No manual entries yet. Click <strong>+ Add Entry</strong> to record Director salary, rental income, etc.
+            No manual entries yet. Click <strong>Add Entry</strong> to record Director salary, rental income, etc.
           </div>
         ) : null}
 
@@ -262,12 +304,12 @@ export default function IncomeSummaryPage() {
             </span>
           </div>
         )}
-      </div>
+      </Panel>
 
       {/* Bottom nav */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         <button className="btn btn-primary btn-lg" onClick={handleNext} disabled={saving} style={{ padding: '14px 36px' }}>
-          {saving ? 'Saving...' : 'Next: Bureau Details →'}
+          {saving ? 'Saving...' : <>Next: Bureau Details <ChevronRight size={18} /></>}
         </button>
       </div>
     </div>

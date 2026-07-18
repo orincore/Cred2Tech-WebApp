@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
-    CheckCircle2, AlertCircle, RefreshCw,
+    CheckCircle2, AlertCircle,
     FileText, ChevronDown, ChevronUp, X, Download
 } from 'lucide-react';
 import FormField from './ui/FormField';
+import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
@@ -149,12 +150,7 @@ const ItrAnalyticsForm = ({
                 {/* Middle: Status description */}
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                     {status === 'INITIATED' && 'No ITR analytics fetched yet'}
-                    {status === 'PROCESSING' && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <RefreshCw size={13} color="var(--warning)" />
-                            Processing... checking automatically
-                        </span>
-                    )}
+                    {status === 'PROCESSING' && <PullingIndicator label="Pulling your ITR analytics…" />}
                     {status === 'COMPLETED' && summary && (
                         <span style={{ color: 'var(--success)' }}>
                             Taxable Income: {formatINR(summary.taxableIncome || summary.salaryIncome)}

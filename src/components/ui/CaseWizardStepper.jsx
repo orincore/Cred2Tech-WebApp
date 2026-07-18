@@ -46,15 +46,21 @@ export default function CaseWizardStepper({ currentStep, caseId, proposalId, onS
       <div style={{ position: 'absolute', top: '50%', left: 30, right: 30, height: 2, background: 'var(--border)', zIndex: 0, transform: 'translateY(-50%)' }} />
       {CASE_WIZARD_STEPS.map((s) => {
         const isActive = currentStep === s.step;
-        const isPast = currentStep > s.step;
-        const isReachable = isPast && !!caseId && routeFor(s.step);
+        const isCompleted = s.step < currentStep;
+        // Free navigation: any step is clickable as long as its route
+        // resolves, regardless of whether it's been completed yet.
+        const isReachable = !isActive && !!caseId && !!routeFor(s.step);
 
         return (
           <div
             key={s.step}
             onClick={() => {
               if (!isReachable) return;
-              if (onStepClick) onStepClick(s.step);
+              // onStepClick only makes sense for steps 1-3, which all live on
+              // the same /customers/add page as local state — steps 4+ are
+              // separate routes and must always go through real navigation,
+              // even when the caller (the add-customer wizard) passes onStepClick.
+              if (onStepClick && s.step <= 3) onStepClick(s.step);
               else navigate(routeFor(s.step));
             }}
             style={{
@@ -78,15 +84,15 @@ export default function CaseWizardStepper({ currentStep, caseId, proposalId, onS
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: isActive ? 'var(--primary)' : isPast ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-                border: isPast ? '2px solid var(--primary)' : 'none',
-                color: isActive ? 'white' : isPast ? 'var(--primary)' : 'var(--text-tertiary)',
+                background: isActive ? 'var(--primary)' : isReachable ? 'var(--bg-surface)' : 'var(--bg-elevated)',
+                border: isReachable ? '2px solid var(--primary)' : 'none',
+                color: isActive ? 'white' : isReachable ? 'var(--primary)' : 'var(--text-tertiary)',
                 fontWeight: 600,
                 fontSize: 12,
                 flexShrink: 0,
               }}
             >
-              {isPast ? <Check size={14} strokeWidth={3} /> : s.step}
+              {isCompleted ? <Check size={14} strokeWidth={3} /> : s.step}
             </div>
             <span
               style={{

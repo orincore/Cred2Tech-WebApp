@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, RefreshCw, FileText, Download } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Download } from 'lucide-react';
 import FormField from './ui/FormField';
+import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
@@ -14,22 +15,30 @@ const MONTHS = [
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 7 }, (_, i) => (CURRENT_YEAR - 4 + i).toString());
 
+// Default GST pull window: the latest 2 years (24 months), ending this month —
+// not a fixed historical range that goes stale as time passes.
+const now = new Date();
+const DEFAULT_TO_MONTH = String(now.getMonth() + 1).padStart(2, '0');
+const DEFAULT_TO_YEAR = String(now.getFullYear());
+const DEFAULT_FROM_MONTH = DEFAULT_TO_MONTH;
+const DEFAULT_FROM_YEAR = String(now.getFullYear() - 2);
+
 const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete }) => {
     const [mode, setMode] = useState('IN_SYSTEM');
     const authType = 'PASSWORD';
     const [isManualGstin, setIsManualGstin] = useState(false);
 
-    const [fromMonth, setFromMonth] = useState('04');
-    const [fromYear, setFromYear] = useState('2022');
-    const [toMonth, setToMonth] = useState('03');
-    const [toYear, setToYear] = useState('2025');
+    const [fromMonth, setFromMonth] = useState(DEFAULT_FROM_MONTH);
+    const [fromYear, setFromYear] = useState(DEFAULT_FROM_YEAR);
+    const [toMonth, setToMonth] = useState(DEFAULT_TO_MONTH);
+    const [toYear, setToYear] = useState(DEFAULT_TO_YEAR);
 
     const [formData, setFormData] = useState({
         gstin: '',
         username: '',
         password: '',
-        from_date: '042022',
-        to_date: '032025',
+        from_date: `${DEFAULT_FROM_MONTH}${DEFAULT_FROM_YEAR}`,
+        to_date: `${DEFAULT_TO_MONTH}${DEFAULT_TO_YEAR}`,
         emails: '',
         mobile_numbers: ''
     });
@@ -198,7 +207,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 
                 {mode === 'IN_SYSTEM' && (
                     <FormField label="GST Username" required>
-                        <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="form-control" />
+                        <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="form-control" placeholder="GST portal username" />
                     </FormField>
                 )}
                 
@@ -229,7 +238,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                  <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
                     <div style={{ flex: 1 }}>
                          <FormField label="GST Password" required>
-                             <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="form-control" />
+                             <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="form-control" placeholder="GST portal password" />
                          </FormField>
                     </div>
                 </div>
@@ -254,11 +263,14 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 <div>
                     <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 20 }}>Active GST Journeys</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).map(req => (
-                            <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: req.status === 'REPORT_READY' || req.status === 'COMPLETED' ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
+                        {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).map(req => {
+                            const isFinal = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
+                            const isWaitingForCustomer = req.mode === 'AUTH_LINK' && req.auth_link && ['AUTH_LINK_CREATED', 'INITIATED'].includes(req.status);
+                            return (
+                            <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isFinal ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                                     <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        {req.gstin} 
+                                        {req.gstin}
                                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border)', textTransform: 'uppercase' }}>{req.mode}</span>
                                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--primary)', color: 'white' }}>{req.status}</span>
                                     </div>
@@ -267,17 +279,17 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                                     </div>
                                 </div>
                                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{req.provider_message}</p>
-                                
-                                {req.mode === 'AUTH_LINK' && req.auth_link && ['AUTH_LINK_CREATED', 'INITIATED'].includes(req.status) && (
+
+                                {isWaitingForCustomer && (
                                     <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 13 }}>
                                         <strong>Link: </strong> <a href={req.auth_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{req.auth_link}</a>
                                         <p style={{ marginTop: 6, color: 'var(--text-tertiary)' }}>Awaiting webhook callback once customer completes auth.</p>
                                     </div>
                                 )}
 
-                                {['PROCESSING', 'DATA_READY', 'CALLBACK_RECEIVED'].includes(req.status) && (
-                                    <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <RefreshCw size={13} className="spin" /> Checking automatically...
+                                {!isFinal && !isWaitingForCustomer && (
+                                    <div style={{ marginBottom: 12 }}>
+                                        <PullingIndicator label="Pulling your GST information…" />
                                     </div>
                                 )}
 
@@ -321,7 +333,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        );})}
                     </div>
                 </div>
             )}

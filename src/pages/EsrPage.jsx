@@ -2,67 +2,101 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseWizardStepper from '../components/ui/CaseWizardStepper';
-import { CheckCircle, XCircle, RefreshCw, ChevronLeft, Calculator,
-         Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone } from 'lucide-react';
+import Panel from '../components/ui/Panel';
+import MetricTile from '../components/ui/MetricTile';
+import {
+  CheckCircle, XCircle, RefreshCw, Calculator,
+  Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone,
+  BarChart3, Landmark, ClipboardList, Wallet, Percent, TrendingDown,
+  Home, Hash, Terminal, ArrowUpRight, ChevronUp, ChevronDown, Zap,
+} from 'lucide-react';
 import { sendCaseToLender, sendCaseToOtherLender, getTenantLenders } from '../api/tenantLenderService';
+
+const easeOut = [0.22, 1, 0.36, 1];
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
 
 // ─── Send Confirmation Modal ───────────────────────────────────────────────────
 function SendConfirmationModal({ isOpen, onClose, result }) {
-  if (!isOpen || !result) return null;
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'var(--bg-primary)', width:'94%', maxWidth:520, borderRadius:14, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ background:'linear-gradient(135deg,#F0FFF4,#EBF8FF)', padding:'24px', textAlign:'center', borderBottom:'1px solid var(--border)' }}>
-          <div style={{ fontSize:44, marginBottom:8 }}>✅</div>
-          <h3 style={{ fontSize:18, fontWeight:800, color:'#276749', margin:0 }}>Lead Successfully Sent!</h3>
-          <p style={{ color:'#4A5568', fontSize:13, marginTop:6 }}>The proposal has been dispatched to the lender contact.</p>
-        </div>
-        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:14 }}>
-          {/* Email preview */}
-          <div style={{ border:'1px solid #BEE3F8', borderRadius:10, overflow:'hidden' }}>
-            <div style={{ background:'#EBF8FF', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
-              <Mail size={14} color='#2B6CB0' />
-              <span style={{ fontSize:12, fontWeight:700, color:'#2B6CB0' }}>EMAIL SENT</span>
+    <AnimatePresence>
+      {isOpen && result && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: easeOut }}
+            style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 520, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          >
+            <div style={{ background: 'linear-gradient(135deg,#F0FFF4,#EBF8FF)', padding: '24px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+              <motion.div
+                initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1, type: 'spring', stiffness: 260, damping: 18 }}
+                style={{ display: 'inline-flex', width: 52, height: 52, borderRadius: '50%', background: '#F0FFF4', border: '2px solid #9AE6B4', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}
+              >
+                <CheckCircle2 size={28} color="#276749" />
+              </motion.div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#276749', margin: 0 }}>Lead Successfully Sent!</h3>
+              <p style={{ color: '#4A5568', fontSize: 13, marginTop: 6 }}>The proposal has been dispatched to the lender contact.</p>
             </div>
-            <div style={{ padding:'12px 16px', fontSize:12 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                <span style={{ color:'var(--text-tertiary)' }}>To:</span>
-                <span style={{ fontWeight:600 }}>{result.to}</span>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Email preview */}
+              <div style={{ border: '1px solid #BEE3F8', borderRadius: 0, overflow: 'hidden' }}>
+                <div style={{ background: '#EBF8FF', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Mail size={14} color='#2B6CB0' />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2B6CB0' }}>EMAIL SENT</span>
+                </div>
+                <div style={{ padding: '12px 16px', fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-tertiary)' }}>To:</span>
+                    <span style={{ fontWeight: 600 }}>{result.to}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-tertiary)' }}>Contact:</span>
+                    <span style={{ fontWeight: 600 }}>{result.contact_name}</span>
+                  </div>
+                  <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>Subject:</strong>
+                    {result.subject}
+                  </div>
+                  <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6, maxHeight: 80, overflow: 'hidden' }}>
+                    {(result.body_preview || '').slice(0, 200)}…
+                  </div>
+                </div>
               </div>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                <span style={{ color:'var(--text-tertiary)' }}>Contact:</span>
-                <span style={{ fontWeight:600 }}>{result.contact_name}</span>
-              </div>
-              <div style={{ marginTop:8, padding:'8px 10px', background:'var(--bg-elevated)', borderRadius:6, fontSize:11, color:'var(--text-secondary)', lineHeight:1.6 }}>
-                <strong style={{ display:'block', marginBottom:4 }}>Subject:</strong>
-                {result.subject}
-              </div>
-              <div style={{ marginTop:6, padding:'8px 10px', background:'var(--bg-elevated)', borderRadius:6, fontSize:11, color:'var(--text-secondary)', lineHeight:1.6, maxHeight:80, overflow:'hidden' }}>
-                {(result.body_preview || '').slice(0, 200)}…
-              </div>
+              {/* SMS preview */}
+              {result.sms?.smsSent && (
+                <div style={{ border: '1px solid #C6F6D5', borderRadius: 0, overflow: 'hidden' }}>
+                  <div style={{ background: '#F0FFF4', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Phone size={14} color='#276749' />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#276749' }}>SMS SENT</span>
+                  </div>
+                  <div style={{ padding: '12px 16px', fontSize: 12 }}>
+                    <div style={{ marginBottom: 4 }}>Sent to: <strong>{result.sms.to}</strong></div>
+                    <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, lineHeight: 1.6 }}>{result.sms.message}</div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-          {/* SMS preview */}
-          {result.sms?.smsSent && (
-            <div style={{ border:'1px solid #C6F6D5', borderRadius:10, overflow:'hidden' }}>
-              <div style={{ background:'#F0FFF4', padding:'10px 16px', display:'flex', alignItems:'center', gap:8 }}>
-                <Phone size={14} color='#276749' />
-                <span style={{ fontSize:12, fontWeight:700, color:'#276749' }}>SMS SENT</span>
-              </div>
-              <div style={{ padding:'12px 16px', fontSize:12 }}>
-                <div style={{ marginBottom:4 }}>Sent to: <strong>{result.sms.to}</strong></div>
-                <div style={{ padding:'8px 10px', background:'var(--bg-elevated)', borderRadius:6, fontSize:11, lineHeight:1.6 }}>{result.sms.message}</div>
-              </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={onClose} className="btn btn-primary">Done</button>
             </div>
-          )}
-        </div>
-        <div style={{ padding:'14px 24px', borderTop:'1px solid var(--border)', display:'flex', justifyContent:'flex-end' }}>
-          <button onClick={onClose} style={{ padding:'9px 22px', borderRadius:8, fontWeight:700, fontSize:14, background:'var(--primary)', color:'#fff', border:'none', cursor:'pointer' }}>Done</button>
-        </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -82,8 +116,6 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSend = async () => {
     if (!selectedContact) { toast.error('Select a contact first'); return; }
     setSending(true);
@@ -99,60 +131,72 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
   const contacts = selectedLender?.contacts || [];
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'var(--bg-primary)', width:'94%', maxWidth:480, borderRadius:14, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'18px 24px', borderBottom:'1px solid var(--border)', background:'var(--bg-elevated)' }}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:700 }}>Send to Other Lender</h3>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-tertiary)' }}><X size={18} /></button>
-        </div>
-        <div style={{ padding:'20px 24px' }}>
-          {loading ? <div style={{ textAlign:'center', padding:30 }}><LoadingSpinner size={30} /></div> : lenders.length === 0 ? (
-            <div style={{ textAlign:'center', padding:20, color:'var(--text-tertiary)' }}>
-              No configured lenders found. <a href='/settings/lender-contacts' style={{ color:'var(--primary)' }}>Add contacts →</a>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: easeOut }}
+            style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 480, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Send to Other Lender</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}><X size={18} /></button>
             </div>
-          ) : (
-            <>
-              <div style={{ marginBottom:16 }}>
-                <label style={{ fontSize:11, fontWeight:700, color:'var(--text-tertiary)', textTransform:'uppercase', letterSpacing:'0.5px', display:'block', marginBottom:8 }}>Select Lender</label>
-                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {lenders.map(l => (
-                    <button key={l.id} onClick={() => { setSelectedLender(l); setSelectedContact(null); }}
-                      style={{ padding:'10px 14px', borderRadius:8, textAlign:'left', cursor:'pointer', fontSize:14, fontWeight:600,
-                        border:`2px solid ${selectedLender?.id === l.id ? 'var(--primary)' : 'var(--border)'}`,
-                        background: selectedLender?.id === l.id ? '#EEF2FF' : 'var(--bg-elevated)', color:'var(--text-primary)' }}>
-                      🏦 {l.lender_name} <span style={{ fontSize:11, fontWeight:400, color:'var(--text-tertiary)' }}>· {l.contacts.length} contact(s)</span>
-                    </button>
-                  ))}
+            <div style={{ padding: '20px 24px' }}>
+              {loading ? <div style={{ textAlign: 'center', padding: 30 }}><LoadingSpinner size={30} /></div> : lenders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}>
+                  No configured lenders found. <a href='/settings/lender-contacts' style={{ color: 'var(--primary)' }}>Add contacts →</a>
                 </div>
-              </div>
-              {selectedLender && contacts.length > 0 && (
-                <div>
-                  <label style={{ fontSize:11, fontWeight:700, color:'var(--text-tertiary)', textTransform:'uppercase', letterSpacing:'0.5px', display:'block', marginBottom:8 }}>Select Contact</label>
-                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                    {contacts.map(c => (
-                      <button key={c.id} onClick={() => setSelectedContact(c)}
-                        style={{ padding:'10px 14px', borderRadius:8, textAlign:'left', cursor:'pointer', fontSize:13,
-                          border:`2px solid ${selectedContact?.id === c.id ? '#276749' : 'var(--border)'}`,
-                          background: selectedContact?.id === c.id ? '#F0FFF4' : 'var(--bg-elevated)', color:'var(--text-primary)' }}>
-                        <div style={{ fontWeight:600 }}>{c.contact_name} <span style={{ fontSize:11, color:'var(--text-tertiary)', fontWeight:400 }}>({c.product_type})</span></div>
-                        <div style={{ fontSize:11, color:'var(--text-tertiary)', marginTop:2 }}>{c.contact_email}{c.contact_mobile ? ` · ${c.contact_mobile}` : ''}</div>
-                      </button>
-                    ))}
+              ) : (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 8 }}>Select Lender</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {lenders.map(l => (
+                        <button key={l.id} onClick={() => { setSelectedLender(l); setSelectedContact(null); }}
+                          style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
+                            border: `2px solid ${selectedLender?.id === l.id ? 'var(--primary)' : 'var(--border)'}`,
+                            background: selectedLender?.id === l.id ? '#EEF2FF' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
+                          <Landmark size={15} color="var(--primary)" />
+                          {l.lender_name} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>· {l.contacts.length} contact(s)</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                  {selectedLender && contacts.length > 0 && (
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 8 }}>Select Contact</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {contacts.map(c => (
+                          <button key={c.id} onClick={() => setSelectedContact(c)}
+                            style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 13,
+                              border: `2px solid ${selectedContact?.id === c.id ? '#276749' : 'var(--border)'}`,
+                              background: selectedContact?.id === c.id ? '#F0FFF4' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
+                            <div style={{ fontWeight: 600 }}>{c.contact_name} <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>({c.product_type})</span></div>
+                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{c.contact_email}{c.contact_mobile ? ` · ${c.contact_mobile}` : ''}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
-        <div style={{ padding:'14px 24px', borderTop:'1px solid var(--border)', display:'flex', justifyContent:'flex-end', gap:10, background:'var(--bg-elevated)' }}>
-          <button onClick={onClose} style={{ padding:'8px 16px', borderRadius:8, border:'1px solid var(--border)', background:'transparent', cursor:'pointer', fontSize:13, fontWeight:600 }}>Cancel</button>
-          <button onClick={handleSend} disabled={!selectedContact || sending}
-            style={{ padding:'9px 20px', borderRadius:8, fontWeight:700, fontSize:14, background: selectedContact ? 'var(--primary)' : 'var(--border)', color:'#fff', border:'none', cursor: selectedContact ? 'pointer' : 'not-allowed', display:'flex', alignItems:'center', gap:6 }}>
-            <Send size={14} /> {sending ? 'Sending...' : 'Send Proposal'}
-          </button>
-        </div>
-      </div>
-    </div>
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
+              <button onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+              <button onClick={handleSend} disabled={!selectedContact || sending} className="btn btn-primary btn-sm"
+                style={{ opacity: selectedContact ? 1 : 0.5, cursor: selectedContact ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Send size={14} /> {sending ? 'Sending...' : 'Send Proposal'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -191,7 +235,7 @@ function ProposalBadge({ status }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '3px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700,
+      padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
       background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`
     }}>
       <Icon size={10} /> {cfg.label}
@@ -208,16 +252,16 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
   const ev = evaluations[activeScheme] || evaluations[0];
 
   const steps = [
-    { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: '💰', color: '#2B6CB0', bg: '#EBF8FF', note: 'Selected income method monthly figure' },
-    { label: 'FOIR Allowed', value: fmtPct(ev.foir_allowed_percent), icon: '📊', color: '#276749', bg: '#F0FFF4', note: 'Max permissible obligation %' },
-    { label: 'FOIR Actual', value: fmtPct(ev.foir_actual_percent), icon: '📉',
+    { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: Wallet, color: '#2B6CB0', bg: '#EBF8FF', note: 'Selected income method monthly figure' },
+    { label: 'FOIR Allowed', value: fmtPct(ev.foir_allowed_percent), icon: Percent, color: '#276749', bg: '#F0FFF4', note: 'Max permissible obligation %' },
+    { label: 'FOIR Actual', value: fmtPct(ev.foir_actual_percent), icon: TrendingDown,
       color: ev.foir_actual_percent > ev.foir_allowed_percent ? '#C53030' : '#276749',
       bg: ev.foir_actual_percent > ev.foir_allowed_percent ? '#FFF5F5' : '#F0FFF4',
       note: 'Current EMI ÷ income' },
-    { label: 'Max Eligible EMI', value: ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—', icon: '🏦', color: '#744210', bg: '#FFFBF0', note: '(FOIR% × Income) − Existing EMI' },
-    { label: 'LTV Applied', value: ev.applicable_ltv_percent != null ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—', icon: '🏠', color: '#553C9A', bg: '#FAF5FF', note: `Key: ${ev.applicable_ltv_key || '—'}` },
-    { label: 'Max Loan by LTV', value: ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—', icon: '🔢', color: '#2C7A7B', bg: '#E6FFFA', note: 'Property Value × LTV%' },
-    { label: 'Final Eligible Loan', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: '✅',
+    { label: 'Max Eligible EMI', value: ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—', icon: Landmark, color: '#744210', bg: '#FFFBF0', note: '(FOIR% × Income) − Existing EMI' },
+    { label: 'LTV Applied', value: ev.applicable_ltv_percent != null ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: '#553C9A', bg: '#FAF5FF', note: `Key: ${ev.applicable_ltv_key || '—'}` },
+    { label: 'Max Loan by LTV', value: ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—', icon: Hash, color: '#2C7A7B', bg: '#E6FFFA', note: 'Property Value × LTV%' },
+    { label: 'Final Eligible Loan', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: CheckCircle2,
       color: ev.is_eligible ? '#276749' : '#C53030', bg: ev.is_eligible ? '#F0FFF4' : '#FFF5F5',
       note: ev.is_eligible ? 'Min(requested, LTV cap)' : 'Failed eligibility', highlight: true },
   ];
@@ -227,64 +271,71 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
       <button onClick={() => setOpen(!open)} style={{
         display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px',
         background: 'var(--bg-elevated)', color: 'var(--primary)', border: '1px solid var(--primary)',
-        borderRadius: 6, cursor: 'pointer', fontWeight: 600
+        borderRadius: 0, cursor: 'pointer', fontWeight: 600
       }}>
         <Calculator size={12} />
-        {open ? 'Hide Calculation ↑' : 'View Calculation ↓'}
+        {open ? 'Hide Calculation' : 'View Calculation'}
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 
-      {open && (
-        <div style={{ marginTop: 10, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-          {evaluations.length > 1 && (
-            <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
-              {evaluations.map((e, i) => (
-                <button key={i} onClick={() => setActiveScheme(i)} style={{
-                  flex: 1, padding: '8px 6px', fontSize: 11, fontWeight: 600,
-                  border: 'none', cursor: 'pointer',
-                  background: activeScheme === i ? 'var(--primary)' : 'transparent',
-                  color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
-                }}>
-                  {e.scheme_name}
-                  <span style={{ marginLeft: 4, fontSize: 9, padding: '1px 5px', borderRadius: 10,
-                    background: e.is_eligible ? '#9AE6B4' : '#FED7D7',
-                    color: e.is_eligible ? '#22543D' : '#C53030' }}>
-                    {e.is_eligible ? '✓' : '✕'}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={{ padding: '14px 14px 8px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {steps.map((step, i) => (
-                <div key={i} style={{
-                  background: step.bg, borderRadius: 8, padding: '10px 12px',
-                  border: step.highlight ? `2px solid ${step.color}` : '1px solid transparent',
-                  gridColumn: step.highlight ? 'span 2' : 'span 1',
-                }}>
-                  <div style={{ fontSize: 10, color: '#718096', fontWeight: 600, marginBottom: 2 }}>
-                    {step.icon} {step.label}
-                  </div>
-                  <div style={{ fontSize: step.highlight ? 18 : 15, fontWeight: 800, color: step.color }}>
-                    {step.value}
-                  </div>
-                  <div style={{ fontSize: 10, color: '#718096', marginTop: 4, fontStyle: 'italic' }}>
-                    {step.note}
-                  </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: easeOut }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ marginTop: 10, borderRadius: 0, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              {evaluations.length > 1 && (
+                <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+                  {evaluations.map((e, i) => (
+                    <button key={i} onClick={() => setActiveScheme(i)} style={{
+                      flex: 1, padding: '8px 6px', fontSize: 11, fontWeight: 600,
+                      border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      background: activeScheme === i ? 'var(--primary)' : 'transparent',
+                      color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
+                    }}>
+                      {e.scheme_name}
+                      {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : '#276749'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : '#C53030'} />}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              <div style={{ padding: '14px 14px 8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {steps.map((step, i) => (
+                    <div key={i} style={{
+                      background: step.bg, borderRadius: 0, padding: '10px 12px',
+                      border: step.highlight ? `2px solid ${step.color}` : '1px solid transparent',
+                      gridColumn: step.highlight ? 'span 2' : 'span 1',
+                    }}>
+                      <div style={{ fontSize: 10, color: '#718096', fontWeight: 600, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <step.icon size={11} /> {step.label}
+                      </div>
+                      <div style={{ fontSize: step.highlight ? 18 : 15, fontWeight: 800, color: step.color }}>
+                        {step.value}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#718096', marginTop: 4, fontStyle: 'italic' }}>
+                        {step.note}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10, padding: '8px 12px', background: '#1A202C', borderRadius: 0,
+                  fontSize: 10, color: '#A0AEC0', fontFamily: 'monospace', lineHeight: 1.8 }}>
+                  <div style={{ color: '#68D391', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Terminal size={11} /> Calculation Trace
+                  </div>
+                  <div>Max EMI = Income ({formatDynamicCurrency(monthlyIncome)}) × FOIR ({fmtPct(ev.foir_allowed_percent)}) − Obligations = {ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—'}</div>
+                  <div>Max Loan LTV = {ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—'}</div>
+                  <div style={{ color: '#68D391' }}>Final = {ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—'}</div>
+                </div>
+              </div>
             </div>
-            <div style={{ marginTop: 10, padding: '8px 12px', background: '#1A202C', borderRadius: 8,
-              fontSize: 10, color: '#A0AEC0', fontFamily: 'monospace', lineHeight: 1.8 }}>
-              <div style={{ color: '#68D391', fontWeight: 700, marginBottom: 4 }}>📐 Calculation Trace</div>
-              <div>Max EMI = Income ({formatDynamicCurrency(monthlyIncome)}) × FOIR ({fmtPct(ev.foir_allowed_percent)}) − Obligations = {ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—'}</div>
-              <div>Max Loan LTV = {ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—'}</div>
-              <div style={{ color: '#68D391' }}>Final = {ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—'}</div>
-            </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -296,37 +347,46 @@ const SchemeDiagnosticsPanel = ({ evaluations }) => {
   return (
     <div style={{ marginTop: 8 }}>
       <button className="btn btn-ghost" onClick={() => setOpen(!open)}
-        style={{ fontSize: 11, padding: '4px 8px', color: 'var(--text-tertiary)', border: '1px solid var(--border)' }}>
-        {open ? 'Hide Diagnostics ↑' : 'View Scheme Diagnostics ↓'}
+        style={{ fontSize: 11, padding: '4px 8px', color: 'var(--text-tertiary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {open ? 'Hide Diagnostics' : 'View Scheme Diagnostics'}
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
-      {open && (
-        <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 12 }}>
-          {evaluations.map((ev, i) => (
-            <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i === evaluations.length - 1 ? 'none' : '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <strong>{ev.scheme_name}</strong>
-                <span style={{ color: ev.is_eligible ? 'var(--success)' : 'var(--error)' }}>
-                  {ev.is_eligible ? 'Eligible' : 'Ineligible'}
-                </span>
-              </div>
-              <div style={{ color: 'var(--text-tertiary)', fontSize: 11, marginBottom: 6 }}>
-                LTV: {ev.applicable_ltv_percent ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—'} ({ev.applicable_ltv_key})
-                <br />Method Matched: {ev.income_method_matched ? 'Yes' : 'No'}
-              </div>
-              {ev.failure_reasons?.length > 0 && (
-                <ul style={{ color: 'var(--error)', paddingLeft: 16, margin: '4px 0' }}>
-                  {ev.failure_reasons.map((r, ri) => <li key={ri}>{r}</li>)}
-                </ul>
-              )}
-              {ev.warnings?.length > 0 && (
-                <ul style={{ color: '#D97706', paddingLeft: 16, margin: '4px 0' }}>
-                  {ev.warnings.map((w, wi) => <li key={wi}>{w}</li>)}
-                </ul>
-              )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: easeOut }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 12 }}>
+              {evaluations.map((ev, i) => (
+                <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i === evaluations.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <strong>{ev.scheme_name}</strong>
+                    <span style={{ color: ev.is_eligible ? 'var(--success)' : 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {ev.is_eligible ? <CheckCircle2 size={13} /> : <XCircle size={13} />} {ev.is_eligible ? 'Eligible' : 'Ineligible'}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: 11, marginBottom: 6 }}>
+                    LTV: {ev.applicable_ltv_percent ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—'} ({ev.applicable_ltv_key})
+                    <br />Method Matched: {ev.income_method_matched ? 'Yes' : 'No'}
+                  </div>
+                  {ev.failure_reasons?.length > 0 && (
+                    <ul style={{ color: 'var(--error)', paddingLeft: 16, margin: '4px 0' }}>
+                      {ev.failure_reasons.map((r, ri) => <li key={ri}>{r}</li>)}
+                    </ul>
+                  )}
+                  {ev.warnings?.length > 0 && (
+                    <ul style={{ color: '#D97706', paddingLeft: 16, margin: '4px 0' }}>
+                      {ev.warnings.map((w, wi) => <li key={wi}>{w}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -405,38 +465,46 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
   return (
     <div style={{ marginTop: 14 }}>
       {/* Clone dialog */}
-      {showCloneDialog && (
-        <div style={{
-          padding: '14px', background: '#EBF8FF', borderRadius: 8,
-          border: '1px solid #BEE3F8', marginBottom: 10
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#2B6CB0', marginBottom: 8 }}>
-            📋 Reuse existing proposal?
-          </div>
-          <div style={{ fontSize: 11, color: '#4A5568', marginBottom: 10 }}>
-            A proposal was already prepared (#{otherSubmitted?.proposal_number}).
-            Reuse its data and documents for {lender.lender_name}?
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => doCreate(otherSubmitted.id)}
-              disabled={creating}
-              style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 700,
-                       background: '#2B6CB0', color: '#fff', border: 'none',
-                       borderRadius: 6, cursor: 'pointer' }}>
-              {creating ? 'Cloning...' : '✅ Yes, Clone Proposal'}
-            </button>
-            <button
-              onClick={() => { setShowCloneDialog(false); doCreate(null); }}
-              disabled={creating}
-              style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600,
-                       background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-                       border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>
-              No, Start Fresh
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {showCloneDialog && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: easeOut }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{
+              padding: '14px', background: '#EBF8FF', borderRadius: 0,
+              border: '1px solid #BEE3F8', marginBottom: 10
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#2B6CB0', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ClipboardList size={13} /> Reuse existing proposal?
+              </div>
+              <div style={{ fontSize: 11, color: '#4A5568', marginBottom: 10 }}>
+                A proposal was already prepared (#{otherSubmitted?.proposal_number}).
+                Reuse its data and documents for {lender.lender_name}?
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => doCreate(otherSubmitted.id)}
+                  disabled={creating}
+                  style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                           background: '#2B6CB0', color: '#fff', border: 'none',
+                           borderRadius: 0, cursor: 'pointer' }}>
+                  <CheckCircle2 size={13} /> {creating ? 'Cloning...' : 'Yes, Clone Proposal'}
+                </button>
+                <button
+                  onClick={() => { setShowCloneDialog(false); doCreate(null); }}
+                  disabled={creating}
+                  style={{ flex: 1, padding: '8px', fontSize: 12, fontWeight: 600,
+                           background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                           border: '1px solid var(--border)', borderRadius: 0, cursor: 'pointer' }}>
+                  No, Start Fresh
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Existing proposal badges + view button */}
       {lenderProposals.length > 0 && (
@@ -470,19 +538,19 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         ) : (
           <button
             className="btn btn-primary"
-            style={{ flex: 1, padding: '10px', fontWeight: 700,
+            style={{ flex: 1, padding: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                      background: 'linear-gradient(135deg,#2B6CB0,#553C9A)' }}
             onClick={handlePrepare}
             disabled={creating}
           >
-            {creating ? 'Creating...' : '📋 Prepare Proposal →'}
+            <ClipboardList size={15} /> {creating ? 'Creating...' : 'Prepare Proposal →'}
           </button>
         )}
         <button
           onClick={handleSendEmail}
           disabled={sending}
           title="Send proposal email to this lender's configured contact"
-          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 12, borderRadius: 8,
+          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 12, borderRadius: 0,
                    background: sending ? '#718096' : '#276749', color: '#fff', border: 'none',
                    cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
         >
@@ -491,11 +559,11 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         <button
           onClick={onSendToOtherLender}
           title="Send to a different lender contact from your directory"
-          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 11, borderRadius: 8,
+          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 11, borderRadius: 0,
                    background: 'transparent', color: '#553C9A', border: '1px solid #553C9A',
                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
         >
-          ↗ Other Lender
+          <ArrowUpRight size={13} /> Other Lender
         </button>
       </div>
     </div>
@@ -506,6 +574,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
 export default function EsrPage() {
   const { id: caseId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [sendConfirmResult, setSendConfirmResult] = useState(null);
   const [showOtherLenderModal, setShowOtherLenderModal] = useState(false);
 
@@ -557,65 +626,71 @@ export default function EsrPage() {
     || (esr?.combined_income ? esr.combined_income / 12 : null);
 
   return (
-    <div style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
-      <CaseWizardStepper currentStep={6} caseId={caseId} />
+    <div className="esr-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', maxWidth: 1040, margin: '0 auto', padding: '0 20px 60px' }}>
+      <style>{`
+        .esr-page .card,
+        .esr-page .btn,
+        .esr-page .form-control { border-radius: 0 !important; }
+        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+      `}</style>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <motion.div
+        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 24, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
+      >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
             Eligibility Summary Report
           </h1>
           <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>
             {esr
-              ? `Generated ${new Date(esr.generated_at).toLocaleString('en-IN')} · ${eligibleLenders.length} eligible of ${lenders.length} lenders · ${proposals.length} proposal(s)`
-              : 'Run the eligibility engine to see matching lenders'}
+              ? `Step 6 of 7 — Generated ${new Date(esr.generated_at).toLocaleString('en-IN')} · ${eligibleLenders.length} eligible of ${lenders.length} lenders · ${proposals.length} proposal(s)`
+              : 'Step 6 of 7 — Run the eligibility engine to see matching lenders'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/bureau-obligations`)}>
-            <ChevronLeft size={16} /> Back
-          </button>
-          <button className="btn btn-secondary" onClick={handleGenerate} disabled={generating}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <RefreshCw size={14} className={generating ? 'spin' : ''} />
-            {generating ? 'Generating...' : (esr ? 'Regenerate ESR' : 'Generate ESR')}
-          </button>
-        </div>
-      </div>
+      </motion.div>
+      <CaseWizardStepper currentStep={6} caseId={caseId} />
 
       {/* Snapshot summary */}
       {esr && (
-        <div className="card" style={{ marginBottom: 24, padding: 0 }}>
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg,#EBF4FF,transparent)' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>📋 Input Snapshot</h3>
+        <Panel
+          icon={ClipboardList}
+          accentColor="var(--primary)"
+          title="Input Snapshot"
+          delay={0}
+          style={{ marginBottom: 24 }}
+          headerRight={
+            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RefreshCw size={14} className={generating ? 'spin' : ''} />
+              {generating ? 'Generating...' : 'Regenerate ESR'}
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+            <MetricTile label="Combined Annual Income" value={fmt(esr.combined_income) || '—'} size="lg" delay={0.05} />
+            <MetricTile label="Property Value" value={fmt(esr.property_value) || '—'} size="lg" delay={0.08} />
+            <MetricTile label="Primary CIBIL" value={esr.primary_cibil_score || '—'} size="lg" delay={0.11} />
+            <MetricTile label="Lowest CIBIL" value={esr.lowest_cibil_score || '—'} size="lg" delay={0.14} />
+            <MetricTile label="Total EMI / Month" value={fmt(esr.total_emi_per_month) || '—'} size="lg" delay={0.17} />
           </div>
-          <div style={{ padding: '16px 24px', display: 'flex', gap: 40, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Combined Annual Income', value: fmt(esr.combined_income) },
-              { label: 'Property Value',         value: fmt(esr.property_value) },
-              { label: 'Primary CIBIL',          value: esr.primary_cibil_score || '—' },
-              { label: 'Lowest CIBIL',           value: esr.lowest_cibil_score || '—' },
-              { label: 'Total EMI / Month',       value: fmt(esr.total_emi_per_month) }
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{label}</div>
-                <div style={{ fontSize: 17, fontWeight: 800 }}>{value || '—'}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </Panel>
       )}
 
       {/* No ESR yet */}
       {!esr && !generating && (
-        <div className="card" style={{ padding: '60px 40px', textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+        <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+          className="card" style={{ padding: '60px 40px', textAlign: 'center', marginBottom: 24, borderRadius: 0 }}>
+          <div style={{ display: 'inline-flex', width: 72, height: 72, borderRadius: '50%', background: 'var(--bg-elevated)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <BarChart3 size={32} color="var(--text-tertiary)" />
+          </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>No ESR generated yet</h3>
           <p style={{ color: 'var(--text-tertiary)', marginBottom: 24 }}>Click <strong>Generate ESR</strong> to run the eligibility engine against all active lenders.</p>
-          <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px' }}>
-            {generating ? 'Generating...' : '⚡ Generate Eligibility Report'}
+          <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <Zap size={18} /> Generate Eligibility Report
           </button>
-        </div>
+        </motion.div>
       )}
 
       {/* Eligible Lenders */}
@@ -625,11 +700,11 @@ export default function EsrPage() {
             <CheckCircle size={18} color="var(--success)" />
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>Eligible Lenders ({eligibleLenders.length})</h2>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-            {eligibleLenders.map(lender => (
-              <div key={lender.lender_id} className="card" style={{ borderTop: '3px solid var(--success)', position: 'relative' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+            {eligibleLenders.map((lender, i) => (
+              <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.06} hoverable style={{ borderTop: '3px solid var(--success)', position: 'relative' }}>
                 <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div>
                       <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{lender.lender_name}</h3>
                       <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
@@ -637,7 +712,9 @@ export default function EsrPage() {
                       </p>
                     </div>
                     <span style={{ background: '#F0FFF4', color: 'var(--success)', padding: '4px 10px',
-                      borderRadius: 20, fontSize: 11, fontWeight: 700, border: '1px solid #9AE6B4' }}>✓ ELIGIBLE</span>
+                      borderRadius: 0, fontSize: 11, fontWeight: 700, border: '1px solid #9AE6B4', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <CheckCircle2 size={12} /> ELIGIBLE
+                    </span>
                   </div>
                 </div>
                 <div style={{ padding: '16px 20px' }}>
@@ -648,10 +725,7 @@ export default function EsrPage() {
                       { label: 'LTV', value: lender.applicable_ltv_percent ? `${(lender.applicable_ltv_percent * 100).toFixed(0)}%` : '—', color: 'var(--text-primary)' },
                       { label: 'Max Tenure', value: formatDynamicTenure(lender.max_tenure_months), color: 'var(--text-primary)' }
                     ].map(({ label, value, color }) => value && (
-                      <div key={label} style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 12px' }}>
-                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color, marginTop: 2 }}>{value}</div>
-                      </div>
+                      <MetricTile key={label} boxed label={label} value={value} color={color} />
                     ))}
                   </div>
 
@@ -668,7 +742,7 @@ export default function EsrPage() {
                     onSendToOtherLender={() => setShowOtherLenderModal(true)}
                   />
                 </div>
-              </div>
+              </Panel>
             ))}
           </div>
         </div>
@@ -681,28 +755,30 @@ export default function EsrPage() {
             <XCircle size={18} color="var(--text-tertiary)" />
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Not Eligible ({ineligibleLenders.length})</h2>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-            {ineligibleLenders.map(lender => (
-              <div key={lender.lender_id} className="card" style={{ borderTop: '3px solid var(--border)', opacity: 0.85 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {ineligibleLenders.map((lender, i) => (
+              <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.05} style={{ borderTop: '3px solid var(--border)', opacity: 0.85 }}>
                 <div style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>{lender.lender_name}</h3>
                     <span style={{ background: 'var(--bg-elevated)', color: 'var(--text-tertiary)', padding: '3px 8px',
-                      borderRadius: 20, fontSize: 11, fontWeight: 600, border: '1px solid var(--border)' }}>✕ INELIGIBLE</span>
+                      borderRadius: 0, fontSize: 11, fontWeight: 600, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <XCircle size={11} /> INELIGIBLE
+                    </span>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
                     {lender.product_display_name || lender.product_type}
                   </p>
                   {lender.ineligibility_reason && (
-                    <div style={{ marginTop: 10, padding: '8px 10px', background: '#FFF5F5', borderRadius: 6,
-                      fontSize: 11, color: 'var(--error)', border: '1px solid #FED7D7' }}>
-                      ❌ {lender.ineligibility_reason}
+                    <div style={{ marginTop: 10, padding: '8px 10px', background: '#FFF5F5', borderRadius: 0,
+                      fontSize: 11, color: 'var(--error)', border: '1px solid #FED7D7', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                      <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} /> {lender.ineligibility_reason}
                     </div>
                   )}
                   <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
                   <SchemeDiagnosticsPanel evaluations={lender.scheme_evaluations} />
                 </div>
-              </div>
+              </Panel>
             ))}
           </div>
         </div>
