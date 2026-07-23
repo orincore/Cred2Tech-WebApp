@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import {
@@ -12,6 +10,7 @@ import {
   Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone,
   BarChart3, Landmark, ClipboardList, Wallet, Percent, TrendingDown,
   Home, Hash, Terminal, ArrowUpRight, ChevronUp, ChevronDown, Zap,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { sendCaseToLender, sendCaseToOtherLender, getTenantLenders } from '../api/tenantLenderService';
 
@@ -27,6 +26,35 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+// ─── Horizontal Scroll Row (for lenders beyond the top 3) ─────────────────────
+function HorizontalScrollRow({ children }) {
+  const scrollRef = useRef(null);
+  const scrollBy = (dir) => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollBy({ left: dir * 340, behavior: 'smooth' });
+  };
+  return (
+    <div style={{ position: 'relative' }}>
+      <button type="button" onClick={() => scrollBy(-1)} aria-label="Scroll left"
+        style={{ position: 'absolute', left: -4, top: '50%', transform: 'translateY(-50%)', zIndex: 2,
+          width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-base)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
+        <ChevronLeft size={16} />
+      </button>
+      <div ref={scrollRef} className="hide-scrollbar"
+        style={{ display: 'flex', gap: 16, overflowX: 'auto', scrollSnapType: 'x proximity', padding: '4px 40px' }}>
+        {children}
+      </div>
+      <button type="button" onClick={() => scrollBy(1)} aria-label="Scroll right"
+        style={{ position: 'absolute', right: -4, top: '50%', transform: 'translateY(-50%)', zIndex: 2,
+          width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-base)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Send Confirmation Modal ───────────────────────────────────────────────────
 function SendConfirmationModal({ isOpen, onClose, result }) {
   return (
@@ -39,7 +67,7 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.25, ease: easeOut }}
-            style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 520, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 520, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
             <div style={{ background: 'linear-gradient(135deg,#F0FFF4,#EBF8FF)', padding: '24px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
               <motion.div
@@ -140,7 +168,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
           <motion.div
             initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.25, ease: easeOut }}
-            style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 480, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 480, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Send to Other Lender</h3>
@@ -160,7 +188,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
                         <button key={l.id} onClick={() => { setSelectedLender(l); setSelectedContact(null); }}
                           style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
                             border: `2px solid ${selectedLender?.id === l.id ? 'var(--primary)' : 'var(--border)'}`,
-                            background: selectedLender?.id === l.id ? '#EEF2FF' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
+                            background: selectedLender?.id === l.id ? 'var(--primary-subtle)' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
                           <Landmark size={15} color="var(--primary)" />
                           {l.lender_name} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>· {l.contacts.length} contact(s)</span>
                         </button>
@@ -174,8 +202,8 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
                         {contacts.map(c => (
                           <button key={c.id} onClick={() => setSelectedContact(c)}
                             style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 13,
-                              border: `2px solid ${selectedContact?.id === c.id ? '#276749' : 'var(--border)'}`,
-                              background: selectedContact?.id === c.id ? '#F0FFF4' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
+                              border: `2px solid ${selectedContact?.id === c.id ? 'var(--success)' : 'var(--border)'}`,
+                              background: selectedContact?.id === c.id ? 'var(--success-bg)' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
                             <div style={{ fontWeight: 600 }}>{c.contact_name} <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>({c.product_type})</span></div>
                             <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{c.contact_email}{c.contact_mobile ? ` · ${c.contact_mobile}` : ''}</div>
                           </button>
@@ -221,12 +249,12 @@ const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 
 // ─── Proposal status badge config ─────────────────────────────────────────────
 const PROPOSAL_STATUS = {
-  draft:              { label: 'Draft',      color: '#718096', bg: '#EDF2F7', icon: Clock },
-  submitted:          { label: 'Submitted',  color: '#2B6CB0', bg: '#EBF8FF', icon: Send },
-  accepted:           { label: 'Accepted',   color: '#276749', bg: '#F0FFF4', icon: CheckCircle2 },
-  rejected:           { label: 'Rejected',   color: '#C53030', bg: '#FFF5F5', icon: XCircle },
-  query_raised:       { label: 'Query',      color: '#C05621', bg: '#FFFBEB', icon: AlertCircle },
-  resent:             { label: 'Resent',     color: '#6B46C1', bg: '#FAF5FF', icon: Send },
+  draft:              { label: 'Draft',      color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)', icon: Clock },
+  submitted:          { label: 'Submitted',  color: 'var(--info)', bg: 'var(--info-bg)', icon: Send },
+  accepted:           { label: 'Accepted',   color: 'var(--success)', bg: 'var(--success-bg)', icon: CheckCircle2 },
+  rejected:           { label: 'Rejected',   color: 'var(--error)', bg: 'var(--error-bg)', icon: XCircle },
+  query_raised:       { label: 'Query',      color: 'var(--warning)', bg: 'var(--warning-bg)', icon: AlertCircle },
+  resent:             { label: 'Resent',     color: 'var(--role-admin)', bg: 'var(--role-admin-bg)', icon: Send },
 };
 
 function ProposalBadge({ status }) {
@@ -236,7 +264,7 @@ function ProposalBadge({ status }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
-      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`
+      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}`
     }}>
       <Icon size={10} /> {cfg.label}
     </span>
@@ -252,17 +280,17 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
   const ev = evaluations[activeScheme] || evaluations[0];
 
   const steps = [
-    { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: Wallet, color: '#2B6CB0', bg: '#EBF8FF', note: 'Selected income method monthly figure' },
-    { label: 'FOIR Allowed', value: fmtPct(ev.foir_allowed_percent), icon: Percent, color: '#276749', bg: '#F0FFF4', note: 'Max permissible obligation %' },
+    { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: Wallet, color: 'var(--info)', bg: 'var(--info-bg)', note: 'Selected income method monthly figure' },
+    { label: 'FOIR Allowed', value: fmtPct(ev.foir_allowed_percent), icon: Percent, color: 'var(--success)', bg: 'var(--success-bg)', note: 'Max permissible obligation %' },
     { label: 'FOIR Actual', value: fmtPct(ev.foir_actual_percent), icon: TrendingDown,
-      color: ev.foir_actual_percent > ev.foir_allowed_percent ? '#C53030' : '#276749',
-      bg: ev.foir_actual_percent > ev.foir_allowed_percent ? '#FFF5F5' : '#F0FFF4',
+      color: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error)' : 'var(--success)',
+      bg: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error-bg)' : 'var(--success-bg)',
       note: 'Current EMI ÷ income' },
-    { label: 'Max Eligible EMI', value: ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—', icon: Landmark, color: '#744210', bg: '#FFFBF0', note: '(FOIR% × Income) − Existing EMI' },
-    { label: 'LTV Applied', value: ev.applicable_ltv_percent != null ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: '#553C9A', bg: '#FAF5FF', note: `Key: ${ev.applicable_ltv_key || '—'}` },
-    { label: 'Max Loan by LTV', value: ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—', icon: Hash, color: '#2C7A7B', bg: '#E6FFFA', note: 'Property Value × LTV%' },
+    { label: 'Max Eligible EMI', value: ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—', icon: Landmark, color: 'var(--warning)', bg: 'var(--warning-bg)', note: '(FOIR% × Income) − Existing EMI' },
+    { label: 'LTV Applied', value: ev.applicable_ltv_percent != null ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: 'var(--role-admin)', bg: 'var(--role-admin-bg)', note: `Key: ${ev.applicable_ltv_key || '—'}` },
+    { label: 'Max Loan by LTV', value: ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—', icon: Hash, color: 'var(--role-cred2tech)', bg: 'var(--role-cred2tech-bg)', note: 'Property Value × LTV%' },
     { label: 'Final Eligible Loan', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: CheckCircle2,
-      color: ev.is_eligible ? '#276749' : '#C53030', bg: ev.is_eligible ? '#F0FFF4' : '#FFF5F5',
+      color: ev.is_eligible ? 'var(--success)' : 'var(--error)', bg: ev.is_eligible ? 'var(--success-bg)' : 'var(--error-bg)',
       note: ev.is_eligible ? 'Min(requested, LTV cap)' : 'Failed eligibility', highlight: true },
   ];
 
@@ -287,7 +315,7 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
           >
             <div style={{ marginTop: 10, borderRadius: 0, overflow: 'hidden', border: '1px solid var(--border)' }}>
               {evaluations.length > 1 && (
-                <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
                   {evaluations.map((e, i) => (
                     <button key={i} onClick={() => setActiveScheme(i)} style={{
                       flex: 1, padding: '8px 6px', fontSize: 11, fontWeight: 600,
@@ -296,7 +324,7 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
                       {e.scheme_name}
-                      {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : '#276749'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : '#C53030'} />}
+                      {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
                 </div>
@@ -310,13 +338,13 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
                       border: step.highlight ? `2px solid ${step.color}` : '1px solid transparent',
                       gridColumn: step.highlight ? 'span 2' : 'span 1',
                     }}>
-                      <div style={{ fontSize: 10, color: '#718096', fontWeight: 600, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                         <step.icon size={11} /> {step.label}
                       </div>
                       <div style={{ fontSize: step.highlight ? 18 : 15, fontWeight: 800, color: step.color }}>
                         {step.value}
                       </div>
-                      <div style={{ fontSize: 10, color: '#718096', marginTop: 4, fontStyle: 'italic' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }}>
                         {step.note}
                       </div>
                     </div>
@@ -340,60 +368,8 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
   );
 };
 
-// ─── Scheme Diagnostics ───────────────────────────────────────────────────────
-const SchemeDiagnosticsPanel = ({ evaluations }) => {
-  const [open, setOpen] = useState(false);
-  if (!evaluations || evaluations.length === 0) return null;
-  return (
-    <div style={{ marginTop: 8 }}>
-      <button className="btn btn-ghost" onClick={() => setOpen(!open)}
-        style={{ fontSize: 11, padding: '4px 8px', color: 'var(--text-tertiary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4 }}>
-        {open ? 'Hide Diagnostics' : 'View Scheme Diagnostics'}
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: easeOut }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 12 }}>
-              {evaluations.map((ev, i) => (
-                <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i === evaluations.length - 1 ? 'none' : '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <strong>{ev.scheme_name}</strong>
-                    <span style={{ color: ev.is_eligible ? 'var(--success)' : 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {ev.is_eligible ? <CheckCircle2 size={13} /> : <XCircle size={13} />} {ev.is_eligible ? 'Eligible' : 'Ineligible'}
-                    </span>
-                  </div>
-                  <div style={{ color: 'var(--text-tertiary)', fontSize: 11, marginBottom: 6 }}>
-                    LTV: {ev.applicable_ltv_percent ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—'} ({ev.applicable_ltv_key})
-                    <br />Method Matched: {ev.income_method_matched ? 'Yes' : 'No'}
-                  </div>
-                  {ev.failure_reasons?.length > 0 && (
-                    <ul style={{ color: 'var(--error)', paddingLeft: 16, margin: '4px 0' }}>
-                      {ev.failure_reasons.map((r, ri) => <li key={ri}>{r}</li>)}
-                    </ul>
-                  )}
-                  {ev.warnings?.length > 0 && (
-                    <ul style={{ color: '#D97706', paddingLeft: 16, margin: '4px 0' }}>
-                      {ev.warnings.map((w, wi) => <li key={wi}>{w}</li>)}
-                    </ul>
-                  )}
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
 // ─── Lender Action Button (multi-proposal aware) ───────────────────────────────
-function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender }) {
-  const navigate = useNavigate();
+function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender, onOpenProposal }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [sending, setSending] = useState(false);
@@ -453,7 +429,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
       }
       onProposalCreated();
       toast.success(`Proposal created: ${result.proposal_number}`);
-      navigate(`/cases/${caseId}/proposals/${result.id}`);
+      onOpenProposal(result.id);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to create proposal');
     } finally {
@@ -473,13 +449,13 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
             style={{ overflow: 'hidden' }}
           >
             <div style={{
-              padding: '14px', background: '#EBF8FF', borderRadius: 0,
-              border: '1px solid #BEE3F8', marginBottom: 10
+              padding: '14px', background: 'var(--info-bg)', borderRadius: 0,
+              border: '1px solid var(--info)', marginBottom: 10
             }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#2B6CB0', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--info)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <ClipboardList size={13} /> Reuse existing proposal?
               </div>
-              <div style={{ fontSize: 11, color: '#4A5568', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
                 A proposal was already prepared (#{otherSubmitted?.proposal_number}).
                 Reuse its data and documents for {lender.lender_name}?
               </div>
@@ -515,19 +491,20 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {/* Row 1: primary action — always full width, own row so its label never gets squeezed */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         {latestProposal ? (
           <>
             <button
               className="btn btn-primary"
-              style={{ flex: 1, padding: '9px', fontWeight: 700 }}
-              onClick={() => navigate(`/cases/${caseId}/proposals/${latestProposal.id}`)}
+              style={{ flex: 1, padding: '9px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => onOpenProposal(latestProposal.id)}
             >
               View Proposal →
             </button>
             <button
               className="btn btn-secondary"
-              style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12 }}
+              style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}
               onClick={() => doCreate(latestProposal.id)}
               disabled={creating}
               title="Send to another lender"
@@ -546,22 +523,26 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
             <ClipboardList size={15} /> {creating ? 'Creating...' : 'Prepare Proposal →'}
           </button>
         )}
+      </div>
+
+      {/* Row 2: secondary actions — equal width, same row across every card regardless of width */}
+      <div style={{ display: 'flex', gap: 8 }}>
         <button
           onClick={handleSendEmail}
           disabled={sending}
           title="Send proposal email to this lender's configured contact"
-          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 12, borderRadius: 0,
+          style={{ flex: 1, padding: '9px 8px', fontWeight: 700, fontSize: 12, borderRadius: 0,
                    background: sending ? '#718096' : '#276749', color: '#fff', border: 'none',
-                   cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                   cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
         >
           <Send size={13} /> {sending ? '...' : 'Send'}
         </button>
         <button
           onClick={onSendToOtherLender}
           title="Send to a different lender contact from your directory"
-          style={{ padding: '9px 12px', fontWeight: 700, fontSize: 11, borderRadius: 0,
-                   background: 'transparent', color: '#553C9A', border: '1px solid #553C9A',
-                   cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+          style={{ flex: 1, padding: '9px 8px', fontWeight: 700, fontSize: 11, borderRadius: 0,
+                   background: 'transparent', color: 'var(--role-admin)', border: '1px solid var(--role-admin)',
+                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap' }}
         >
           <ArrowUpRight size={13} /> Other Lender
         </button>
@@ -571,9 +552,12 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
 }
 
 // ─── Main EsrPage ─────────────────────────────────────────────────────────────
-export default function EsrPage() {
-  const { id: caseId } = useParams();
-  const navigate = useNavigate();
+// Step 6 of the case journey — rendered inline by AddCustomerWizardPage (not
+// its own route), so it takes caseId/onOpenProposal as props instead of
+// reading useParams()/navigating itself. onOpenProposal(proposalId) is how a
+// newly created (or existing) proposal hands off to step 7, since proposalId
+// only ever exists once one has actually been created here.
+export default function EsrPage({ caseId, onOpenProposal }) {
   const isMobile = useIsMobile();
   const [sendConfirmResult, setSendConfirmResult] = useState(null);
   const [showOtherLenderModal, setShowOtherLenderModal] = useState(false);
@@ -626,57 +610,42 @@ export default function EsrPage() {
     || (esr?.combined_income ? esr.combined_income / 12 : null);
 
   return (
-    <div className="esr-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', maxWidth: 1040, margin: '0 auto', padding: '0 20px 60px' }}>
+    <div className="esr-page">
       <style>{`
         .esr-page .card,
         .esr-page .btn,
         .esr-page .form-control { border-radius: 0 !important; }
-        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page — bump them to white here specifically,
+           without touching the global theme. */
+        :root.dark .esr-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .esr-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
+        }
       `}</style>
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 24, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
       >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
             Eligibility Summary Report
           </h1>
-          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>
-            {esr
-              ? `Step 6 of 7 — Generated ${new Date(esr.generated_at).toLocaleString('en-IN')} · ${eligibleLenders.length} eligible of ${lenders.length} lenders · ${proposals.length} proposal(s)`
-              : 'Step 6 of 7 — Run the eligibility engine to see matching lenders'}
-          </p>
         </div>
+        {esr && (
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <RefreshCw size={14} className={generating ? 'spin' : ''} />
+            {generating ? 'Generating...' : 'Regenerate ESR'}
+          </button>
+        )}
       </motion.div>
-      <CaseWizardStepper currentStep={6} caseId={caseId} />
-
-      {/* Snapshot summary */}
-      {esr && (
-        <Panel
-          icon={ClipboardList}
-          accentColor="var(--primary)"
-          title="Input Snapshot"
-          delay={0}
-          style={{ marginBottom: 24 }}
-          headerRight={
-            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <RefreshCw size={14} className={generating ? 'spin' : ''} />
-              {generating ? 'Generating...' : 'Regenerate ESR'}
-            </button>
-          }
-        >
-          <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
-            <MetricTile label="Combined Annual Income" value={fmt(esr.combined_income) || '—'} size="lg" delay={0.05} />
-            <MetricTile label="Property Value" value={fmt(esr.property_value) || '—'} size="lg" delay={0.08} />
-            <MetricTile label="Primary CIBIL" value={esr.primary_cibil_score || '—'} size="lg" delay={0.11} />
-            <MetricTile label="Lowest CIBIL" value={esr.lowest_cibil_score || '—'} size="lg" delay={0.14} />
-            <MetricTile label="Total EMI / Month" value={fmt(esr.total_emi_per_month) || '—'} size="lg" delay={0.17} />
-          </div>
-        </Panel>
-      )}
 
       {/* No ESR yet */}
       {!esr && !generating && (
@@ -694,95 +663,134 @@ export default function EsrPage() {
       )}
 
       {/* Eligible Lenders */}
-      {eligibleLenders.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <CheckCircle size={18} color="var(--success)" />
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>Eligible Lenders ({eligibleLenders.length})</h2>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
-            {eligibleLenders.map((lender, i) => (
-              <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.06} hoverable style={{ borderTop: '3px solid var(--success)', position: 'relative' }}>
-                <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                    <div>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{lender.lender_name}</h3>
-                      <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                        {lender.product_display_name || lender.product_type} · {lender.best_scheme_name}
-                      </p>
-                    </div>
-                    <span style={{ background: '#F0FFF4', color: 'var(--success)', padding: '4px 10px',
-                      borderRadius: 0, fontSize: 11, fontWeight: 700, border: '1px solid #9AE6B4', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <CheckCircle2 size={12} /> ELIGIBLE
-                    </span>
-                  </div>
+      {eligibleLenders.length > 0 && (() => {
+        const renderEligibleCard = (lender, i) => (
+          <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.06} hoverable style={{ borderTop: '3px solid var(--success)', position: 'relative' }}>
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{lender.lender_name}</h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    {lender.product_display_name || lender.product_type} · {lender.best_scheme_name}
+                  </p>
                 </div>
-                <div style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>
-                    {[
-                      { label: 'Loan Amount', value: formatDynamicCurrency(lender.final_eligible_loan_amount), color: 'var(--success)' },
-                      { label: 'ROI', value: lender.roi_min ? `${lender.roi_min}% p.a.` + (lender.roi_max ? ` – ${lender.roi_max}%` : '') : '—', color: 'var(--text-primary)' },
-                      { label: 'LTV', value: lender.applicable_ltv_percent ? `${(lender.applicable_ltv_percent * 100).toFixed(0)}%` : '—', color: 'var(--text-primary)' },
-                      { label: 'Max Tenure', value: formatDynamicTenure(lender.max_tenure_months), color: 'var(--text-primary)' }
-                    ].map(({ label, value, color }) => value && (
-                      <MetricTile key={label} boxed label={label} value={value} color={color} />
-                    ))}
+                <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px',
+                  borderRadius: 0, fontSize: 11, fontWeight: 700, border: '1px solid var(--success)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <CheckCircle2 size={12} /> ELIGIBLE
+                </span>
+              </div>
+            </div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>
+                {[
+                  { label: 'Loan Amount', value: formatDynamicCurrency(lender.final_eligible_loan_amount), color: 'var(--success)' },
+                  { label: 'ROI', value: lender.roi_min ? `${lender.roi_min}% p.a.` + (lender.roi_max ? ` – ${lender.roi_max}%` : '') : '—', color: 'var(--text-primary)' },
+                  { label: 'LTV', value: lender.applicable_ltv_percent ? `${(lender.applicable_ltv_percent * 100).toFixed(0)}%` : '—', color: 'var(--text-primary)' },
+                  { label: 'Max Tenure', value: formatDynamicTenure(lender.max_tenure_months), color: 'var(--text-primary)' }
+                ].map(({ label, value, color }) => value && (
+                  <MetricTile key={label} boxed label={label} value={value} color={color} />
+                ))}
+              </div>
+
+              <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
+
+              {/* Proposal Actions — pinned to the card's bottom so button rows line up across cards of different content heights */}
+              <div style={{ marginTop: 'auto', paddingTop: 14 }}>
+                <LenderActions
+                  lender={lender}
+                  caseId={caseId}
+                  proposals={proposals}
+                  onProposalCreated={load}
+                  onSendToLender={setSendConfirmResult}
+                  onSendToOtherLender={() => setShowOtherLenderModal(true)}
+                  onOpenProposal={onOpenProposal}
+                />
+              </div>
+            </div>
+          </Panel>
+        );
+        return (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <CheckCircle size={18} color="var(--success)" />
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>Eligible Lenders ({eligibleLenders.length})</h2>
+            </div>
+            {isMobile ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+                {eligibleLenders.map((lender, i) => renderEligibleCard(lender, i))}
+              </div>
+            ) : eligibleLenders.length <= 3 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                {eligibleLenders.map((lender, i) => renderEligibleCard(lender, i))}
+              </div>
+            ) : (
+              // More than 3: keep exactly the top-3 width on screen and let the rest
+              // continue to the right within the same row — never grows page height.
+              <HorizontalScrollRow>
+                {eligibleLenders.map((lender, i) => (
+                  <div key={lender.lender_id} style={{ width: 320, flexShrink: 0, scrollSnapAlign: 'start', display: 'flex' }}>
+                    {renderEligibleCard(lender, i)}
                   </div>
-
-                  <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
-                  <SchemeDiagnosticsPanel evaluations={lender.scheme_evaluations} />
-
-                  {/* Proposal Actions */}
-                  <LenderActions
-                    lender={lender}
-                    caseId={caseId}
-                    proposals={proposals}
-                    onProposalCreated={load}
-                    onSendToLender={setSendConfirmResult}
-                    onSendToOtherLender={() => setShowOtherLenderModal(true)}
-                  />
-                </div>
-              </Panel>
-            ))}
+                ))}
+              </HorizontalScrollRow>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Ineligible Lenders */}
-      {ineligibleLenders.length > 0 && (
+      {ineligibleLenders.length > 0 && (() => {
+        const renderIneligibleCard = (lender, i) => (
+          <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.05} style={{ borderTop: '3px solid var(--border)', opacity: 0.85 }}>
+            <div style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>{lender.lender_name}</h3>
+                <span style={{ background: 'var(--bg-elevated)', color: 'var(--text-tertiary)', padding: '3px 8px',
+                  borderRadius: 0, fontSize: 11, fontWeight: 600, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <XCircle size={11} /> INELIGIBLE
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
+                {lender.product_display_name || lender.product_type}
+              </p>
+              {lender.ineligibility_reason && (
+                <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--error-bg)', borderRadius: 0,
+                  fontSize: 11, color: 'var(--error)', border: '1px solid var(--error)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                  <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} /> {lender.ineligibility_reason}
+                </div>
+              )}
+              <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
+            </div>
+          </Panel>
+        );
+        return (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <XCircle size={18} color="var(--text-tertiary)" />
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>Not Eligible ({ineligibleLenders.length})</h2>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-            {ineligibleLenders.map((lender, i) => (
-              <Panel key={lender.lender_id} bodyPadding={0} delay={i * 0.05} style={{ borderTop: '3px solid var(--border)', opacity: 0.85 }}>
-                <div style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>{lender.lender_name}</h3>
-                    <span style={{ background: 'var(--bg-elevated)', color: 'var(--text-tertiary)', padding: '3px 8px',
-                      borderRadius: 0, fontSize: 11, fontWeight: 600, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <XCircle size={11} /> INELIGIBLE
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
-                    {lender.product_display_name || lender.product_type}
-                  </p>
-                  {lender.ineligibility_reason && (
-                    <div style={{ marginTop: 10, padding: '8px 10px', background: '#FFF5F5', borderRadius: 0,
-                      fontSize: 11, color: 'var(--error)', border: '1px solid #FED7D7', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                      <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} /> {lender.ineligibility_reason}
-                    </div>
-                  )}
-                  <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
-                  <SchemeDiagnosticsPanel evaluations={lender.scheme_evaluations} />
+          {isMobile ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+              {ineligibleLenders.map((lender, i) => renderIneligibleCard(lender, i))}
+            </div>
+          ) : ineligibleLenders.length <= 3 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+              {ineligibleLenders.map((lender, i) => renderIneligibleCard(lender, i))}
+            </div>
+          ) : (
+            // More than 3: keep exactly the top-3 width on screen and let the rest
+            // continue to the right within the same row — never grows page height.
+            <HorizontalScrollRow>
+              {ineligibleLenders.map((lender, i) => (
+                <div key={lender.lender_id} style={{ width: 320, flexShrink: 0, scrollSnapAlign: 'start', display: 'flex' }}>
+                  {renderIneligibleCard(lender, i)}
                 </div>
-              </Panel>
-            ))}
-          </div>
+              ))}
+            </HorizontalScrollRow>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Modals */}
       <SendConfirmationModal

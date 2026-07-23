@@ -4,6 +4,7 @@ import { AuthProvider } from '../context/AuthContext';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { DASHBOARD_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
 const LoginPage = lazy(() => import('../pages/LoginPage'));
@@ -32,11 +33,16 @@ const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'
 const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'));
 const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
-const IncomeSummaryPage = lazy(() => import('../pages/IncomeSummaryPage'));
-const BureauObligationsPage = lazy(() => import('../pages/BureauObligationsPage'));
-const EsrPage = lazy(() => import('../pages/EsrPage'));
-const ProposalPage = lazy(() => import('../pages/ProposalPage'));
 const DSALenderContactsPage = lazy(() => import('../pages/DSALenderContactsPage'));
+
+// MSME Direct Portal
+const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
+const MsmeProtectedRoute = lazy(() => import('./MsmeProtectedRoute'));
+const MsmeLoginPage = lazy(() => import('../pages/msme/MsmeLoginPage'));
+const MsmeDashboardPage = lazy(() => import('../pages/msme/MsmeDashboardPage'));
+const MsmeCasesPage = lazy(() => import('../pages/msme/MsmeCasesPage'));
+const MsmeDocumentsPage = lazy(() => import('../pages/msme/MsmeDocumentsPage'));
+const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
 const PageLoader = () => (
   <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -56,10 +62,27 @@ const AppRouter = () => (
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
+          {/* MSME Direct Portal */}
+          <Route path="/msme" element={<MsmeLayout />}>
+            <Route path="login" element={<MsmeLoginPage />} />
+            <Route element={<MsmeProtectedRoute />}>
+              <Route path="dashboard" element={<MsmeDashboardPage />} />
+              <Route path="onboarding" element={
+                <MsmePaymentGate>
+                  <AddCustomerWizardPage mode="MSME_SELF_SERVICE" />
+                </MsmePaymentGate>
+              } />
+              <Route path="cases" element={<MsmeCasesPage />} />
+              <Route path="documents" element={<MsmeDocumentsPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
+          </Route>
+
           {/* Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={DASHBOARD_ROLES}>
                 <DashboardPage />
               </ProtectedRoute>
             } />
@@ -161,50 +184,23 @@ const AppRouter = () => (
             <Route
               path="/customers/:customer_id"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'MSME_CUSTOMER']}>
                   <CustomerProfilePage />
                 </ProtectedRoute>
               }
             />
 
-            {/* Phase 1 — Onboarding continuation pages */}
+            {/* Case overview/detail page — NOT one of the 7 case-journey
+                steps. Steps 4-7 (Income Summary, Bureau & Obligations, ESR,
+                Proposal) render inline inside AddCustomerWizardPage now
+                (?step=4..7 on /customers/add or /msme/onboarding) instead of
+                separate routes, so effects that only run "while mounted"
+                (bureau auto-fetch, etc.) survive across the whole journey. */}
             <Route
               path="/cases/:id"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'MSME_CUSTOMER']}>
                   <CaseDetailPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cases/:id/income-summary"
-              element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
-                  <IncomeSummaryPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cases/:id/bureau-obligations"
-              element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
-                  <BureauObligationsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cases/:id/esr"
-              element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
-                  <EsrPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cases/:id/proposals/:pid"
-              element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN']}>
-                  <ProposalPage />
                 </ProtectedRoute>
               }
             />

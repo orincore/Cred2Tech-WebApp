@@ -5,7 +5,7 @@ import { getMe } from '../api/authService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
-  const { isAuthenticated, isLoading, hasRole, hasTenantType, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, hasRole, hasTenantType, logout } = useAuth();
   const location = useLocation();
   const [isValidating, setIsValidating] = useState(false);
 
@@ -37,6 +37,12 @@ const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // MSME customers live in their own portal — send them home instead of
+  // showing them the internal admin/DSA "Access Denied" page.
+  if (user?.role === 'MSME_CUSTOMER' && allowedRoles && !hasRole(allowedRoles)) {
+    return <Navigate to="/msme/dashboard" replace />;
   }
 
   // Role check

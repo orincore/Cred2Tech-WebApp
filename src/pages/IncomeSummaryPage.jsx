@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
-import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, Trash2, ChevronRight, BarChart3, PenLine } from 'lucide-react';
 
 const INCOME_TYPES = [
@@ -28,9 +25,10 @@ const useIsMobile = () => {
   return isMobile;
 };
 
-export default function IncomeSummaryPage() {
-  const { id: caseId } = useParams();
-  const navigate = useNavigate();
+// Step 4 of the case journey — rendered inline by AddCustomerWizardPage
+// (not its own route), so it takes caseId/onNext as props instead of
+// reading useParams()/navigating itself.
+export default function IncomeSummaryPage({ caseId, onNext }) {
   const isMobile = useIsMobile();
 
   const [loading, setLoading] = useState(true);
@@ -97,7 +95,7 @@ export default function IncomeSummaryPage() {
     try {
       setSaving(true);
       await caseService.confirmIncomeSummary(caseId);
-      navigate(`/cases/${caseId}/bureau-obligations`);
+      onNext();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to confirm');
     } finally {
@@ -110,7 +108,6 @@ export default function IncomeSummaryPage() {
   const api = data?.api_data || {};
   const manualTotal = data?.manual_total || 0;
   const combined = data?.combined_annual_income || 0;
-  const totalEmi = data?.total_emi_per_month || 0;
 
   // Derive FY labels from whichever source has them, with fallback defaults
   const fyLatestLabel = api.gst_turnover?.fy_latest || api.net_profit?.fy_latest || api.avg_bank_balance?.fy_latest || 'Latest Year';
@@ -119,27 +116,32 @@ export default function IncomeSummaryPage() {
   const addEntryGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1.5fr 2fr auto';
 
   return (
-    <div className="income-summary-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', maxWidth: 960, margin: '0 auto', padding: '0 20px 60px' }}>
+    <div className="income-summary-page">
       <style>{`
         .income-summary-page .card,
         .income-summary-page .btn,
         .income-summary-page .form-control { border-radius: 0 !important; }
-        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page — bump them to white here specifically,
+           without touching the global theme. */
+        :root.dark .income-summary-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .income-summary-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
+        }
+        @media (max-width: 768px) {
+          /* Matches the JS isMobile breakpoint (also 768px) that switches
+             tables to stacked cards below — Panel header/body padding is
+             fixed for desktop, so tighten it here too for the phone view. */
+          .income-summary-page .card > div:first-child { padding: 14px 12px !important; }
+          .income-summary-page .add-entry-row { padding: 14px 12px !important; }
+          .income-summary-page .manual-total-row { padding: 10px 12px !important; }
+        }
       `}</style>
-      {/* Page Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 24, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
-      >
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Income Summary</h1>
-          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Step 4 of 7 — Review API-pulled income and add any manual entries</p>
-        </div>
-      </motion.div>
-      <CaseWizardStepper currentStep={4} caseId={caseId} />
 
       {/* API-Pulled Income Table */}
       <Panel
@@ -148,41 +150,65 @@ export default function IncomeSummaryPage() {
         title="Income from API Pulls"
         bodyPadding={0}
         delay={0}
-        headerRight={<span style={{ background: '#F0FFF4', color: 'var(--success)', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: '1px solid #9AE6B4' }}>Auto-generated</span>}
         className="mb-24"
         style={{ marginBottom: 24 }}
       >
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', minWidth: isMobile ? 560 : '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-elevated)' }}>
-                {['Item', `Latest Year (${fyLatestLabel})`, `Previous Year (${fyPrevLabel})`, 'Source'].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
+        {(() => {
+          const rows = [
+            { label: 'Gross Turnover / Receipts', latest: api.gst_turnover?.latest, prev: api.gst_turnover?.prev, source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)' },
+            { label: 'Net Profit (PAT)', latest: api.net_profit?.latest, prev: api.net_profit?.prev, source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)' },
+            { label: 'Average Monthly Bank Balance', latest: api.avg_bank_balance?.latest, prev: api.avg_bank_balance?.prev, source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)' }
+          ];
+          // Phones get stacked label/value cards instead of a table — a table
+          // that "fits" a phone by shrinking columns just becomes unreadable,
+          // and one that scrolls sideways is easy to miss/mistake as cut off.
+          if (isMobile) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {rows.map((row, i) => (
+                  <div key={i} style={{ padding: '14px 12px', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</span>
+                      <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      <span>Latest Year ({fyLatestLabel})</span>
+                      <strong style={{ color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      <span>Previous Year ({fyPrevLabel})</span>
+                      <strong>{fmt(row.prev)}</strong>
+                    </div>
+                  </div>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { label: 'Gross Turnover / Receipts', latest: api.gst_turnover?.latest, prev: api.gst_turnover?.prev, source: 'GST', color: '#2B6CB0', bg: '#EBF8FF' },
-                { label: 'Net Profit (PAT)', latest: api.net_profit?.latest, prev: api.net_profit?.prev, source: 'ITR', color: '#276749', bg: '#F0FFF4' },
-                { label: 'Average Monthly Bank Balance', latest: api.avg_bank_balance?.latest, prev: api.avg_bank_balance?.prev, source: 'Bank Stmt', color: '#744210', bg: '#FFFBF0' }
-              ].map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</td>
-                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{fmt(row.prev)}</td>
-                  <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {/* Footer strip */}
-        <div style={{ padding: '14px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', display: 'flex', gap: 40, flexWrap: 'wrap' }}>
-          <MetricTile label="Net Profit (Latest Year)" value={fmt(api.net_profit?.latest)} color="var(--success)" delay={0.1} />
-          <MetricTile label="Avg Monthly Bank Balance" value={fmt(api.avg_bank_balance?.latest)} color="var(--text-primary)" delay={0.15} />
-          <MetricTile label="Combined EMI Obligations" value={fmt(totalEmi)} color="var(--error)" delay={0.2} />
-        </div>
+              </div>
+            );
+          }
+          return (
+            <div style={{ overflowX: 'auto', minWidth: 0 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-elevated)' }}>
+                    {['Item', `Latest Year (${fyLatestLabel})`, `Previous Year (${fyPrevLabel})`, 'Source'].map(h => (
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{fmt(row.prev)}</td>
+                      <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+
       </Panel>
 
       {/* Manual Income Addition */}
@@ -210,7 +236,7 @@ export default function IncomeSummaryPage() {
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               style={{ overflow: 'hidden' }}
             >
-              <div style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+              <div className="add-entry-row" style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: addEntryGridCols, gap: 12, alignItems: 'end' }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
@@ -252,10 +278,45 @@ export default function IncomeSummaryPage() {
           )}
         </AnimatePresence>
 
-        {/* Existing entries table */}
+        {/* Existing entries */}
         {data?.manual_entries?.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: isMobile ? 560 : '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <AnimatePresence initial={false}>
+                {data.manual_entries.map((entry, i) => (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ padding: '14px 12px', borderBottom: i < data.manual_entries.length - 1 ? '1px solid var(--border)' : 'none' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.income_type}</span>
+                      <button onClick={() => handleDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, flexShrink: 0 }} title="Remove">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{entry.applicant_label || 'Entity'}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Annual Amount</span>
+                      <strong style={{ color: 'var(--success)' }}>{fmt(entry.annual_amount)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: entry.remarks ? 4 : 0 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Supporting Doc</span>
+                      <span>{entry.supporting_doc_type || '—'}</span>
+                    </div>
+                    {entry.remarks && (
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{entry.remarks}</div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          ) : (
+          <div style={{ overflowX: 'auto', minWidth: 0 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)' }}>
                   {['Income Type', 'Applicant', 'Annual Amount', 'Supporting Doc', 'Remarks', ''].map(h => (
@@ -290,6 +351,7 @@ export default function IncomeSummaryPage() {
               </tbody>
             </table>
           </div>
+          )
         ) : !adding ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
             No manual entries yet. Click <strong>Add Entry</strong> to record Director salary, rental income, etc.
@@ -298,7 +360,7 @@ export default function IncomeSummaryPage() {
 
         {/* Manual total footer */}
         {data?.manual_entries?.length > 0 && (
-          <div style={{ padding: '12px 24px', background: '#F0FFF4', borderTop: '1px solid #9AE6B4' }}>
+          <div className="manual-total-row" style={{ padding: '12px 24px', background: 'var(--success-bg)', borderTop: '1px solid var(--success)' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
               Manual Income Total: {fmt(manualTotal)} &nbsp;·&nbsp; Combined ESR Income: {fmt(combined)}
             </span>
@@ -307,8 +369,13 @@ export default function IncomeSummaryPage() {
       </Panel>
 
       {/* Bottom nav */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-        <button className="btn btn-primary btn-lg" onClick={handleNext} disabled={saving} style={{ padding: '14px 36px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+        <button
+          className="btn btn-primary btn-lg"
+          onClick={handleNext}
+          disabled={saving}
+          style={{ padding: '14px 36px', width: isMobile ? '100%' : undefined, justifyContent: 'center' }}
+        >
           {saving ? 'Saving...' : <>Next: Bureau Details <ChevronRight size={18} /></>}
         </button>
       </div>

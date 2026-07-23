@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X } from 'lucide-react';
@@ -33,9 +31,10 @@ const LOAN_TYPES = [
   'Two-Wheeler Loan', 'Education Loan', 'Gold Loan', 'Credit Card', 'Other'
 ];
 
-export default function BureauObligationsPage() {
-  const { id: caseId } = useParams();
-  const navigate = useNavigate();
+// Step 5 of the case journey — rendered inline by AddCustomerWizardPage
+// (not its own route), so it takes caseId/onNext/onBack as props instead of
+// reading useParams()/navigating itself.
+export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const isMobile = useIsMobile();
 
   const [loading, setLoading]     = useState(true);
@@ -46,12 +45,52 @@ export default function BureauObligationsPage() {
   const [addingFor, setAddingFor] = useState(null);        // applicant_id
   const [newObl, setNewObl]       = useState({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
 
+  const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
+
+  // syncObligations() only re-parses obligations from a bureau report that
+  // must already exist for this case_id — it never triggers the actual CIBIL
+  // pull. Normally that pull happens automatically during onboarding
+  // (AddCustomerWizardPage), but if that was missed, this page would
+  // otherwise render permanently blank with no way to recover. Guard by a
+  // per-applicant "attempted" ref so a genuine failure doesn't retry forever.
+  const bureauAutoAttempted = useRef(new Set());
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
       await caseService.syncObligations(caseId);
-      const result = await caseService.getObligations(caseId);
+      let [result, caseData] = await Promise.all([
+        caseService.getObligations(caseId),
+        caseService.getCaseById(caseId)
+      ]);
+
+      const unfetched = (result.grouped || [])
+        .map(g => g.applicant)
+        .filter(a => a.id && !a.bureau_fetched && !bureauAutoAttempted.current.has(a.id));
+
+      if (unfetched.length > 0) {
+        unfetched.forEach(a => bureauAutoAttempted.current.add(a.id));
+        const runs = await Promise.allSettled(
+          unfetched.map(a => caseService.runBureauVerification(caseId, a.id))
+        );
+        if (runs.some(r => r.status === 'fulfilled')) {
+          await caseService.syncObligations(caseId);
+          result = await caseService.getObligations(caseId);
+        } else {
+          toast.error('Bureau report could not be fetched for one or more applicants.');
+        }
+      }
+
       setData(result);
+      // Obligations only return a display name that already falls back to a
+      // role label ("Primary Borrower") when Applicant.name is unset — pull
+      // the PAN-verified name from the full case record so we can show a
+      // real name instead of that placeholder wherever it's available.
+      const names = {};
+      (caseData.applicants || []).forEach(a => {
+        if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
+      });
+      setApplicantNames(names);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to load bureau obligations');
     } finally {
@@ -92,7 +131,7 @@ export default function BureauObligationsPage() {
       setGenerating(true);
       await caseService.generateESR(caseId);
       toast.success('Eligibility Report generated!');
-      navigate(`/cases/${caseId}/esr`);
+      onNext();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to generate ESR');
     } finally {
@@ -103,37 +142,48 @@ export default function BureauObligationsPage() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
 
   const { grouped = [], summary = {} } = data || {};
-  const allCibils = grouped.map(g => g.applicant.cibil_score).filter(Boolean);
-  const lowestCibil = allCibils.length ? Math.min(...allCibils) : null;
   const addLoanGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1fr 1fr auto';
 
   return (
-    <div className="bureau-obligations-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', maxWidth: 980, margin: '0 auto', padding: '0 20px 60px' }}>
+    <div className="bureau-obligations-page">
       <style>{`
         .bureau-obligations-page .card,
         .bureau-obligations-page .btn,
         .bureau-obligations-page .form-control { border-radius: 0 !important; }
-        .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page (labels, table headers, dates) — bump them
+           to white here specifically, without touching the global theme. */
+        :root.dark .bureau-obligations-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .bureau-obligations-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
+        }
+        @media (max-width: 768px) {
+          .bureau-obligations-page .applicant-header { padding: 14px 16px !important; }
+          .bureau-obligations-page .page-title { font-size: 20px !important; }
+        }
       `}</style>
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 24, marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}
       >
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Bureau & Credit Obligations</h1>
+          <h1 className="page-title" style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Bureau & Credit Obligations</h1>
           <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Step 5 of 7 — Review all applicant obligations before generating ESR</p>
         </div>
       </motion.div>
-      <CaseWizardStepper currentStep={5} caseId={caseId} />
 
       {/* Info box */}
-      <div style={{ padding: '14px 18px', background: '#FFFBF0', border: '1px solid #F6E05E', borderRadius: 0, marginBottom: 20, fontSize: 13, color: '#744210', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-        <span><strong>Review all EMIs carefully.</strong> Obligations directly affect eligibility. Click the EMI field to edit if bureau data is inaccurate. Use <strong>+ Add Loan</strong> to include any obligation not showing in the bureau report.</span>
+      <div style={{ padding: '14px 18px', background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 0, marginBottom: 20, fontSize: 13, color: 'var(--text-primary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <AlertTriangle size={16} color="var(--warning)" style={{ flexShrink: 0, marginTop: 1 }} />
+        <span><strong>Review all EMIs carefully.</strong> Obligations directly affect eligibility. Click the EMI field to edit if EMI amounts are different / Loan is closed. Use <strong>+ Add Loan</strong> to include any Loans not shown below.</span>
       </div>
 
       {/* Per-applicant cards */}
@@ -142,35 +192,75 @@ export default function BureauObligationsPage() {
         return (
         <Panel key={applicant.id} bodyPadding={0} delay={idx * 0.08} style={{ marginBottom: 20 }}>
           {/* Applicant header */}
-          <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: applicant.type === 'PRIMARY' ? 'linear-gradient(135deg,#F0FFF4,transparent)' : 'linear-gradient(135deg,#EBF8FF,transparent)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: applicant.type === 'PRIMARY' ? 'linear-gradient(135deg,#F6AD55,#E53E3E)' : 'linear-gradient(135deg,#3182CE,#63B3ED)', color: 'white', fontWeight: 700, fontSize: 15 }}>
-                {(applicant.name || applicant.pan_number || 'AP').substring(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{applicant.name || (applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant')}</h3>
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.pan_number} · {applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
-              </div>
+          <div className="applicant-header" style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: applicant.type === 'PRIMARY' ? 'linear-gradient(135deg, var(--success-bg), transparent)' : 'linear-gradient(135deg, var(--info-bg), transparent)' }}>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-primary)', overflowWrap: 'break-word' }}>
+                {applicantNames[applicant.id] || applicant.name || (applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant')}
+              </h3>
+              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.pan_number} · {applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>CIBIL Score</div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bureau Score</div>
             </div>
           </div>
 
-          {/* Summary bar */}
-          <div style={{ padding: '10px 24px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', display: 'flex', gap: 32 }}>
-            <MetricTile label="Total EMI/mo" value={fmt(total_emi)} color="var(--error)" size="sm" />
-            <MetricTile label="Active Loans" value={active_count} color="var(--text-primary)" size="sm" />
-          </div>
 
-          {/* Obligations table */}
+
+          {/* Obligations */}
           {obligations.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: isMobile ? 640 : '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {obligations.map((obl, i) => (
+                  <div key={obl.id} style={{ padding: '14px 16px', borderBottom: i < obligations.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{obl.lender_name || '—'}</span>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                        background: obl.needs_verification ? 'var(--warning-bg)' : 'var(--success-bg)',
+                        color: obl.needs_verification ? 'var(--warning)' : 'var(--success)',
+                        border: `1px solid ${obl.needs_verification ? 'var(--warning)' : 'var(--success)'}`,
+                        padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600
+                      }}>
+                        {obl.needs_verification ? <AlertTriangle size={11} /> : obl.source === 'MANUAL' ? <PenLine size={11} /> : <CheckCircle2 size={11} />}
+                        {obl.needs_verification ? 'Verify' : (obl.source === 'MANUAL' ? 'Manual' : 'Active')}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{obl.loan_type || '—'}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Loan Amount</span>
+                      <strong>{fmt(obl.loan_amount)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Outstanding</span>
+                      <strong>{fmt(obl.outstanding_amount)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Start</span>
+                      <span style={{ color: 'var(--text-tertiary)' }}>{obl.loan_start_date ? new Date(obl.loan_start_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="number"
+                          style={{ width: 100, padding: '5px 8px', border: obl.needs_verification ? '1.5px solid var(--warning)' : '1.5px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', background: 'var(--bg-surface)' }}
+                          value={editEmi[obl.id] !== undefined ? editEmi[obl.id] : obl.emi_per_month}
+                          onChange={e => setEditEmi({ ...editEmi, [obl.id]: e.target.value })}
+                          onBlur={e => { handleEmiBlur(obl.id, e.target.value); setEditEmi(prev => { const n = { ...prev }; delete n[obl.id]; return n; }); }}
+                        />
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+            <div style={{ overflowX: 'auto', minWidth: 0 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['Lender', 'Type', 'Loan Amount', 'Outstanding', 'Start', 'EMI / Month', 'Status'].map(h => (
+                    {['Lender', 'Type of Loan', 'Loan Amount', 'Outstanding', 'Start', 'EMI / Month', 'Status'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
                     ))}
                   </tr>
@@ -187,7 +277,7 @@ export default function BureauObligationsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <input
                             type="number"
-                            style={{ width: 90, padding: '5px 8px', border: obl.needs_verification ? '1.5px solid var(--warning)' : '1.5px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : undefined }}
+                            style={{ width: 90, padding: '5px 8px', border: obl.needs_verification ? '1.5px solid var(--warning)' : '1.5px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', background: 'var(--bg-surface)' }}
                             value={editEmi[obl.id] !== undefined ? editEmi[obl.id] : obl.emi_per_month}
                             onChange={e => setEditEmi({ ...editEmi, [obl.id]: e.target.value })}
                             onBlur={e => { handleEmiBlur(obl.id, e.target.value); setEditEmi(prev => { const n = { ...prev }; delete n[obl.id]; return n; }); }}
@@ -198,9 +288,9 @@ export default function BureauObligationsPage() {
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4,
-                          background: obl.needs_verification ? '#FEFCBF' : '#F0FFF4',
-                          color: obl.needs_verification ? '#744210' : 'var(--success)',
-                          border: `1px solid ${obl.needs_verification ? '#F6E05E' : '#9AE6B4'}`,
+                          background: obl.needs_verification ? 'var(--warning-bg)' : 'var(--success-bg)',
+                          color: obl.needs_verification ? 'var(--warning)' : 'var(--success)',
+                          border: `1px solid ${obl.needs_verification ? 'var(--warning)' : 'var(--success)'}`,
                           padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600
                         }}>
                           {obl.needs_verification ? <AlertTriangle size={11} /> : obl.source === 'MANUAL' ? <PenLine size={11} /> : <CheckCircle2 size={11} />}
@@ -212,6 +302,7 @@ export default function BureauObligationsPage() {
                 </tbody>
               </table>
             </div>
+            )
           ) : (
             <div style={{ padding: '20px 24px', color: 'var(--text-tertiary)', fontSize: 13 }}>
               No bureau obligations found for this applicant.
@@ -232,26 +323,26 @@ export default function BureauObligationsPage() {
                 <div style={{ padding: '16px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: addLoanGridCols, gap: 10, alignItems: 'end' }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>LENDER</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LENDER</label>
                       <input className="form-control" placeholder="Bank / NBFC name" value={newObl.lender_name} onChange={e => setNewObl({ ...newObl, lender_name: e.target.value })} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>LOAN TYPE</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN TYPE</label>
                       <select className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
                         <option value="">— Type —</option>
                         {LOAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>LOAN AMT (₹)</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN AMT (₹)</label>
                       <input type="number" className="form-control" placeholder="0" value={newObl.loan_amount} onChange={e => setNewObl({ ...newObl, loan_amount: e.target.value })} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>OUTSTANDING</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>OUTSTANDING</label>
                       <input type="number" className="form-control" placeholder="0" value={newObl.outstanding_amount} onChange={e => setNewObl({ ...newObl, outstanding_amount: e.target.value })} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>EMI/MONTH *</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>EMI/MONTH *</label>
                       <input type="number" className="form-control" placeholder="0" value={newObl.emi_per_month} onChange={e => setNewObl({ ...newObl, emi_per_month: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -281,11 +372,10 @@ export default function BureauObligationsPage() {
         delay={grouped.length * 0.08}
         style={{ marginBottom: 24, border: '2px solid var(--warning)' }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 16 }}>
           <MetricTile boxed size="lg" label="Primary Borrower EMI" value={fmt(grouped.find(g => g.applicant.type === 'PRIMARY')?.total_emi)} color="var(--error)" delay={0.05} />
           <MetricTile boxed size="lg" label="Co-Borrower EMIs" value={fmt(grouped.filter(g => g.applicant.type !== 'PRIMARY').reduce((s, g) => s + g.total_emi, 0))} color="var(--error)" delay={0.1} />
-          <MetricTile boxed size="lg" highlight label="Combined Monthly Obligation" value={fmt(summary.combined_emi_per_month)} color="var(--warning)" delay={0.15} />
-          <MetricTile boxed size="lg" label="Lowest CIBIL Score" value={lowestCibil || '—'} color={getCibilColor(lowestCibil)} delay={0.2} />
+          <MetricTile boxed size="lg" highlight label="Combined Monthly EMI" value={fmt(summary.combined_emi_per_month)} color="var(--warning)" delay={0.15} />
         </div>
         <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)' }}>
           Shared loans (appearing across multiple applicants) are counted once. Edit EMI values above if bureau data differs from actual.
@@ -293,9 +383,9 @@ export default function BureauObligationsPage() {
       </Panel>
 
       {/* Bottom nav */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/income-summary`)}><ChevronLeft size={16} /> Back</button>
-        <button className="btn btn-primary btn-lg" onClick={handleGenerateESR} disabled={generating} style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', gap: 12 }}>
+        <button className="btn btn-ghost" onClick={onBack} style={{ justifyContent: 'center', width: isMobile ? '100%' : undefined }}><ChevronLeft size={16} /> Back</button>
+        <button className="btn btn-primary btn-lg" onClick={handleGenerateESR} disabled={generating} style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}>
           <Zap size={18} />
           {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
         </button>

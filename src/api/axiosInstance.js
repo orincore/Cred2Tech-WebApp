@@ -26,11 +26,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid — clear session and redirect to login
+      // Token expired or invalid — clear session and redirect to the login
+      // page for whichever portal (DSA vs MSME direct) the session belongs to
+      const isMsmeSession =
+        localStorage.getItem('roleName') === 'MSME_CUSTOMER' ||
+        window.location.pathname.startsWith('/msme');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      localStorage.removeItem('roleName');
+      const loginPath = isMsmeSession ? '/msme/login' : '/login';
+      if (window.location.pathname !== loginPath) {
+        window.location.href = loginPath;
       }
     }
     return Promise.reject(error);

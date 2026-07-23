@@ -1,26 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
-import { Sun, Moon } from 'lucide-react';
-import Sidebar from '../components/layout/Sidebar';
-import MsmeSidebar from '../components/layout/MsmeSidebar';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { MsmeAuthProvider, useMsmeAuth } from '../context/MsmeAuthContext';
+import MsmeSidebar from '../components/layout/MsmeSidebar';
 import { getInitials } from '../utils/helpers';
 
-const AppLayout = () => {
-  const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
-
-  // MSME borrowers reach the shared /cases/* journey pages through this
-  // layout — render their portal sidebar so the chrome matches the /msme
-  // pages exactly, instead of the DSA nav (which their role would blank out).
-  const isMsme = user?.role === 'MSME_CUSTOMER' || localStorage.getItem('roleName') === 'MSME_CUSTOMER';
-  const msmeLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('roleName');
-    window.location.href = '/msme/login';
-  };
+// Shell for the MSME direct portal. Mirrors AppLayout's responsive sidebar
+// behavior; the /msme/login route renders bare (no chrome).
+const LayoutContent = () => {
+  const { user, logout } = useMsmeAuth();
+  const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -42,6 +31,11 @@ const AppLayout = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  const isLoginPage = location.pathname.includes('/login');
+  if (isLoginPage) {
+    return <Outlet />;
+  }
+
   const toggleSidebar = () => {
     if (isMobile) {
       setShowMobileSidebar(!showMobileSidebar);
@@ -54,7 +48,7 @@ const AppLayout = () => {
     <div className="app-shell" style={{ position: 'relative' }}>
       {/* Mobile Overlay */}
       {isMobile && showMobileSidebar && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: 0,
@@ -67,28 +61,19 @@ const AppLayout = () => {
           onClick={() => setShowMobileSidebar(false)}
         />
       )}
-      
-      {isMsme ? (
-        <MsmeSidebar
-          isOpen={isSidebarOpen}
-          isMobile={isMobile}
-          showMobile={showMobileSidebar}
-          onClose={() => setShowMobileSidebar(false)}
-          user={user}
-          onLogout={msmeLogout}
-        />
-      ) : (
-        <Sidebar
-          isOpen={isSidebarOpen}
-          isMobile={isMobile}
-          showMobile={showMobileSidebar}
-          onClose={() => setShowMobileSidebar(false)}
-        />
-      )}
-      
-      <div 
-        className="app-main" 
-        style={{ 
+
+      <MsmeSidebar
+        isOpen={isSidebarOpen}
+        isMobile={isMobile}
+        showMobile={showMobileSidebar}
+        onClose={() => setShowMobileSidebar(false)}
+        user={user}
+        onLogout={logout}
+      />
+
+      <div
+        className="app-main"
+        style={{
           marginLeft: !isMobile && isSidebarOpen ? 'var(--sidebar-width)' : '0',
           transition: 'margin-left 0.3s ease',
           width: '100%',
@@ -119,18 +104,14 @@ const AppLayout = () => {
               fontWeight: 'bold',
               color: 'var(--on-surface)',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--surface-low)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'var(--surface)';
-            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
             title={isSidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'}
           >
             {isSidebarOpen ? '<' : '>'}
           </button>
         )}
-        
+
         {/* Mobile Header */}
         {isMobile && (
           <div style={{
@@ -148,7 +129,6 @@ const AppLayout = () => {
             padding: '0 16px',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           }}>
-            {/* Menu Button */}
             <button
               onClick={toggleSidebar}
               style={{
@@ -168,65 +148,48 @@ const AppLayout = () => {
               </span>
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* Theme Toggle */}
-              <button
-                onClick={toggleTheme}
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  background: 'var(--surface-low)',
-                  border: '1px solid var(--outline)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: 'var(--on-surface)',
-                }}
-              >
-                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-              </button>
-
-              {/* User Avatar */}
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'var(--on-surface)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '14px',
-                fontWeight: 700,
-                color: 'var(--surface)',
-                border: '2px solid var(--outline)',
-              }}>
-                {getInitials(user?.name || 'U')}
-              </div>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'var(--on-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+              fontWeight: 700,
+              color: 'var(--surface)',
+              border: '2px solid var(--outline)',
+            }}>
+              {getInitials(user?.name || 'U')}
             </div>
           </div>
         )}
-        
-        <main className="page-content" style={{ padding: isMobile ? 0 : 0 }}>
+
+        <main className="page-content" style={{ paddingTop: isMobile ? 60 : 0 }}>
           <Outlet />
         </main>
       </div>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 14,
-            borderRadius: 10,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          },
-        }}
-      />
     </div>
   );
 };
 
-export default AppLayout;
+const MsmeLayout = () => (
+  <MsmeAuthProvider>
+    <LayoutContent />
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        duration: 4000,
+        style: {
+          fontFamily: 'Inter, sans-serif',
+          fontSize: 14,
+          borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+        },
+      }}
+    />
+  </MsmeAuthProvider>
+);
+
+export default MsmeLayout;

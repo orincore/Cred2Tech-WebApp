@@ -11,7 +11,22 @@ import {
   Activity,
   Mail,
   Network,
+  Sparkles,
+  FolderOpen,
+  FileText,
+  UserCircle,
 } from 'lucide-react';
+
+// MSME direct-portal navigation — used by MsmeSidebar, and by the main
+// Sidebar when an MSME borrower is on the shared /cases/* journey pages
+// (their role matches none of NAV_ITEMS, which would leave the nav blank).
+export const MSME_NAV_ITEMS = [
+  { id: 'msme-dashboard', label: 'My Dashboard', path: '/msme/dashboard', icon: LayoutDashboard },
+  { id: 'msme-onboarding', label: 'Check Eligibility', path: '/msme/onboarding', icon: Sparkles },
+  { id: 'msme-cases', label: 'My Cases', path: '/msme/cases', icon: FolderOpen },
+  { id: 'msme-documents', label: 'My Documents', path: '/msme/documents', icon: FileText },
+  { id: 'msme-profile', label: 'My Profile', path: '/msme/profile', icon: UserCircle },
+];
 
 export const NAV_ITEMS = [
   // SUPER_ADMIN Views

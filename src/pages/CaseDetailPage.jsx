@@ -108,6 +108,14 @@ export default function CaseDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { hasRole } = useAuth();
+  // MSME direct-portal borrowers can view their own case, but the DSA
+  // pipeline/wizard routes are off-limits — route them back to their portal.
+  const isMsme = localStorage.getItem('roleName') === 'MSME_CUSTOMER';
+  const backPath = isMsme ? '/msme/dashboard' : '/customers';
+  const wizardPath = isMsme ? `/msme/onboarding?caseId=${id}` : `/customers/add?caseId=${id}`;
+  // Steps 4-7 of the case journey render inline inside AddCustomerWizardPage
+  // now — jump straight to the right step via the same entry point.
+  const journeyPath = (step) => `${wizardPath}&step=${step}`;
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { isMobile } = useResponsive();
@@ -330,7 +338,7 @@ export default function CaseDetailPage() {
   if (!caseData) return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
       <p style={{ fontSize: 15, color: 'var(--text-secondary)' }}>Case not found.</p>
-      <button className="btn btn-secondary btn-sm" onClick={() => navigate('/customers')}><ArrowLeft size={14} /> Back to Pipeline</button>
+      <button className="btn btn-secondary btn-sm" onClick={() => navigate(backPath)}><ArrowLeft size={14} /> {isMsme ? 'Back to Dashboard' : 'Back to Pipeline'}</button>
     </div>
   );
 
@@ -355,9 +363,9 @@ export default function CaseDetailPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 20, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6, display: 'flex', gap: 4, alignItems: 'center' }}>
-            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate('/customers')}>Customer List</span>
+            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate(backPath)}>{isMsme ? 'My Dashboard' : 'Customer List'}</span>
             <span>/</span>
-            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate('/customers')}>All Cases</span>
+            <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate(isMsme ? '/msme/cases' : '/customers')}>{isMsme ? 'My Cases' : 'All Cases'}</span>
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
             CASE-{caseData.id} — {caseData.customer_name || caseData.customer?.business_name}
@@ -371,14 +379,14 @@ export default function CaseDetailPage() {
           {hasRole('DSA_ADMIN') && caseData?.lead_source === 'DIRECT_MSME' && (
             <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick}><Users size={13} /> Allocate to Employee</button>
           )}
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/customers/add?caseId=${id}`)}>Open Wizard</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(wizardPath)}>Open Wizard</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowPropertyModal(true)}>Edit Property Details</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${id}/bureau-obligations?mode=edit`)}>View &amp; Edit Obligations</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${id}/income-summary?mode=edit`)}>Income Summary</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(5))}>View &amp; Edit Obligations</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(4))}>Income Summary</button>
           <button className="btn btn-secondary btn-sm" onClick={handleDownloadLoanApplicationSummary} disabled={summaryDownloading}>
             <Download size={13} /> {summaryDownloading ? 'Preparing...' : 'Loan Application Summary'}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${id}/esr`)}>Generate ESR</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(6))}>Generate ESR</button>
           <button className="btn btn-primary btn-sm" onClick={() => setShowStageModal(true)}>Update Stage</button>
         </div>
       </div>
@@ -908,7 +916,7 @@ export default function CaseDetailPage() {
 
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
-                <label className="form-label">Loan Product *</label>
+                <label className="form-label">Loan Product & collateral</label>
                 <select className="form-control" value={propertyForm.product_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, product_type: e.target.value }))} required>
                   <option value="">- Select a loan product -</option>
                   <option value="HL">HL - Home Loan</option>

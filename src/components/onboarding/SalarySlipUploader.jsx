@@ -3,6 +3,12 @@ import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
 
 const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [months, setMonths] = useState([
     { id: 'm1', label: 'Month 1', file: null, ocrStatus: 'PENDING', result: null, isUploaded: false, documentId: null, fileName: null },
     { id: 'm2', label: 'Month 2', file: null, ocrStatus: 'PENDING', result: null, isUploaded: false, documentId: null, fileName: null },
@@ -340,7 +346,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
         {months.map((m) => (
           <div key={m.id} style={{ background: 'var(--bg-elevated)', border: '1.5px dashed var(--border)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
             {m.ocrStatus === 'COMPLETED' ? (
@@ -418,7 +424,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               {completedCount} slip{completedCount > 1 ? 's' : ''} processed
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
             <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '10px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Employer</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{summary[0]?.employer_name || '-'}</div>

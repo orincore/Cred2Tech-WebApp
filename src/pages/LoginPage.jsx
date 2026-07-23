@@ -205,6 +205,13 @@ const LoginPage = () => {
                 Register as Partner
               </button>
             </p>
+            <button
+              onClick={() => navigate('/msme/login')}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-[10px] border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[14px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[17px]">storefront</span>
+              MSME Borrower? Login with OTP
+            </button>
           </div>
         </div>
       </div>

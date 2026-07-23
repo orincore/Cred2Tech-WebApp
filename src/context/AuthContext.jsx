@@ -80,6 +80,8 @@ export const AuthProvider = ({ children }) => {
     
     // Store in localStorage for backward compatibility
     localStorage.setItem('token', newToken);
+    // Clear any MSME-portal session marker so 401 handling routes to /login
+    localStorage.removeItem('roleName');
     
     // Set cookie for cross-domain sharing
     setCookie('cred2tech_token', newToken, 7); // 7 days expiry
@@ -103,6 +105,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('roleName');
     deleteCookie('cred2tech_token');
     setToken(null);
     setUser(null);

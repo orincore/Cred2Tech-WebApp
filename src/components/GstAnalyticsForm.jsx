@@ -6,39 +6,36 @@ import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
-const MONTHS = [
-    { v: '01', l: 'Jan' }, { v: '02', l: 'Feb' }, { v: '03', l: 'Mar' },
-    { v: '04', l: 'Apr' }, { v: '05', l: 'May' }, { v: '06', l: 'Jun' },
-    { v: '07', l: 'Jul' }, { v: '08', l: 'Aug' }, { v: '09', l: 'Sep' },
-    { v: '10', l: 'Oct' }, { v: '11', l: 'Nov' }, { v: '12', l: 'Dec' }
-];
-const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = Array.from({ length: 7 }, (_, i) => (CURRENT_YEAR - 4 + i).toString());
-
-// Default GST pull window: the latest 2 years (24 months), ending this month —
-// not a fixed historical range that goes stale as time passes.
+// GST pull window is fixed, not user-editable or shown on screen: the latest
+// 2 years (24 months), ending 2 months before the current month — not a
+// manually-picked range that can be set incorrectly or go stale.
 const now = new Date();
-const DEFAULT_TO_MONTH = String(now.getMonth() + 1).padStart(2, '0');
-const DEFAULT_TO_YEAR = String(now.getFullYear());
-const DEFAULT_FROM_MONTH = DEFAULT_TO_MONTH;
-const DEFAULT_FROM_YEAR = String(now.getFullYear() - 2);
+const toDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+const fromDate = new Date(toDate.getFullYear() - 2, toDate.getMonth(), 1);
+const AUTO_TO_MONTH = String(toDate.getMonth() + 1).padStart(2, '0');
+const AUTO_TO_YEAR = String(toDate.getFullYear());
+const AUTO_FROM_MONTH = String(fromDate.getMonth() + 1).padStart(2, '0');
+const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete }) => {
+const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onboardingMode }) => {
+    // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
+    const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
+    const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+    useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth <= 640);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
     const [mode, setMode] = useState('IN_SYSTEM');
     const authType = 'PASSWORD';
     const [isManualGstin, setIsManualGstin] = useState(false);
-
-    const [fromMonth, setFromMonth] = useState(DEFAULT_FROM_MONTH);
-    const [fromYear, setFromYear] = useState(DEFAULT_FROM_YEAR);
-    const [toMonth, setToMonth] = useState(DEFAULT_TO_MONTH);
-    const [toYear, setToYear] = useState(DEFAULT_TO_YEAR);
 
     const [formData, setFormData] = useState({
         gstin: '',
         username: '',
         password: '',
-        from_date: `${DEFAULT_FROM_MONTH}${DEFAULT_FROM_YEAR}`,
-        to_date: `${DEFAULT_TO_MONTH}${DEFAULT_TO_YEAR}`,
+        from_date: `${AUTO_FROM_MONTH}${AUTO_FROM_YEAR}`,
+        to_date: `${AUTO_TO_MONTH}${AUTO_TO_YEAR}`,
         emails: '',
         mobile_numbers: ''
     });
@@ -79,10 +76,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
         }
     }, [linkedGstins]);
 
-    useEffect(() => {
-        setFormData(prev => ({ ...prev, from_date: `${fromMonth}${fromYear}`, to_date: `${toMonth}${toYear}` }));
-    }, [fromMonth, fromYear, toMonth, toYear]);
-
     const fetchRequests = async () => {
         try {
             const res = await api.get(`/external/gst/requests?case_id=${caseId}`);
@@ -116,8 +109,10 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 mode: mode,
                 auth_type: mode === 'IN_SYSTEM' ? authType : null,
                 gstin: formData.gstin,
-                username: formData.username,
-                password: formData.password,
+                // Only meaningful for IN_SYSTEM auth — omit for AUTH_LINK so a
+                // stale value typed while on the other tab is never sent.
+                username: mode === 'IN_SYSTEM' ? formData.username : undefined,
+                password: mode === 'IN_SYSTEM' ? formData.password : undefined,
                 from_date: formData.from_date,
                 to_date: formData.to_date,
                 emails: formData.emails ? formData.emails.split(',').map(s => s.trim()) : [],
@@ -158,8 +153,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
 
     return (
         <div style={{ padding: 24 }}>
-            <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Initiate New GST Journey</h4>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
                     <input type="radio" name="gstMode" value="IN_SYSTEM" checked={mode === 'IN_SYSTEM'} onChange={() => setMode('IN_SYSTEM')} />
                     Enter Details in System
@@ -170,7 +164,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 </label>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
                 <FormField label="SELECT GSTIN" required>
                     {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
                         <div style={{ display: 'flex', gap: 8 }}>
@@ -207,45 +201,39 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                 
                 {mode === 'IN_SYSTEM' && (
                     <FormField label="GST Username" required>
-                        <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="form-control" placeholder="GST portal username" />
+                        <input
+                            type="text"
+                            value={formData.username}
+                            onChange={e => setFormData({...formData, username: e.target.value})}
+                            className="form-control"
+                            placeholder="GST portal username"
+                            autoComplete="off"
+                            name="gst-username-no-autofill"
+                        />
                     </FormField>
                 )}
-                
-                <FormField label="From Date" required>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <select className="form-control" value={fromMonth} onChange={e => setFromMonth(e.target.value)} style={{ flex: 1 }}>
-                            {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-                        </select>
-                        <select className="form-control" value={fromYear} onChange={e => setFromYear(e.target.value)} style={{ flex: 1 }}>
-                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                    </div>
-                </FormField>
-
-                <FormField label="To Date" required>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <select className="form-control" value={toMonth} onChange={e => setToMonth(e.target.value)} style={{ flex: 1 }}>
-                            {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-                        </select>
-                        <select className="form-control" value={toYear} onChange={e => setToYear(e.target.value)} style={{ flex: 1 }}>
-                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                    </div>
-                </FormField>
             </div>
 
             {mode === 'IN_SYSTEM' && (
                  <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
                     <div style={{ flex: 1 }}>
                          <FormField label="GST Password" required>
-                             <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="form-control" placeholder="GST portal password" />
+                             <input
+                                 type="password"
+                                 value={formData.password}
+                                 onChange={e => setFormData({...formData, password: e.target.value})}
+                                 className="form-control"
+                                 placeholder="GST portal password"
+                                 autoComplete="new-password"
+                                 name="gst-password-no-autofill"
+                             />
                          </FormField>
                     </div>
                 </div>
             )}
 
             {mode === 'AUTH_LINK' && (
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
                      <FormField label="Target Emails (comma separated)">
                         <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
                      </FormField>
@@ -255,88 +243,68 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete })
                  </div>
             )}
 
-            <button type="button" onClick={handleCreateRequest} disabled={loading || !formData.gstin} className="btn btn-primary" style={{ marginBottom: 32 }}>
-                {loading ? 'Creating...' : 'Initialize GST Request (~1 Credit)'}
+            <button type="button" onClick={handleCreateRequest} disabled={loading || !formData.gstin} className="btn btn-primary" style={{ marginBottom: 24 }}>
+                {loading ? 'Creating...' : isMsme ? 'Submit' : 'Submit (~1 Credit)'}
             </button>
 
-            {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).length > 0 && (
-                <div>
-                    <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, borderTop: '1px solid var(--border)', paddingTop: 20 }}>Active GST Journeys</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING')).map(req => {
-                            const isFinal = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
-                            const isWaitingForCustomer = req.mode === 'AUTH_LINK' && req.auth_link && ['AUTH_LINK_CREATED', 'INITIATED'].includes(req.status);
-                            return (
-                            <div key={req.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isFinal ? 'var(--success-subtle)' : 'var(--bg-surface)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        {req.gstin}
-                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--bg-elevated)', border: '1px solid var(--border)', textTransform: 'uppercase' }}>{req.mode}</span>
-                                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 0, background: 'var(--primary)', color: 'white' }}>{req.status}</span>
-                                    </div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                                        {new Date(req.created_at).toLocaleString()}
-                                    </div>
+            {(() => {
+                const visible = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
+                if (visible.length === 0) return null;
+                // Only the most recent journey is shown — no journey list/history,
+                // no raw GSTIN/mode/status/timestamp/auth-link plumbing surfaced to the user.
+                const req = visible[0];
+                const isFinal = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
+                return (
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isFinal ? 'var(--success-bg)' : 'var(--bg-surface)' }}>
+                        {!isFinal ? (
+                            <PullingIndicator label="Pulling GST data…" />
+                        ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--success)', fontWeight: 600, fontSize: 14 }}>
+                                    <CheckCircle2 size={16} /> GST data pulled successfully
                                 </div>
-                                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{req.provider_message}</p>
+                                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                    {/* PDF: prefer internal document, fallback to source URL for legacy records */}
+                                    {req.gst_pdf_document_id ? (
+                                        <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                            onClick={() => downloadDocument(req.gst_pdf_document_id, `gst_${req.gstin}.pdf`).catch(e => toast.error(e.message))}>
+                                            <FileText size={14} /> PDF Report
+                                        </button>
+                                    ) : req.report_pdf_url ? (
+                                        <a href={req.report_pdf_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <FileText size={14} /> PDF Report
+                                        </a>
+                                    ) : null}
 
-                                {isWaitingForCustomer && (
-                                    <div style={{ marginBottom: 12, padding: 10, background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 13 }}>
-                                        <strong>Link: </strong> <a href={req.auth_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{req.auth_link}</a>
-                                        <p style={{ marginTop: 6, color: 'var(--text-tertiary)' }}>Awaiting webhook callback once customer completes auth.</p>
-                                    </div>
-                                )}
+                                    {/* Excel */}
+                                    {req.gst_excel_document_id ? (
+                                        <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                            onClick={() => downloadDocument(req.gst_excel_document_id, `gst_${req.gstin}.xlsx`).catch(e => toast.error(e.message))}>
+                                            <Download size={14} /> Excel Report
+                                        </button>
+                                    ) : req.report_excel_url ? (
+                                        <a href={req.report_excel_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Download size={14} /> Excel Report
+                                        </a>
+                                    ) : null}
 
-                                {!isFinal && !isWaitingForCustomer && (
-                                    <div style={{ marginBottom: 12 }}>
-                                        <PullingIndicator label="Pulling your GST information…" />
-                                    </div>
-                                )}
-
-                                {(req.status === 'REPORT_READY' || req.status === 'COMPLETED') && (
-                                    <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                                        {/* PDF: prefer internal document, fallback to source URL for legacy records */}
-                                        {req.gst_pdf_document_id ? (
-                                            <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                                onClick={() => downloadDocument(req.gst_pdf_document_id, `gst_${req.gstin}.pdf`).catch(e => toast.error(e.message))}>
-                                                <FileText size={14} /> PDF Report
-                                            </button>
-                                        ) : req.report_pdf_url ? (
-                                            <a href={req.report_pdf_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <FileText size={14} /> PDF Report
-                                            </a>
-                                        ) : null}
-
-                                        {/* Excel */}
-                                        {req.gst_excel_document_id ? (
-                                            <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                                onClick={() => downloadDocument(req.gst_excel_document_id, `gst_${req.gstin}.xlsx`).catch(e => toast.error(e.message))}>
-                                                <Download size={14} /> Excel Report
-                                            </button>
-                                        ) : req.report_excel_url ? (
-                                            <a href={req.report_excel_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <Download size={14} /> Excel Report
-                                            </a>
-                                        ) : null}
-
-                                        {/* JSON */}
-                                        {req.gst_json_document_id ? (
-                                            <button type="button" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                                onClick={() => downloadDocument(req.gst_json_document_id, `gst_${req.gstin}.json`).catch(e => toast.error(e.message))}>
-                                                <Download size={14} /> Raw JSON
-                                            </button>
-                                        ) : req.report_json_url ? (
-                                            <a href={req.report_json_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <Download size={14} /> Raw JSON
-                                            </a>
-                                        ) : null}
-                                    </div>
-                                )}
+                                    {/* JSON */}
+                                    {req.gst_json_document_id ? (
+                                        <button type="button" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                            onClick={() => downloadDocument(req.gst_json_document_id, `gst_${req.gstin}.json`).catch(e => toast.error(e.message))}>
+                                            <Download size={14} /> Raw JSON
+                                        </button>
+                                    ) : req.report_json_url ? (
+                                        <a href={req.report_json_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Download size={14} /> Raw JSON
+                                        </a>
+                                    ) : null}
+                                </div>
                             </div>
-                        );})}
+                        )}
                     </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };

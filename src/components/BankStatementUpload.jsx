@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, UploadCloud, FileText, Briefcase, Plus, X, Download } from 'lucide-react';
+import { CheckCircle2, AlertCircle, UploadCloud, Briefcase, Plus, X, Download } from 'lucide-react';
 import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 
-const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete }) => {
+const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode }) => {
+    // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
+    const isMsme = mode === 'MSME_SELF_SERVICE';
+    const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+    useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth <= 640);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
     const [status, setStatus] = useState(existingStatus?.status || 'INITIATED');
     const [reportId, setReportId] = useState(existingStatus?.report_id || null);
     // documentIds: our internal stored file IDs — used for secure serving via /api/documents/:id
@@ -153,25 +161,17 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     return (
         <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--warning)', borderRadius: 0, overflow: 'hidden' }}>
             {/* Summary Row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: 16, alignItems: 'center', padding: '16px 24px', backgroundColor: 'var(--bg-base)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: isMobile ? 10 : 16, alignItems: 'center', padding: isMobile ? '14px 16px' : '16px 24px', backgroundColor: 'var(--bg-base)' }}>
                 {/* Left: Name and Type */}
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{applicantName}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{roleLabel}</span>
                 </div>
 
-                {/* Middle: State indicator */}
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    {status === 'INITIATED' && "No statement uploaded yet"}
-                    {status === 'ANALYZING' && <PullingIndicator label="Pulling your bank statement information…" />}
-                    {status === 'FAILED' && <span style={{ color: 'var(--error)' }}>Failed to process. Try again.</span>}
-                    {status === 'FAILED_DOWNLOAD' && <span style={{ color: 'var(--error)' }}>Analysis Complete but Failed to retrieve secure links.</span>}
-                    {status === 'COMPLETED' && "Statement processed and analysed"}
-                    {(status === 'LOADING_LINKS' || status === 'AWAITING_LINKS') && <PullingIndicator label="Retrieving your reports…" />}
-                </div>
+                
 
                 {/* Right: Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
 
                     {/* Status Pills */}
                     {(status === 'COMPLETED' || status === 'FAILED_DOWNLOAD') ? (
@@ -204,22 +204,6 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                     </a>
                                 )
                             )}
-                            {(documentIds.json || sourceUrls.json) && (
-                                documentIds.json ? (
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost btn-sm"
-                                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: 'var(--text-tertiary)' }}
-                                        onClick={() => downloadDocument(documentIds.json, 'bank_statement.json').catch(e => toast.error(e.message))}
-                                    >
-                                        <FileText size={14} /> JSON
-                                    </button>
-                                ) : (
-                                    <a href={sourceUrls.json} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', color: 'var(--text-tertiary)' }}>
-                                        <FileText size={14} /> JSON
-                                    </a>
-                                )
-                            )}
                             {(!documentIds.excel && !documentIds.json && !sourceUrls.excel && !sourceUrls.json) && (
                                 <PullingIndicator label="Retrieving your reports…" />
                             )}
@@ -247,7 +231,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
                     </div>
 
-                    {walletBalance < analyzeCost && (
+                    {!isMsme && walletBalance < analyzeCost && (
                         <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
                             <AlertCircle size={16} /> Insufficient credits. Wallet has {walletBalance}, needs {analyzeCost}.
                         </div>
@@ -293,8 +277,8 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </button>
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || walletBalance < analyzeCost}>
-                                {loading ? 'Wait...' : `Analyze (~${analyzeCost} Cr)`}
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || (!isMsme && walletBalance < analyzeCost)}>
+                                {loading ? 'Wait...' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
                             </button>
                         </div>
                     </div>

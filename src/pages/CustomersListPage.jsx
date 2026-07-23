@@ -262,7 +262,8 @@ const CustomersListPage = () => {
       const path = c.customer?.category === 'SALARIED' ? '/customers/salaried/add' : '/customers/add';
       navigate(`${path}?caseId=${c.id}`);
     } else if (c.stage === 'DATA_COLLECTION') {
-      navigate(`/cases/${c.id}/esr`);
+      // ESR (step 6) now renders inline inside AddCustomerWizardPage.
+      navigate(`/customers/add?caseId=${c.id}&step=6`);
     } else {
       navigate(`/cases/${c.id}`);
     }

@@ -6,7 +6,7 @@ import { otpService } from '../api/otpService';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Building2, Lightbulb, Clock, Pencil } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -16,8 +16,22 @@ import { useAuth } from '../context/AuthContext';
 import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
+import { msmeApi } from '../api/msmeService';
+import IncomeSummaryStep from './IncomeSummaryPage';
+import BureauObligationsStep from './BureauObligationsPage';
+import EsrStep from './EsrPage';
+import ProposalStep from './ProposalPage';
 
-const AddCustomerWizardPage = () => {
+// Each step's own historical max-width (steps 1-3 were designed for 880;
+// steps 4-7 lived on separate, wider pages) — preserved here so folding them
+// into this single wizard doesn't visually shrink them.
+const STEP_MAX_WIDTH = { 1: 880, 2: 880, 3: 880, 4: 960, 5: 980, 6: 1040, 7: 940 };
+
+const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
+  // MSME self-service: the borrower fills the wizard themselves after OTP
+  // login + payment. Their mobile is already verified at login, and wallet
+  // credits are a DSA concept that doesn't apply to them.
+  const isMsme = mode === 'MSME_SELF_SERVICE';
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -27,7 +41,19 @@ const AddCustomerWizardPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  // Step 1 is split into two sub-pages (Business Entity, then Co-Applicants)
+  // without affecting the overall wizard step count — CaseWizardStepper still
+  // only ever sees currentStep === 1 for both.
+  const [step1SubPage, setStep1SubPage] = useState('business');
+  // Step 2 is split into three sub-pages (GST, then ITR, then Bank Statements)
+  // the same way — currentStep stays 2 for all three.
+  const [step2SubPage, setStep2SubPage] = useState('gst');
   const [caseId, setCaseId] = useState(null);
+  // Only exists once a proposal has actually been created from step 6 — step
+  // 7 (ProposalStep) is unreachable until then, same as the old route-based
+  // journey (/cases/:id/proposals/:pid required an id that only ever came
+  // from a "create proposal" action).
+  const [proposalId, setProposalId] = useState(searchParams.get('proposalId') || null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
@@ -35,6 +61,25 @@ const AddCustomerWizardPage = () => {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // All 7 steps live in this one mounted component now — switching steps is
+  // always a local state change, never a route navigation, so effects that
+  // only run "while mounted" (PAN/GST/bureau auto-fetch) stay alive across
+  // the whole journey. The URL's ?step= (and &proposalId=) just mirror
+  // whatever step/proposal is current, the same way ?caseId= already does,
+  // so a saved/shared link resumes at the right place.
+  const goToStep = (step, extra = {}) => {
+    setCurrentStep(step);
+    const params = new URLSearchParams(location.search);
+    params.set('step', String(step));
+    if (extra.proposalId) params.set('proposalId', String(extra.proposalId));
+    navigate(`?${params.toString()}`, { replace: true });
+  };
+
+  const handleProposalCreated = (newProposalId) => {
+    setProposalId(newProposalId);
+    goToStep(7, { proposalId: newProposalId });
+  };
 
   const [formData, setFormData] = useState({
     customer_id: null,
@@ -47,6 +92,7 @@ const AddCustomerWizardPage = () => {
     is_professional: false,
     profession_type: '',
     mobile_verified: false,
+    is_locked: false,
     pan_verified: false,
     linked_gstins: [],
     applicants: [],
@@ -62,6 +108,8 @@ const AddCustomerWizardPage = () => {
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
+     if (isMsme) return; // wallet/credits are DSA-only
+
      api.get('/wallet/api-costs')
        .then(res => {
           const data = res.data;
@@ -75,7 +123,20 @@ const AddCustomerWizardPage = () => {
      api.get('/wallet/balance')
        .then(res => setWalletBalance(res.data.balance))
        .catch(console.error);
-  }, []);
+  }, [isMsme]);
+
+  // MSME self-service: prefill the borrower's own (already OTP-verified)
+  // mobile from their portal session.
+  useEffect(() => {
+    if (!isMsme) return;
+    msmeApi.getDashboard().then(res => {
+      setFormData(prev => ({
+        ...prev,
+        business_mobile: prev.business_mobile || res.data.user.mobile,
+        mobile_verified: true
+      }));
+    }).catch(console.error);
+  }, [isMsme]);
 
   const [panVerifying, setPanVerifying] = useState(false);
   const [panVerifyFailed, setPanVerifyFailed] = useState(false);
@@ -142,7 +203,8 @@ const AddCustomerWizardPage = () => {
         pincode: caseData.applicants?.find(a => a.type === 'PRIMARY')?.pincode || '',
         is_professional: caseData.customer?.is_professional || false,
         profession_type: caseData.customer?.profession_type || '',
-        mobile_verified: caseData.customer?.mobile_verified || false,
+        mobile_verified: isMsme ? true : (caseData.customer?.mobile_verified || false),
+        is_locked: !!caseData.is_locked,
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
         linked_gstins: currentPanProfile?.gstin_records || [],
@@ -168,11 +230,19 @@ const AddCustomerWizardPage = () => {
       // mid-edit (PAN reset, applicant reuse/removal) pass preserveStep=true
       // so the user isn't yanked away from the step they're actively on.
       if (!preserveStep) {
-        if (caseData.applicants && caseData.applicants.length > 0) {
+        // A URL with ?step= (a saved/shared link, or returning from a full
+        // reload) resumes at that exact step instead of the default
+        // heuristic below.
+        const stepParam = parseInt(searchParams.get('step'), 10);
+        if (stepParam >= 1 && stepParam <= 7) {
+          setCurrentStep(stepParam);
+        } else if (caseData.applicants && caseData.applicants.length > 0) {
           setCurrentStep(2);
         } else {
           setCurrentStep(1);
         }
+        const pid = searchParams.get('proposalId');
+        if (pid) setProposalId(pid);
       }
 
     } catch (error) {
@@ -328,6 +398,12 @@ const AddCustomerWizardPage = () => {
   // clears the guard and allows a fresh attempt.
   const panAutoVerifyAttempted = useRef(null);
   useEffect(() => {
+    // Steps 4-7 render inline in this same component now, but this
+    // auto-progression only makes sense while actually on steps 1-3 —
+    // data collection is already complete by the time a case reaches step
+    // 4+, so this must not re-fire just because the wizard remounts/deep
+    // links straight into a later step (it did, live, before this guard).
+    if (currentStep > 3) return;
     const pan = formData.business_pan;
     const ready = pan && pan.length === 10 && !!formData.business_mobile;
     if (
@@ -342,12 +418,13 @@ const AddCustomerWizardPage = () => {
       panAutoVerifyAttempted.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.business_pan, formData.business_mobile, formData.pan_verified, panVerifying]);
+  }, [currentStep, formData.business_pan, formData.business_mobile, formData.pan_verified, panVerifying]);
 
   // Auto-fetch GST records right after PAN verification succeeds — no manual
   // "Fetch GST" click needed. Same guard pattern as above.
   const gstAutoFetchAttempted = useRef(null);
   useEffect(() => {
+    if (currentStep > 3) return;
     const pan = formData.business_pan;
     if (
       formData.pan_verified &&
@@ -360,7 +437,31 @@ const AddCustomerWizardPage = () => {
       handleFetchGst();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan]);
+  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan]);
+
+  // Auto-verify each co-applicant's PAN once it's a full 10 characters — same
+  // no-manual-click pattern as the primary PAN above, guarded per-index so a
+  // failed attempt doesn't retry in a tight loop.
+  const coappPanAutoVerifyAttempted = useRef({});
+  useEffect(() => {
+    if (currentStep > 3) return;
+    formData.applicants.forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT') return;
+      const pan = app.pan_number;
+      if (
+        pan && pan.length === 10 &&
+        !app.pan_verified &&
+        !coappPanVerifyingMap[idx] &&
+        coappPanAutoVerifyAttempted.current[idx] !== pan
+      ) {
+        coappPanAutoVerifyAttempted.current[idx] = pan;
+        handleVerifyPan(true, idx);
+      } else if (!pan || pan.length !== 10) {
+        coappPanAutoVerifyAttempted.current[idx] = null;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.applicants, coappPanVerifyingMap]);
 
   const handleResetPan = async (isCoapplicant = false, idx = null) => {
     let applicantId = null;
@@ -403,6 +504,9 @@ const AddCustomerWizardPage = () => {
   };
 
   const checkPanDuplicate = async (pan) => {
+    // Tenant-wide duplicate lookup is a DSA workflow; MSME borrowers must not
+    // query (or be shown) other customers' records.
+    if (isMsme) return;
     if (!pan || pan.length !== 10) return;
     try {
       const res = await api.get('/customers/check-existing-by-pan', { params: { pan } });
@@ -587,10 +691,16 @@ const AddCustomerWizardPage = () => {
     }
   };
 
+  const goToCoApplicants = () => {
+    if (!formData.business_pan) return toast.error("Business PAN is required.");
+    if (!formData.mobile_verified && !isMsme) return toast.error("Primary Business Mobile must be verified before proceeding.");
+    setStep1SubPage('coapplicants');
+  };
+
   const handleStep1Submit = async (e) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error("Business PAN is required.");
-    if (!formData.mobile_verified) return toast.error("Primary Business Mobile must be verified before proceeding.");
+    if (!formData.mobile_verified && !isMsme) return toast.error("Primary Business Mobile must be verified before proceeding.");
 
     try {
       setSaving(true);
@@ -608,7 +718,7 @@ const AddCustomerWizardPage = () => {
       }
       setFormData(prev => ({ ...prev, applicants: savedApps }));
 
-      setCurrentStep(2);
+      goToStep(2);
     } catch (error) {
       toast.error(error.response?.data?.error || error.message);
     } finally {
@@ -715,7 +825,7 @@ const AddCustomerWizardPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.applicants, formData.mobile_verified]);
 
-  const handleStep2Submit = async (e) => { e.preventDefault(); setCurrentStep(3); };
+  const handleStep2Submit = async (e) => { e.preventDefault(); goToStep(3); };
 
   const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
@@ -740,7 +850,13 @@ const AddCustomerWizardPage = () => {
       await caseService.updateProductProperty(caseId, payload);
       localStorage.removeItem('draftCaseId');
       toast.success('Product & property saved!');
-      navigate(`/cases/${caseId}/income-summary`);
+      // Steps 4-7 render inline in this same component now (no more
+      // /cases/:id/* routes to navigate to) — the full reload this used to
+      // do for MSME existed only to rehydrate the main AuthProvider before
+      // crossing into that separate, main-ProtectedRoute-gated route tree.
+      // Since that crossing no longer happens, a plain step change is safe
+      // for both MSME and DSA.
+      goToStep(4);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to save product details.');
     } finally {
@@ -751,7 +867,7 @@ const AddCustomerWizardPage = () => {
   if (loading) return <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><LoadingSpinner size={40} /></div>;
 
   return (
-    <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
+    <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: (isMobile && !isMsme) ? '84px 16px 24px' : isMobile ? '24px 16px' : '24px 20px' }}>
       <style>{`
         .wizard-page .card,
         .wizard-page .btn,
@@ -759,6 +875,18 @@ const AddCustomerWizardPage = () => {
         .wizard-page .modal-box,
         .wizard-page .notice {
           border-radius: 0 !important;
+        }
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page — bump them to white here specifically,
+           without touching the global theme. */
+        :root.dark .wizard-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .wizard-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
         }
         .hide-scrollbar {
           scrollbar-width: none;
@@ -770,24 +898,34 @@ const AddCustomerWizardPage = () => {
         /* Responsive form grids — mobile-first collapse of fixed columns */
         .wizard-page .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .wizard-page .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
-        .wizard-page .coapp-row-a { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 16px; align-items: end; }
-        .wizard-page .coapp-row-b { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 16px; align-items: end; }
         @media (max-width: 900px) {
           .wizard-page .grid-3 { grid-template-columns: 1fr 1fr; }
-          .wizard-page .coapp-row-a, .wizard-page .coapp-row-b { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 640px) {
-          .wizard-page .grid-2, .wizard-page .grid-3,
-          .wizard-page .coapp-row-a, .wizard-page .coapp-row-b { grid-template-columns: 1fr; }
+          .wizard-page .grid-2, .wizard-page .grid-3 { grid-template-columns: 1fr; gap: 16px; }
           .wizard-page .modal-box { padding: 24px 16px !important; }
+          /* Cards eat too much of the already-narrow phone viewport with their
+             desktop-tuned 24px padding — tighten header/body padding so the
+             form fields inside actually have room to breathe. */
+          .wizard-page .card > div { padding: 14px 12px !important; }
+          .wizard-page .coapp-box { padding: 14px 12px !important; }
+          /* Footer nav buttons (Back / Next / Continue) — side-by-side with
+             space-between breaks down at phone widths since both labels are
+             long; stack them full-width instead. */
+          .wizard-page .wizard-footer-actions { flex-direction: column; align-items: stretch; }
+          .wizard-page .wizard-footer-actions .btn { width: 100%; justify-content: center; }
+        }
+        @media (max-width: 400px) {
+          .wizard-page { padding-left: 10px !important; padding-right: 10px !important; }
         }
       `}</style>
-      <div style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 40 }}>
+      <div style={{ maxWidth: STEP_MAX_WIDTH[currentStep] || 880, margin: '0 auto', paddingBottom: 40 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{caseId ? "Resume Draft Case" : "Add New Customer / New Case"}</h1>
-          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Step {currentStep} of 7 — {currentStep === 1 ? 'Business Entity & Co-Applicants' : currentStep === 2 ? 'Financial Data' : 'Product Selection'}</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {caseId ? (formData.business_name ? `${formData.business_name}` : "Resume Draft Case") : "Add New Customer / New Case"}
+          </h1>
         </div>
         {caseId && (
           <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -796,17 +934,41 @@ const AddCustomerWizardPage = () => {
         )}
       </div>
 
-      {/* Stepper — spans the full case-creation journey, not just this page's 3 steps */}
+      {/* Stepper — all 7 steps of the case journey render inline in this
+          single component now, so jumping steps is always just goToStep. */}
       <CaseWizardStepper
         currentStep={currentStep}
         caseId={caseId}
-        onStepClick={(step) => setCurrentStep(step)}
+        proposalId={proposalId}
+        onStepClick={(step) => goToStep(step)}
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {currentStep === 1 && (
           <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {duplicateWarning && !caseId && (
+            {/* Step 1 sub-navigation — Business Entity / Co-Applicants, both still "Step 1" */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setStep1SubPage('business')}
+                className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 180px', fontWeight: 600 }}
+              >
+                1. Business Entity / Applicant
+              </button>
+              <button
+                type="button"
+                onClick={goToCoApplicants}
+                className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 180px', fontWeight: 600 }}
+              >
+                2. Co-Applicants
+              </button>
+            </div>
+
+            {step1SubPage === 'business' && (
+            <>
+            {duplicateWarning && !caseId && !isMsme && (
               <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
                 <div style={{ display: 'flex', gap: 16 }}>
                   <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -844,7 +1006,7 @@ const AddCustomerWizardPage = () => {
             <div className="card">
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700 }}>Business Entity</h3>
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Enter PAN — profile fetched automatically</span>
+
               </div>
               
               <div style={{ padding: 24 }}>
@@ -903,46 +1065,27 @@ const AddCustomerWizardPage = () => {
                     </div>
                   </FormField>
 
-                  <FormField label="BUSINESS NAME / FULL NAME" name="business_name">
-                    <input
-                      type="text"
-                      value={formData.business_name}
-                      onChange={e => setFormData({ ...formData, business_name: e.target.value })}
-                      className="form-control"
-                      placeholder="Autofetched via PAN or enter manually"
-                    />
-                  </FormField>
-                </div>
-
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="DATE OF BIRTH / INCORPORATION" name="dob">
-                    <input
-                      type="date"
-                      value={formData.dob || ''}
-                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                      className="form-control"
-                    />
-                  </FormField>
-
                   <FormField label="MOBILE NUMBER" name="business_mobile" required disabled={formData.mobile_verified}>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
-                      {!formData.mobile_verified ? (
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified || isMsme} />
+                      {(!formData.mobile_verified && !isMsme) ? (
                         <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                             <CheckCircle2 size={18} /> Verified
                           </div>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setFormData(prev => ({ ...prev, mobile_verified: false }))}
-                            title="Edit mobile number"
-                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <Pencil size={13} /> Edit
-                          </button>
+                          {!isMsme && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setFormData(prev => ({ ...prev, mobile_verified: false }))}
+                              title="Edit mobile number"
+                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Pencil size={13} /> Edit
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -973,6 +1116,29 @@ const AddCustomerWizardPage = () => {
                   </FormField>
                 </div>
 
+                <div className="grid-2" style={{ marginBottom: 24 }}>
+                  <FormField label="BUSINESS NAME / FULL NAME" name="business_name" disabled={formData.pan_verified}>
+                    <input
+                      type="text"
+                      value={formData.business_name}
+                      onChange={e => setFormData({ ...formData, business_name: e.target.value })}
+                      className="form-control"
+                      placeholder={formData.pan_verified ? 'Autofetched via PAN' : 'Autofetched via PAN or enter manually'}
+                      disabled={formData.pan_verified}
+                    />
+                  </FormField>
+
+                  <FormField label="DATE OF BIRTH / INCORPORATION" name="dob" disabled={formData.pan_verified}>
+                    <input
+                      type="date"
+                      value={formData.dob || ''}
+                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
+                      className="form-control"
+                      disabled={formData.pan_verified}
+                    />
+                  </FormField>
+                </div>
+
                 {(formData.is_professional === true || formData.is_professional === 'true') && (
                   <div className="grid-2">
                     <FormField label="SELECT YOUR PROFESSION" name="profession_type" required>
@@ -987,18 +1153,34 @@ const AddCustomerWizardPage = () => {
                   </div>
                 )}
 
-                <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--primary-subtle)', borderRadius: 0, color: 'var(--primary-dark)', fontSize: 12 }}>
-                  📌 After entering PAN and Mobile, trigger 'Send OTP' to lock your draft and verify ownership.
-                </div>
+                {!isMsme && (
+                  <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--primary-subtle)', borderRadius: 0, color: 'var(--primary-dark)', fontSize: 12 }}>
+                    📌 After entering PAN and Mobile, trigger 'Send OTP' to lock your draft and verify ownership.
+                  </div>
+                )}
               </div>
             </div>
 
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg"
+                onClick={goToCoApplicants}
+                disabled={!formData.mobile_verified && !isMsme}
+              >
+                Next: Co-Applicants →
+              </button>
+            </div>
+            </>
+            )}
+
+            {step1SubPage === 'coapplicants' && (
+            <>
             {/* Co-Applicants Card */}
             <div className="card">
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Add each co-applicant's PAN, mobile and email. Bureau is pulled via OTP consent on their mobile.</p>
                 </div>
                 <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
               </div>
@@ -1048,72 +1230,50 @@ const AddCustomerWizardPage = () => {
                       if (app.type !== 'CO_APPLICANT') return null;
                       const coApplicantIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
                       return (
-                      <div key={realIdx} style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0, position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: 18, right: 24, display: 'flex', gap: 12 }}>
-                           <button type="button" className="btn btn-danger btn-sm" onClick={() => removeApplicant(realIdx)}>Remove ×</button>
+                      <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantIdx + 1}</h4>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => removeApplicant(realIdx)}
+                            disabled={formData.is_locked}
+                            title={formData.is_locked ? 'Cannot remove — case is locked' : undefined}
+                          >
+                            Remove ×
+                          </button>
                         </div>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: 'var(--text-secondary)' }}>Applicant #{coApplicantIdx + 1}</h4>
-                        <div className="coapp-row-a" style={{ marginBottom: 16 }}>
+                        <div className="grid-2" style={{ marginBottom: 16 }}>
                           <FormField label="PAN NUMBER" name={`copan_${realIdx}`} required>
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                               <input
                                 type="text"
                                 value={app.pan_number || ''}
                                 onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())}
                                 className="form-control"
-                                style={{ textTransform: 'uppercase' }}
+                                style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }}
                                 disabled={app.pan_verified}
                                 placeholder="E.G. AABCE1234F"
                               />
-                              {!app.pan_verified ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleVerifyPan(true, realIdx)}
-                                  disabled={coappPanVerifyingMap[realIdx] || !app.pan_number}
-                                  className="btn btn-secondary"
-                                  style={{ whiteSpace: 'nowrap' }}
-                                >
-                                  {coappPanVerifyingMap[realIdx] ? 'Wait...' : 'Verify PAN'}
-                                </button>
-                              ) : (
+                              {app.pan_verified ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                                     <CheckCircle2 size={16} /> Verified
                                   </span>
                                   {(user?.role === 'DSA_ADMIN' || user?.role === 'SUPER_ADMIN') && (
                                     <button type="button" onClick={() => handleResetPan(true, realIdx)} className="btn btn-danger btn-sm" disabled={saving}>Reset</button>
                                   )}
                                 </div>
-                              )}
+                              ) : coappPanVerifyingMap[realIdx] ? (
+                                <PullingIndicator label="Verifying PAN…" />
+                              ) : (app.pan_number || '').length === 10 ? (
+                                <PullingIndicator label="Queued…" />
+                              ) : null}
                             </div>
                           </FormField>
-                          <FormField label="FULL NAME" name={`coname_${realIdx}`}>
-                            <input
-                              type="text"
-                              value={app.name || ''}
-                              onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
-                              className="form-control"
-                              placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
-                              disabled={app.pan_verified}
-                            />
-                          </FormField>
-                          <FormField label="EMPLOYMENT TYPE" name={`coemp_${realIdx}`}>
-                            <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
-                              <option value="SELF_EMPLOYED">Self Employed</option>
-                              <option value="SALARIED">Salaried</option>
-                            </select>
-                          </FormField>
-                        </div>
-                        <div className="coapp-row-b">
-                          <FormField label="PINCODE" name={`copincode_${realIdx}`} required>
-                            <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="560026" maxLength={6} />
-                          </FormField>
-                          <FormField label="EMAIL" name={`coemail_${realIdx}`}>
-                            <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" />
-                          </FormField>
                           <FormField label="MOBILE NUMBER" name={`comob_${realIdx}`}>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" disabled={app.otp_verified} />
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
                               {!app.otp_verified ? (
                                 <button type="button" className="btn btn-primary" onClick={() => handleSendCoapplicantOtp(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Send OTP</button>
                               ) : (
@@ -1124,6 +1284,42 @@ const AddCustomerWizardPage = () => {
                             </div>
                           </FormField>
                         </div>
+                        <div className="grid-3" style={{ marginBottom: 16 }}>
+                          <FormField label="EMPLOYMENT TYPE" name={`coemp_${realIdx}`}>
+                            <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                              <option value="SELF_EMPLOYED">Self Employed</option>
+                              <option value="SALARIED">Salaried</option>
+                              <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
+                            </select>
+                          </FormField>
+                          <FormField label="PINCODE" name={`copincode_${realIdx}`} required>
+                            <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="560026" maxLength={6} />
+                          </FormField>
+                          <FormField label="EMAIL" name={`coemail_${realIdx}`}>
+                            <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" />
+                          </FormField>
+                        </div>
+                        <div className="grid-2">
+                          <FormField label="FULL NAME" name={`coname_${realIdx}`} disabled={app.pan_verified}>
+                            <input
+                              type="text"
+                              value={app.name || ''}
+                              onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+                              className="form-control"
+                              placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
+                              disabled={app.pan_verified}
+                            />
+                          </FormField>
+                          <FormField label="DATE OF BIRTH" name={`codob_${realIdx}`} disabled={app.pan_verified}>
+                            <input
+                              type="date"
+                              value={app.dob || ''}
+                              onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
+                              className="form-control"
+                              disabled={app.pan_verified}
+                            />
+                          </FormField>
+                        </div>
                       </div>
                       );
                     })}
@@ -1132,62 +1328,53 @@ const AddCustomerWizardPage = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Business Entity</button>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || (!formData.mobile_verified && !isMsme)}>
                 {saving ? 'Processing...' : 'Continue to Financials →'}
               </button>
             </div>
+            </>
+            )}
           </form>
         )}
 
-        {currentStep === 2 && ( 
+        {currentStep === 2 && (
           <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Bureau Section - NEW */}
-            <div className="card">
-               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                 <div>
-                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bureau Verification</h3>
-                   <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Verify credit scores before analysis</p>
-                 </div>
-                 <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Auto-fetched once OTP is verified — no action needed</div>
-               </div>
-               <div style={{ padding: 24 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {formData.applicants.sort((a,b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => {
-                      const eligible = app.otp_verified || (app.type === 'PRIMARY' && formData.mobile_verified);
-                      return (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-base)', borderRadius: 0, border: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                           <div style={{ width: 8, height: 8, borderRadius: 0, background: app.bureau_fetched ? 'var(--success)' : 'var(--warning)' }} />
-                           <div>
-                             <p style={{ fontSize: 14, fontWeight: 600 }}>{app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${formData.applicants.filter(x => x.type === 'CO_APPLICANT').indexOf(app) + 1}`}</p>
-                             <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{app.pan_number || 'PAN Pending'} • {app.type}</p>
-                           </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                           {app.cibil_score && <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>CIBIL: {app.cibil_score}</span>}
-                           {app.bureau_fetched ? (
-                             <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                               <CheckCircle2 size={13} /> Verified
-                             </span>
-                           ) : bureauLoadingMap[app.id] ? (
-                             <PullingIndicator label="Fetching credit report…" />
-                           ) : eligible ? (
-                             <PullingIndicator label="Queued…" />
-                           ) : (
-                             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Awaiting OTP verification</span>
-                           )}
-                        </div>
-                      </div>
-                    );})}
-                  </div>
-               </div>
+
+            {/* Step 2 sub-navigation — GST / ITR / Bank Statements, all still "Step 2" */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setStep2SubPage('gst')}
+                className={`btn btn-sm ${step2SubPage === 'gst' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 140px', fontWeight: 600 }}
+              >
+                1. GST
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep2SubPage('itr')}
+                className={`btn btn-sm ${step2SubPage === 'itr' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 140px', fontWeight: 600 }}
+              >
+                2. ITR
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep2SubPage('bank')}
+                className={`btn btn-sm ${step2SubPage === 'bank' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 140px', fontWeight: 600 }}
+              >
+                3. Bank Statements
+              </button>
             </div>
 
+            {step2SubPage === 'gst' && (
+            <>
             <div className="card">
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
-                 <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Extrapolated from Business PAN: {formData.business_pan}</p>
                </div>
                 <div style={{ padding: 0 }}>
                   <GstAnalyticsForm
@@ -1195,17 +1382,27 @@ const AddCustomerWizardPage = () => {
                      customerId={formData.customer_id}
                      linkedGstins={formData.linked_gstins}
                      onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
+                     onboardingMode={mode}
                   />
                 </div>
             </div>
 
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => { goToStep(1); setStep1SubPage('coapplicants'); }}>← Back to Co-Applicants</button>
+              <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('itr')}>
+                Next: ITR Analytics →
+              </button>
+            </div>
+            </>
+            )}
+
+            {step2SubPage === 'itr' && (
+            <>
             <div className="card">
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                  <div>
                    <h3 style={{ fontSize: 16, fontWeight: 700 }}>ITR Analytics</h3>
-                   <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Structured financial analytics via ITR portal credentials</p>
                  </div>
-                 <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>One fetch per applicant — PAN + portal password</p>
                </div>
                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <ItrAnalyticsForm
@@ -1219,38 +1416,48 @@ const AddCustomerWizardPage = () => {
                       itrCost={costs.ITR_ANALYTICS}
                       existingRecord={formData.customer_itr_profile}
                       onComplete={(data) => setFormData(prev => ({...prev, itr_completed: true, itr_analytics: data}))}
+                      mode={mode}
                   />
 
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED').map((coApp, idx) => (
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
                       <ItrAnalyticsForm
                           key={idx}
                           caseId={caseId}
                           customerId={formData.customer_id}
                           applicantId={coApp.id}
                           applicantType="CO_APPLICANT"
-                          applicantName={coApp.pan_number || `Co-Applicant ${idx + 1}`}
+                          applicantName={coApp.name || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           prefillPan={coApp.pan_number || ''}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
                           existingRecord={coApp.itr_analytics?.[0] || null}
                           onComplete={(data) => console.log(`Co-App ${idx} ITR complete`)}
+                          mode={mode}
                       />
                   ))}
 
-                  <div style={{ padding: '14px 16px', background: 'var(--primary-subtle)', borderRadius: 0, border: '1px solid var(--primary-light)', color: 'var(--primary-dark)', fontSize: 13 }}>
-                    ITR Analytics includes P&L, Balance Sheet, Ratio Analysis, and an Excel report downloadable per applicant.
-                  </div>
+
                </div>
             </div>
 
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep2SubPage('gst')}>← Back to GST</button>
+              <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('bank')}>
+                Next: Bank Statements →
+              </button>
+            </div>
+            </>
+            )}
+
+            {step2SubPage === 'bank' && (
+            <>
             {/* Bank Statement Section */}
             <div className="card">
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                   <div style={{ fontSize: 20 }}>🏢</div> 
                    <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bank Statement Upload</h3>
                  </div>
-                 <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Upload 12-month bank statement for each applicant — PDF or Excel</p>
+                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Upload 12-month bank statement for each applicant — PDF only</p>
                </div>
                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <BankStatementUpload 
@@ -1263,26 +1470,26 @@ const AddCustomerWizardPage = () => {
                       analyzeCost={costs.BANK_ANALYSIS}
                       existingStatus={formData.customer_bank_profile}
                       onComplete={(status, payload) => console.log('Primary bank complete')}
+                      mode={mode}
                   />
                   
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT').map((coApp, idx) => (
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
                       <BankStatementUpload
                           key={idx}
                           caseId={caseId}
                           customerId={formData.customer_id}
-                          applicantId={coApp.id} 
+                          applicantId={coApp.id}
                           applicantType="CO_APPLICANT"
-                          applicantName={coApp.pan_number || `Co-Applicant ${idx+1}`}
+                          applicantName={coApp.name || coApp.pan_number || `Co-Applicant ${idx+1}`}
                           walletBalance={walletBalance}
                           analyzeCost={costs.BANK_ANALYSIS}
                           existingStatus={coApp.bank_statements?.[0] || null}
                           onComplete={(status, payload) => console.log(`Co-App ${idx} bank complete`)}
+                          mode={mode}
                       />
                   ))}
                   
-                  <div style={{ padding: '16px', background: 'var(--primary-subtle)', borderRadius: 0, border: '1px solid var(--primary-light)', color: 'var(--primary-dark)', fontSize: 13, marginTop: 8 }}>
-                    Bank statement analysis (average monthly balance, credits, debits) will appear in the next step's income summary.
-                  </div>
+                  
                </div>
             </div>
 
@@ -1303,19 +1510,20 @@ const AddCustomerWizardPage = () => {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 10 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
+            <div className="wizard-footer-actions" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
+              <button className="btn btn-ghost" type="button" onClick={() => setStep2SubPage('itr')}>← Back to ITR Analytics</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
             </div>
+            </>
+            )}
           </form>
         )}
         {currentStep === 3 && (
           <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-            {/* Top row: Product + Data Pull Status */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-
-              <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
+            {/* Loan Product — merges Property & Collateral Details into a single field grid when required */}
+            <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product & collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20 }}>
                 <FormField label="SELECT PRODUCT" name="product_type" required>
                   <select
                     className="form-control"
@@ -1334,82 +1542,46 @@ const AddCustomerWizardPage = () => {
                     <option value="Other">Other — Specify</option>
                   </select>
                 </FormField>
-                <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                  Loan amount &amp; tenure will be captured after the lender is identified via ESR.
-                </div>
-              </Panel>
 
-              <Panel icon={SatelliteDish} delay={0.08} title="Data Pull Status">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {[
-                    { label: 'Bureau Pull',     done: formData.applicants.every(a => a.bureau_fetched), sub: `${formData.applicants.filter(a => a.bureau_fetched).length} of ${formData.applicants.length} fetched` },
-                    { label: 'GST Report',      done: formData.gst_completed,  sub: formData.gst_completed ? 'Generated' : 'Not yet generated' },
-                    { label: 'ITR Report',      done: formData.itr_completed,  sub: formData.itr_completed ? 'Generated' : 'Not yet generated' },
-                    { label: 'Bank Statement',  done: !!formData.customer_bank_profile, sub: formData.customer_bank_profile ? 'Uploaded' : 'Not yet uploaded' }
-                  ].map(({ label, done, sub }) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: done ? 'var(--success-bg)' : 'var(--warning-bg)', borderRadius: 0, border: `1px solid ${done ? 'var(--success)' : 'var(--warning)'}` }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</div>
-                      </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: done ? 'var(--success)' : 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {done ? <CheckCircle2 size={14} /> : <Clock size={14} />} {done ? 'Done' : 'Pending'}
-                      </span>
+                {/* Property & Collateral fields — only for LAP / HL */}
+                {PROPERTY_REQUIRED.includes(formData.product_type) && (
+                  <>
+                    <FormField label="PROPERTY TYPE" name="property_type" required>
+                      <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                        <option value="">— Select —</option>
+                        <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
+                        <option value="Residential — House / Flat">Residential — House / Flat</option>
+                        <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
+                        <option value="Plot / Land">Plot / Land</option>
+                      </select>
+                    </FormField>
+                    <FormField label="OCCUPANCY STATUS" name="occupancy_status">
+                      <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                        <option value="Self Occupied">Self Occupied</option>
+                        <option value="Rented Out">Rented Out</option>
+                        <option value="Vacant">Vacant</option>
+                      </select>
+                    </FormField>
+                    <FormField label="OWNERSHIP" name="ownership_type">
+                      <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                        <option value="Sole Owner">Sole Owner</option>
+                        <option value="Joint Owner">Joint Owner</option>
+                        <option value="Company Owned">Company Owned</option>
+                      </select>
+                    </FormField>
+                    <div>
+                      <FormField label="MARKET VALUE (₹)" name="market_value" required>
+                        <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
+                      </FormField>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Estimate — lender does independent valuation</div>
                     </div>
-                  ))}
-                </div>
-              </Panel>
-            </div>
+                  </>
+                )}
+              </div>
+            </Panel>
 
-            {/* Property Details — only for LAP / HL */}
-            {PROPERTY_REQUIRED.includes(formData.product_type) && (
-              <Panel
-                icon={Building2}
-                delay={0.16}
-                title="Property & Collateral Details"
-                headerRight={<span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Required for {formData.product_type}</span>}
-              >
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20, marginBottom: 20 }}>
-                  <FormField label="PROPERTY TYPE" name="property_type" required>
-                    <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
-                      <option value="">— Select —</option>
-                      <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
-                      <option value="Residential — House / Flat">Residential — House / Flat</option>
-                      <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
-                      <option value="Plot / Land">Plot / Land</option>
-                    </select>
-                  </FormField>
-                  <FormField label="OCCUPANCY STATUS" name="occupancy_status">
-                    <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
-                      <option value="Self Occupied">Self Occupied</option>
-                      <option value="Rented Out">Rented Out</option>
-                      <option value="Vacant">Vacant</option>
-                    </select>
-                  </FormField>
-                  <FormField label="OWNERSHIP" name="ownership_type">
-                    <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
-                      <option value="Sole Owner">Sole Owner</option>
-                      <option value="Joint Owner">Joint Owner</option>
-                      <option value="Company Owned">Company Owned</option>
-                    </select>
-                  </FormField>
-                </div>
-                <div style={{ maxWidth: 300 }}>
-                  <FormField label="MARKET VALUE (₹)" name="market_value" required>
-                    <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
-                  </FormField>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
-                </div>
-                <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                  Property location, title clearance, full address will be collected after the lender is identified.
-                </div>
-              </Panel>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+              <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>
                 {saving ? 'Saving...' : 'Next: Income Summary →'}
               </button>
@@ -1417,6 +1589,21 @@ const AddCustomerWizardPage = () => {
           </form>
         )}
 
+        {/* Steps 4-7 — formerly separate /cases/:id/* routed pages, now
+            rendered inline so they share this component's mount lifetime
+            (auto-fetch effects, etc.) instead of tearing down on navigation. */}
+        {currentStep === 4 && (
+          <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} />
+        )}
+        {currentStep === 5 && (
+          <BureauObligationsStep caseId={caseId} onNext={() => goToStep(6)} onBack={() => goToStep(4)} />
+        )}
+        {currentStep === 6 && (
+          <EsrStep caseId={caseId} onOpenProposal={handleProposalCreated} />
+        )}
+        {currentStep === 7 && (
+          <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} />
+        )}
       </div>
 
       {/* OTP Modal */}
@@ -1430,15 +1617,16 @@ const AddCustomerWizardPage = () => {
                We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
              </p>
              <FormField label="ENTER 6-DIGIT OTP" name="otpInput">
-               <input 
+               <input
                  autoFocus
-                 type="text" 
+                 type="text"
                  pattern="\d*"
                  maxLength={6}
-                 className="form-control" 
-                 value={otpModal.otpInput} 
-                 onChange={e => setOtpModal(prev => ({...prev, otpInput: e.target.value.replace(/\D/g, '')}))} 
-                 style={{ fontSize: 24, letterSpacing: '0.5em', textAlign: 'center', padding: '16px 0', fontFamily: 'monospace' }} 
+                 className="form-control"
+                 placeholder="000000"
+                 value={otpModal.otpInput}
+                 onChange={e => setOtpModal(prev => ({...prev, otpInput: e.target.value.replace(/\D/g, '')}))}
+                 style={{ fontSize: 24, letterSpacing: '0.5em', textAlign: 'center', padding: '16px 0', fontFamily: 'monospace' }}
                />
              </FormField>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28 }}>

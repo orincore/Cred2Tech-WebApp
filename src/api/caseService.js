@@ -86,6 +86,13 @@ export const caseService = {
     const response = await axiosInstance.post(`/cases/${caseId}/bureau-obligations/sync`);
     return response.data;
   },
+  // Actually pulls the CIBIL/bureau report for an applicant — syncObligations
+  // above only re-syncs obligations from a bureau pull that must already
+  // exist for this case_id, it never triggers the external fetch itself.
+  runBureauVerification: async (caseId, applicantId) => {
+    const response = await axiosInstance.post(`/verification/bureau/run/${caseId}`, { applicantId });
+    return response.data;
+  },
   getObligations: async (caseId) => {
     const response = await axiosInstance.get(`/cases/${caseId}/bureau-obligations`);
     return response.data;

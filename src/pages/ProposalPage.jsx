@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, Square, UploadCloud,
@@ -643,10 +641,10 @@ const inputStyle = {
 const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
 
 // ─── Main ProposalPage ─────────────────────────────────────────────────────────
-export default function ProposalPage() {
-  const { id: caseId, pid: proposalId } = useParams();
-  const navigate = useNavigate();
-
+// Step 7 of the case journey — rendered inline by AddCustomerWizardPage (not
+// its own route), so it takes caseId/proposalId/onBack as props instead of
+// reading useParams()/navigating itself.
+export default function ProposalPage({ caseId, proposalId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -744,7 +742,7 @@ export default function ProposalPage() {
   if (!data) return (
     <div className="card" style={{ padding: 40, textAlign: 'center' }}>
       <h3>Proposal not found</h3>
-      <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/esr`)}>← Back</button>
+      <button className="btn btn-ghost" onClick={onBack}>← Back</button>
     </div>
   );
 
@@ -755,8 +753,20 @@ export default function ProposalPage() {
   const pendingKyc = allDocs.filter(d => !d.is_attached && ['PAN_CARD', 'AADHAAR'].includes(d.document_type)).length;
 
   return (
-    <div className="proposal-page" style={{ maxWidth: 940, margin: '0 auto', padding: '0 20px 100px' }}>
+    <div className="proposal-page">
       <style>{`
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page — bump them to white here specifically,
+           without touching the global theme. */
+        :root.dark .proposal-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .proposal-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
+        }
         /* Responsive grids — collapse fixed columns on smaller screens */
         .proposal-page .pp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .proposal-page .pp-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
@@ -774,13 +784,17 @@ export default function ProposalPage() {
           .proposal-page .pp-grid-2, .proposal-page .pp-grid-3, .proposal-page .pp-ref-row { grid-template-columns: 1fr; }
           .proposal-page .pp-grid-5 { grid-template-columns: repeat(2, 1fr); }
           .proposal-page .pp-span-2 { grid-column: auto; }
+          /* Sticky footer at the bottom of the viewport needs its own
+             mobile clearance regardless of the wizard's own container
+             padding, since it's fixed to the viewport, not this scroll
+             container. */
           .proposal-page { padding-bottom: 220px !important; }
         }
       `}</style>
       {/* ── Page Header ────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        marginTop: 24, marginBottom: 22, flexWrap: 'wrap', gap: 12
+        marginBottom: 22, flexWrap: 'wrap', gap: 12
       }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Prepare Proposal</h1>
@@ -799,7 +813,6 @@ export default function ProposalPage() {
         </div>
         <Badge status={proposal.lender_submission_status || proposal.proposal_status} />
       </div>
-      <CaseWizardStepper currentStep={7} caseId={caseId} proposalId={proposalId} />
 
       {/* ── 1. Loan Details (EMI Calculator) ────────────────────────── */}
       <Section emoji="💰" title="Loan Details"
@@ -1004,7 +1017,7 @@ export default function ProposalPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-ghost" onClick={() => navigate(`/cases/${caseId}/esr`)}
+              <button className="btn btn-ghost" onClick={onBack}
                 style={{ color: '#A0AEC0', fontSize: 12 }}>Cancel</button>
               <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
                 style={{

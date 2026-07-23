@@ -476,7 +476,9 @@ const AddSalariedCustomerWizardPage = () => {
       };
       await caseService.updateProductProperty(caseId, payload);
       toast.success('Product & property saved!');
-      navigate(`/cases/${caseId}/income-summary`, { replace: true });
+      // Steps 4-7 (Income Summary onward) live inside AddCustomerWizardPage
+      // now, not a separate route — hand off there at step 4.
+      navigate(`/customers/add?caseId=${caseId}&step=4`, { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to save product details.');
     } finally {
@@ -869,7 +871,7 @@ const AddSalariedCustomerWizardPage = () => {
                     <FormField label="MARKET VALUE (₹)" name="market_value" required>
                       <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
                     </FormField>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
+                    <div style={{ fontSize: 11, color: 'black', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
                   </div>
                   <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--primary-dark)' }}>
                     💡 Property location, title clearance, full address will be collected after the lender is identified.

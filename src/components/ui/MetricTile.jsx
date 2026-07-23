@@ -18,6 +18,7 @@ const MetricTile = ({ label, value, color = 'var(--text-primary)', icon: Icon, b
           letterSpacing: boxed ? '0.5px' : 'normal',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: size === 'lg' ? 'center' : 'flex-start',
           gap: 4,
           marginBottom: boxed ? 6 : 0,
         }}
