@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 export const CASE_WIZARD_STEPS = [
   { step: 1, label: 'Customer Profile' },
   { step: 2, label: 'GST / ITR / Bank' },
-  { step: 3, label: 'Loan Product & collateral' },
+  { step: 3, label: 'Loan Product & Collateral' },
   { step: 4, label: 'Income Summary' },
   { step: 5, label: 'Bureau & Obligations' },
   { step: 6, label: 'ESR' },

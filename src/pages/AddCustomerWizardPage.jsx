@@ -85,6 +85,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     customer_id: null,
     business_pan: '',
     business_name: '',
+    proprietor_name: '',
     dob: '',
     business_mobile: '',
     business_email: '',
@@ -197,6 +198,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         customer_id: caseData.customer?.id,
         business_pan: caseData.customer?.business_pan || '',
         business_name: caseData.customer?.business_name || '',
+        proprietor_name: caseData.customer?.proprietor_name || '',
         dob: caseData.customer?.dob || '',
         business_mobile: caseData.customer?.business_mobile || '',
         business_email: caseData.customer?.business_email || '',
@@ -924,7 +926,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {caseId ? (formData.business_name ? `${formData.business_name}` : "Resume Draft Case") : "Add New Customer / New Case"}
+            {caseId ? ((formData.proprietor_name || formData.business_name) ? `${formData.proprietor_name || formData.business_name}` : "Resume Draft Case") : "Add New Customer / New Case"}
           </h1>
         </div>
         {caseId && (
@@ -1011,7 +1013,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               
               <div style={{ padding: 24 }}>
                 <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="PAN NUMBER" name="business_pan" required disabled={!!caseId && formData.pan_verified}>
+                  <FormField label="PAN Number" name="business_pan" required disabled={!!caseId && formData.pan_verified}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -1065,7 +1067,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     </div>
                   </FormField>
 
-                  <FormField label="MOBILE NUMBER" name="business_mobile" required disabled={formData.mobile_verified}>
+                  <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified || isMsme} />
                       {(!formData.mobile_verified && !isMsme) ? (
@@ -1093,15 +1095,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 </div>
 
                 <div className="grid-3" style={{ marginBottom: 24 }}>
-                  <FormField label="EMAIL ADDRESS" name="business_email" required>
+                  <FormField label="Email Address" name="business_email" required>
                     <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} className="form-control" placeholder="admin@company.in" />
                   </FormField>
 
-                  <FormField label="PINCODE" name="pincode" required>
+                  <FormField label="Pincode" name="pincode" required>
                     <input type="text" value={formData.pincode || ''} onChange={e => setFormData({...formData, pincode: e.target.value})} className="form-control" placeholder="e.g. 560026" maxLength={6} />
                   </FormField>
 
-                  <FormField label="ARE YOU A PROFESSIONAL?" name="is_professional">
+                  <FormField label="Are You A Professional?" name="is_professional">
                     <select
                       className="form-control"
                       value={formData.is_professional === true || formData.is_professional === 'true' ? 'true' : 'false'}
@@ -1117,7 +1119,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 </div>
 
                 <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="BUSINESS NAME / FULL NAME" name="business_name" disabled={formData.pan_verified}>
+                  <FormField label="Business Name / Full Name" name="business_name" disabled={formData.pan_verified}>
                     <input
                       type="text"
                       value={formData.business_name}
@@ -1128,7 +1130,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     />
                   </FormField>
 
-                  <FormField label="DATE OF BIRTH / INCORPORATION" name="dob" disabled={formData.pan_verified}>
+                  <FormField label="Date Of Birth / Incorporation" name="dob" disabled={formData.pan_verified}>
                     <input
                       type="date"
                       value={formData.dob || ''}
@@ -1141,7 +1143,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
                 {(formData.is_professional === true || formData.is_professional === 'true') && (
                   <div className="grid-2">
-                    <FormField label="SELECT YOUR PROFESSION" name="profession_type" required>
+                    <FormField label="Select Your Profession" name="profession_type" required>
                       <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
                         <option value="">Select Profession</option>
                         <option value="CA">CA</option>
@@ -1244,7 +1246,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           </button>
                         </div>
                         <div className="grid-2" style={{ marginBottom: 16 }}>
-                          <FormField label="PAN NUMBER" name={`copan_${realIdx}`} required>
+                          <FormField label="PAN Number" name={`copan_${realIdx}`} required>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                               <input
                                 type="text"
@@ -1271,7 +1273,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               ) : null}
                             </div>
                           </FormField>
-                          <FormField label="MOBILE NUMBER" name={`comob_${realIdx}`}>
+                          <FormField label="Mobile Number" name={`comob_${realIdx}`}>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
                               {!app.otp_verified ? (
@@ -1285,22 +1287,22 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           </FormField>
                         </div>
                         <div className="grid-3" style={{ marginBottom: 16 }}>
-                          <FormField label="EMPLOYMENT TYPE" name={`coemp_${realIdx}`}>
+                          <FormField label="Employment Type" name={`coemp_${realIdx}`}>
                             <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                               <option value="SELF_EMPLOYED">Self Employed</option>
                               <option value="SALARIED">Salaried</option>
                               <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
                             </select>
                           </FormField>
-                          <FormField label="PINCODE" name={`copincode_${realIdx}`} required>
+                          <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                             <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="560026" maxLength={6} />
                           </FormField>
-                          <FormField label="EMAIL" name={`coemail_${realIdx}`}>
+                          <FormField label="Email" name={`coemail_${realIdx}`}>
                             <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" />
                           </FormField>
                         </div>
                         <div className="grid-2">
-                          <FormField label="FULL NAME" name={`coname_${realIdx}`} disabled={app.pan_verified}>
+                          <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
                             <input
                               type="text"
                               value={app.name || ''}
@@ -1310,7 +1312,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               disabled={app.pan_verified}
                             />
                           </FormField>
-                          <FormField label="DATE OF BIRTH" name={`codob_${realIdx}`} disabled={app.pan_verified}>
+                          <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled={app.pan_verified}>
                             <input
                               type="date"
                               value={app.dob || ''}
@@ -1524,7 +1526,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             {/* Loan Product — merges Property & Collateral Details into a single field grid when required */}
             <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product & collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20 }}>
-                <FormField label="SELECT PRODUCT" name="product_type" required>
+                <FormField label="Select Product" name="product_type" required>
                   <select
                     className="form-control"
                     value={formData.product_type}
@@ -1546,7 +1548,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 {/* Property & Collateral fields — only for LAP / HL */}
                 {PROPERTY_REQUIRED.includes(formData.product_type) && (
                   <>
-                    <FormField label="PROPERTY TYPE" name="property_type" required>
+                    <FormField label="Property Type" name="property_type" required>
                       <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
                         <option value="">— Select —</option>
                         <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
@@ -1555,14 +1557,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         <option value="Plot / Land">Plot / Land</option>
                       </select>
                     </FormField>
-                    <FormField label="OCCUPANCY STATUS" name="occupancy_status">
+                    <FormField label="Occupancy Status" name="occupancy_status">
                       <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
                         <option value="Self Occupied">Self Occupied</option>
                         <option value="Rented Out">Rented Out</option>
                         <option value="Vacant">Vacant</option>
                       </select>
                     </FormField>
-                    <FormField label="OWNERSHIP" name="ownership_type">
+                    <FormField label="Ownership" name="ownership_type">
                       <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
                         <option value="Sole Owner">Sole Owner</option>
                         <option value="Joint Owner">Joint Owner</option>
@@ -1570,7 +1572,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       </select>
                     </FormField>
                     <div>
-                      <FormField label="MARKET VALUE (₹)" name="market_value" required>
+                      <FormField label="Market Value (₹)" name="market_value" required>
                         <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
                       </FormField>
                       <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Estimate — lender does independent valuation</div>
@@ -1616,7 +1618,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
              <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>
                We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
              </p>
-             <FormField label="ENTER 6-DIGIT OTP" name="otpInput">
+             <FormField label="Enter 6-Digit OTP" name="otpInput">
                <input
                  autoFocus
                  type="text"

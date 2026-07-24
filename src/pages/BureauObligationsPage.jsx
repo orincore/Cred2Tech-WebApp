@@ -226,7 +226,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
               <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-primary)', overflowWrap: 'break-word' }}>
                 {applicantNames[applicant.id] || applicant.name || (applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant')}
               </h3>
-              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.pan_number} · {applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>

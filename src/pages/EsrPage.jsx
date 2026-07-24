@@ -400,7 +400,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
 
   if (compact) {
     return (
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
         {lenderProposals.length > 0 && (
           <div style={{ display: 'flex', gap: 4 }}>
             {lenderProposals.map(p => (
@@ -741,61 +741,68 @@ export default function EsrPage({ caseId, onOpenProposal }) {
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.02 }}
               style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}
             >
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 16, padding: '10px 16px',
-                flexWrap: 'wrap', opacity: eligible ? 1 : 0.75
-              }}>
-                {eligible ? <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />
-                          : <XCircle size={16} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />}
-
-                {/* Name + product */}
-                <div style={{ flex: '1 1 180px', minWidth: 140 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{lender.lender_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                    {lender.product_display_name || lender.product_type}
-                    {eligible && lender.best_scheme_name ? ` · ${lender.best_scheme_name}` : ''}
+              <div style={{ padding: '12px 16px', opacity: eligible ? 1 : 0.75 }}>
+                {/* Identity row: icon + name/product on the left, status badge anchored right */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+                    {eligible ? <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
+                              : <XCircle size={16} color="var(--text-tertiary)" style={{ flexShrink: 0, marginTop: 1 }} />}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{lender.lender_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                        {lender.product_display_name || lender.product_type}
+                        {eligible && lender.best_scheme_name ? ` · ${lender.best_scheme_name}` : ''}
+                      </div>
+                    </div>
                   </div>
+                  <span style={{
+                    background: eligible ? 'var(--success-bg)' : 'var(--bg-elevated)',
+                    color: eligible ? 'var(--success)' : 'var(--text-tertiary)',
+                    padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
+                    border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
+                  }}>
+                    {eligible ? 'ELIGIBLE' : 'INELIGIBLE'}
+                  </span>
                 </div>
 
-                {/* Stats (eligible) or reason (ineligible) */}
-                {eligible ? (
-                  <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', flex: '2 1 320px' }}>
-                    <MetricTile size="sm" label="Loan" value={formatDynamicCurrency(lender.final_eligible_loan_amount)} color="var(--success)" />
-                    <MetricTile size="sm" label="ROI" value={lender.roi_min ? `${lender.roi_min}%${lender.roi_max ? `–${lender.roi_max}%` : ''}` : '—'} />
-                    <MetricTile size="sm" label="Tenure" value={formatDynamicTenure(lender.max_tenure_months)} />
-                  </div>
-                ) : (
-                  <div style={{ flex: '2 1 260px', fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {lender.ineligibility_reason && <AlertCircle size={12} color="var(--error)" style={{ flexShrink: 0 }} />}
-                    {lender.ineligibility_reason || 'Not eligible'}
-                  </div>
-                )}
-
-                {/* Status badge */}
-                <span style={{
-                  background: eligible ? 'var(--success-bg)' : 'var(--bg-elevated)',
-                  color: eligible ? 'var(--success)' : 'var(--text-tertiary)',
-                  padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
-                  border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
+                {/* Stats + actions row: stats hug the left, actions form their own
+                    right-anchored group behind a hairline divider — so the button
+                    cluster never wraps into the middle of the metric tiles. */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 16, flexWrap: 'wrap', marginTop: 10, paddingLeft: 26
                 }}>
-                  {eligible ? 'ELIGIBLE' : 'INELIGIBLE'}
-                </span>
+                  {eligible ? (
+                    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                      <MetricTile size="sm" label="Loan" value={formatDynamicCurrency(lender.final_eligible_loan_amount)} color="var(--success)" />
+                      <MetricTile size="sm" label="ROI" value={lender.roi_min ? `${lender.roi_min}%${lender.roi_max ? `–${lender.roi_max}%` : ''}` : '—'} />
+                      <MetricTile size="sm" label="Tenure" value={formatDynamicTenure(lender.max_tenure_months)} />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {lender.ineligibility_reason && <AlertCircle size={12} color="var(--error)" style={{ flexShrink: 0 }} />}
+                      {lender.ineligibility_reason || 'Not eligible'}
+                    </div>
+                  )}
 
-                {/* Actions (eligible lenders only) */}
-                {eligible && (
-                  <div style={{ flexShrink: 0 }}>
-                    <LenderActions
-                      lender={lender}
-                      caseId={caseId}
-                      proposals={proposals}
-                      onProposalCreated={load}
-                      onSendToLender={setSendConfirmResult}
-                      onSendToOtherLender={() => setShowOtherLenderModal(true)}
-                      onOpenProposal={onOpenProposal}
-                      compact
-                    />
-                  </div>
-                )}
+                  {eligible && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', flexShrink: 0,
+                      paddingLeft: 16, borderLeft: '1px solid var(--border)'
+                    }}>
+                      <LenderActions
+                        lender={lender}
+                        caseId={caseId}
+                        proposals={proposals}
+                        onProposalCreated={load}
+                        onSendToLender={setSendConfirmResult}
+                        onSendToOtherLender={() => setShowOtherLenderModal(true)}
+                        onOpenProposal={onOpenProposal}
+                        compact
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{ padding: '0 16px 8px 42px' }}>
                 <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />

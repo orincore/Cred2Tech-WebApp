@@ -151,7 +151,11 @@ const MsmeDashboardPage = () => {
   }
 
   const { activeCase, emptyState } = dashboardData || {};
-  const businessName = activeCase?.customer?.business_name || user?.name || 'User';
+  // proprietor_name is a plain user-entered/KYC identity field; business_name/trade_name
+  // are derived from GST vendor lookups and can end up holding a GST registration
+  // reference number when the business never registered a real trade name — prefer
+  // the reliable identity field first.
+  const businessName = activeCase?.customer?.proprietor_name || activeCase?.customer?.business_name || user?.name || 'User';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const primaryApplicant = activeCase?.applicants?.find(a => a.type === 'PRIMARY');

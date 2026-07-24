@@ -450,11 +450,18 @@ thead th {
   font-size: 12px;
   font-weight: 600;
   color: var(--on-muted);
-  text-transform: uppercase;
+  /* Only the first letter of the header should be capitalized, regardless of
+     how the label is cased in source (ALL CAPS, Title Case, etc.) — lowercase
+     everything, then re-capitalize just the first character. */
+  text-transform: lowercase;
   letter-spacing: 0.06em;
   background: transparent;
   border-bottom: 1px solid var(--outline);
   white-space: nowrap;
+}
+
+thead th::first-letter {
+  text-transform: uppercase;
 }
 
 tbody tr {
