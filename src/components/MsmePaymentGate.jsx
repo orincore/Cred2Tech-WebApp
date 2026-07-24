@@ -54,17 +54,32 @@ const MsmePaymentGate = ({ children }) => {
         description: 'Multi-Lender Eligibility Check',
         order_id: order_id,
         handler: async function (response) {
-          try {
-            await msmeApi.verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            toast.success('Payment successful!');
-            setPaymentStatus('PAID');
-          } catch (err) {
-            toast.error('Payment verification failed');
+          const verifyData = {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          };
+          // Razorpay has already captured the payment by the time this handler
+          // fires, so a failed verify call here must not be reported as a plain
+          // "failed" — retry transient network blips before surfacing the
+          // backend's actual error, otherwise a momentary blip after a real
+          // charge reads to the user as a lost payment.
+          let lastErr;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              await msmeApi.verifyPayment(verifyData);
+              toast.success('Payment successful!');
+              setPaymentStatus('PAID');
+              return;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
           }
+          toast.error(
+            `${getErrorMessage(lastErr)} If the amount was deducted, refresh in a moment — if it still doesn't reflect, contact support with payment ID ${response.razorpay_payment_id}.`,
+            { duration: 8000 }
+          );
         },
         prefill: {
           name: user?.name,

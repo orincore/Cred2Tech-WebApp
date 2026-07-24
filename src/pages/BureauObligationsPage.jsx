@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw } from 'lucide-react';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -43,6 +43,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const [data, setData]           = useState(null);
   const [editEmi, setEditEmi]     = useState({});         // { [oblId]: value }
   const [addingFor, setAddingFor] = useState(null);        // applicant_id
+  const [retryingFor, setRetryingFor] = useState(null);     // applicant_id currently re-pulling bureau data
   const [newObl, setNewObl]       = useState({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
 
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
@@ -91,8 +92,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
       });
       setApplicantNames(names);
+      return result;
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to load bureau obligations');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -123,6 +126,32 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
       toast.error(e.response?.data?.error || 'Failed to add obligation');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // The backend marks an applicant's bureau data as "fetched" as soon as the
+  // credit-score check succeeds, even if the separate obligations pull came
+  // back empty — so the page's automatic retry (which only fires while
+  // bureau_fetched is falsy) never runs again for that applicant. This gives
+  // a manual way to re-pull obligations for one applicant without reloading
+  // the whole page or waiting on the (nonexistent) automatic retry.
+  const handleRetryBureau = async (applicantId) => {
+    const before = (data?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
+    setRetryingFor(applicantId);
+    try {
+      await caseService.runBureauVerification(caseId, applicantId);
+      await caseService.syncObligations(caseId);
+      const fresh = await load();
+      const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
+      if (after > before) {
+        toast.success(`Bureau data re-fetched — ${after - before} obligation(s) found`);
+      } else {
+        toast.error('Bureau pull ran again but still found no obligations for this applicant — the vendor may be missing valid PAN/DOB data for them.', { duration: 6000 });
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to re-fetch bureau data');
+    } finally {
+      setRetryingFor(null);
     }
   };
 
@@ -304,8 +333,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
             </div>
             )
           ) : (
-            <div style={{ padding: '20px 24px', color: 'var(--text-tertiary)', fontSize: 13 }}>
-              No bureau obligations found for this applicant.
+            <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                No bureau obligations found for this applicant.
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleRetryBureau(applicant.id)}
+                disabled={retryingFor === applicant.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <RefreshCw size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                {retryingFor === applicant.id ? 'Re-fetching…' : 'Retry Bureau Pull'}
+              </button>
             </div>
           )}
 

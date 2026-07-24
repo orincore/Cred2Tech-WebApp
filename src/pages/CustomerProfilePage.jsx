@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { customerService } from '../api/customerService';
 import api from '../api/axiosInstance';
+import { viewDocument } from '../api/documentHelper';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -262,9 +263,7 @@ const CustomerProfilePage = () => {
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => {
-                            const token = localStorage.getItem('token');
-                            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
-                            window.open(`${baseUrl}/documents/${doc.id}/view?token=${token}`, '_blank');
+                            viewDocument(doc.id).catch(() => toast.error('Failed to open document'));
                           }}
                         >
                           <Eye size={13} /> View
@@ -297,9 +296,7 @@ const CustomerProfilePage = () => {
                           <button
                             className="btn btn-secondary btn-sm"
                             onClick={() => {
-                              const token = localStorage.getItem('token');
-                              const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
-                              window.open(`${baseUrl}/documents/${doc.id}/view?token=${token}`, '_blank');
+                              viewDocument(doc.id).catch(() => toast.error('Failed to open document'));
                             }}
                           >
                             <Eye size={13} /> View

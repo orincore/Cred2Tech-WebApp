@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import ConfirmModal from '../components/ui/ConfirmModal';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, Square, UploadCloud,
-  X, Mail, Phone
+  X, Mail, Phone, IndianRupee, Users, BarChart3, MapPin, FolderOpen, MessageSquare,
+  Contact, Landmark
 } from 'lucide-react';
 import { getTenantLenders, sendCaseToOtherLender } from '../api/tenantLenderService';
 import { uploadDocument } from '../api/documentHelper';
@@ -22,20 +24,20 @@ const fmtINR = (n, fallback = '—') => {
 const fmtNum = (n, fallback = '—') => (n == null ? fallback : Number(n).toLocaleString('en-IN'));
 
 const STATUS_CFG = {
-  draft: { label: 'Draft', color: '#718096', bg: '#EDF2F7', Icon: Clock },
-  submitted: { label: 'Submitted', color: '#2B6CB0', bg: '#EBF8FF', Icon: Send },
-  accepted: { label: 'Accepted', color: '#276749', bg: '#F0FFF4', Icon: CheckCircle2 },
-  rejected: { label: 'Rejected', color: '#C53030', bg: '#FFF5F5', Icon: XCircle },
-  query_raised: { label: 'Query', color: '#C05621', bg: '#FFFBEB', Icon: AlertCircle },
+  draft: { label: 'Draft', color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)', Icon: Clock },
+  submitted: { label: 'Submitted', color: 'var(--info)', bg: 'var(--info-bg)', Icon: Send },
+  accepted: { label: 'Accepted', color: 'var(--success)', bg: 'var(--success-bg)', Icon: CheckCircle2 },
+  rejected: { label: 'Rejected', color: 'var(--error)', bg: 'var(--error-bg)', Icon: XCircle },
+  query_raised: { label: 'Query', color: 'var(--warning)', bg: 'var(--warning-bg)', Icon: AlertCircle },
 };
 
-function Badge({ status, size = 12 }) {
+function ProposalStatusBadge({ status, size = 12 }) {
   const c = STATUS_CFG[status] || STATUS_CFG.draft;
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
-      background: c.bg, color: c.color, padding: '4px 12px', borderRadius: 20,
-      fontSize: size, fontWeight: 700, border: `1px solid ${c.color}30`
+      background: c.bg, color: c.color, padding: '4px 12px', borderRadius: 0,
+      fontSize: size, fontWeight: 700, border: `1px solid ${c.color}`
     }}>
       <c.Icon size={size} /> {c.label}
     </span>
@@ -43,11 +45,11 @@ function Badge({ status, size = 12 }) {
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
-function Section({ emoji, title, subtitle, children, rightSlot }) {
+function Section({ icon: Icon, title, subtitle, children, rightSlot }) {
   return (
     <div style={{
-      background: 'var(--bg-primary)', border: '1px solid var(--border)',
-      borderRadius: 12, marginBottom: 20, overflow: 'hidden'
+      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+      borderRadius: 0, marginBottom: 20, overflow: 'hidden'
     }}>
       <div style={{
         padding: '16px 22px', borderBottom: '1px solid var(--border)',
@@ -56,10 +58,10 @@ function Section({ emoji, title, subtitle, children, rightSlot }) {
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>{emoji}</span>
+            {Icon && <Icon size={16} color="var(--primary)" />}
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>{title}</span>
           </div>
-          {subtitle && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 26 }}>{subtitle}</div>}
+          {subtitle && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, marginLeft: 24 }}>{subtitle}</div>}
         </div>
         {rightSlot}
       </div>
@@ -69,9 +71,9 @@ function Section({ emoji, title, subtitle, children, rightSlot }) {
 }
 
 // ─── EMI Calculator ───────────────────────────────────────────────────────────
-function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
+function EMICalculator({ loanAmount, roi, monthlyIncome, maxTenure, onChange }) {
   const [amount, setAmount] = useState(loanAmount ? (loanAmount / 100000).toFixed(2) : '');
-  const [tenor, setTenor] = useState('12');
+  const [tenor, setTenor] = useState(() => maxTenure ? String(maxTenure) : '12');
   const [rate, setRate] = useState(roi || '');
   const [showAmort, setShowAmort] = useState(false);
 
@@ -79,7 +81,7 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
     if (loanAmount) setAmount((loanAmount / 100000).toFixed(2));
   }, [loanAmount]);
 
-  const { emi, totalInterest, totalRepayment, emiFoirPct, schedule } = useMemo(() => {
+  const { emi, totalInterest, schedule } = useMemo(() => {
     const P = parseFloat(amount) * 100000 || 0;
     const r = parseFloat(rate) / 12 / 100 || 0;
     const n = parseInt(tenor, 10) * 12 || 0;
@@ -99,7 +101,14 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
     return { emi, totalInterest, totalRepayment, emiFoirPct, schedule };
   }, [amount, tenor, rate, monthlyIncome]);
 
-  const TENOR_OPTIONS = [1, 2, 3, 5, 7, 10, 12, 15, 20, 25, 30];
+  const TENOR_OPTIONS = useMemo(() => {
+    const presets = [1, 2, 3, 5, 7, 10, 12, 15, 20, 25, 30];
+    const max = parseFloat(maxTenure);
+    if (!max || !isFinite(max)) return presets;
+    const capped = presets.filter(t => t <= max);
+    if (!capped.includes(max)) capped.push(max);
+    return capped.sort((a, b) => a - b);
+  }, [maxTenure]);
 
   return (
     <div>
@@ -116,6 +125,9 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
           <select value={tenor} onChange={e => setTenor(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
             {TENOR_OPTIONS.map(t => <option key={t} value={t}>{t} Years</option>)}
           </select>
+          {maxTenure && (
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>Max eligible: {maxTenure} years</div>
+          )}
         </div>
         <div>
           <label style={labelStyle}>INDICATIVE RATE (% P.A.)</label>
@@ -125,35 +137,19 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
       </div>
 
       {/* EMI Result Cards */}
-      <div className="pp-grid-4">
+      <div className="pp-grid-2">
         <div style={{
-          gridColumn: 'span 1', background: 'linear-gradient(135deg,#FAF0FF,#EBF4FF)',
-          border: '2px solid #C6A7F7', borderRadius: 10, padding: '14px 18px', textAlign: 'center'
+          background: 'var(--primary-subtle)',
+          border: '2px solid var(--primary)', borderRadius: 0, padding: '14px 18px', textAlign: 'center'
         }}>
-          <div style={{ fontSize: 11, color: '#6B46C1', fontWeight: 700, marginBottom: 4 }}>Monthly EMI</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#553C9A' }}>
+          <div style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700, marginBottom: 4 }}>Monthly EMI</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--primary-dark)' }}>
             {emi > 0 ? `₹${Math.round(emi).toLocaleString('en-IN')}` : '—'}
           </div>
         </div>
-        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '14px 18px', textAlign: 'center' }}>
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: '14px 18px', textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Total Interest</div>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{fmtINR(totalInterest)}</div>
-        </div>
-        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '14px 18px', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, marginBottom: 4 }}>Total Repayment</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{fmtINR(totalRepayment)}</div>
-        </div>
-        <div style={{
-          background: emiFoirPct > 50 ? '#FFF5F5' : '#F0FFF4', borderRadius: 10,
-          padding: '14px 18px', textAlign: 'center', border: `1px solid ${emiFoirPct > 50 ? '#FEB2B2' : '#9AE6B4'}`
-        }}>
-          <div style={{
-            fontSize: 11, fontWeight: 700, marginBottom: 4,
-            color: emiFoirPct > 50 ? '#C53030' : '#276749'
-          }}>EMI to Income Ratio</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: emiFoirPct > 50 ? '#C53030' : '#276749' }}>
-            {emiFoirPct ? `~${emiFoirPct}%` : '—'}
-          </div>
         </div>
       </div>
 
@@ -187,7 +183,7 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, onChange }) {
                       <td style={tdStyle}>{row.month}</td>
                       <td style={tdStyle}>{fmtINR(row.emi)}</td>
                       <td style={tdStyle}>{fmtINR(row.principal)}</td>
-                      <td style={{ ...tdStyle, color: '#C05621' }}>{fmtINR(row.interest)}</td>
+                      <td style={{ ...tdStyle, color: 'var(--warning)' }}>{fmtINR(row.interest)}</td>
                       <td style={tdStyle}>{fmtINR(row.balance)}</td>
                     </tr>
                   ))}
@@ -211,8 +207,8 @@ function ApplicantCard({ applicant, isPrimary, index }) {
   const bureauStatus = applicant.cibil_score ? 'KYC ✓' : null;
   return (
     <div style={{
-      border: '1px solid var(--border)', borderRadius: 8, padding: '14px 18px',
-      marginBottom: 14, background: isPrimary ? 'var(--bg-elevated)' : 'var(--bg-primary)'
+      border: '1px solid var(--border)', borderRadius: 0, padding: '14px 18px',
+      marginBottom: 14, background: isPrimary ? 'var(--bg-elevated)' : 'var(--bg-surface)'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <div>
@@ -224,14 +220,14 @@ function ApplicantCard({ applicant, isPrimary, index }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isPrimary && (
             <span style={{
-              fontSize: 11, padding: '3px 10px', borderRadius: 12, background: 'none',
+              fontSize: 11, padding: '3px 10px', borderRadius: 0, background: 'none',
               border: '1px solid var(--primary)', color: 'var(--primary)', fontWeight: 600
             }}>Primary</span>
           )}
           {bureauStatus && (
             <span style={{
-              fontSize: 11, padding: '3px 10px', borderRadius: 12,
-              background: '#F0FFF4', color: '#276749', fontWeight: 600, border: '1px solid #9AE6B4'
+              fontSize: 11, padding: '3px 10px', borderRadius: 0,
+              background: 'var(--success-bg)', color: 'var(--success)', fontWeight: 600, border: '1px solid var(--success)'
             }}>
               {bureauStatus}
             </span>
@@ -243,7 +239,7 @@ function ApplicantCard({ applicant, isPrimary, index }) {
         <InfoCell label="PAN" value={applicant.pan_number || '—'} />
         <InfoCell label="Mobile" value={applicant.mobile || '—'} />
         <InfoCell label="CIBIL Score" value={applicant.cibil_score || '—'} />
-        <InfoCell label="KYC Status" value={applicant.otp_verified ? '✓ Verified' : 'Pending'} valueColor={applicant.otp_verified ? '#276749' : '#C05621'} />
+        <InfoCell label="KYC Status" value={applicant.otp_verified ? '✓ Verified' : 'Pending'} valueColor={applicant.otp_verified ? 'var(--success)' : 'var(--warning)'} />
       </div>
     </div>
   );
@@ -271,8 +267,8 @@ function FinancialSummary({ summary, prefill }) {
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <span style={{
-            fontSize: 10, fontWeight: 800, color: '#276749', background: '#F0FFF4',
-            padding: '3px 10px', borderRadius: 4, letterSpacing: '1px'
+            fontSize: 10, fontWeight: 800, color: 'var(--success)', background: 'var(--success-bg)',
+            padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
           }}>GST</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST TURNOVER SUMMARY</span>
         </div>
@@ -287,9 +283,9 @@ function FinancialSummary({ summary, prefill }) {
               red: gst?.nil_months > 0
             },
           ].map(({ label, value, red }) => (
-            <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+            <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '12px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 6, lineHeight: 1.3 }}>{label}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: red ? '#C53030' : '#276749' }}>{value}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: red ? 'var(--error)' : 'var(--success)' }}>{value}</div>
             </div>
           ))}
         </div>
@@ -300,8 +296,8 @@ function FinancialSummary({ summary, prefill }) {
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span style={{
-              fontSize: 10, fontWeight: 800, color: '#2B6CB0', background: '#EBF8FF',
-              padding: '3px 10px', borderRadius: 4, letterSpacing: '1px'
+              fontSize: 10, fontWeight: 800, color: 'var(--info)', background: 'var(--info-bg)',
+              padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
             }}>ITR</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>INCOME TAX RETURN SUMMARY</span>
           </div>
@@ -322,9 +318,9 @@ function FinancialSummary({ summary, prefill }) {
                 <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px 14px', fontWeight: 600 }}>{row.ay}</td>
                   <td style={{ padding: '10px 14px' }}>{fmtINR(row.gross_receipts)}</td>
-                  <td style={{ padding: '10px 14px', fontWeight: 700, color: '#276749' }}>{fmtINR(row.net_profit)}</td>
+                  <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--success)' }}>{fmtINR(row.net_profit)}</td>
                   <td style={{ padding: '10px 14px' }}>
-                    <span style={{ color: '#276749', fontWeight: 700, fontSize: 11 }}>✓ {row.filing_status}</span>
+                    <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: 11 }}>✓ {row.filing_status}</span>
                   </td>
                 </tr>
               ))}
@@ -339,22 +335,22 @@ function FinancialSummary({ summary, prefill }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span style={{
-              fontSize: 10, fontWeight: 800, color: '#553C9A', background: '#FAF5FF',
-              padding: '3px 10px', borderRadius: 4, letterSpacing: '1px'
+              fontSize: 10, fontWeight: 800, color: 'var(--primary-dark)', background: 'var(--primary-subtle)',
+              padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
             }}>BANK</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>BANKING SUMMARY</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px,1fr))', gap: 14 }}>
             {bank_accounts.map((acc, i) => (
               <div key={i} style={{
-                border: `1px solid ${i === 0 ? '#BEE3F8' : 'var(--border)'}`,
-                borderRadius: 8, padding: '14px 16px',
-                background: i === 0 ? '#F0F8FF' : 'var(--bg-elevated)'
+                border: `1px solid ${i === 0 ? 'var(--info)' : 'var(--border)'}`,
+                borderRadius: 0, padding: '14px 16px',
+                background: i === 0 ? 'var(--info-bg)' : 'var(--bg-elevated)'
               }}>
                 <div style={{
-                  fontSize: 12, fontWeight: 700, color: i === 0 ? '#2B6CB0' : 'var(--text-secondary)',
-                  marginBottom: 10
-                }}>{i === 0 ? '🏦 Primary Current Account' : `🏦 ${acc.label}`}</div>
+                  fontSize: 12, fontWeight: 700, color: i === 0 ? 'var(--info)' : 'var(--text-secondary)',
+                  marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6
+                }}><Landmark size={13} /> {i === 0 ? 'Primary Current Account' : acc.label}</div>
                 {[
                   ['Bank & Branch', acc.bank_name],
                   ['Account Number', acc.account_number],
@@ -369,7 +365,7 @@ function FinancialSummary({ summary, prefill }) {
                     padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 12
                   }}>
                     <span style={{ color: 'var(--text-tertiary)' }}>{label}</span>
-                    <span style={{ fontWeight: 600, color: label.includes('Bounce') && val !== 'Nil' ? '#C53030' : 'var(--text-primary)' }}>
+                    <span style={{ fontWeight: 600, color: label.includes('Bounce') && val !== 'Nil' ? 'var(--error)' : 'var(--text-primary)' }}>
                       {val === 0 ? 'Nil' : val}
                     </span>
                   </div>
@@ -398,29 +394,29 @@ function AddressSection({ addresses, onChange, readOnly }) {
           <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
             CURRENT RESIDENTIAL ADDRESS
             <span style={{
-              fontSize: 9, color: '#276749', fontWeight: 600,
-              background: '#F0FFF4', padding: '1px 6px', borderRadius: 4
-            }}>AUTO-FETCHED · EDITABLE</span>
+              fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600,
+              background: 'var(--bg-elevated)', padding: '1px 6px', borderRadius: 0
+            }}>MANUAL ENTRY</span>
           </label>
           <textarea rows={3} value={addresses.residential || ''} readOnly={readOnly}
             onChange={e => onChange({ ...addresses, residential: e.target.value })}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Current residential address" />
-          <div style={{ fontSize: 10, color: '#276749', marginTop: 3 }}>✓ Auto-fetched from Aadhaar OTP</div>
+          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>Not available from bureau data — enter manually</div>
         </div>
         <div>
           <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
             OFFICE / BUSINESS ADDRESS
             <span style={{
-              fontSize: 9, color: '#276749', fontWeight: 600,
-              background: '#F0FFF4', padding: '1px 6px', borderRadius: 4
+              fontSize: 9, color: 'var(--success)', fontWeight: 600,
+              background: 'var(--success-bg)', padding: '1px 6px', borderRadius: 0
             }}>AUTO-FETCHED · EDITABLE</span>
           </label>
           <textarea rows={3} value={addresses.office || ''} readOnly={readOnly}
             onChange={e => onChange({ ...addresses, office: e.target.value })}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Office / business address" />
-          <div style={{ fontSize: 10, color: '#276749', marginTop: 3 }}>✓ Auto-fetched from bureau / GST registration</div>
+          <div style={{ fontSize: 10, color: 'var(--success)', marginTop: 3 }}>✓ Auto-fetched from GST registration</div>
         </div>
       </div>
       <div>
@@ -522,14 +518,7 @@ function KYCDocumentsSection({ applicationApplicants, docs, onToggle, isSubmitte
         })}
       </div>
 
-      {pendingCount > 0 && (
-        <div style={{
-          marginTop: 12, padding: '8px 14px', background: '#FFFBEB',
-          borderRadius: 6, fontSize: 12, color: '#92400E', border: '1px solid #FDE68A'
-        }}>
-          ⚠️ {pendingCount} required document(s) not yet uploaded. Please upload before submitting.
-        </div>
-      )}
+      
     </div>
   );
 }
@@ -557,14 +546,14 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
 
   return (
     <div style={{
-      border: `1px solid ${!uploaded && required ? '#FEB2B2' : uploaded ? '#9AE6B4' : 'var(--border)'}`,
-      borderRadius: 8, overflow: 'hidden'
+      border: `1px solid ${!uploaded && required ? 'var(--error)' : uploaded ? 'var(--success)' : 'var(--border)'}`,
+      borderRadius: 0, overflow: 'hidden'
     }}>
-      <div style={{ padding: '10px 12px', background: uploaded ? '#FAFFFD' : !required ? 'var(--bg-elevated)' : '#FFF5F5' }}>
+      <div style={{ padding: '10px 12px', background: uploaded ? 'var(--success-bg)' : !required ? 'var(--bg-elevated)' : 'var(--error-bg)' }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, lineHeight: 1.3 }}>
           {label}
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: uploaded ? '#276749' : required ? '#C53030' : '#718096' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: uploaded ? 'var(--success)' : required ? 'var(--error)' : 'var(--text-tertiary)' }}>
           {uploaded
             ? `✓ ${doc?.original_file_name || 'Uploaded'}`
             : required ? '△ Pending' : '— Optional'}
@@ -587,9 +576,9 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
               disabled={isSubmitted}
               style={{
                 flex: 1, padding: '5px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                border: isAttached ? '1px solid #9AE6B4' : '1px solid var(--border)',
-                borderRadius: 5, background: isAttached ? '#F0FFF4' : 'var(--bg-primary)',
-                color: isAttached ? '#276749' : 'var(--text-secondary)'
+                border: isAttached ? '1px solid var(--success)' : '1px solid var(--border)',
+                borderRadius: 0, background: isAttached ? 'var(--success-bg)' : 'var(--bg-surface)',
+                color: isAttached ? 'var(--success)' : 'var(--text-secondary)'
               }}>
               {isAttached ? '✓ Included' : 'Include'}
             </button>
@@ -599,8 +588,8 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
                 disabled={uploading}
                 style={{
                   padding: '5px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  border: '1px solid var(--border)', borderRadius: 5,
-                  background: 'var(--bg-primary)', color: 'var(--text-secondary)'
+                  border: '1px solid var(--border)', borderRadius: 0,
+                  background: 'var(--bg-surface)', color: 'var(--text-secondary)'
                 }}
                 title="Replace file">
                 ↑
@@ -614,8 +603,8 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
             style={{
               width: '100%', padding: '5px 8px', fontSize: 11, fontWeight: 700,
               cursor: isSubmitted || uploading ? 'not-allowed' : 'pointer',
-              border: 'none', borderRadius: 5,
-              background: uploading ? '#718096' : required ? 'var(--primary)' : '#718096',
+              border: 'none', borderRadius: 0,
+              background: uploading ? 'var(--text-tertiary)' : required ? 'var(--primary)' : 'var(--text-tertiary)',
               color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4
             }}>
             <UploadCloud size={12} />
@@ -633,9 +622,9 @@ const labelStyle = {
   textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5
 };
 const inputStyle = {
-  width: '100%', padding: '9px 12px', borderRadius: 6,
+  width: '100%', padding: '9px 12px', borderRadius: 0,
   border: '1px solid var(--border)', fontSize: 14,
-  background: 'var(--bg-primary)', color: 'var(--text-primary)',
+  background: 'var(--bg-surface)', color: 'var(--text-primary)',
   fontFamily: 'inherit', boxSizing: 'border-box'
 };
 const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
@@ -651,6 +640,7 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
   const [data, setData] = useState(null);
   const [showOtherLenderModal, setShowOtherLenderModal] = useState(false);
   const [sendConfirmResult, setSendConfirmResult] = useState(null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [form, setForm] = useState({
     loan_purpose: '', remarks: '', preferred_banking_program: ''
   });
@@ -670,10 +660,17 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
         additional_notes: p.additional_notes || '',
         preferred_banking_program: p.preferred_banking_program || '',
       });
-      // Parse addresses + references from additional_notes JSON
+      // Parse addresses + references from additional_notes JSON; fall back to
+      // the GST-registered office address when nothing was saved yet.
+      // (Residential has no source: the bureau integration is a credit-score
+      // check only — no KYC/address payload exists anywhere in the system.)
       try {
         const stored = p.additional_notes ? JSON.parse(p.additional_notes) : null;
-        if (stored?.__addresses) setAddresses(stored.__addresses);
+        setAddresses({
+          residential: stored?.__addresses?.residential || '',
+          office: stored?.__addresses?.office || res.prefill?.office_address || '',
+          property: stored?.__addresses?.property || '',
+        });
         if (stored?.__references) setReferences(stored.__references);
         setForm(f => ({ ...f }));
       } catch { }
@@ -708,13 +705,15 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!window.confirm(`Submit this proposal (${data?.proposal?.proposal_number}) to ${data?.lender?.name}?\n\nThis will record the lead as sent to lender.`)) return;
+  const handleSubmit = () => setShowSubmitConfirm(true);
+
+  const performSubmit = async () => {
     try {
       setSubmitting(true);
       await handleSave(true);
       await caseService.submitProposal(caseId, proposalId);
       toast.success('✅ Proposal submitted! Lead sent to lender.');
+      setShowSubmitConfirm(false);
       await load();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to submit');
@@ -746,8 +745,13 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
     </div>
   );
 
-  const { proposal, lender, scheme_name, prefill, applicants = [], co_applicants = [],
+  const { proposal, prefill, applicants = [], co_applicants = [],
     financial_summary, documents_by_category, lender_eligibility } = data;
+  const lenderName = proposal.lender_name || 'Lender';
+  const maxTenureMonths = lender_eligibility?.max_tenure_months ?? proposal.tenure_months ?? null;
+  const maxTenureYears = maxTenureMonths
+    ? (maxTenureMonths % 12 === 0 ? String(maxTenureMonths / 12) : (maxTenureMonths / 12).toFixed(1))
+    : null;
   const isSubmitted = proposal.proposal_status === 'submitted';
   const allDocs = Object.values(documents_by_category || {}).flat();
   const pendingKyc = allDocs.filter(d => !d.is_attached && ['PAN_CARD', 'AADHAAR'].includes(d.document_type)).length;
@@ -755,18 +759,6 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
   return (
     <div className="proposal-page">
       <style>{`
-        /* Dark mode: the shared grey text tokens read too low-contrast on
-           this data-heavy page — bump them to white here specifically,
-           without touching the global theme. */
-        :root.dark .proposal-page {
-          --text-secondary: #ffffff;
-          --text-tertiary: #ffffff;
-        }
-        /* Light mode: same low-contrast grey complaint — use black instead. */
-        :root:not(.dark) .proposal-page {
-          --text-secondary: #000000;
-          --text-tertiary: #000000;
-        }
         /* Responsive grids — collapse fixed columns on smaller screens */
         .proposal-page .pp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .proposal-page .pp-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
@@ -807,31 +799,31 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
             <span style={{ color: 'var(--text-tertiary)' }}>CASE-{caseId}</span>
             {' · '}
             Sending to:{' '}
-            <strong style={{ color: 'var(--primary)' }}>{lender?.name || proposal.lender_id}</strong>
-            {scheme_name && <span style={{ color: 'var(--text-tertiary)' }}> · {scheme_name}</span>}
+            <strong style={{ color: 'var(--primary)' }}>{lenderName}</strong>
           </div>
         </div>
-        <Badge status={proposal.lender_submission_status || proposal.proposal_status} />
+        <ProposalStatusBadge status={proposal.lender_submission_status || proposal.proposal_status} />
       </div>
 
       {/* ── 1. Loan Details (EMI Calculator) ────────────────────────── */}
-      <Section emoji="💰" title="Loan Details"
-        subtitle="Enter the loan amount and tenor for this application">
+      <Section icon={IndianRupee} title="Loan Details"
+        subtitle="Enter the Proposed loan amount and tenor for this application">
         <EMICalculator
           loanAmount={proposal.eligible_amount || proposal.requested_amount}
           roi={proposal.roi_min}
           monthlyIncome={prefill?.monthly_income}
+          maxTenure={maxTenureYears}
           onChange={() => { }}
         />
       </Section>
 
       {/* ── 2. Co-Applicant Profiles ─────────────────────────────────── */}
-      <Section emoji="👤" title="Co-Applicant Profiles"
+      <Section icon={Users} title="Co-Applicant Profiles"
         subtitle="Relationship with the company / promoter — included in proposal"
         rightSlot={co_applicants.length > 0 ? (
           <span style={{
-            fontSize: 12, color: 'var(--primary)', fontWeight: 700, background: '#EBF8FF',
-            padding: '3px 10px', borderRadius: 12, border: '1px solid #BEE3F8'
+            fontSize: 12, color: 'var(--info)', fontWeight: 700, background: 'var(--info-bg)',
+            padding: '3px 10px', borderRadius: 0, border: '1px solid var(--info)'
           }}>
             {co_applicants.length} Co-Applicant{co_applicants.length > 1 ? 's' : ''}
           </span>
@@ -853,13 +845,13 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
       </Section>
 
       {/* ── 3. Financial Summary ─────────────────────────────────────── */}
-      <Section emoji="📊" title="Financial Summary"
+      <Section icon={BarChart3} title="Financial Summary"
         subtitle="Auto-compiled from GST, ITR and Bank Statement data">
         <FinancialSummary summary={financial_summary} prefill={prefill} />
       </Section>
 
       {/* ── 4. Addresses ─────────────────────────────────────────────── */}
-      <Section emoji="📍" title="Addresses"
+      <Section icon={MapPin} title="Addresses"
         subtitle="auto-fetched from Aadhaar / bureau, editable">
         <AddressSection
           addresses={addresses}
@@ -869,18 +861,18 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
       </Section>
 
       {/* ── 5. KYC Documents ─────────────────────────────────────────── */}
-      <Section emoji="🗂️" title="KYC Documents"
+      <Section icon={FolderOpen} title="KYC Documents"
         rightSlot={pendingKyc > 0 ? (
           <span style={{
-            fontSize: 11, color: '#C53030', fontWeight: 700,
-            background: '#FFF5F5', padding: '3px 10px', borderRadius: 12, border: '1px solid #FEB2B2'
+            fontSize: 11, color: 'var(--error)', fontWeight: 700,
+            background: 'var(--error-bg)', padding: '3px 10px', borderRadius: 0, border: '1px solid var(--error)'
           }}>
             {pendingKyc} Pending
           </span>
         ) : (
           <span style={{
-            fontSize: 11, color: '#276749', fontWeight: 700,
-            background: '#F0FFF4', padding: '3px 10px', borderRadius: 12, border: '1px solid #9AE6B4'
+            fontSize: 11, color: 'var(--success)', fontWeight: 700,
+            background: 'var(--success-bg)', padding: '3px 10px', borderRadius: 0, border: '1px solid var(--success)'
           }}>
             All uploaded
           </span>
@@ -896,7 +888,7 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
       </Section>
 
       {/* ── 6. Remarks ───────────────────────────────────────────────── */}
-      <Section emoji="📝" title="Remarks &amp; Loan Purpose">
+      <Section icon={MessageSquare} title="Remarks &amp; Loan Purpose">
         <div className="pp-grid-2">
           <div>
             <label style={labelStyle}>LOAN PURPOSE</label>
@@ -923,13 +915,13 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
       </Section>
 
       {/* ── 7. References ────────────────────────────────────────────── */}
-      <Section emoji="👥" title="References"
+      <Section icon={Contact} title="References"
         subtitle="Personal or professional references for the applicant"
         rightSlot={
           <span style={{
-            fontSize: 11, color: '#C05621', fontWeight: 700,
-            background: '#FFFBEB', padding: '3px 10px', borderRadius: 12,
-            border: '1px solid #FDE68A'
+            fontSize: 11, color: 'var(--warning)', fontWeight: 700,
+            background: 'var(--warning-bg)', padding: '3px 10px', borderRadius: 0,
+            border: '1px solid var(--warning)'
           }}>2 required</span>
         }>
         {references.map((ref, idx) => (
@@ -1006,54 +998,51 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
         }}>
           {/* Lender branding bar */}
           <div style={{
-            background: '#1A202C', padding: '10px 20px',
+            background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', padding: '10px 20px',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             flexWrap: 'wrap', gap: 10
           }}>
             <div>
-              <div style={{ fontSize: 11, color: '#A0AEC0', marginBottom: 2 }}>Ready to send to</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
-                {lender?.name || 'Lender'}
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>Ready to send to</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                {lenderName}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-ghost" onClick={onBack}
-                style={{ color: '#A0AEC0', fontSize: 12 }}>Cancel</button>
+                style={{ borderRadius: 0, fontSize: 12 }}>Cancel</button>
               <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#fff',
-                  background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)'
-                }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 0 }}>
                 <Save size={13} /> {saving ? 'Saving…' : 'Save Draft'}
               </button>
               <button onClick={() => setShowOtherLenderModal(true)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px',
-                  background: 'transparent', color: '#A78BFA',
-                  border: '1px solid #A78BFA', borderRadius: 8,
+                  background: 'transparent', color: 'var(--primary)',
+                  border: '1px solid var(--primary)', borderRadius: 0,
                   fontWeight: 700, fontSize: 13, cursor: 'pointer'
                 }}>
                 ↗ Send to Another Lender
               </button>
               <button onClick={handleSubmit} disabled={submitting}
+                className="btn btn-primary"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '11px 28px',
-                  background: 'linear-gradient(135deg,#D69E2E,#B7791F)',
-                  color: '#fff', border: 'none', borderRadius: 8, fontWeight: 800,
-                  fontSize: 14, cursor: 'pointer', boxShadow: '0 2px 12px rgba(214,158,46,0.4)'
+                  borderRadius: 0, fontWeight: 800, fontSize: 14
                 }}>
                 <Send size={15} />
-                {submitting ? 'Submitting…' : `Send Lead to ${lender?.name || 'Lender'} →`}
+                {submitting ? 'Submitting…' : `Send Lead to ${lenderName} →`}
               </button>
             </div>
           </div>
         </div>
       ) : (
         <div style={{
-          padding: '14px 22px', background: '#F0FFF4', borderRadius: 10,
-          border: '1px solid #9AE6B4', textAlign: 'center', fontSize: 13
+          padding: '14px 22px', background: 'var(--success-bg)', borderRadius: 0,
+          border: '1px solid var(--success)', textAlign: 'center', fontSize: 13,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-primary)'
         }}>
-          ✅ Proposal submitted on {proposal.submitted_at
+          <CheckCircle2 size={16} color="var(--success)" /> Proposal submitted on {proposal.submitted_at
             ? new Date(proposal.submitted_at).toLocaleString('en-IN') : '—'}
         </div>
       )}
@@ -1067,6 +1056,16 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
         isOpen={!!sendConfirmResult}
         onClose={() => setSendConfirmResult(null)}
         result={sendConfirmResult}
+      />
+      <ConfirmModal
+        isOpen={showSubmitConfirm}
+        onClose={() => setShowSubmitConfirm(false)}
+        onConfirm={performSubmit}
+        title="Submit this proposal?"
+        message={`Submit proposal ${data?.proposal?.proposal_number || ''} to ${lenderName}? This will record the lead as sent to lender.`}
+        confirmLabel="Submit"
+        isLoading={submitting}
+        danger={false}
       />
     </div>
   );
@@ -1108,7 +1107,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 500, borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 500, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Send to Another Lender</h3>
@@ -1134,12 +1133,12 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
                   {lenders.map(l => (
                     <button key={l.id} onClick={() => { setSelectedLender(l); setSelectedContact(null); }}
                       style={{
-                        padding: '11px 14px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
+                        padding: '11px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer',
                         border: `2px solid ${selectedLender?.id === l.id ? 'var(--primary)' : 'var(--border)'}`,
-                        background: selectedLender?.id === l.id ? '#EEF2FF' : 'var(--bg-elevated)',
+                        background: selectedLender?.id === l.id ? 'var(--primary-subtle)' : 'var(--bg-elevated)',
                         color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                       }}>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>🏦 {l.lender_name}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Landmark size={14} /> {l.lender_name}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{l.contacts.length} contact(s)</span>
                     </button>
                   ))}
@@ -1153,14 +1152,14 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
                     {contacts.map(c => (
                       <button key={c.id} onClick={() => setSelectedContact(c)}
                         style={{
-                          padding: '12px 14px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
-                          border: `2px solid ${selectedContact?.id === c.id ? '#276749' : 'var(--border)'}`,
-                          background: selectedContact?.id === c.id ? '#F0FFF4' : 'var(--bg-elevated)',
+                          padding: '12px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer',
+                          border: `2px solid ${selectedContact?.id === c.id ? 'var(--success)' : 'var(--border)'}`,
+                          background: selectedContact?.id === c.id ? 'var(--success-bg)' : 'var(--bg-elevated)',
                           color: 'var(--text-primary)'
                         }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span style={{ fontSize: 13, fontWeight: 700 }}>{c.contact_name}</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, background: '#EEF2FF', color: '#4F46E5', padding: '2px 8px', borderRadius: 10 }}>{c.product_type}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--primary-subtle)', color: 'var(--primary)', padding: '2px 8px', borderRadius: 0 }}>{c.product_type}</span>
                         </div>
                         <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--text-secondary)' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Mail size={10} /> {c.contact_email}</span>
@@ -1176,11 +1175,11 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
         </div>
 
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 0, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cancel</button>
           <button onClick={handleSend} disabled={!selectedContact || sending}
             style={{
-              padding: '10px 22px', borderRadius: 8, fontWeight: 700, fontSize: 13,
-              background: selectedContact ? '#276749' : 'var(--border)',
+              padding: '10px 22px', borderRadius: 0, fontWeight: 700, fontSize: 13,
+              background: selectedContact ? 'var(--success)' : 'var(--border)',
               color: '#fff', border: 'none',
               cursor: selectedContact ? 'pointer' : 'not-allowed',
               display: 'flex', alignItems: 'center', gap: 6,
@@ -1199,15 +1198,15 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
   if (!isOpen || !result) return null;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-primary)', width: '94%', maxWidth: 500, borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-        <div style={{ background: 'linear-gradient(135deg,#F0FFF4,#EBF8FF)', padding: '28px 24px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 48, marginBottom: 10 }}>✅</div>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#276749' }}>Lead Sent Successfully!</h3>
-          <p style={{ color: '#4A5568', fontSize: 13, marginTop: 6 }}>Proposal dispatched to {result.contact_name}</p>
+      <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 500, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ background: 'var(--success-bg)', padding: '28px 24px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
+          <CheckCircle2 size={40} color="var(--success)" style={{ marginBottom: 10 }} />
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--success)' }}>Lead Sent Successfully!</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>Proposal dispatched to {result.contact_name}</p>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ border: '1px solid #BEE3F8', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ background: '#EBF8FF', padding: '10px 16px', fontSize: 12, fontWeight: 700, color: '#2B6CB0', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ border: '1px solid var(--info)', borderRadius: 0, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--info-bg)', padding: '10px 16px', fontSize: 12, fontWeight: 700, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Mail size={13} /> EMAIL SENT
             </div>
             <div style={{ padding: '12px 16px', fontSize: 12 }}>
@@ -1215,7 +1214,7 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
                 <span style={{ color: 'var(--text-tertiary)' }}>To:</span>
                 <span style={{ fontWeight: 600 }}>{result.to}</span>
               </div>
-              <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 6, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 <strong style={{ display: 'block', marginBottom: 2 }}>Subject:</strong>
                 {result.subject}
               </div>
@@ -1223,7 +1222,7 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
           </div>
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', background: 'var(--bg-elevated)' }}>
-          <button onClick={onClose} style={{ padding: '9px 24px', borderRadius: 8, fontWeight: 700, fontSize: 14, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>Done</button>
+          <button onClick={onClose} style={{ padding: '9px 24px', borderRadius: 0, fontWeight: 700, fontSize: 14, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>Done</button>
         </div>
       </div>
     </div>

@@ -1,0 +1,1 @@
+let r=null;const n=()=>window.Razorpay?Promise.resolve(window.Razorpay):r||(r=new Promise((e,a)=>{const o=document.createElement("script");o.src="https://checkout.razorpay.com/v1/checkout.js",o.async=!0,o.onload=()=>e(window.Razorpay),o.onerror=()=>{r=null,a(new Error("Failed to load Razorpay checkout. Check your connection."))},document.body.appendChild(o)}),r);export{n as l};
