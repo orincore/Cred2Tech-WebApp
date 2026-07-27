@@ -10,6 +10,7 @@ import { Search, CheckCircle2, Check } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import DataPullProgress from '../components/onboarding/DataPullProgress';
+import { toTitleCase } from '../utils/helpers';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
@@ -765,7 +766,7 @@ const AddSalariedCustomerWizardPage = () => {
                       key={app.id || idx}
                       label={app.name || (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`)}
                       status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
-                      description={app.cibil_score ? `CIBIL: ${app.cibil_score}` : `${app.pan_number} • ${app.type}`}
+                      description={app.cibil_score ? `Bureau Score: ${app.cibil_score}` : `${app.pan_number} • ${app.type}`}
                       onStart={() => handleRunBureau(app.id)}
                       loading={saving}
                     />
@@ -787,7 +788,7 @@ const AddSalariedCustomerWizardPage = () => {
                         {idx + 1}
                       </div>
                       <h4 style={{ fontSize: 16, fontWeight: 700 }}>
-                        {app.name || app.pan_number || (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`)}
+                        {toTitleCase(app.name) || app.pan_number || (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`)}
                         <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 8 }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
                       </h4>
                     </div>
@@ -795,7 +796,7 @@ const AddSalariedCustomerWizardPage = () => {
                     <SalarySlipUploader
                       caseId={caseId}
                       applicantId={app.id}
-                      applicantName={app.name || app.pan_number}
+                      applicantName={toTitleCase(app.name) || app.pan_number}
                     />
                   </div>
                 ))}

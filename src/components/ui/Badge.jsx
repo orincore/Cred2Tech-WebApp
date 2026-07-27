@@ -1,5 +1,6 @@
 import React from 'react';
 import { ROLES } from '../../constants/roles';
+import { formatStatusLabel } from '../../utils/helpers';
 
 const Badge = ({ type = 'role', value, className = '' }) => {
   if (!value) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>;
@@ -10,7 +11,7 @@ const Badge = ({ type = 'role', value, className = '' }) => {
     const role = ROLES[value] || {};
     color = role.color || 'var(--text-secondary)';
     bg = role.bg || 'var(--bg-elevated)';
-    label = role.name || value;
+    label = role.name || formatStatusLabel(value);
   } else if (type === 'status') {
     if (value === 'ACTIVE') {
       color = 'var(--success)'; bg = 'var(--success-bg)'; label = 'Active';
@@ -18,9 +19,9 @@ const Badge = ({ type = 'role', value, className = '' }) => {
       color = 'var(--text-tertiary)'; bg = 'var(--bg-elevated)'; label = 'Inactive';
     }
   } else if (type === 'level') {
-    color = 'var(--info)'; bg = 'var(--info-bg)'; label = value;
+    color = 'var(--info)'; bg = 'var(--info-bg)'; label = formatStatusLabel(value);
   } else {
-    color = 'var(--text-secondary)'; bg = 'var(--bg-elevated)'; label = value;
+    color = 'var(--text-secondary)'; bg = 'var(--bg-elevated)'; label = formatStatusLabel(value);
   }
 
   return (

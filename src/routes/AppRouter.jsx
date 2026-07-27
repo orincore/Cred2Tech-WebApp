@@ -34,6 +34,7 @@ const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'))
 const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
 const DSALenderContactsPage = lazy(() => import('../pages/DSALenderContactsPage'));
+const AdminMsmeCasesPage = lazy(() => import('../pages/AdminMsmeCasesPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -154,6 +155,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/lenders" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><LenderConfigPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/msme-cases" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminMsmeCasesPage /></ProtectedRoute>
             } />
 
             {/* Customers Pipeline / Wizard */}

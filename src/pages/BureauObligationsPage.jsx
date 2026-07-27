@@ -144,7 +144,13 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
       const fresh = await load();
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
       if (after > before) {
-        toast.success(`Bureau data re-fetched — ${after - before} obligation(s) found`);
+        toast.success(`Bureau data re-fetched — ${after - before} new obligation(s) found`);
+      } else if (after > 0) {
+        // Re-running the same PAN/DOB against the vendor legitimately returns
+        // the same tradelines every time - a flat count here means the
+        // applicant's obligations are already on file, not that the pull
+        // failed. Only an actual zero total means the vendor found nothing.
+        toast.success(`Bureau data re-fetched — ${after} obligation(s) already on file, no new ones since last pull`);
       } else {
         toast.error('Bureau pull ran again but still found no obligations for this applicant — the vendor may be missing valid PAN/DOB data for them.', { duration: 6000 });
       }

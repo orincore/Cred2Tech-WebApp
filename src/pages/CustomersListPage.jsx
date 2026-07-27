@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { toTitleCase } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
 import { useTheme } from '../context/ThemeContext';
@@ -72,7 +73,7 @@ const SORT_OPTIONS = [
   { label: 'Newest First', by: 'lead_date', order: 'desc' },
   { label: 'Oldest First', by: 'lead_date', order: 'asc' },
   { label: 'Name A-Z', by: 'name', order: 'asc' },
-  { label: 'CIBIL (High-Low)', by: 'cibil_score', order: 'desc' },
+  { label: 'Bureau Score (High-Low)', by: 'cibil_score', order: 'desc' },
   { label: 'Amount (High-Low)', by: 'loan_amount', order: 'desc' },
 ];
 const LIMIT = 10;
@@ -414,7 +415,7 @@ const CustomersListPage = () => {
                   style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
                   onClick={() => navigate(`/customers/${c.customer_id}`)}
                 >
-                  {c.customer_name || c.customer?.business_name || '—'}
+                  {toTitleCase(c.customer_name || c.customer?.business_name) || '—'}
                 </div>
                 <div style={{ fontSize: 11, color: mutedColor, marginBottom: 12 }}>
                   {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}
@@ -422,7 +423,7 @@ const CustomersListPage = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12, marginBottom: c.alert_flag === 'PDD_PENDING' ? 10 : 0 }}>
                   <div><div style={labelSm(isDark)}>Employee</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.customer?.created_by?.name || '—'}</div></div>
-                  <div><div style={labelSm(isDark)}>CIBIL</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
+                  <div><div style={labelSm(isDark)}>Bureau Score</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Lender</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.lender_name || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Product</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.product_type || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Requested</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.loan_amount || c.parent_case?.loan_amount)}</div></div>
@@ -463,7 +464,7 @@ const CustomersListPage = () => {
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
-                {['Case', 'Customer', 'Lender / Product', 'CIBIL', 'Amounts (Req / Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
+                {['Case', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Req / Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
                   <th key={h} style={{
                     position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)',
                     padding: '10px 8px', fontSize: 10, fontWeight: 800, color: mutedColor,
@@ -488,7 +489,7 @@ const CustomersListPage = () => {
                     </td>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
-                        {c.customer_name || c.customer?.business_name || '—'}
+                        {toTitleCase(c.customer_name || c.customer?.business_name) || '—'}
                       </div>
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>
                         {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}

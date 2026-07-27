@@ -42,6 +42,7 @@ const ItrAnalyticsForm = ({
 
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
 
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
 
@@ -91,6 +92,21 @@ const ItrAnalyticsForm = ({
             // else still processing — the background poller below will check again automatically
         } catch (error) {
             console.error('[ITR auto-sync]', error.response?.data?.error || error.message);
+        }
+    };
+
+    const handleCancel = async () => {
+        if (!referenceId) return;
+        if (!window.confirm('Cancel this ITR request? This cannot be undone.')) return;
+        setCancelling(true);
+        try {
+            await api.post('/external/itr/cancel', { reference_id: referenceId });
+            setStatus('FAILED');
+            toast.success('ITR request cancelled');
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel ITR request');
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -146,7 +162,17 @@ const ItrAnalyticsForm = ({
                     )}
 
                     {/* Action Button */}
-                    {status === 'PROCESSING' ? null : status === 'COMPLETED' ? (
+                    {status === 'PROCESSING' ? (
+                        <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={handleCancel}
+                            disabled={cancelling}
+                            style={{ color: 'var(--error)', border: '1px solid var(--error)' }}
+                        >
+                            {cancelling ? 'Cancelling...' : 'Cancel'}
+                        </button>
+                    ) : status === 'COMPLETED' ? (
                         <div style={{ display: 'flex', gap: 8 }}>
                             {documentId ? (
                                 <button

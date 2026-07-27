@@ -5,6 +5,7 @@ import FormField from './ui/FormField';
 import PullingIndicator from './ui/PullingIndicator';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
+import { formatStatusLabel } from '../utils/helpers';
 
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
@@ -42,6 +43,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     const [activeRequests, setActiveRequests] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const activeRequestsRef = useRef(activeRequests);
 
     useEffect(() => {
@@ -100,6 +102,9 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         if (mode === 'IN_SYSTEM' && authType === 'PASSWORD' && !formData.password) {
             return toast.error("Password is required for Password auth");
         }
+        if (mode === 'AUTH_LINK' && !formData.emails.trim() && !formData.mobile_numbers.trim()) {
+            return toast.error("Enter at least one customer email or mobile number to send the auth link to");
+        }
 
         setLoading(true);
         try {
@@ -132,6 +137,20 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             toast.error(`GST request failed: ${message}`, { duration: 8000 });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCancelRequest = async (requestId) => {
+        if (!window.confirm('Cancel this GST request? This cannot be undone.')) return;
+        setCancelling(true);
+        try {
+            await api.post(`/external/gst/cancel`, { request_id: requestId });
+            toast.success('GST request cancelled');
+            await fetchRequests();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel GST request');
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -183,7 +202,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                                 <option value="">Select GSTIN</option>
                                 {linkedGstins.map(g => (
                                     <option key={g.gstin} value={g.gstin}>
-                                        {g.gstin} ({g.registration_name || 'No Name'}) - {g.status}
+                                        {g.gstin} ({g.registration_name || 'No Name'}) - {formatStatusLabel(g.status)}
                                     </option>
                                 ))}
                                 <option value="__manual__">Enter manually...</option>
@@ -233,13 +252,18 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             )}
 
             {mode === 'AUTH_LINK' && (
-                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                     <FormField label="Target Emails (comma separated)">
-                        <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
-                     </FormField>
-                     <FormField label="Target Mobile Numbers (comma separated)">
-                        <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
-                     </FormField>
+                 <div style={{ marginBottom: 16 }}>
+                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+                         <FormField label="Target Emails (comma separated)">
+                            <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
+                         </FormField>
+                         <FormField label="Target Mobile Numbers (comma separated)">
+                            <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
+                         </FormField>
+                     </div>
+                     <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                        At least one email or mobile number is required — the customer receives the auth link there, not through the GST username/password fields above.
+                     </p>
                  </div>
             )}
 
@@ -253,11 +277,22 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                 // Only the most recent journey is shown — no journey list/history,
                 // no raw GSTIN/mode/status/timestamp/auth-link plumbing surfaced to the user.
                 const req = visible[0];
-                const isFinal = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
+                const isSuccess = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
+                const isDead = req.status === 'FAILED' || req.status === 'EXPIRED';
                 return (
-                    <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isFinal ? 'var(--success-bg)' : 'var(--bg-surface)' }}>
-                        {!isFinal ? (
-                            <PullingIndicator label="Pulling GST data…" />
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
+                        {isDead ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
+                                <AlertCircle size={16} /> {req.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed'}
+                            </div>
+                        ) : !isSuccess ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <PullingIndicator label="Pulling GST data…" />
+                                <button type="button" onClick={() => handleCancelRequest(req.id)} disabled={cancelling}
+                                    className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', border: '1px solid var(--error)' }}>
+                                    {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                                </button>
+                            </div>
                         ) : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--success)', fontWeight: 600, fontSize: 14 }}>

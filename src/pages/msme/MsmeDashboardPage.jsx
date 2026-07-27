@@ -4,11 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
   Sparkles, FolderOpen, BarChart3, Star, FileText, UserCircle,
-  ShieldCheck, Sun, CloudSun, Moon, ArrowRight,
+  ShieldCheck, Sun, CloudSun, Moon, ArrowRight, Archive,
 } from 'lucide-react';
 import { msmeApi } from '../../api/msmeService';
 import { useMsmeAuth } from '../../context/MsmeAuthContext';
 import { loadRazorpay } from '../../utils/razorpay';
+import { toTitleCase } from '../../utils/helpers';
 import { getErrorMessage, formatCompactINR } from '../../utils/helpers';
 import StatCard from '../../components/ui/StatCard';
 import SectionCard from '../../components/ui/SectionCard';
@@ -150,12 +151,12 @@ const MsmeDashboardPage = () => {
     );
   }
 
-  const { activeCase, emptyState } = dashboardData || {};
+  const { activeCase, emptyState, totalCasesCount } = dashboardData || {};
   // proprietor_name is a plain user-entered/KYC identity field; business_name/trade_name
   // are derived from GST vendor lookups and can end up holding a GST registration
   // reference number when the business never registered a real trade name — prefer
   // the reliable identity field first.
-  const businessName = activeCase?.customer?.proprietor_name || activeCase?.customer?.business_name || user?.name || 'User';
+  const businessName = toTitleCase(activeCase?.customer?.proprietor_name || activeCase?.customer?.business_name || user?.name) || 'User';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const primaryApplicant = activeCase?.applicants?.find(a => a.type === 'PRIMARY');
@@ -245,9 +246,6 @@ const MsmeDashboardPage = () => {
             {greeting}, {businessName}{' '}
             {hour < 12 ? <Sun size={20} color="#f59e0b" /> : hour < 17 ? <CloudSun size={20} color="#f59e0b" /> : <Moon size={20} color="#6366f1" />}
           </h1>
-          <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>
-            Registered mobile +91 {user?.mobile} · {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </p>
         </div>
 
         
@@ -274,11 +272,12 @@ const MsmeDashboardPage = () => {
             {/* Left column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
               {/* Summary cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 16 }}>
                 {[
-                  { title: 'Active Cases', value: '1', subtitle: 'This month', icon: FolderOpen, color: 'var(--info)' },
+                  { title: 'Active Cases', value: activeCase ? '1' : '0', subtitle: 'This month', icon: FolderOpen, color: 'var(--info)' },
                   { title: 'Loan Applied', value: activeCase.loan_amount ? formatCompactINR(activeCase.loan_amount) : '—', subtitle: activeCase.product_type || 'Product TBD', icon: BarChart3, color: 'var(--success)' },
-                  { title: 'CIBIL Score', value: cibilScore || '—', subtitle: cibilScore ? (cibilScore >= 700 ? 'Good' : 'Fair') : 'Available after bureau pull', icon: Star, color: 'var(--warning)' },
+                  { title: 'Bureau Score', value: cibilScore || '—', subtitle: cibilScore ? (cibilScore >= 700 ? 'Good' : 'Fair') : 'Available after bureau pull', icon: Star, color: 'var(--warning)' },
+                  { title: 'All Time Cases', value: totalCasesCount ?? '—', subtitle: 'Since you joined', icon: Archive, color: 'var(--role-admin)' },
                 ].map((card, i) => (
                   <motion.div
                     key={card.title}

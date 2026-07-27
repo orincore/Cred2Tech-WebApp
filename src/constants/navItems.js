@@ -15,6 +15,7 @@ import {
   FolderOpen,
   FileText,
   UserCircle,
+  Inbox,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -85,6 +86,13 @@ export const NAV_ITEMS = [
     path: '/admin/lenders',
     icon: Settings,
     roles: ['SUPER_ADMIN', 'CRED2TECH_MEMBER'],
+  },
+  {
+    id: 'admin-msme-cases',
+    label: 'Direct MSME Leads',
+    path: '/admin/msme-cases',
+    icon: Inbox,
+    roles: ['SUPER_ADMIN'],
   },
 
   // DSA_ADMIN Views

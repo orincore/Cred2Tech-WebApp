@@ -192,7 +192,7 @@ const CustomerProfilePage = () => {
 
       {/* KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <StatCard title="CIBIL Score" value={primaryBureau?.cibil_score || '—'} subtitle="Primary applicant" icon={CreditCard} color="var(--primary)" />
+        <StatCard title="Bureau Score" value={primaryBureau?.cibil_score || '—'} subtitle="Primary applicant" icon={CreditCard} color="var(--primary)" />
         <StatCard title="Total Cases" value={profile.cases?.length || 0} subtitle="All time" icon={Building2} color="#0284C7" />
         <StatCard title="Documents" value={profile.documents?.length || 0} subtitle="Uploaded" icon={FileText} color="#059669" />
         <StatCard title="Bureau Status" value={profile.api_status?.bureau || 'PENDING'} subtitle="Data pull" icon={Activity} color="#F59E0B" />
@@ -409,7 +409,7 @@ const CustomerProfilePage = () => {
                   <colgroup><col style={{ width: '20%' }} /><col style={{ width: '20%' }} /><col style={{ width: '10%' }} /><col style={{ width: '22%' }} /><col style={{ width: '14%' }} /><col style={{ width: '14%' }} /></colgroup>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                      {['Applicant', 'PAN / Mobile', 'CIBIL', 'Loans / EMI / Overdue', 'Status', 'Action'].map(h => (
+                      {['Applicant', 'PAN / Mobile', 'Bureau Score', 'Loans / EMI / Overdue', 'Status', 'Action'].map(h => (
                         <th key={h} style={{ padding: '10px 8px', fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>{h}</th>
                       ))}
                     </tr>

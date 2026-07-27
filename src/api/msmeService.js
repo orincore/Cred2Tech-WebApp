@@ -25,5 +25,5 @@ export const msmeApi = {
   getEligibilityResult: () => api.get('/msme/eligibility/result'),
 
   selectLender: (esr_lender_id) => api.post('/msme/lender/select', { esr_lender_id }),
-  submitCase: () => api.post('/msme/case/submit'),
+  submitCase: (payload) => api.post('/msme/case/submit', payload),
 };

@@ -238,7 +238,7 @@ function ApplicantCard({ applicant, isPrimary, index }) {
       <div className="pp-grid-4-sm">
         <InfoCell label="PAN" value={applicant.pan_number || '—'} />
         <InfoCell label="Mobile" value={applicant.mobile || '—'} />
-        <InfoCell label="CIBIL Score" value={applicant.cibil_score || '—'} />
+        <InfoCell label="Bureau Score" value={applicant.cibil_score || '—'} />
         <InfoCell label="KYC Status" value={applicant.otp_verified ? '✓ Verified' : 'Pending'} valueColor={applicant.otp_verified ? 'var(--success)' : 'var(--warning)'} />
       </div>
     </div>
@@ -633,7 +633,7 @@ const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
 // Step 7 of the case journey — rendered inline by AddCustomerWizardPage (not
 // its own route), so it takes caseId/proposalId/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function ProposalPage({ caseId, proposalId, onBack }) {
+export default function ProposalPage({ caseId, proposalId, onBack, isMsme = false }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1011,28 +1011,32 @@ export default function ProposalPage({ caseId, proposalId, onBack }) {
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-ghost" onClick={onBack}
                 style={{ borderRadius: 0, fontSize: 12 }}>Cancel</button>
-              <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 0 }}>
-                <Save size={13} /> {saving ? 'Saving…' : 'Save Draft'}
-              </button>
-              <button onClick={() => setShowOtherLenderModal(true)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px',
-                  background: 'transparent', color: 'var(--primary)',
-                  border: '1px solid var(--primary)', borderRadius: 0,
-                  fontWeight: 700, fontSize: 13, cursor: 'pointer'
-                }}>
-                ↗ Send to Another Lender
-              </button>
-              <button onClick={handleSubmit} disabled={submitting}
-                className="btn btn-primary"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '11px 28px',
-                  borderRadius: 0, fontWeight: 800, fontSize: 14
-                }}>
-                <Send size={15} />
-                {submitting ? 'Submitting…' : `Send Lead to ${lenderName} →`}
-              </button>
+              {!isMsme && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 0 }}>
+                    <Save size={13} /> {saving ? 'Saving…' : 'Save Draft'}
+                  </button>
+                  <button onClick={() => setShowOtherLenderModal(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px',
+                      background: 'transparent', color: 'var(--primary)',
+                      border: '1px solid var(--primary)', borderRadius: 0,
+                      fontWeight: 700, fontSize: 13, cursor: 'pointer'
+                    }}>
+                    ↗ Send to Another Lender
+                  </button>
+                  <button onClick={handleSubmit} disabled={submitting}
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '11px 28px',
+                      borderRadius: 0, fontWeight: 800, fontSize: 14
+                    }}>
+                    <Send size={15} />
+                    {submitting ? 'Submitting…' : `Send Lead to ${lenderName} →`}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

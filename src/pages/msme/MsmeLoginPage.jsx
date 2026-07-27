@@ -111,7 +111,7 @@ const MsmeLoginPage = () => {
             <h2 className="text-3xl font-bold leading-tight mb-4 hero-h1">
               Check Your Loan Eligibility
             </h2>
-            <p className="text-indigo-100 text-[15px] leading-relaxed opacity-90 hero-p">
+            <p className="text-white text-[15px] leading-relaxed opacity-90 hero-p">
               Discover offers across multiple lenders instantly — without affecting your credit score. Consent-based, secure, and built for your business.
             </p>
             <p className="mt-5 text-[12px] text-indigo-200/60 hero-btns">
@@ -290,12 +290,6 @@ const MsmeLoginPage = () => {
               </motion.form>
             )}
           </AnimatePresence>
-
-          {/* Trust */}
-          <div className="flex items-center justify-center gap-1.5 mt-8 text-[11px] text-[#4a5d73] dark:text-[#94a3b8]">
-            <span className="material-symbols-outlined text-[13px] text-indigo-600">lock</span>
-            256-bit encryption · Consent-based data access
-          </div>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
             <p className="text-[12px] text-[#4a5d73] dark:text-[#94a3b8]">

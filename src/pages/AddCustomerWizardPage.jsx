@@ -17,10 +17,12 @@ import CaseWizardStepper from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
+import { toTitleCase } from '../utils/helpers';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
 import EsrStep from './EsrPage';
 import ProposalStep from './ProposalPage';
+import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
 // Each step's own historical max-width (steps 1-3 were designed for 880;
 // steps 4-7 lived on separate, wider pages) — preserved here so folding them
@@ -81,6 +83,17 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     goToStep(7, { proposalId: newProposalId });
   };
 
+  // MSME self-service customers never create/send a proposal themselves - step
+  // 6 lets them pick a bank card, which moves to step 7 (MsmeLoanTermsStep)
+  // instead of the DSA's ProposalStep - there they state how much they need
+  // before the case goes to the Cred2Tech admin queue for allocation to a DSA
+  // (who then creates and sends the actual proposal).
+  const [applyLender, setApplyLender] = useState(null);
+  const handleApplyForLoan = (lender) => {
+    setApplyLender(lender);
+    goToStep(7);
+  };
+
   const [formData, setFormData] = useState({
     customer_id: null,
     business_pan: '',
@@ -98,6 +111,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     linked_gstins: [],
     applicants: [],
     product_type: '',
+    loan_amount: '',
+    dsa_notes: '',
     // Property (Step 3)
     property_type: '',
     occupancy_status: 'Self Occupied',
@@ -197,7 +212,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setFormData({
         customer_id: caseData.customer?.id,
         business_pan: caseData.customer?.business_pan || '',
-        business_name: caseData.customer?.business_name || '',
+        // proprietor_name is a plain user-entered/KYC identity field; business_name
+        // is derived from GST vendor lookups and can end up holding a GST
+        // registration TRN (reference number) when the business never registered
+        // a real trade name yet - prefer the reliable identity field first, same
+        // as the case header / MSME dashboard greeting already do.
+        business_name: toTitleCase(caseData.customer?.proprietor_name) || caseData.customer?.business_name || '',
         proprietor_name: caseData.customer?.proprietor_name || '',
         dob: caseData.customer?.dob || '',
         business_mobile: caseData.customer?.business_mobile || '',
@@ -212,6 +232,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         linked_gstins: currentPanProfile?.gstin_records || [],
         applicants: caseData.applicants || [],
         product_type: caseData.product_type || '',
+        loan_amount: caseData.loan_amount || '',
+        dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
         occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
         ownership_type: caseData.property?.ownership_type || 'Sole Owner',
@@ -233,16 +255,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // so the user isn't yanked away from the step they're actively on.
       if (!preserveStep) {
         // A URL with ?step= (a saved/shared link, or returning from a full
-        // reload) resumes at that exact step instead of the default
-        // heuristic below.
+        // reload) resumes at that exact step. Otherwise always start at step
+        // 1 - do NOT guess a "further along" step from data already present
+        // (e.g. an applicant existing as soon as PAN is verified), since that
+        // silently skipped the user past step 1 without them clicking Next.
         const stepParam = parseInt(searchParams.get('step'), 10);
-        if (stepParam >= 1 && stepParam <= 7) {
-          setCurrentStep(stepParam);
-        } else if (caseData.applicants && caseData.applicants.length > 0) {
-          setCurrentStep(2);
-        } else {
-          setCurrentStep(1);
-        }
+        setCurrentStep(stepParam >= 1 && stepParam <= 7 ? stepParam : 1);
         const pid = searchParams.get('proposalId');
         if (pid) setProposalId(pid);
       }
@@ -661,6 +679,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   const removeApplicant = async (index) => {
     const app = formData.applicants[index];
+    if (!app) {
+      // Defensive: an out-of-sync index would otherwise throw here silently
+      // (uncaught inside a React event handler just logs to console — the
+      // button visibly does nothing, which is exactly the "dummy button"
+      // symptom reported for this control).
+      toast.error('Could not find that applicant — please refresh and try again.');
+      return;
+    }
     if (app.id) {
       if (!window.confirm('Are you sure you want to remove this applicant from the current case?')) return;
       try {
@@ -677,6 +703,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       const arr = [...formData.applicants];
       arr.splice(index, 1);
       setFormData(prev => ({ ...prev, applicants: arr }));
+      toast.success('Co-applicant removed.');
     }
   };
 
@@ -703,6 +730,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error("Business PAN is required.");
     if (!formData.mobile_verified && !isMsme) return toast.error("Primary Business Mobile must be verified before proceeding.");
+    // Bureau/credit checks need PAN + DOB together for every applicant - PAN
+    // alone isn't enough for the vendor to match a record, which otherwise
+    // only surfaces later as a confusing "no obligations found" bureau error.
+    if (!formData.dob) return toast.error("Date of Birth / Incorporation is required.");
+    const coApplicantMissingDob = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
+    if (coApplicantMissingDob) return toast.error(`Date of Birth is required for co-applicant ${coApplicantMissingDob.name || coApplicantMissingDob.pan_number}.`);
 
     try {
       setSaving(true);
@@ -712,7 +745,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       for (let app of formData.applicants) {
         if (app.pan_number) {
           if (app.type === 'PRIMARY') {
-            app = { ...app, pincode: formData.pincode };
+            // formData.dob is the customer-level DOB captured from PAN
+            // verification - it never otherwise reaches the primary
+            // Applicant row, which is what the bureau/credit check actually
+            // reads. Without this, the bureau vendor gets a null DOB and
+            // silently returns "no obligations found" for a real applicant.
+            app = { ...app, pincode: formData.pincode, dob: app.dob || formData.dob };
           }
           const savedApp = await caseService.addApplicant(targetCaseId, app);
           savedApps.push(savedApp);
@@ -834,6 +872,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleStep3Submit = async (e) => {
     e.preventDefault();
     if (!formData.product_type) return toast.error('Please select a loan product.');
+    if (!formData.loan_amount || Number(formData.loan_amount) <= 0) return toast.error('Please enter the requested loan amount.');
     const needsProperty = PROPERTY_REQUIRED.includes(formData.product_type);
     if (needsProperty && !formData.property_type) return toast.error('Property type is required for LAP/HL.');
     if (needsProperty && !formData.market_value)  return toast.error('Market value is required for LAP/HL.');
@@ -842,6 +881,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setSaving(true);
       const payload = {
         product_type: formData.product_type,
+        loan_amount: parseFloat(formData.loan_amount),
+        dsa_notes: formData.dsa_notes || null,
         property: needsProperty ? {
           property_type:    formData.property_type,
           occupancy_status: formData.occupancy_status,
@@ -926,7 +967,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {caseId ? ((formData.proprietor_name || formData.business_name) ? `${formData.proprietor_name || formData.business_name}` : "Resume Draft Case") : "Add New Customer / New Case"}
+            {caseId ? ((formData.proprietor_name || formData.business_name) ? toTitleCase(formData.proprietor_name || formData.business_name) : "Resume Draft Case") : "Add New Customer / New Case"}
           </h1>
         </div>
         {caseId && (
@@ -1130,12 +1171,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     />
                   </FormField>
 
-                  <FormField label="Date Of Birth / Incorporation" name="dob" disabled={formData.pan_verified}>
+                  <FormField label="Date Of Birth / Incorporation" name="dob" required disabled={formData.pan_verified}>
                     <input
                       type="date"
                       value={formData.dob || ''}
                       onChange={e => setFormData({ ...formData, dob: e.target.value })}
                       className="form-control"
+                      required
                       disabled={formData.pan_verified}
                     />
                   </FormField>
@@ -1312,12 +1354,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               disabled={app.pan_verified}
                             />
                           </FormField>
-                          <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled={app.pan_verified}>
+                          <FormField label="Date Of Birth" name={`codob_${realIdx}`} required disabled={app.pan_verified}>
                             <input
                               type="date"
                               value={app.dob || ''}
                               onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
                               className="form-control"
+                              required
                               disabled={app.pan_verified}
                             />
                           </FormField>
@@ -1412,7 +1455,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       customerId={formData.customer_id}
                       applicantId={null}
                       applicantType="PRIMARY"
-                      applicantName={formData.business_name || formData.business_pan || 'Primary Business'}
+                      applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                       prefillPan={formData.business_pan}
                       walletBalance={walletBalance}
                       itrCost={costs.ITR_ANALYTICS}
@@ -1428,7 +1471,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           customerId={formData.customer_id}
                           applicantId={coApp.id}
                           applicantType="CO_APPLICANT"
-                          applicantName={coApp.name || coApp.pan_number || `Co-Applicant ${idx + 1}`}
+                          applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           prefillPan={coApp.pan_number || ''}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
@@ -1467,7 +1510,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       customerId={formData.customer_id}
                       applicantId={null} 
                       applicantType="PRIMARY"
-                      applicantName={formData.business_name || formData.business_pan || 'Primary Business'}
+                      applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                       walletBalance={walletBalance}
                       analyzeCost={costs.BANK_ANALYSIS}
                       existingStatus={formData.customer_bank_profile}
@@ -1482,7 +1525,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           customerId={formData.customer_id}
                           applicantId={coApp.id}
                           applicantType="CO_APPLICANT"
-                          applicantName={coApp.name || coApp.pan_number || `Co-Applicant ${idx+1}`}
+                          applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx+1}`}
                           walletBalance={walletBalance}
                           analyzeCost={costs.BANK_ANALYSIS}
                           existingStatus={coApp.bank_statements?.[0] || null}
@@ -1505,7 +1548,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
                     <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 16 : 0 }}>
                       <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
-                      <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={app.name || app.pan_number} />
+                      <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={toTitleCase(app.name) || app.pan_number} />
                     </div>
                   ))}
                 </div>
@@ -1543,6 +1586,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     <option value="BL">Business Loan (Unsecured)</option>
                     <option value="Other">Other — Specify</option>
                   </select>
+                </FormField>
+
+                <FormField label="Requested Loan Amount (₹)" name="loan_amount" required>
+                  <input type="number" className="form-control" placeholder="e.g. 5000000" value={formData.loan_amount} onChange={e => setFormData({ ...formData, loan_amount: e.target.value })} required min="1" />
+                </FormField>
+
+                <FormField label="Additional Requirements / Notes" name="dsa_notes">
+                  <textarea rows={3} className="form-control" placeholder="Any specific requirements..." value={formData.dsa_notes} onChange={e => setFormData({ ...formData, dsa_notes: e.target.value })} />
                 </FormField>
 
                 {/* Property & Collateral fields — only for LAP / HL */}
@@ -1601,10 +1652,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           <BureauObligationsStep caseId={caseId} onNext={() => goToStep(6)} onBack={() => goToStep(4)} />
         )}
         {currentStep === 6 && (
-          <EsrStep caseId={caseId} onOpenProposal={handleProposalCreated} />
+          <EsrStep
+            caseId={caseId}
+            onOpenProposal={handleProposalCreated}
+            isMsme={isMsme}
+            onApplyForLoan={handleApplyForLoan}
+          />
         )}
         {currentStep === 7 && (
-          <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} />
+          isMsme ? (
+            <MsmeLoanTermsStep caseId={caseId} lender={applyLender} onBack={() => goToStep(6)} />
+          ) : (
+            <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} />
+          )
         )}
       </div>
 

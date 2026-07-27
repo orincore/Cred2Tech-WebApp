@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { toTitleCase, formatStatusLabel } from '../utils/helpers';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -368,7 +369,7 @@ export default function CaseDetailPage() {
             <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate(isMsme ? '/msme/cases' : '/customers')}>{isMsme ? 'My Cases' : 'All Cases'}</span>
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-            CASE-{caseData.id} — {caseData.customer_name || caseData.customer?.business_name}
+            CASE-{caseData.id} — {toTitleCase(caseData.customer?.proprietor_name || caseData.customer_name || caseData.customer?.business_name)}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
             {caseData.lender_name || 'Unassigned'} · {caseData.product_type || 'N/A'} · {formatCurrency(caseData.loan_amount)}
@@ -473,7 +474,7 @@ export default function CaseDetailPage() {
               <DataRow label="Industry" value={caseData.customer?.industry || 'N/A'} />
               <DataRow label="Entity Type" value={caseData.entity_type || caseData.customer?.entity_type || 'N/A'} />
               <DataRow label="Business Vintage" value={caseData.customer?.business_vintage ? `${caseData.customer.business_vintage} Years` : 'N/A'} />
-              <DataRow label="CIBIL Score" value={caseData.cibil_score || 'Pending'} valueColor={caseData.cibil_score >= 700 ? 'var(--success)' : 'var(--warning)'} />
+              <DataRow label="Bureau Score" value={caseData.cibil_score || 'Pending'} valueColor={caseData.cibil_score >= 700 ? 'var(--success)' : 'var(--warning)'} />
               <DataRow label="Lender" value={caseData.lender_name || 'Not Selected'} />
               <DataRow label="Loan Amount" value={formatCurrency(caseData.loan_amount)} />
               <DataRow label="DSA Notes" value={caseData.dsa_notes || '—'} />
@@ -526,7 +527,7 @@ export default function CaseDetailPage() {
               <colgroup><col style={{ width: '28%' }} /><col style={{ width: '20%' }} /><col style={{ width: '17%' }} /><col style={{ width: '18%' }} /><col style={{ width: '17%' }} /></colgroup>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)', borderBottom: '2px solid var(--border)' }}>
-                  {['Name / Entity', 'Role', 'PAN', 'Status', 'CIBIL'].map(h => (
+                  {['Name / Entity', 'Role', 'PAN', 'Status', 'Bureau Score'].map(h => (
                     <th key={h} style={{ padding: '10px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>{h}</th>
                   ))}
                 </tr>
@@ -627,7 +628,7 @@ export default function CaseDetailPage() {
                 <div key={log.id} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--primary)', marginTop: 5, flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 13 }}><strong>{log.activity_type}</strong>: {log.description}</div>
+                    <div style={{ fontSize: 13 }}><strong>{formatStatusLabel(log.activity_type)}</strong>: {log.description}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{formatRelative(log.created_at)} · User ID: {log.performed_by_user_id || 'System'}</div>
                   </div>
                 </div>
@@ -644,7 +645,7 @@ export default function CaseDetailPage() {
                 <div key={history.id} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--success)', marginTop: 5, flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 13 }}>Transitioned from <strong>{history.old_stage}</strong> to <strong>{history.new_stage}</strong></div>
+                    <div style={{ fontSize: 13 }}>Transitioned from <strong>{formatStatusLabel(history.old_stage)}</strong> to <strong>{formatStatusLabel(history.new_stage)}</strong></div>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{formatRelative(history.changed_at)} · Updated by User: {history.changed_by || 'System'}</div>
                   </div>
                 </div>

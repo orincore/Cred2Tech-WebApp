@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -207,6 +207,106 @@ const formatDynamicTenure = (months) => {
 
 const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 
+// ─── Ineligibility reason humanizer ───────────────────────────────────────────
+// The eligibility engine (dynamicEligibility.service.js) emits a mix of plain
+// sentences and internal SCREAMING_SNAKE_CASE codes (e.g. LIP_REQUIRES_MANUAL_REVIEW,
+// PRIMARY_APPLICANT_NOT_SALARIED: employment type is NA), joined with " | ".
+// This maps the known codes to plain-English explanations, and falls back to
+// turning any unmapped code into readable words rather than showing raw jargon.
+const REASON_ACRONYMS = new Set(['LTV', 'FOIR', 'DBR', 'KYC', 'CIBIL', 'GST', 'PAN', 'ROI', 'NWM', 'LIP', 'GRP', 'CA', 'ICICI', 'TATA', 'EMI']);
+
+const humanizeReasonCode = (code) => code
+  .split('_')
+  .filter(Boolean)
+  .map(w => REASON_ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+  .join(' ');
+
+const REASON_PATTERNS = [
+  [/^PRIMARY_APPLICANT_NOT_SALARIED:\s*employment type is\s*(.+)$/i,
+    (m) => `This scheme needs the primary applicant to be salaried${m[1] && m[1].toUpperCase() !== 'NA' ? ` (current employment type: ${m[1]})` : ''}.`],
+  [/^Composed eligible income is 0 or missing\.?$/i,
+    () => 'Your eligible income could not be calculated — required income details may be missing.'],
+  [/^GRP eligibility is 0.*$/i,
+    () => 'Based on your gross receipts, the eligible loan amount works out to zero for this scheme.'],
+  [/^GRP gross receipt not available$/i,
+    () => 'Gross receipts details are not available for this business.'],
+  [/^PROFESSION_REQUIRED_FOR_GRP$/i,
+    () => 'Profession details are required to evaluate this scheme.'],
+  [/^POLICY_VALUE_REQUIRES_CONFIRMATION:?\s*(.*)$/i,
+    (m) => `This scheme needs confirmation of a policy value${m[1] ? ` (${m[1]})` : ''}.`],
+  [/^LIP_REQUIRES_MANUAL_REVIEW$/i,
+    () => 'This scheme requires manual review by our credit team.'],
+  [/^LOW_LTV_REQUIRES_MANUAL_REVIEW$/i,
+    () => 'This scheme requires manual review due to a low loan-to-value ratio.'],
+  [/^NWM_CUSTOMER_SELECTION_FAILED$/i,
+    () => 'Additional details are required to evaluate this scheme.'],
+  [/^NWM inactive.*$/i,
+    () => 'This scheme is currently unavailable with this lender.'],
+  [/^TATA_LIP_CURRENT_YEAR_NET_PROFIT_REQUIRED$/i,
+    () => 'Current year net profit details are required for this scheme.'],
+  [/^CA_ASSESSED_ELIGIBLE_AMOUNT_REQUIRED_FOR_TATA_LIP$/i,
+    () => 'A CA-assessed eligible loan amount is required for this scheme.'],
+  [/^Bureau score missing\.?$/i,
+    () => 'Your bureau score is missing, so this lender could not be evaluated.'],
+  [/^Lowest CIBIL score (\d+) is below bureau cutoff (\d+)$/i,
+    (m) => `Your bureau score (${m[1]}) is below this lender's minimum requirement (${m[2]}).`],
+  [/^No valid ROI configured.*$/i,
+    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
+  [/^No valid tenure configured.*$/i,
+    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
+  [/is a manual\/deviation method\..*$/i,
+    () => 'This scheme requires manual review by our credit team.'],
+  [/requires manual override\.?$/i,
+    () => 'This scheme requires manual review by our credit team.'],
+  [/^Manual \/ Low LTV \/ LIP method requires.*$/i,
+    () => 'This scheme requires manual underwriting review.'],
+  [/^Invalid lender configuration for.*$/i,
+    () => "This lender's eligibility criteria could not be evaluated due to a setup issue."],
+  [/^Missing required lender configuration for.*$/i,
+    () => "This lender's eligibility criteria could not be evaluated due to a setup issue."],
+  [/FOIR\/DBR not configured.*$/i,
+    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
+  [/FOIR config missing.*$/i,
+    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
+  [/^Maximum eligible loan (₹[\d,]+) is below lender minimum (₹[\d,]+)$/i,
+    (m) => `Your maximum eligible loan (${m[1]}) is below this lender's minimum loan amount (${m[2]}).`],
+];
+
+const humanizeReason = (raw) => {
+  const text = (raw || '').trim();
+  if (!text) return text;
+
+  for (const [pattern, format] of REASON_PATTERNS) {
+    const m = text.match(pattern);
+    if (m) return format(m);
+  }
+
+  // "SOME_CODE: extra detail" — humanize the code, keep the human-written detail
+  const codeWithDetail = text.match(/^([A-Z][A-Z0-9_]{3,}):\s*(.+)$/);
+  if (codeWithDetail) return `${humanizeReasonCode(codeWithDetail[1])} — ${codeWithDetail[2]}`;
+
+  // A bare "SOME_CODE" with no known mapping and no detail
+  if (/^[A-Z][A-Z0-9_]{3,}$/.test(text)) return `${humanizeReasonCode(text)}.`;
+
+  // Already a plain sentence — leave as-is
+  return text;
+};
+
+// Splits the " | "-joined raw reason string into de-duplicated, humanized reasons.
+const parseIneligibilityReasons = (raw) => {
+  if (!raw) return [];
+  const seen = new Set();
+  const out = [];
+  for (const part of raw.split(' | ')) {
+    const humanized = humanizeReason(part);
+    if (humanized && !seen.has(humanized)) {
+      seen.add(humanized);
+      out.push(humanized);
+    }
+  }
+  return out;
+};
+
 // ─── Proposal status badge config ─────────────────────────────────────────────
 const PROPOSAL_STATUS = {
   draft:              { label: 'Draft',      color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)', icon: Clock },
@@ -329,7 +429,7 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
 };
 
 // ─── Lender Action Button (multi-proposal aware) ───────────────────────────────
-function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender, onOpenProposal, compact = false }) {
+function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender, onOpenProposal, compact = false, isMsme = false, onApplyForLoan }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [sending, setSending] = useState(false);
@@ -342,6 +442,27 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
   const otherSubmitted = proposals.find(p =>
     String(p.lender_id) !== String(lender.lender_id) && p.proposal_status === 'submitted'
   ) || proposals.find(p => String(p.lender_id) !== String(lender.lender_id));
+
+  // MSME self-service customers never create/send proposals directly - picking
+  // a bank here moves to step 7, a dedicated loan-terms page where they state
+  // how much they need before the case goes to the Cred2Tech admin queue (the
+  // assigned DSA creates the actual proposal for that lender after allocation).
+  if (isMsme) {
+    return (
+      <button
+        className={`btn ${compact ? 'btn-sm' : ''}`}
+        style={{
+          borderRadius: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6,
+          padding: compact ? undefined : '10px', width: compact ? undefined : '100%', justifyContent: 'center',
+          background: 'linear-gradient(135deg,#2B6CB0,#553C9A)', color: '#fff', border: 'none', cursor: 'pointer'
+        }}
+        onClick={() => onApplyForLoan(lender)}
+      >
+        <Send size={compact ? 12 : 15} />
+        Apply for this Loan
+      </button>
+    );
+  }
 
   const handleSendEmail = async () => {
     setSending(true);
@@ -589,7 +710,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
 // reading useParams()/navigating itself. onOpenProposal(proposalId) is how a
 // newly created (or existing) proposal hands off to step 7, since proposalId
 // only ever exists once one has actually been created here.
-export default function EsrPage({ caseId, onOpenProposal }) {
+export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onApplyForLoan }) {
   const [sendConfirmResult, setSendConfirmResult] = useState(null);
   const [showOtherLenderModal, setShowOtherLenderModal] = useState(false);
 
@@ -599,6 +720,20 @@ export default function EsrPage({ caseId, onOpenProposal }) {
   const [proposals, setProposals]   = useState([]);
   const [lenderFilter, setLenderFilter]         = useState('all');
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
+  const [showIneligible, setShowIneligible] = useState(true);
+
+  // The card list is rendered from esr.raw_payload.lenders (a debugging
+  // snapshot taken before the EligibilityReportLender rows were inserted, so
+  // it has no real id) - resolve the real row id via lender_id so step 7 can
+  // record msme_selected_lender_esr_id correctly on submit.
+  const handleApplyForLoan = (lender) => {
+    const dbLenderId = esr?.lenders?.find(l => String(l.lender_id) === String(lender.lender_id))?.id;
+    if (!dbLenderId) {
+      toast.error('Could not resolve this lender - please regenerate the ESR and try again.');
+      return;
+    }
+    onApplyForLoan({ ...lender, dbLenderId });
+  };
 
   const load = useCallback(async () => {
     try {
@@ -674,17 +809,26 @@ export default function EsrPage({ caseId, onOpenProposal }) {
       >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Eligibility Summary Report
+            {isMsme ? 'Your Loan Eligibility Results' : 'Eligibility Summary Report'}
           </h1>
+          {isMsme && (
+            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+              Here's what you qualify for across our lending partners.
+            </p>
+          )}
         </div>
-        {esr && (
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <RefreshCw size={14} className={generating ? 'spin' : ''} />
-            {generating ? 'Generating...' : 'Regenerate ESR'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {esr && (
+            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RefreshCw size={14} className={generating ? 'spin' : ''} />
+              {generating ? 'Refreshing...' : isMsme ? 'Refresh Results' : 'Regenerate ESR'}
+            </button>
+          )}
+        </div>
       </motion.div>
+
+
 
       {/* No ESR yet */}
       {!esr && !generating && (
@@ -693,10 +837,16 @@ export default function EsrPage({ caseId, onOpenProposal }) {
           <div style={{ display: 'inline-flex', width: 72, height: 72, borderRadius: '50%', background: 'var(--bg-elevated)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <BarChart3 size={32} color="var(--text-tertiary)" />
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>No ESR generated yet</h3>
-          <p style={{ color: 'var(--text-tertiary)', marginBottom: 24 }}>Click <strong>Generate ESR</strong> to run the eligibility engine against all active lenders.</p>
+          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+            {isMsme ? 'Let\'s check your eligibility' : 'No ESR generated yet'}
+          </h3>
+          <p style={{ color: 'var(--text-tertiary)', marginBottom: 24 }}>
+            {isMsme
+              ? 'We\'ll instantly check your eligibility across all our lending partners.'
+              : <>Click <strong>Generate ESR</strong> to run the eligibility engine against all active lenders.</>}
+          </p>
           <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={18} /> Generate Eligibility Report
+            <Zap size={18} /> {isMsme ? 'Check My Eligibility' : 'Generate Eligibility Report'}
           </button>
         </motion.div>
       )}
@@ -708,15 +858,15 @@ export default function EsrPage({ caseId, onOpenProposal }) {
           marginBottom: 20, padding: '12px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-tertiary)', fontSize: 12, fontWeight: 700 }}>
-            <ListFilter size={14} /> FILTERS
+            <ListFilter size={14} /> {isMsme ? 'Filter Offers' : 'FILTERS'}
           </div>
           <select className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
-            style={{ width: 'auto', minWidth: 180, padding: '7px 10px', fontSize: 13 }}>
+            style={{ width: 'auto', minWidth: 180, padding: isMsme ? '9px 10px' : '7px 10px', fontSize: 13 }}>
             <option value="all">All Lenders ({lenders.length})</option>
             {lenderNames.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
           <select className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
-            style={{ width: 'auto', minWidth: 160, padding: '7px 10px', fontSize: 13 }}>
+            style={{ width: 'auto', minWidth: 160, padding: isMsme ? '9px 10px' : '7px 10px', fontSize: 13 }}>
             <option value="all">All Statuses</option>
             <option value="eligible">Eligible ({eligibleCount})</option>
             <option value="ineligible">Not Eligible ({ineligibleCount})</option>
@@ -739,7 +889,7 @@ export default function EsrPage({ caseId, onOpenProposal }) {
           return (
             <motion.div key={lender.lender_id}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.02 }}
-              style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}
+              style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', borderRadius: 0, marginBottom: 12 }}
             >
               <div style={{ padding: '12px 16px', opacity: eligible ? 1 : 0.75 }}>
                 {/* Identity row: icon + name/product on the left, status badge anchored right */}
@@ -761,7 +911,9 @@ export default function EsrPage({ caseId, onOpenProposal }) {
                     padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
                     border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
                   }}>
-                    {eligible ? 'ELIGIBLE' : 'INELIGIBLE'}
+                    {isMsme
+                      ? (eligible ? 'Eligible' : 'Not Eligible')
+                      : (eligible ? 'ELIGIBLE' : 'INELIGIBLE')}
                   </span>
                 </div>
 
@@ -779,9 +931,28 @@ export default function EsrPage({ caseId, onOpenProposal }) {
                       <MetricTile size="sm" label="Tenure" value={formatDynamicTenure(lender.max_tenure_months)} />
                     </div>
                   ) : (
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {lender.ineligibility_reason && <AlertCircle size={12} color="var(--error)" style={{ flexShrink: 0 }} />}
-                      {lender.ineligibility_reason || 'Not eligible'}
+                    <div style={{ width: '100%' }}>
+                      {(() => {
+                        const reasons = parseIneligibilityReasons(lender.ineligibility_reason);
+                        if (reasons.length === 0) {
+                          return <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Not eligible</div>;
+                        }
+                        return (
+                          <>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <AlertCircle size={12} style={{ flexShrink: 0 }} /> Why not eligible
+                            </div>
+                            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {reasons.map((reason, ri) => (
+                                <li key={ri} style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: 7, lineHeight: 1.4 }}>
+                                  <span style={{ color: 'var(--error)', fontWeight: 700, flexShrink: 0 }}>•</span>
+                                  <span>{reason}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -798,15 +969,19 @@ export default function EsrPage({ caseId, onOpenProposal }) {
                         onSendToLender={setSendConfirmResult}
                         onSendToOtherLender={() => setShowOtherLenderModal(true)}
                         onOpenProposal={onOpenProposal}
+                        isMsme={isMsme}
+                        onApplyForLoan={handleApplyForLoan}
                         compact
                       />
                     </div>
                   )}
                 </div>
               </div>
-              <div style={{ padding: '0 16px 8px 42px' }}>
-                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
-              </div>
+              {!isMsme && (
+                <div style={{ padding: '0 16px 8px 42px' }}>
+                  <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
+                </div>
+              )}
             </motion.div>
           );
         };
@@ -823,18 +998,45 @@ export default function EsrPage({ caseId, onOpenProposal }) {
         const visibleIneligible = filteredLenders.filter(l => !l.is_eligible);
 
         return (
-          <div style={{ border: '1px solid var(--border)', borderBottom: 'none' }}>
-            {visibleEligible.map((lender, i) => renderRow(lender, i))}
-            {visibleEligible.length > 0 && visibleIneligible.length > 0 && (
+          <div>
+            {visibleEligible.length > 0 && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '6px 16px',
-                background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)',
-                fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px'
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+                padding: '8px 14px', background: 'var(--success-bg)', border: '1px solid var(--success)',
+                color: 'var(--success)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em'
               }}>
-                <XCircle size={12} /> Not Eligible ({visibleIneligible.length})
+                <CheckCircle2 size={14} /> Eligible Loans ({visibleEligible.length})
               </div>
             )}
-            {visibleIneligible.map((lender, i) => renderRow(lender, i))}
+            {visibleEligible.map((lender, i) => renderRow(lender, i))}
+
+            {visibleIneligible.length > 0 && (
+              isMsme ? (
+                <button
+                  onClick={() => setShowIneligible(v => !v)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                    marginTop: visibleEligible.length > 0 ? 16 : 0, marginBottom: showIneligible ? 10 : 0,
+                    background: 'var(--error-bg)', border: '1px solid var(--error)',
+                    fontSize: 12, fontWeight: 800, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer'
+                  }}
+                >
+                  <XCircle size={14} />
+                  {showIneligible ? 'Hide' : 'Show'} {visibleIneligible.length} lender{visibleIneligible.length === 1 ? '' : 's'} you're not eligible with
+                  {showIneligible ? <ChevronUp size={13} style={{ marginLeft: 'auto' }} /> : <ChevronDown size={13} style={{ marginLeft: 'auto' }} />}
+                </button>
+              ) : (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  marginTop: visibleEligible.length > 0 ? 16 : 0, marginBottom: 10,
+                  padding: '8px 14px', background: 'var(--error-bg)', border: '1px solid var(--error)',
+                  color: 'var(--error)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em'
+                }}>
+                  <XCircle size={14} /> Not Eligible Loans ({visibleIneligible.length})
+                </div>
+              )
+            )}
+            {showIneligible && visibleIneligible.map((lender, i) => renderRow(lender, i))}
           </div>
         );
       })()}
