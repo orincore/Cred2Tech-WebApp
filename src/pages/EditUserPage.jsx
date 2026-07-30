@@ -8,15 +8,13 @@ import { ROLE_OPTIONS, HIERARCHY_LEVELS } from '../constants/roles';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-import { useTheme } from '../context/ThemeContext';
+import PageHeader from '../components/ui/PageHeader';
 
 const ROLE_ID_NAME = { 1: 'SUPER_ADMIN', 2: 'DSA_ADMIN', 3: 'CRED2TECH_MEMBER', 4: 'DSA_MEMBER' };
 
 const EditUserPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,12 +77,15 @@ const EditUserPage = () => {
     fetchUser();
   }, [id]);
 
+  // Matches CreateUserPage's exact recipe — same page pair, same visual
+  // language, so this is copied rather than re-derived.
   const labelStyle = { fontSize: 12, color: 'var(--on-muted)', marginBottom: 6, display: 'block', fontWeight: 600 };
   const inputStyle = {
     width: '100%', background: 'transparent', border: 'none', outline: 'none',
-    borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628',
+    borderBottom: '2px solid var(--outline)', color: 'var(--on-surface)',
     fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s',
   };
+  const inputFocusStyle = { borderBottomColor: 'var(--primary)' };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -161,20 +162,18 @@ const EditUserPage = () => {
   if (loading) return <LoadingSpinner fullPage />;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-y-auto">
-      <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center w-full">
-        <div className="mb-10">
-          <h1 className="text-[24px] md:text-[28px] lg:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-            Edit User
-          </h1>
-          <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[13px] md:text-[14px] lg:text-[15px]">
-            Modify user information for {user?.name || 'this user'}
-          </p>
-        </div>
+    <div className="eup-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .eup-page > div { padding: 80px 24px 24px !important; }
+        }
+      `}</style>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+        <PageHeader title="Edit User" subtitle={`Modify user information for ${user?.name || 'this user'}`} />
 
         {/* Success banner */}
         {success && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)' }}>
             <CheckCircle size={16} />
             User updated successfully! Redirecting…
           </div>
@@ -182,7 +181,7 @@ const EditUserPage = () => {
 
         {/* Error banner */}
         {apiError && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--error-bg)', border: '1px solid var(--error)', color: 'var(--error)' }}>
             <AlertCircle size={16} />
             {apiError}
           </div>
@@ -191,7 +190,7 @@ const EditUserPage = () => {
         <form onSubmit={handleSubmit}>
           {/* Basic Information */}
           <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Basic Information
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -203,14 +202,14 @@ const EditUserPage = () => {
                   value={form.name}
                   onChange={handleChange}
                   placeholder="e.g. John Smith"
-                  style={{ ...inputStyle, borderBottomColor: errors.name ? '#dc2626' : 'var(--outline)' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  style={{ ...inputStyle, ...(errors.name ? inputFocusStyle : {}) }}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {
                     handleFieldBlur('name');
-                    e.target.style.borderBottomColor = errors.name ? '#dc2626' : 'var(--outline)';
+                    e.target.style.borderBottomColor = errors.name ? 'var(--error)' : 'var(--outline)';
                   }}
                 />
-                {errors.name && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
+                {errors.name && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
               </div>
               <div>
                 <label style={labelStyle}>Email Address *</label>
@@ -220,14 +219,14 @@ const EditUserPage = () => {
                   value={form.email}
                   onChange={handleChange}
                   placeholder="e.g. john@company.com"
-                  style={{ ...inputStyle, borderBottomColor: errors.email ? '#dc2626' : 'var(--outline)' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  style={{ ...inputStyle, ...(errors.email ? inputFocusStyle : {}) }}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {
                     handleFieldBlur('email');
-                    e.target.style.borderBottomColor = errors.email ? '#dc2626' : 'var(--outline)';
+                    e.target.style.borderBottomColor = errors.email ? 'var(--error)' : 'var(--outline)';
                   }}
                 />
-                {errors.email && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
+                {errors.email && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
               </div>
               <div>
                 <label style={labelStyle}>Mobile</label>
@@ -237,14 +236,14 @@ const EditUserPage = () => {
                   value={form.mobile}
                   onChange={handleChange}
                   placeholder="9876543210"
-                  style={{ ...inputStyle, borderBottomColor: errors.mobile ? '#dc2626' : 'var(--outline)' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  style={{ ...inputStyle, ...(errors.mobile ? inputFocusStyle : {}) }}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {
                     handleFieldBlur('mobile');
-                    e.target.style.borderBottomColor = errors.mobile ? '#dc2626' : 'var(--outline)';
+                    e.target.style.borderBottomColor = errors.mobile ? 'var(--error)' : 'var(--outline)';
                   }}
                 />
-                {errors.mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
+                {errors.mobile && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
               </div>
               <div>
                 <label style={labelStyle}>Designation</label>
@@ -255,7 +254,7 @@ const EditUserPage = () => {
                   onChange={handleChange}
                   placeholder="e.g. Executive"
                   style={{ ...inputStyle }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 />
               </div>
@@ -264,7 +263,7 @@ const EditUserPage = () => {
 
           {/* Role & Organization */}
           <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Role & Organization
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -288,7 +287,7 @@ const EditUserPage = () => {
                   value={form.status}
                   onChange={handleChange}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="ACTIVE">Active</option>
@@ -314,7 +313,7 @@ const EditUserPage = () => {
                   value={form.hierarchy_level}
                   onChange={handleChange}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">None</option>
@@ -328,7 +327,7 @@ const EditUserPage = () => {
                   value={form.manager_id}
                   onChange={handleChange}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">None (root level)</option>
@@ -338,26 +337,26 @@ const EditUserPage = () => {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 32, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+          {/* Action Buttons — same recipe as CreateUserPage's footer */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', marginTop: 32 }}>
             <button
               type="button"
               onClick={() => navigate('/users')}
               disabled={saving}
               style={{
-                padding: '6px 16px', background: 'transparent', border: '2px solid var(--outline)',
-                borderRadius: 10, fontSize: 11, fontWeight: 700, color: 'var(--on-surface)',
+                padding: '6px 14px', background: 'transparent', border: '2px solid var(--outline)',
+                borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)',
                 cursor: saving ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                flex: isMobile ? 1 : 'auto',
               }}
             >
               Cancel
             </button>
             <TravelingBorderButton
               type="submit"
+              size="sm"
+              solid
+              showIcon={false}
               disabled={saving || success}
-              className="px-4 py-1.5 text-[11px] rounded-[10px]"
-              style={{ flex: isMobile ? 1 : 'auto' }}
             >
               {saving ? (
                 <div className="flex justify-center items-center w-full h-full">

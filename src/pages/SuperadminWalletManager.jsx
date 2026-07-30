@@ -71,9 +71,6 @@ const SuperadminWalletManager = () => {
          {/* ─── Top header ─── */}
          <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
             <div>
-               <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-                  Admin › DSA Wallets
-               </p>
                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
                   DSA Wallets Management
                </h1>
@@ -130,7 +127,71 @@ const SuperadminWalletManager = () => {
                   <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} wallets</span>
                </div>
 
-               {/* Table */}
+               {/* Mobile: card list instead of a table — same reasoning as
+                   the other admin list pages. The whole card is tappable
+                   (matching the desktop row's onRowClick), same destination
+                   as the Open action. */}
+               {isMobile ? (
+                  <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                     {filtered.map((t) => {
+                        const isLow = t.wallet_balance <= 0;
+                        const isActive = t.status === 'ACTIVE';
+                        const statusColor = isLow ? 'var(--error)' : (isActive ? 'var(--success)' : 'var(--error)');
+                        return (
+                           <div
+                              key={t.tenant_id}
+                              onClick={() => navigate(`/admin/wallets/${t.tenant_id}`)}
+                              style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14, cursor: 'pointer' }}
+                           >
+                              {/* Identity row: DSA name + code on the left, status pill anchored right */}
+                              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                                 <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                       {t.tenant_name}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{t.code} · {t.city}</div>
+                                 </div>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor }} />
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: statusColor, whiteSpace: 'nowrap' }}>
+                                       {isLow ? 'Low Balance' : (isActive ? 'Active' : 'Inactive')}
+                                    </span>
+                                 </div>
+                              </div>
+
+                              {/* Fields grid */}
+                              <div style={{
+                                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                                 marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
+                              }}>
+                                 <div>
+                                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Mobile</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{t.mobile}</div>
+                                 </div>
+                                 <div>
+                                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Balance</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: isLow ? 'var(--error)' : 'var(--success)' }}>₹{t.wallet_balance.toLocaleString('en-IN')}</div>
+                                 </div>
+                                 <div style={{ gridColumn: 'span 2' }}>
+                                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Last Recharge</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>
+                                       {t.last_transaction_date ? new Date(t.last_transaction_date).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Never'}
+                                    </div>
+                                 </div>
+                              </div>
+
+                              <div style={{
+                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                 width: '100%', marginTop: 12, padding: '8px 0',
+                                 border: '1px solid var(--outline)', fontSize: 12, fontWeight: 700, color: 'var(--on-surface)',
+                              }}>
+                                 <Eye size={12} /> Open
+                              </div>
+                           </div>
+                        );
+                     })}
+                  </div>
+               ) : (
                <DataTable
                   columns={[
                      { key: 'tenant_name', label: 'DSA Name', render: (t) => (
@@ -182,6 +243,7 @@ const SuperadminWalletManager = () => {
                   hoverRows={true}
                   onRowClick={(t) => navigate(`/admin/wallets/${t.tenant_id}`)}
                />
+               )}
 
                {/* Pagination */}
                {totalPages > 1 && (

@@ -109,9 +109,6 @@ const TenantsListPage = () => {
       {/* ─── Top header ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            Admin › Manage DSAs
-          </p>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
             Manage DSAs
           </h1>
@@ -232,7 +229,101 @@ const TenantsListPage = () => {
             <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tenants.length} DSAs</span>
           </div>
 
-          {/* Table */}
+          {/* Mobile: card list instead of a table. A table forced into a small
+              viewport either truncates every column into illegibility or
+              becomes horizontally scrollable — a scrollable table on a phone
+              hides columns off-screen and needs a second gesture just to read
+              a row. A card puts every field for one DSA in a single vertical
+              read, needing only the scroll the user is already doing. */}
+          {isMobile ? (
+            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+              {filtered.map((t) => {
+                const [avatarBg, avatarClr] = avatarColors(t.name);
+                const isActive = (t.status || 'ACTIVE') === 'ACTIVE';
+                const isLowWallet = (t.wallet_balance || 0) < 500;
+                return (
+                  <div
+                    key={t.id}
+                    style={{
+                      background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                      borderRadius: 0, padding: 14,
+                    }}
+                  >
+                    {/* Identity row: avatar + name on the left, status pill anchored right */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                          background: avatarBg, color: avatarClr,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 800,
+                        }}>
+                          {getInitials(t.name)}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {t.name || '—'}
+                          </div>
+                          <span style={{
+                            display: 'inline-block', marginTop: 3,
+                            background: t.type === 'DSA' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#334155' : '#f1f5f9'),
+                            color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : 'var(--on-muted)',
+                            padding: '2px 7px', borderRadius: 0, fontSize: 9, fontWeight: 800,
+                          }}>
+                            {t.type || 'DSA'}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? '#10b981' : '#f43f5e' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? '#10b981' : '#f43f5e', whiteSpace: 'nowrap' }}>
+                          {t.status || 'ACTIVE'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Fields grid: everything a table column showed, laid out 2-up */}
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                      marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>PAN</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.pan_number || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>City</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.city || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Wallet</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: isLowWallet ? '#f43f5e' : '#10b981' }}>
+                          ₹{Number(t.wallet_balance || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>API Calls</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{t.api_calls_mtd || 0}</div>
+                      </div>
+                    </div>
+
+                    {/* Action */}
+                    <button
+                      onClick={() => openSummary(t.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        width: '100%', marginTop: 12, padding: '8px 0',
+                        background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                        fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                      }}
+                    >
+                      <Eye size={13} /> View
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
           <DataTable
             columns={[
               { key: 'name', label: 'DSA Name', render: (t) => {
@@ -304,6 +395,7 @@ const TenantsListPage = () => {
             isMobile={isMobile}
             hoverRows={true}
           />
+          )}
         </>
       )}
 

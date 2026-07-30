@@ -11,8 +11,15 @@ const WALLET_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
  * "Add New Customer" button), rendered alongside the wallet chip rather than in
  * a separate row underneath the header. Omitting it — as all other pages do —
  * leaves the header rendering exactly as before.
+ *
+ * `compact` shrinks the header's own vertical footprint (smaller title/
+ * subtitle, tighter margins) for pages that need to reclaim screen space —
+ * mobile viewports especially, where every stacked header row competes with
+ * the actual content for a small screen. Defaults to false, so every existing
+ * caller renders pixel-identical to before; opt in per page (or per
+ * breakpoint, e.g. `compact={isMobile}`).
  */
-const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null }) => {
+const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null, compact = false }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [walletBalance, setWalletBalance] = useState(null);
@@ -28,15 +35,15 @@ const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null }) => {
   }, [user?.role]);
 
   return (
-    <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', width: '100%' }}>
+    <div style={{ marginBottom: compact ? 14 : 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', width: '100%' }}>
       <div>
         {breadcrumbs.length > 0 && (
           <nav style={{
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            marginBottom: 10,
-            fontSize: 13,
+            marginBottom: compact ? 6 : 10,
+            fontSize: compact ? 12 : 13,
             color: 'var(--text-tertiary)',
             flexWrap: 'wrap',
           }}>
@@ -54,8 +61,8 @@ const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null }) => {
             ))}
           </nav>
         )}
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{title}</h1>
-        {subtitle && <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>{subtitle}</p>}
+        <h1 style={{ fontSize: compact ? 18 : 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{title}</h1>
+        {subtitle && <p style={{ fontSize: compact ? 12 : 14, color: 'var(--text-secondary)', marginTop: compact ? 2 : 4 }}>{subtitle}</p>}
       </div>
 
       {/* Right-hand group: wallet chip and any page-level actions share one

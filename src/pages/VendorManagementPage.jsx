@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Network, BarChart2, ShieldAlert, X, Edit, Plus } from 'lucide-react';
 import { getVendors, updateVendor, updateVendorSlabs } from '../api/vendor.api';
-import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -27,8 +26,6 @@ const useResponsive = () => {
 const VendorManagementPage = () => {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useResponsive();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [vendors, setVendors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -149,7 +146,7 @@ const VendorManagementPage = () => {
   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
-    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+    borderBottom: `2px solid ${active ? 'var(--primary)' : 'var(--outline)'}`,
     outline: 'none', width: '100%', padding: '6px 0',
     fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
     transition: 'border-color 0.2s',
@@ -160,11 +157,8 @@ const VendorManagementPage = () => {
       {/* ─── Top header ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            Admin › Vendor Management
-          </p>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-            Vendor Management
+            API Vendor Contracts
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
             API vendor contracts, billing slabs & monthly invoicing
@@ -174,7 +168,7 @@ const VendorManagementPage = () => {
 
       {/* ─── Info bar ─── */}
       <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <ShieldAlert size={16} color="#4f46e5" />
+        <ShieldAlert size={16} color="var(--primary)" />
         <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
           <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Vendor cost changes are versioned and do not affect past invoices. Billing slabs are evaluated per monthly volume.
         </p>
@@ -186,15 +180,15 @@ const VendorManagementPage = () => {
         <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
           <span style={labelSm}>Search</span>
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: 'var(--on-muted)' }} />
             <input
               type="text"
               placeholder="Vendor name, API type or website…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20 }}
-              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
+              onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+              onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
             />
           </div>
         </div>
@@ -207,7 +201,7 @@ const VendorManagementPage = () => {
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-          <Network size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
+          <Network size={48} color="var(--on-muted)" style={{ marginBottom: 16 }} />
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No vendors found</h3>
           <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Try adjusting your search.</p>
         </div>
@@ -219,38 +213,124 @@ const VendorManagementPage = () => {
             <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} vendors</span>
           </div>
 
-          {/* Table */}
+          {/* Mobile: card list instead of a table — same reasoning as
+              TenantsListPage. A table forced into a small viewport either
+              truncates every column or becomes horizontally scrollable, which
+              hides columns off-screen behind a second gesture. A card puts
+              every field for one vendor in a single vertical read. */}
+          {isMobile ? (
+            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+              {filtered.map((v) => {
+                const isActive = v.status === 'Active';
+                return (
+                  <div
+                    key={v.id}
+                    style={{
+                      background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                      borderRadius: 0, padding: 14,
+                    }}
+                  >
+                    {/* Identity row: vendor name + website on the left, status pill anchored right */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {v.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--on-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {v.website}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? 'var(--success)' : 'var(--error)' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--success)' : 'var(--error)', whiteSpace: 'nowrap' }}>
+                          {v.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* API type + role pill */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                      <span style={{ color: 'var(--info)', fontSize: 12, fontWeight: 600 }}>{v.apiType}</span>
+                      <span style={{
+                        background: v.role === 'Primary' ? 'var(--success-bg)' : 'var(--error-bg)',
+                        color: v.role === 'Primary' ? 'var(--success)' : 'var(--error)',
+                        padding: '2px 7px', borderRadius: 0, fontSize: 9, fontWeight: 800,
+                      }}>
+                        {v.role}
+                      </span>
+                    </div>
+
+                    {/* Fields grid: everything a table column showed, laid out 2-up */}
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                      marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Contract Period</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.period || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Billing Model</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.billingModel || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>MTD Calls</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{v.mtdCalls.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>MTD Cost</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>₹{v.mtdCost.toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    {/* Action */}
+                    <button
+                      onClick={() => handleEditClick(v)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        width: '100%', marginTop: 12, padding: '8px 0',
+                        background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                        fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                      }}
+                    >
+                      <Edit size={12} /> Edit
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
           <DataTable
             columns={[
-              { key: 'name', label: 'Vendor Name', render: (v) => (
+              { key: 'name', label: 'Vendor Name', align: 'center', render: (v) => (
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{v.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{v.website}</div>
                 </div>
               )},
-              { key: 'apiType', label: 'API Type', render: (v) => (
-                <span style={{ color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>{v.apiType}</span>
+              { key: 'apiType', label: 'API Type', align: 'center', render: (v) => (
+                <span style={{ color: 'var(--info)', fontSize: 12, fontWeight: 600 }}>{v.apiType}</span>
               )},
-              { key: 'role', label: 'Role', render: (v) => (
+              { key: 'role', label: 'Role', align: 'center', render: (v) => (
                 <span style={{
-                  background: v.role === 'Primary' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#7f1d1d' : '#fee2e2'),
-                  color: v.role === 'Primary' ? (isDark ? '#6ee7b7' : '#15803d') : (isDark ? '#fca5a5' : '#dc2626'),
-                  padding: '3px 8px', borderRadius: 4,
+                  background: v.role === 'Primary' ? 'var(--success-bg)' : 'var(--error-bg)',
+                  color: v.role === 'Primary' ? 'var(--success)' : 'var(--error)',
+                  padding: '3px 8px', borderRadius: 0,
                   fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
                 }}>
                   {v.role}
                 </span>
               )},
-              { key: 'period', label: 'Contract Period', render: (v) => v.period || '—' },
-              { key: 'billingModel', label: 'Billing Model', render: (v) => v.billingModel || '—' },
-              { key: 'mtdCalls', label: 'MTD Calls', render: (v) => v.mtdCalls.toLocaleString() },
-              { key: 'mtdCost', label: 'MTD Cost (₹)', render: (v) => `₹${v.mtdCost.toLocaleString()}` },
-              { key: 'status', label: 'Status', render: (v) => {
+              { key: 'period', label: 'Contract Period', align: 'center', render: (v) => v.period || '—' },
+              { key: 'billingModel', label: 'Billing Model', align: 'center', render: (v) => v.billingModel || '—' },
+              { key: 'mtdCalls', label: 'MTD Calls', align: 'center', render: (v) => v.mtdCalls.toLocaleString() },
+              { key: 'mtdCost', label: 'MTD Cost (₹)', align: 'center', render: (v) => `₹${v.mtdCost.toLocaleString()}` },
+              { key: 'status', label: 'Status', align: 'center', render: (v) => {
                 const isActive = v.status === 'Active';
                 return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? '#10b981' : '#f43f5e', flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? '#10b981' : '#f43f5e', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? 'var(--success)' : 'var(--error)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--success)' : 'var(--error)', whiteSpace: 'nowrap' }}>
                       {v.status}
                     </span>
                   </div>
@@ -264,9 +344,9 @@ const VendorManagementPage = () => {
                     background: 'transparent', border: 'none',
                     padding: '5px 10px', fontSize: 11, fontWeight: 700,
                     color: 'var(--on-surface)', cursor: 'pointer', transition: 'all 0.15s',
-                    borderRadius: 4, whiteSpace: 'nowrap',
+                    borderRadius: 0, whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#4f46e5'; e.currentTarget.style.background = 'var(--surface-low)'; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.background = 'var(--surface-low)'; }}
                   onMouseLeave={e => { e.currentTarget.style.color = 'var(--on-surface)'; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <Edit size={11} />
@@ -278,6 +358,7 @@ const VendorManagementPage = () => {
             isMobile={isMobile}
             hoverRows={true}
           />
+          )}
         </>
       )}
 
@@ -289,11 +370,11 @@ const VendorManagementPage = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: isMobile ? 16 : 24
         }}>
-          <div style={{ background: isDark ? '#1e293b' : '#fff', borderRadius: 12, width: isMobile ? '100%' : 700, maxWidth: isMobile ? '100%' : 700, overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-             <div style={{ background: '#4f46e5', padding: isMobile ? '12px 16px' : '16px 20px', display: 'flex', justifyContent: 'space-between', color: '#fff' }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 0, width: isMobile ? '100%' : 700, maxWidth: isMobile ? '100%' : 700, overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+             <div style={{ background: 'var(--primary)', padding: isMobile ? '12px 16px' : '16px 20px', display: 'flex', justifyContent: 'space-between', color: '#fff' }}>
               <div>
                  <h3 style={{ margin: 0, fontSize: isMobile ? 14 : 16, fontWeight: 700 }}>Edit Vendor</h3>
-                 <p style={{ margin: 0, fontSize: isMobile ? 11 : 12, color: '#c7d2fe', fontWeight: 500 }}>Super Admin only — billing slab changes effective from next cycle</p>
+                 <p style={{ margin: 0, fontSize: isMobile ? 11 : 12, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>Super Admin only — billing slab changes effective from next cycle</p>
               </div>
               <button
                 onClick={() => setEditModalOpen(false)}
@@ -301,7 +382,7 @@ const VendorManagementPage = () => {
                   width: 28,
                   height: 28,
                   border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: 6,
+                  borderRadius: 0,
                   background: 'transparent',
                   cursor: 'pointer',
                   color: '#fff',
@@ -336,8 +417,8 @@ const VendorManagementPage = () => {
                       type="text"
                       value={editForm.name}
                       onChange={e => setEditForm({...editForm, name: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     />
                   </div>
@@ -346,8 +427,8 @@ const VendorManagementPage = () => {
                     <select
                       value={editForm.apiType}
                       onChange={e => setEditForm({...editForm, apiType: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                         <option value="ITR">ITR</option>
@@ -361,8 +442,8 @@ const VendorManagementPage = () => {
                     <select
                       value={editForm.role}
                       onChange={e => setEditForm({...editForm, role: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                         <option value="Primary">Primary</option>
@@ -378,8 +459,8 @@ const VendorManagementPage = () => {
                       type="text"
                       value={editForm.contract_start}
                       onChange={e => setEditForm({...editForm, contract_start: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     />
                   </div>
@@ -389,8 +470,8 @@ const VendorManagementPage = () => {
                       type="text"
                       value={editForm.contract_end}
                       onChange={e => setEditForm({...editForm, contract_end: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     />
                   </div>
@@ -399,8 +480,8 @@ const VendorManagementPage = () => {
                     <select
                       value={editForm.billingModel}
                       onChange={e => setEditForm({...editForm, billingModel: e.target.value})}
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                         <option value="Volume Slabs">Monthly Volume-Based</option>
@@ -410,7 +491,7 @@ const VendorManagementPage = () => {
                </div>
 
                {/* BILLING SLABS SECTION */}
-               <div style={{background: isDark ? '#0f172a' : '#F8FAFC', border: '1px solid var(--outline)', borderRadius: 8, padding: isMobile ? 12 : 16}}>
+               <div style={{background: 'var(--bg-elevated)', border: '1px solid var(--outline)', borderRadius: 0, padding: isMobile ? 12 : 16}}>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 12 : 0}}>
                     <div>
                       <h4 style={{margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--on-surface)'}}>Billing Slabs</h4>
@@ -420,10 +501,10 @@ const VendorManagementPage = () => {
                       onClick={addSlabRow}
                       style={{
                         padding: '8px 16px', background: 'transparent', border: '2px solid var(--outline)',
-                        borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
+                        borderRadius: 0, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
                         cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
                       }}
-                      onMouseEnter={e => e.target.style.borderColor = '#4f46e5'}
+                      onMouseEnter={e => e.target.style.borderColor = 'var(--primary)'}
                       onMouseLeave={e => e.target.style.borderColor = 'var(--outline)'}
                     >
                       <span style={{fontSize: 14}}>+</span> Add Slab
@@ -461,9 +542,9 @@ const VendorManagementPage = () => {
                       <button
                         onClick={() => removeSlab(i)}
                         style={{
-                          color: '#EF4444', borderColor: '#FECACA', background: '#FEF2F2',
+                          color: 'var(--error)', borderColor: 'var(--error)', background: 'var(--error-bg)',
                           padding: 0, width: 32, height: 36, display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', border: '1px solid', borderRadius: 6, cursor: 'pointer',
+                          justifyContent: 'center', border: '1px solid', borderRadius: 0, cursor: 'pointer',
                           fontSize: 16, fontWeight: 700
                         }}
                       >✕</button>
@@ -476,7 +557,7 @@ const VendorManagementPage = () => {
                   onClick={() => setEditModalOpen(false)}
                   style={{
                     padding: '8px 20px', background: 'transparent', border: '2px solid var(--outline)',
-                    borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
+                    borderRadius: 0, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
                     cursor: 'pointer', transition: 'all 0.2s'
                   }}
                 >
@@ -484,7 +565,7 @@ const VendorManagementPage = () => {
                 </button>
                 <TravelingBorderButton
                   onClick={handleSaveVendor}
-                  className="px-6 py-2.5 text-[13px] rounded-[10px]"
+                  className="px-6 py-2.5 text-[13px] rounded-none"
                 >
                   Save Vendor
                 </TravelingBorderButton>

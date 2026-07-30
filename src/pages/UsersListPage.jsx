@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, RefreshCw, UserPlus, Edit, Lock, Users, ShieldCheck } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, UserPlus, Edit, Users, ShieldCheck } from 'lucide-react';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { getUsers } from '../api/userService';
 import { MOCK_USERS } from '../constants/mockData';
@@ -65,6 +65,9 @@ const UsersListPage = () => {
   }, [users, search, filterRole, filterStatus, filterLevel]);
 
   const hasFilters = search || filterRole || filterStatus || filterLevel;
+  // Role/Status/Level (not Search) — what the mobile "Filters" toggle counts,
+  // since Search stays visible inline regardless of the toggle state.
+  const activeAdvancedFilterCount = [filterRole, filterStatus, filterLevel].filter(Boolean).length;
 
   const getRoleLabel = (n) => {
     if (n === 'SUPER_ADMIN') return 'Super Admin';
@@ -103,31 +106,43 @@ const UsersListPage = () => {
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
       {/* ─── Top header ─── */}
-      <div style={{ padding: isMobile ? '80px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
-        <PageHeader title="Team Management" subtitle="Manage Your Employees Easily" />
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <TravelingBorderButton
-            onClick={() => navigate('/users/create')}
-            size={isMobile ? 'sm' : 'sm'}
-            solid
-            showIcon={false}
-            className={isMobile ? 'px-4 py-2 text-xs' : ''}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-              <UserPlus size={isMobile ? 12 : 14} /> Add Employee
-            </div>
-          </TravelingBorderButton>
-        </div>
+      <div style={{ padding: isMobile ? '68px 16px 10px' : '24px 24px 16px', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader
+          title="Team Management"
+          subtitle="Manage Your Employees Easily"
+          compact={isMobile}
+          actions={
+            <TravelingBorderButton
+              onClick={() => navigate('/users/create')}
+              size="sm"
+              solid
+              showIcon={false}
+              className={isMobile ? 'px-4 py-2 text-xs' : ''}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
+                <UserPlus size={isMobile ? 12 : 14} /> Add Employee
+              </div>
+            </TravelingBorderButton>
+          }
+        />
       </div>
 
       {/* ─── Info bar ─── */}
-      <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <ShieldCheck size={16} color="#4f46e5" />
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate employees.
-          Employees receive OTP to mobile and email on account creation to activate access.
-        </p>
+      {/* Collapsed to one short line on mobile — the full explanatory copy is
+          nice-to-have context, not something worth permanent screen real
+          estate on a small viewport. */}
+      <div style={{ borderBottom: '1px solid var(--outline)', padding: isMobile ? '8px 16px' : '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <ShieldCheck size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+        {isMobile ? (
+          <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> — add, edit or deactivate employees.
+          </p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate employees.
+            Employees receive OTP to mobile and email on account creation to activate access.
+          </p>
+        )}
       </div>
 
       {/* ─── Error ─── */}
@@ -139,64 +154,90 @@ const UsersListPage = () => {
       )}
 
       {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+      {/* Mobile: Search stays inline (the filter people actually reach for
+          first); Role/Status/Level collapse behind a "Filters" toggle, closed
+          by default — this is what was eating half the screen: 4 stacked
+          label+input pairs plus Clear-all, always rendered, before a single
+          employee row was visible. Desktop is untouched — all four fields
+          stay inline exactly as before. */}
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '12px 16px' : '20px 20px', display: 'flex', gap: isMobile ? 10 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
 
         {/* Search */}
-        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+        <div style={{ flex: isMobile ? '1 1 auto' : 2, minWidth: isMobile ? 140 : 200, maxWidth: isMobile ? 'none' : 360 }}>
           <span style={labelSm}>Search</span>
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
+            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: 'var(--on-muted)' }} />
             <input
               type="text"
               placeholder="Name, email or mobile…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20 }}
-              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
+              onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+              onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
             />
           </div>
         </div>
 
-        {/* Role */}
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <span style={labelSm}>Role</span>
-          <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-            style={{ ...underlineInput(!!filterRole), appearance: 'none', cursor: 'pointer', borderBottomColor: filterRole ? '#4f46e5' : 'var(--outline)', color: filterRole ? '#4f46e5' : 'var(--on-surface)' }}>
-            <option value="">All Roles</option>
-            {ROLE_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-          </select>
-        </div>
-
-        {/* Status */}
-        <div style={{ flex: 1, minWidth: 120 }}>
-          <span style={labelSm}>Status</span>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            style={{ ...underlineInput(!!filterStatus), appearance: 'none', cursor: 'pointer', borderBottomColor: filterStatus ? '#4f46e5' : 'var(--outline)', color: filterStatus ? '#4f46e5' : 'var(--on-surface)' }}>
-            <option value="">All Status</option>
-            {STATUS_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-          </select>
-        </div>
-
-        {/* Level */}
-        <div style={{ flex: 1, minWidth: 110 }}>
-          <span style={labelSm}>Level</span>
-          <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
-            style={{ ...underlineInput(!!filterLevel), appearance: 'none', cursor: 'pointer', borderBottomColor: filterLevel ? '#4f46e5' : 'var(--outline)', color: filterLevel ? '#4f46e5' : 'var(--on-surface)' }}>
-            <option value="">All Levels</option>
-            {['L1', 'L2', 'L3', 'L4'].map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
-
-        {hasFilters && (
+        {isMobile && (
           <button
-            onClick={() => { setSearch(''); setFilterRole(''); setFilterStatus(''); setFilterLevel(''); }}
-            style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#f43f5e'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--on-muted)'}
+            onClick={() => setShowFilters(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '7px 12px', marginBottom: 2, background: 'transparent',
+              border: `1px solid ${activeAdvancedFilterCount > 0 ? 'var(--primary)' : 'var(--outline)'}`,
+              color: activeAdvancedFilterCount > 0 ? 'var(--primary)' : 'var(--on-surface)',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', borderRadius: 0,
+            }}
           >
-            Clear all
+            <SlidersHorizontal size={13} />
+            Filters{activeAdvancedFilterCount > 0 ? ` (${activeAdvancedFilterCount})` : ''}
           </button>
+        )}
+
+        {(!isMobile || showFilters) && (
+          <>
+            {/* Role */}
+            <div style={{ flex: 1, minWidth: isMobile ? '45%' : 130 }}>
+              <span style={labelSm}>Role</span>
+              <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+                style={{ ...underlineInput(!!filterRole), appearance: 'none', cursor: 'pointer', borderBottomColor: filterRole ? 'var(--primary)' : 'var(--outline)', color: filterRole ? 'var(--primary)' : 'var(--on-surface)' }}>
+                <option value="">All Roles</option>
+                {ROLE_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div style={{ flex: 1, minWidth: isMobile ? '45%' : 120 }}>
+              <span style={labelSm}>Status</span>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                style={{ ...underlineInput(!!filterStatus), appearance: 'none', cursor: 'pointer', borderBottomColor: filterStatus ? 'var(--primary)' : 'var(--outline)', color: filterStatus ? 'var(--primary)' : 'var(--on-surface)' }}>
+                <option value="">All Status</option>
+                {STATUS_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+              </select>
+            </div>
+
+            {/* Level */}
+            <div style={{ flex: 1, minWidth: isMobile ? '45%' : 110 }}>
+              <span style={labelSm}>Level</span>
+              <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
+                style={{ ...underlineInput(!!filterLevel), appearance: 'none', cursor: 'pointer', borderBottomColor: filterLevel ? 'var(--primary)' : 'var(--outline)', color: filterLevel ? 'var(--primary)' : 'var(--on-surface)' }}>
+                <option value="">All Levels</option>
+                {['L1', 'L2', 'L3', 'L4'].map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+
+            {hasFilters && (
+              <button
+                onClick={() => { setSearch(''); setFilterRole(''); setFilterStatus(''); setFilterLevel(''); }}
+                style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--error)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--on-muted)'}
+              >
+                Clear all
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -224,15 +265,109 @@ const UsersListPage = () => {
       ) : (
         <>
           {/* Sub-header */}
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? '8px 16px' : '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Team Information</span>
             <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {users.length} employees</span>
           </div>
 
-          {/* Table */}
+          {/* Mobile: card list instead of a table — same reasoning as
+              TenantsListPage/VendorManagementPage. A table forced into a
+              small viewport either truncates every column or becomes
+              horizontally scrollable, hiding columns off-screen behind a
+              second gesture. A card puts every field for one employee in a
+              single vertical read. */}
+          {isMobile ? (
+            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+              {filtered.map((u) => {
+                const [avatarBg, avatarClr] = avatarColors(u.name);
+                const pill = getRolePill(u.role?.name);
+                const isActive = (u.status || 'ACTIVE') === 'ACTIVE';
+                const isSuperAdmin = u.role?.name === 'SUPER_ADMIN' && u.id === '1';
+                return (
+                  <div
+                    key={u.id}
+                    style={{
+                      background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                      borderRadius: 0, padding: 14,
+                    }}
+                  >
+                    {/* Identity row: avatar + name on the left, status pill anchored right */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                          background: avatarBg, color: avatarClr,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 800,
+                        }}>
+                          {getInitials(u.name)}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {u.name || '—'}
+                          </div>
+                          <span style={{
+                            display: 'inline-block', marginTop: 3,
+                            background: pill.bg, color: pill.color,
+                            padding: '2px 7px', borderRadius: 0, fontSize: 9, fontWeight: 800,
+                          }}>
+                            {getRoleLabel(u.role?.name)}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? 'var(--success)' : 'var(--error)' }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--success)' : 'var(--error)', whiteSpace: 'nowrap' }}>
+                          {u.status || 'ACTIVE'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Fields grid: everything a table column showed, laid out 2-up */}
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                      marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Designation</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.designation || 'Operations Executive'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Mobile</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.mobile || '—'}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Email</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || '—'}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Last Login</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{u.last_login_at ? formatDateTime(u.last_login_at) : 'Today 09:15'}</div>
+                      </div>
+                    </div>
+
+                    {/* Action */}
+                    {isSuperAdmin ? null : (
+                      <button
+                        onClick={() => navigate(`/users/${u.id}/edit`)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          width: '100%', marginTop: 12, padding: '8px 0',
+                          background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                          fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                        }}
+                      >
+                        <Edit size={12} /> {u.status === 'INACTIVE' ? 'Reactivate' : 'Edit'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
           <DataTable
             columns={[
-              { key: 'name', label: 'Name', render: (u) => {
+              { key: 'name', label: 'Name', width: '19%', render: (u) => {
                 const [avatarBg, avatarClr] = avatarColors(u.name);
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -250,7 +385,7 @@ const UsersListPage = () => {
                   </div>
                 );
               }},
-              { key: 'role', label: 'Role', render: (u) => {
+              { key: 'role', label: 'Role', width: '9%', render: (u) => {
                 const pill = getRolePill(u.role?.name);
                 return (
                   <span style={{
@@ -262,11 +397,11 @@ const UsersListPage = () => {
                   </span>
                 );
               }},
-              { key: 'designation', label: 'Designation', render: (u) => u.designation || 'Operations Executive' },
-              { key: 'mobile', label: 'Mobile', render: (u) => u.mobile || '—' },
-              { key: 'email', label: 'Email', render: (u) => u.email || '—' },
-              { key: 'last_login_at', label: 'Last Login', render: (u) => u.last_login_at ? formatDateTime(u.last_login_at) : 'Today 09:15' },
-              { key: 'status', label: 'Status', render: (u) => {
+              { key: 'designation', label: 'Designation', width: '14%', render: (u) => u.designation || 'Operations Executive' },
+              { key: 'mobile', label: 'Mobile', width: '10%', render: (u) => u.mobile || '—' },
+              { key: 'email', label: 'Email', width: '20%', render: (u) => u.email || '—' },
+              { key: 'last_login_at', label: 'Last Login', width: '13%', render: (u) => u.last_login_at ? formatDateTime(u.last_login_at) : 'Today 09:15' },
+              { key: 'status', label: 'Status', width: '7%', render: (u) => {
                 const isActive = (u.status || 'ACTIVE') === 'ACTIVE';
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -277,7 +412,7 @@ const UsersListPage = () => {
                   </div>
                 );
               }},
-              { key: 'action', label: 'Action', align: 'center', render: (u) => {
+              { key: 'action', label: 'Action', align: 'center', width: '8%', render: (u) => {
                 const isSuperAdmin = u.role?.name === 'SUPER_ADMIN' && u.id === '1';
                 return isSuperAdmin ? (
                   <span style={{ color: 'var(--outline)' }}>—</span>
@@ -304,6 +439,7 @@ const UsersListPage = () => {
             isMobile={isMobile}
             hoverRows={true}
           />
+          )}
         </>
       )}
     </div>

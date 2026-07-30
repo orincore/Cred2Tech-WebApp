@@ -14,7 +14,7 @@ import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import TrendBadge, { AnimatedNumber } from '../../components/ui/TrendBadge';
 import { getDsaSummary, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
-import { formatCompactINR, getErrorMessage } from '../../utils/helpers';
+import { formatCompactINR, getErrorMessage, formatStatusLabel, CASE_STAGE_LABELS } from '../../utils/helpers';
 
 // Fixed pipeline order — matches the product's actual case lifecycle stages.
 const STAGE_ORDER = [
@@ -179,7 +179,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
                       <td style={{ padding: '12px 20px', fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{formatCompactINR(c.applied_amount)}</td>
                       <td style={{ padding: '12px 20px' }}>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 0, color: stageColor(c.stage), background: `${stageColor(c.stage)}18` }}>
-                          {c.stage || '—'}
+                          {c.stage ? (CASE_STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)) : '—'}
                         </span>
                       </td>
                     </motion.tr>

@@ -42,11 +42,28 @@ const DataTable = ({
 
   return (
     <div style={{ flex: 1, overflow: 'auto', width: '100%' }}>
-      <table style={{ 
-        width: isMobile ? '900px' : '100%', 
-        borderCollapse: 'collapse', 
-        tableLayout: 'auto', 
-        minWidth: isMobile ? '900px' : '100%' 
+      <table style={{
+        width: isMobile ? '900px' : '100%',
+        borderCollapse: 'collapse',
+        // `auto` sizes each column to its widest UNWRAPPED cell content (every
+        // cell below renders with whiteSpace: 'nowrap') and, critically, treats
+        // `width: 100%` as a minimum rather than a cap — a handful of
+        // naturally-wide columns (an email address, a full name + role pill,
+        // a formatted timestamp) is enough for the summed content width to
+        // exceed the viewport, so the table grows past its container and the
+        // wrapper's `overflow: auto` above turns into a horizontal scrollbar.
+        // `fixed` makes the declared width authoritative instead: columns are
+        // sized from `col.width` (falling back to an even split across
+        // whatever's left unspecified), and each cell's existing
+        // `overflow: hidden` + `textOverflow: ellipsis` — already set below,
+        // previously inert because `auto` layout never shrinks a column below
+        // its content's natural width — finally does its job.
+        //
+        // Mobile intentionally keeps `auto` here: it already opts into a fixed
+        // 900px scrollable table as a deliberate small-screen pattern, so
+        // there is nothing to fix on that path.
+        tableLayout: isMobile ? 'auto' : 'fixed',
+        minWidth: isMobile ? '900px' : '100%'
       }}>
         <colgroup>
           {columns.map((col, idx) => (

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
 import PageHeader from '../components/ui/PageHeader';
@@ -525,8 +525,8 @@ const CustomersListPage = () => {
                     </td>
                     <td style={cellStyle}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                        <span style={{ display: 'inline-block', background: stageBg, color: stageColor, padding: '3px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700 }}>
-                          {STAGE_LABELS[c.stage] || c.stage}
+                        <span style={{ display: 'inline-block', background: stageBg, color: stageColor, padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700 }}>
+                          {STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)}
                         </span>
                         {c.alert_flag === 'PDD_PENDING' && (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
+import RouteTitle from './RouteTitle';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { DASHBOARD_ROLES } from '../constants/roles';
 
@@ -61,6 +62,7 @@ const PageLoader = () => (
 const AppRouter = () => (
   <BrowserRouter>
     <AuthProvider>
+      <RouteTitle />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}

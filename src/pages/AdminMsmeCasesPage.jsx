@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
-import { Users, X } from 'lucide-react';
+import { Users, X, ArrowRight, ChevronDown } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
@@ -106,12 +106,36 @@ function AllocateModal({ isOpen, onClose, caseRecord, targets, onAllocated }) {
   );
 }
 
+// Compact mobile stat block — mirrors the sharp-border, tight-padding tiles
+// used on the Pricing/Logs pages' collapsible summary rows.
+function MiniStat({ label, value, color, loading }) {
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 8 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: color || 'var(--on-surface)' }}>{loading ? '—' : value}</div>
+    </div>
+  );
+}
+
+// Responsive hook — same shape as UsersListPage/TenantsListPage/VendorManagementPage.
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return { isMobile };
+};
+
 const AdminMsmeCasesPage = () => {
+  const { isMobile } = useResponsive();
   const [cases, setCases] = useState([]);
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
+  const [showStats, setShowStats] = useState(false);
 
   const fetchCases = async () => {
     try {
@@ -206,34 +230,150 @@ const AdminMsmeCasesPage = () => {
   ];
 
   return (
-    <div>
-      <PageHeader
-        title="Direct MSME Leads"
-        subtitle="Manage and allocate self-onboarded MSME customers to DSA partners."
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <StatCard title="Total Leads" value={stats.total} icon={Users} loading={loading} />
-        <StatCard title="Unallocated" value={stats.unallocated} color="var(--warning)" icon={Users} loading={loading} />
-        <StatCard title="Allocated" value={stats.allocated} color="var(--success)" icon={Users} loading={loading} />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader
+          title="Direct MSME Leads"
+          subtitle="Manage and allocate self-onboarded MSME customers to DSA partners."
+          compact={isMobile}
+        />
       </div>
 
-      <div className="card" style={{ padding: 0, borderRadius: 0 }}>
-        {loading ? (
-          <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={cases}
-            emptyState={
-              <EmptyState
-                icon={Users}
-                title="No Direct MSME cases"
-                description="Self-onboarded MSME leads awaiting allocation will show up here."
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
+        {/* ─── Lead summary ───
+            Mobile: collapsed by default behind one toggle row — same
+            collapse-on-mobile pattern used on the Pricing/Logs pages.
+            Desktop: always-expanded shared StatCard grid, unchanged. */}
+        {isMobile ? (
+          <div style={{ border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)', marginBottom: 12 }}>
+            <button
+              onClick={() => setShowStats(v => !v)}
+              style={{
+                width: '100%', padding: '9px 12px', background: 'transparent', border: 'none',
+                display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <Users size={14} color="var(--primary)" style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: 'var(--on-surface)' }}>Lead Summary</span>
+              <span style={{ fontSize: 11, color: 'var(--on-muted)', fontWeight: 600 }}>{loading ? '…' : `${stats.total} total`}</span>
+              <ChevronDown
+                size={13}
+                color="var(--on-muted)"
+                style={{ flexShrink: 0, transition: 'transform 0.15s', transform: showStats ? 'rotate(180deg)' : 'none' }}
               />
-            }
-          />
+            </button>
+            {showStats && (
+              <div style={{ padding: '0 12px 10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                <MiniStat label="Total" value={stats.total} loading={loading} />
+                <MiniStat label="Unallocated" value={stats.unallocated} color="var(--warning)" loading={loading} />
+                <MiniStat label="Allocated" value={stats.allocated} color="var(--success)" loading={loading} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+            <StatCard title="Total Leads" value={stats.total} icon={Users} loading={loading} />
+            <StatCard title="Unallocated" value={stats.unallocated} color="var(--warning)" icon={Users} loading={loading} />
+            <StatCard title="Allocated" value={stats.allocated} color="var(--success)" icon={Users} loading={loading} />
+          </div>
         )}
+
+      {loading ? (
+        <div className="card" style={{ padding: 0, borderRadius: 0 }}>
+          <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
+        </div>
+      ) : cases.length === 0 ? (
+        <div className="card" style={{ padding: 0, borderRadius: 0 }}>
+          <EmptyState
+            icon={Users}
+            title="No Direct MSME cases"
+            description="Self-onboarded MSME leads awaiting allocation will show up here."
+          />
+        </div>
+      ) : isMobile ? (
+        // Mobile: card list instead of a table — same reasoning as
+        // TenantsListPage/VendorManagementPage/UsersListPage. A table forced
+        // into a small viewport either truncates every column or becomes
+        // horizontally scrollable; a card puts every field for one lead in a
+        // single vertical read.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {cases.map((c) => {
+            const isPaid = c.case_payment?.status === 'PAID';
+            const canAllocate = c.stage === 'LEAD_CREATED' && !c.assigned_dsa_tenant_id;
+            return (
+              <div
+                key={c.id}
+                style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 12 }}
+              >
+                {/* Identity row: business name on the left, stage badge anchored right */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {toTitleCase(resolveEntityName(c.customer)) || 'N/A'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>PAN: {c.customer?.business_pan || '—'} · {formatDate(c.created_at)}</div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <Badge type="level" value={c.stage} />
+                  </div>
+                </div>
+
+                {/* Fields grid */}
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+                  marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Requested Loan</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>
+                      {c.loan_amount ? `₹${Number(c.loan_amount).toLocaleString('en-IN')}` : 'Not Specified'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{c.product_type || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Payment</div>
+                    {isPaid ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', background: 'var(--success-bg)', padding: '3px 8px', border: '1px solid var(--success)', display: 'inline-block' }}>Paid</span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Pending</span>
+                    )}
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Allocation</div>
+                    {c.assigned_dsa_tenant_id ? (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(c.assigned_dsa_user?.name)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>Allocated {c.allocated_at ? formatDate(c.allocated_at) : ''}</div>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-bg)', padding: '3px 8px', border: '1px solid var(--warning)', display: 'inline-block' }}>Unallocated</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action */}
+                {canAllocate && (
+                  <button
+                    onClick={() => openAllocateModal(c)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      width: '100%', marginTop: 12, padding: '8px 0',
+                      background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                      fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                    }}
+                  >
+                    Allocate <ArrowRight size={12} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, borderRadius: 0 }}>
+          <DataTable columns={columns} data={cases} />
+        </div>
+      )}
       </div>
 
       <AllocateModal

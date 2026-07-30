@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, AlertCircle, CheckCircle, UserPlus } from 'lucide-react';
+import { AlertCircle, CheckCircle, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createTenant } from '../api/tenantService';
 import { createUser } from '../api/userService';
@@ -8,7 +8,7 @@ import { getRoles } from '../api/roleService';
 import { getErrorMessage } from '../utils/helpers';
 import { TENANT_TYPES } from '../constants/roles';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-import { useTheme } from '../context/ThemeContext';
+import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
 
 const initialForm = {
@@ -48,8 +48,6 @@ const countryOptions = countries.map(c => ({
 
 const CreateTenantPage = () => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -71,10 +69,10 @@ const CreateTenantPage = () => {
   const labelStyle = { fontSize: 12, color: 'var(--on-muted)', marginBottom: 6, display: 'block', fontWeight: 600 };
   const inputStyle = {
     width: '100%', background: 'transparent', border: 'none', outline: 'none',
-    borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628',
+    borderBottom: '2px solid var(--outline)', color: 'var(--on-surface)',
     fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s',
   };
-  const inputFocusStyle = { borderBottomColor: '#4f46e5' };
+  const inputFocusStyle = { borderBottomColor: 'var(--primary)' };
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -363,20 +361,18 @@ const CreateTenantPage = () => {
   const stepLabel = step === 'tenant' ? 'Creating tenant…' : step === 'admin' ? 'Creating admin user…' : 'Processing…';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-y-auto">
-      <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center w-full">
-          <div className="mb-10">
-            <h1 className="text-[24px] md:text-[28px] lg:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-              Create DSA Organization
-            </h1>
-            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[13px] md:text-[14px] lg:text-[15px]">
-              Onboard a new DSA or Team ecosystem with an initial admin user
-            </p>
-          </div>
+    <div className="ctp-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .ctp-page > div { padding: 80px 24px 24px !important; }
+        }
+      `}</style>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+          <PageHeader title="Create DSA Organization" subtitle="Onboard a new DSA or Team ecosystem with an initial admin user" />
 
           {/* Success banner */}
           {success && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)' }}>
               <CheckCircle size={16} />
               DSA and admin user created successfully! Redirecting…
             </div>
@@ -384,7 +380,7 @@ const CreateTenantPage = () => {
 
           {/* Error banner */}
           {apiError && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--error-bg)', border: '1px solid var(--error)', color: 'var(--error)' }}>
               <AlertCircle size={16} />
               {apiError}
             </div>
@@ -393,7 +389,7 @@ const CreateTenantPage = () => {
           <form onSubmit={handleSubmit}>
             {/* Organization Details */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
                 DSA Organization Details
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -406,10 +402,10 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="e.g. Acme FinServe"
                     style={{ ...inputStyle, ...(errors.name ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                    onBlur={e => e.target.style.borderBottomColor = errors.name ? '#dc2626' : 'var(--outline)'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                    onBlur={e => e.target.style.borderBottomColor = errors.name ? 'var(--error)' : 'var(--outline)'}
                   />
-                  {errors.name && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
+                  {errors.name && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>Official Email *</label>
@@ -420,13 +416,13 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="e.g. admin@acme.com"
                     style={{ ...inputStyle, ...(errors.email ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('email');
-                      e.target.style.borderBottomColor = errors.email ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.email ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
-                  {errors.email && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
+                  {errors.email && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>Mobile Number</label>
@@ -436,7 +432,7 @@ const CreateTenantPage = () => {
                       value={form.mobile_country_code}
                       onChange={e => handleCountryCodeChange('mobile_country_code', e.target.value)}
                       style={{ ...inputStyle, width: '45px', cursor: 'pointer', appearance: 'none' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                       {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
@@ -448,14 +444,14 @@ const CreateTenantPage = () => {
                       onChange={e => handlePhoneChange('mobile', e.target.value)}
                       placeholder="9876543210"
                       style={{ ...inputStyle, flex: 1 }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => {
                         handleFieldBlur('mobile');
-                        e.target.style.borderBottomColor = errors.mobile ? '#dc2626' : 'var(--outline)';
+                        e.target.style.borderBottomColor = errors.mobile ? 'var(--error)' : 'var(--outline)';
                       }}
                     />
                   </div>
-                  {errors.mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
+                  {errors.mobile && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
                   <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional contact number</div>
                 </div>
                 <div>
@@ -465,12 +461,12 @@ const CreateTenantPage = () => {
                     value={form.type}
                     onChange={handleChange}
                     style={{ ...inputStyle, ...(errors.type ? inputFocusStyle : {}), cursor: 'pointer', appearance: 'none' }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                    onBlur={e => e.target.style.borderBottomColor = errors.type ? '#dc2626' : 'var(--outline)'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                    onBlur={e => e.target.style.borderBottomColor = errors.type ? 'var(--error)' : 'var(--outline)'}
                   >
                     {TENANT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  {errors.type && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.type}</div>}
+                  {errors.type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.type}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>PAN Number *</label>
@@ -481,13 +477,13 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="ABCDE1234F"
                     style={{ ...inputStyle, ...(errors.pan_number ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('pan_number');
-                      e.target.style.borderBottomColor = errors.pan_number ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.pan_number ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
-                  {errors.pan_number && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.pan_number}</div>}
+                  {errors.pan_number && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.pan_number}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>GST Number</label>
@@ -498,13 +494,13 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="e.g. 27ABCDE1234F2Z5"
                     style={{ ...inputStyle, ...(errors.gst_number ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('gst_number');
-                      e.target.style.borderBottomColor = errors.gst_number ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.gst_number ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
-                  {errors.gst_number && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.gst_number}</div>}
+                  {errors.gst_number && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.gst_number}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>Company Type *</label>
@@ -513,20 +509,20 @@ const CreateTenantPage = () => {
                     value={form.company_type}
                     onChange={handleChange}
                     style={{ ...inputStyle, ...(errors.company_type ? inputFocusStyle : {}), cursor: 'pointer', appearance: 'none' }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                    onBlur={e => e.target.style.borderBottomColor = errors.company_type ? '#dc2626' : 'var(--outline)'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                    onBlur={e => e.target.style.borderBottomColor = errors.company_type ? 'var(--error)' : 'var(--outline)'}
                   >
                     <option value="">Select Type...</option>
                     {companyTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  {errors.company_type && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.company_type}</div>}
+                  {errors.company_type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.company_type}</div>}
                 </div>
               </div>
             </div>
 
             {/* Location Info */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
                 Location Info
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -540,19 +536,19 @@ const CreateTenantPage = () => {
                       onChange={handleChange}
                       placeholder="400001"
                       style={{ ...inputStyle, ...(errors.pincode ? inputFocusStyle : {}) }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => {
                         if (form.pincode && form.pincode.length === 6) {
                           handleFieldBlur('pincode');
                         }
-                        e.target.style.borderBottomColor = errors.pincode ? '#dc2626' : 'var(--outline)';
+                        e.target.style.borderBottomColor = errors.pincode ? 'var(--error)' : 'var(--outline)';
                       }}
                     />
                     {isPincodeFetching && (
-                      <div style={{ position: 'absolute', right: 0, bottom: 3, width: 14, height: 14, border: '2px solid #4f46e5/30', borderTopColor: '#4f46e5', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      <div style={{ position: 'absolute', right: 0, bottom: 3, width: 14, height: 14, border: '2px solid var(--outline)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                     )}
                   </div>
-                  {errors.pincode && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.pincode}</div>}
+                  {errors.pincode && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.pincode}</div>}
                 </div>
                 <div>
                   <label style={{ ...labelStyle, opacity: locationFetched ? 1 : 0.4 }}>State *</label>
@@ -564,15 +560,15 @@ const CreateTenantPage = () => {
                     placeholder={locationFetched ? "e.g. Maharashtra" : "Enter pincode first..."}
                     disabled={!locationFetched}
                     style={{ ...inputStyle, ...(errors.state ? inputFocusStyle : {}), opacity: locationFetched ? 1 : 0.4, cursor: locationFetched ? 'text' : 'not-allowed' }}
-                    onFocus={e => locationFetched && (e.target.style.borderBottomColor = '#4f46e5')}
+                    onFocus={e => locationFetched && (e.target.style.borderBottomColor = 'var(--primary)')}
                     onBlur={e => {
                       if (locationFetched) {
                         handleFieldBlur('state');
-                        e.target.style.borderBottomColor = errors.state ? '#dc2626' : 'var(--outline)';
+                        e.target.style.borderBottomColor = errors.state ? 'var(--error)' : 'var(--outline)';
                       }
                     }}
                   />
-                  {errors.state && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.state}</div>}
+                  {errors.state && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.state}</div>}
                 </div>
                 <div>
                   <label style={{ ...labelStyle, opacity: locationFetched ? 1 : 0.4 }}>City *</label>
@@ -584,24 +580,24 @@ const CreateTenantPage = () => {
                     placeholder={locationFetched ? "e.g. Mumbai" : "Enter pincode first..."}
                     disabled={!locationFetched}
                     style={{ ...inputStyle, ...(errors.city ? inputFocusStyle : {}), opacity: locationFetched ? 1 : 0.4, cursor: locationFetched ? 'text' : 'not-allowed' }}
-                    onFocus={e => locationFetched && (e.target.style.borderBottomColor = '#4f46e5')}
+                    onFocus={e => locationFetched && (e.target.style.borderBottomColor = 'var(--primary)')}
                     onBlur={e => {
                       if (locationFetched) {
                         handleFieldBlur('city');
-                        e.target.style.borderBottomColor = errors.city ? '#dc2626' : 'var(--outline)';
+                        e.target.style.borderBottomColor = errors.city ? 'var(--error)' : 'var(--outline)';
                       }
                     }}
                   />
-                  {errors.city && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.city}</div>}
+                  {errors.city && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.city}</div>}
                 </div>
               </div>
             </div>
 
             {/* Initial Admin User */}
-            <div style={{ marginBottom: 32, borderLeft: '3px solid #4f46e5', paddingLeft: 20 }}>
+            <div style={{ marginBottom: 32, borderLeft: '3px solid var(--primary)', paddingLeft: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <UserPlus size={16} color="#4f46e5" />
-                <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                <UserPlus size={16} color="var(--primary)" />
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                   Initial Admin User
                 </h3>
               </div>
@@ -618,10 +614,10 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="e.g. John Smith"
                     style={{ ...inputStyle, ...(errors.admin_name ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                    onBlur={e => e.target.style.borderBottomColor = errors.admin_name ? '#dc2626' : 'var(--outline)'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                    onBlur={e => e.target.style.borderBottomColor = errors.admin_name ? 'var(--error)' : 'var(--outline)'}
                   />
-                  {errors.admin_name && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.admin_name}</div>}
+                  {errors.admin_name && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.admin_name}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>Admin Email *</label>
@@ -632,13 +628,13 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="e.g. john@acme.com"
                     style={{ ...inputStyle, ...(errors.admin_email ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('admin_email');
-                      e.target.style.borderBottomColor = errors.admin_email ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.admin_email ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
-                  {errors.admin_email && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.admin_email}</div>}
+                  {errors.admin_email && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.admin_email}</div>}
                 </div>
                 <div>
                   <label style={labelStyle}>Admin Mobile</label>
@@ -648,7 +644,7 @@ const CreateTenantPage = () => {
                       value={form.admin_mobile_country_code}
                       onChange={e => handleCountryCodeChange('admin_mobile_country_code', e.target.value)}
                       style={{ ...inputStyle, width: '45px', cursor: 'pointer', appearance: 'none' }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                       {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
@@ -660,14 +656,14 @@ const CreateTenantPage = () => {
                       onChange={e => handlePhoneChange('admin_mobile', e.target.value)}
                       placeholder="9876543210"
                       style={{ ...inputStyle, flex: 1 }}
-                      onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                      onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                       onBlur={e => {
                         handleFieldBlur('admin_mobile');
-                        e.target.style.borderBottomColor = errors.admin_mobile ? '#dc2626' : 'var(--outline)';
+                        e.target.style.borderBottomColor = errors.admin_mobile ? 'var(--error)' : 'var(--outline)';
                       }}
                     />
                   </div>
-                  {errors.admin_mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.admin_mobile}</div>}
+                  {errors.admin_mobile && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.admin_mobile}</div>}
                   <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional</div>
                 </div>
                 <div>
@@ -679,36 +675,37 @@ const CreateTenantPage = () => {
                     onChange={handleChange}
                     placeholder="Min. 8 characters"
                     style={{ ...inputStyle, ...(errors.admin_password ? inputFocusStyle : {}) }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('admin_password');
-                      e.target.style.borderBottomColor = errors.admin_password ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.admin_password ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
-                  {errors.admin_password && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.admin_password}</div>}
+                  {errors.admin_password && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.admin_password}</div>}
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 32, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+            {/* Action Buttons — same recipe as CreateUserPage's footer */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', marginTop: 32 }}>
               <button
                 type="button"
                 onClick={() => navigate('/tenants')}
                 disabled={isLoading}
                 style={{
-                  padding: '6px 16px', background: 'transparent', border: '2px solid var(--outline)',
-                  borderRadius: 10, fontSize: 11, fontWeight: 700, color: 'var(--on-surface)',
+                  padding: '6px 14px', background: 'transparent', border: '2px solid var(--outline)',
+                  borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)',
                   cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                  flex: isMobile ? 1 : 'auto',
                 }}
               >
                 Cancel
               </button>
               <TravelingBorderButton
                 type="submit"
+                size="sm"
+                solid
+                showIcon={false}
                 disabled={isLoading || success}
-                className="px-4 py-1.5 text-[11px] rounded-[10px]"
-                style={{ flex: isMobile ? 1 : 'auto' }}
               >
                 {isLoading ? (
                   <div className="flex justify-center items-center w-full h-full">
