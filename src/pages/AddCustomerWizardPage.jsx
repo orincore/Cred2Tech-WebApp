@@ -17,6 +17,7 @@ import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
+import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
@@ -24,10 +25,7 @@ import EsrStep from './EsrPage';
 import ProposalStep from './ProposalPage';
 import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
-// Each step's own historical max-width (steps 1-3 were designed for 880;
-// steps 4-7 lived on separate, wider pages) — preserved here so folding them
-// into this single wizard doesn't visually shrink them.
-const STEP_MAX_WIDTH = { 1: 880, 2: 880, 3: 880, 4: 960, 5: 980, 6: 1040, 7: 940 };
+
 
 const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // MSME self-service: the borrower fills the wizard themselves after OTP
@@ -960,11 +958,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           .wizard-page { padding-left: 10px !important; padding-right: 10px !important; }
         }
       `}</style>
-      {/* Step 7 (Proposal) has grown into a dense, wide layout (address
-          picker, KYC document categories, financial summary grids) that
-          benefits from the full content width rather than the narrower
-          centered column every earlier step uses. */}
-      <div style={{ maxWidth: currentStep === 7 ? '100%' : (STEP_MAX_WIDTH[currentStep] || 880), margin: '0 auto', paddingBottom: 40 }}>
+      {/* Every step shares one centered column (see WIZARD_MAX_WIDTH), so the
+          stepper, header and content keep identical gutters from step 1 to 7. */}
+      <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
@@ -1192,11 +1188,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </div>
                 )}
 
-                {!isMsme && (
-                  <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--primary-subtle)', borderRadius: 0, color: 'var(--primary-dark)', fontSize: 12 }}>
-                    📌 After entering PAN and Mobile, trigger 'Send OTP' to lock your draft and verify ownership.
-                  </div>
-                )}
+                
               </div>
             </div>
 

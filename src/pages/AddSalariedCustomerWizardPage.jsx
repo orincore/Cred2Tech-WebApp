@@ -14,6 +14,7 @@ import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseW
 import Panel from '../components/ui/Panel';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase } from '../utils/helpers';
+import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
@@ -605,7 +606,7 @@ const AddSalariedCustomerWizardPage = () => {
           .wizard-page { padding-left: 10px !important; padding-right: 10px !important; }
         }
       `}</style>
-      <div style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 40 }}>
+      <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>

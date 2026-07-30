@@ -1,1 +1,0 @@
-import{c as a,aa as e}from"./index-CbPfyIvK.js";const r=async()=>(await a.get("/tenants")).data,o=async s=>(await a.post("/tenants",s)).data,c=async s=>(await e.post(`${a.defaults.baseURL||""}/tenants/public-register`,s)).data,p=async s=>(await a.get(`/admin/tenants/${s}/summary`)).data;export{p as a,o as c,r as g,c as p};

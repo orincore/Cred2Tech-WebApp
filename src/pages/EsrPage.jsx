@@ -335,9 +335,35 @@ function ProposalBadge({ status }) {
 const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
   const [open, setOpen] = useState(false);
   const [activeScheme, setActiveScheme] = useState(0);
-  if (!evaluations || evaluations.length === 0) return null;
 
-  const ev = evaluations[activeScheme] || evaluations[0];
+  // The API returns scheme_evaluations in evaluation order, not merit order —
+  // the backend sorts only a filtered copy when picking `best_scheme_name`
+  // (dynamicEligibility.service), so the raw array the client gets is unsorted
+  // and the panel used to open on an arbitrary (often ineligible) scheme.
+  //
+  // Mirror that same comparator here — eligible first, then loan amount ↓,
+  // ROI ↑, tenure ↓ — so tab one is always the scheme the card advertises as
+  // best. Sorted copy: never mutate the prop array.
+  const orderedEvaluations = useMemo(() => {
+    if (!evaluations || evaluations.length === 0) return [];
+    return [...evaluations].sort((a, b) => {
+      if (a.is_eligible !== b.is_eligible) return a.is_eligible ? -1 : 1;
+
+      const loanA = a.final_eligible_loan_amount || 0;
+      const loanB = b.final_eligible_loan_amount || 0;
+      if (loanB !== loanA) return loanB - loanA;
+
+      const roiA = a.roi_min || Infinity;
+      const roiB = b.roi_min || Infinity;
+      if (roiB !== roiA) return roiA - roiB;
+
+      return (b.max_tenure_months || 0) - (a.max_tenure_months || 0);
+    });
+  }, [evaluations]);
+
+  if (orderedEvaluations.length === 0) return null;
+
+  const ev = orderedEvaluations[activeScheme] || orderedEvaluations[0];
 
   const steps = [
     { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: Wallet, color: 'var(--info)', bg: 'var(--info-bg)', note: 'Selected income method monthly figure' },
@@ -370,12 +396,28 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
             style={{ overflow: 'hidden' }}
           >
             <div style={{ marginTop: 10, borderRadius: 0, overflow: 'hidden', border: '1px solid var(--border)' }}>
-              {evaluations.length > 1 && (
-                <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                  {evaluations.map((e, i) => (
+              {/* Scheme tabs scroll horizontally rather than wrapping. With
+                  `flex: 1` + wrap, every scheme was squeezed into an equal
+                  share of one row, so with more than a few schemes the names
+                  were crushed and some options unreadable. Tabs now keep their
+                  natural width and the strip scrolls — nothing is hidden or
+                  truncated. Best scheme is first, so the default selection is
+                  always in view. */}
+              {orderedEvaluations.length > 1 && (
+                <div
+                  className="scheme-tabs"
+                  style={{
+                    display: 'flex', background: 'var(--bg-elevated)',
+                    borderBottom: '1px solid var(--border)',
+                    flexWrap: 'nowrap', overflowX: 'auto', overflowY: 'hidden',
+                    scrollbarWidth: 'thin', WebkitOverflowScrolling: 'touch',
+                  }}
+                >
+                  {orderedEvaluations.map((e, i) => (
                     <button key={i} onClick={() => setActiveScheme(i)} style={{
-                      flex: 1, padding: '8px 6px', fontSize: 11, fontWeight: 600,
+                      flex: '0 0 auto', padding: '8px 12px', fontSize: 11, fontWeight: 600,
                       border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      whiteSpace: 'nowrap',
                       background: activeScheme === i ? 'var(--primary)' : 'transparent',
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
@@ -425,6 +467,29 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
 };
 
 // ─── Lender Action Button (multi-proposal aware) ───────────────────────────────
+// Every action button on a lender card renders at one height.
+//
+// Their vertical padding, font sizes and icon sizes all differ by design
+// (9px vs 10px padding, 11/12/14px text, 13 vs 15px icons, some with a border
+// and some without), so intrinsic heights ranged from ~32px to ~39px and the
+// rows looked uneven across the eligible-lender grid. Pinning the height and
+// dropping vertical padding — flex centring already handles the alignment —
+// makes them uniform without flattening the intentional visual differences
+// between primary and secondary actions.
+const LENDER_CARD_BTN_H = 38;   // card (non-compact) layout
+const LENDER_ROW_BTN_H = 30;    // compact list/table row
+
+const LENDER_ACTION_BTN = {
+  borderRadius: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 5,
+  height: LENDER_ROW_BTN_H,
+  paddingTop: 0,
+  paddingBottom: 0,
+};
+
 function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender, onOpenProposal, compact = false, isMsme = false, onApplyForLoan }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
@@ -515,34 +580,30 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
     }
   };
 
+  // Proposal status badges are deliberately NOT rendered here — they live in
+  // the card's identity row, immediately left of the Eligible badge, so status
+  // reads alongside eligibility rather than being buried in the action cluster.
   if (compact) {
     return (
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
-        {lenderProposals.length > 0 && (
-          <div style={{ display: 'flex', gap: 4 }}>
-            {lenderProposals.map(p => (
-              <ProposalBadge key={p.id} status={p.lender_submission_status || p.proposal_status} />
-            ))}
-          </div>
-        )}
+      <div className="lender-actions-compact" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap' }}>
         {latestProposal ? (
-          <button className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}
+          <button className="btn btn-primary btn-sm" style={LENDER_ACTION_BTN}
             onClick={() => onOpenProposal(latestProposal.id)}>
             View →
           </button>
         ) : (
-          <button className="btn btn-primary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+          <button className="btn btn-primary btn-sm" style={LENDER_ACTION_BTN}
             onClick={handlePrepare} disabled={creating}>
             <ClipboardList size={12} /> {creating ? '...' : 'Prepare'}
           </button>
         )}
         <button onClick={handleSendEmail} disabled={sending} title="Send proposal email to this lender's configured contact"
-          className="btn btn-sm" style={{ borderRadius: 0, background: 'var(--success-bg)', color: 'var(--success)',
-            border: '1px solid var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          className="btn btn-sm" style={{ ...LENDER_ACTION_BTN, background: 'var(--success-bg)', color: 'var(--success)',
+            border: '1px solid var(--success)' }}>
           <Send size={12} /> {sending ? '...' : 'Send'}
         </button>
         <button onClick={onSendToOtherLender} title="Send to a different lender contact from your directory"
-          className="btn btn-sm" style={{ borderRadius: 0, background: 'transparent', color: 'var(--role-admin)',
+          className="btn btn-sm" style={{ ...LENDER_ACTION_BTN, background: 'transparent', color: 'var(--role-admin)',
             border: '1px solid var(--role-admin)' }}>
           <ArrowUpRight size={12} />
         </button>
@@ -646,14 +707,14 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
           <>
             <button
               className="btn btn-primary"
-              style={{ flex: 1, padding: '9px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 9px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onClick={() => onOpenProposal(latestProposal.id)}
             >
               View Proposal →
             </button>
             <button
               className="btn btn-secondary"
-              style={{ padding: '9px 14px', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}
+              style={{ height: LENDER_CARD_BTN_H, padding: '0 14px', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}
               onClick={() => doCreate(latestProposal.id)}
               disabled={creating}
               title="Send to another lender"
@@ -664,7 +725,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         ) : (
           <button
             className="btn btn-primary"
-            style={{ flex: 1, padding: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                      background: 'linear-gradient(135deg,#2B6CB0,#553C9A)' }}
             onClick={handlePrepare}
             disabled={creating}
@@ -680,7 +741,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
           onClick={handleSendEmail}
           disabled={sending}
           title="Send proposal email to this lender's configured contact"
-          style={{ flex: 1, padding: '9px 8px', fontWeight: 700, fontSize: 12, borderRadius: 0,
+          style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 8px', fontWeight: 700, fontSize: 12, borderRadius: 0,
                    background: sending ? '#718096' : '#276749', color: '#fff', border: 'none',
                    cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
         >
@@ -689,7 +750,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         <button
           onClick={onSendToOtherLender}
           title="Send to a different lender contact from your directory"
-          style={{ flex: 1, padding: '9px 8px', fontWeight: 700, fontSize: 11, borderRadius: 0,
+          style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 8px', fontWeight: 700, fontSize: 11, borderRadius: 0,
                    background: 'transparent', color: 'var(--role-admin)', border: '1px solid var(--role-admin)',
                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap' }}
         >
@@ -785,6 +846,53 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         .esr-page .card,
         .esr-page .btn,
         .esr-page .form-control { border-radius: 0 !important; }
+        /* Scheme tab strip: slim scrollbar so it's clear the row scrolls when
+           a lender has more schemes than fit, without a chunky OS bar sitting
+           under the tabs. */
+        .esr-page .scheme-tabs::-webkit-scrollbar { height: 4px; }
+        .esr-page .scheme-tabs::-webkit-scrollbar-track { background: transparent; }
+        .esr-page .scheme-tabs::-webkit-scrollbar-thumb {
+          background: var(--border-strong, var(--border));
+          border-radius: 0;
+        }
+
+        /* ── Mobile: lender card actions ──────────────────────────────────
+           On a phone the action cluster ("View →" / "Prepare", "Send", and the
+           other-lender arrow) sat in a nowrap row pinned to the right of the
+           metric tiles, behind a vertical divider. There was never enough width,
+           so the buttons overflowed the card and their labels were clipped.
+
+           Below 640px the cluster drops onto its own full-width row under the
+           metrics, the vertical divider becomes a horizontal rule, and the two
+           labelled buttons share the width evenly while the icon-only action
+           keeps a fixed square footprint. !important is needed throughout —
+           these properties are set as inline styles on the elements. */
+        @media (max-width: 640px) {
+          .esr-page .lender-actions-wrap {
+            width: 100%;
+            flex-shrink: 1 !important;
+            padding-left: 0 !important;
+            border-left: none !important;
+            border-top: 1px solid var(--border);
+            margin-top: 10px;
+            padding-top: 10px;
+          }
+          .esr-page .lender-actions-compact {
+            width: 100%;
+            flex-wrap: nowrap !important;
+          }
+          /* Labelled actions split the row; the trailing icon button stays square.
+             :last-of-type, not :last-child — an AnimatePresence <div> (the clone
+             dialog) renders after the buttons whenever that dialog is open, so
+             :last-child would silently stop matching. */
+          .esr-page .lender-actions-compact > button {
+            flex: 1 1 0 !important;
+            min-width: 0;
+          }
+          .esr-page .lender-actions-compact > button:last-of-type {
+            flex: 0 0 40px !important;
+          }
+        }
         /* Dark mode: the shared grey text tokens read too low-contrast on
            this data-heavy page — bump them to white here specifically,
            without touching the global theme. */
@@ -878,6 +986,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       {esr && lenders.length > 0 && (() => {
         const renderRow = (lender, i) => {
           const eligible = lender.is_eligible;
+          // Same derivation LenderActions uses — the status badges moved up
+          // into the identity row, so the card needs them here too.
+          const lenderProposals = proposals.filter(p => String(p.lender_id) === String(lender.lender_id));
           return (
             <motion.div key={lender.lender_id}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.02 }}
@@ -897,14 +1008,24 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       </div>
                     </div>
                   </div>
-                  <span style={{
-                    background: eligible ? 'var(--success-bg)' : 'var(--bg-elevated)',
-                    color: eligible ? 'var(--success)' : 'var(--text-tertiary)',
-                    padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
-                    border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
-                  }}>
-                    {eligible ? 'Eligible' : 'Not Eligible'}
-                  </span>
+                  {/* Proposal status sits immediately left of the eligibility
+                      badge, so the two read together as one right-anchored
+                      status group. Both are baseline-aligned and never shrink,
+                      so a long lender name pushes them as a unit instead of
+                      squeezing one into the other. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {lenderProposals.length > 0 && lenderProposals.map(p => (
+                      <ProposalBadge key={p.id} status={p.lender_submission_status || p.proposal_status} />
+                    ))}
+                    <span style={{
+                      background: eligible ? 'var(--success-bg)' : 'var(--bg-elevated)',
+                      color: eligible ? 'var(--success)' : 'var(--text-tertiary)',
+                      padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
+                      border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
+                    }}>
+                      {eligible ? 'Eligible' : 'Not Eligible'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Stats + actions row: stats hug the left, actions form their own
@@ -947,7 +1068,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                   )}
 
                   {eligible && (
-                    <div style={{
+                    <div className="lender-actions-wrap" style={{
                       display: 'flex', alignItems: 'center', flexShrink: 0,
                       paddingLeft: 16, borderLeft: '1px solid var(--border)'
                     }}>

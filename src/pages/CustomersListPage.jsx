@@ -286,15 +286,14 @@ const CustomersListPage = () => {
         <PageHeader
           title="Pipeline & Customers"
           subtitle={`${stats.totalCases} active cases · ${stats.totalCustomers} customers`}
+          actions={
+            <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <UserPlus size={13} /> Add New Customer
+              </div>
+            </TravelingBorderButton>
+          }
         />
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <UserPlus size={13} /> Add New Customer
-            </div>
-          </TravelingBorderButton>
-        </div>
       </div>
 
       <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />

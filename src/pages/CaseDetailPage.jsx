@@ -117,11 +117,23 @@ export default function CaseDetailPage() {
   // Steps 4-7 of the case journey render inline inside AddCustomerWizardPage
   // now — jump straight to the right step via the same entry point.
   const journeyPath = (step) => `${wizardPath}&step=${step}`;
+
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { isMobile } = useResponsive();
 
   const [caseData, setCaseData] = useState(null);
+
+  // An MSME case's PRIMARY applicant IS the business, and is deliberately
+  // created without a `name` (case.service.js createCase) — the business
+  // identity lives on the customer record instead. Only the salaried flow
+  // copies a name onto the applicant row. Without this fallback the
+  // Co-Borrowers tab renders the primary borrower as "Unnamed Applicant".
+  const applicantDisplayName = (app) =>
+    toTitleCase(app.name)
+    || (app.type === 'PRIMARY' ? toTitleCase(resolveEntityName(caseData?.customer)) : '')
+    || 'Unnamed Applicant';
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Overview');
   const [showStageModal, setShowStageModal] = useState(false);
@@ -511,7 +523,7 @@ export default function CaseDetailPage() {
               <div key={app.id} className="card card-padded">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>{app.name || 'Unnamed Applicant'}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{applicantDisplayName(app)}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{app.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower / Guarantor'}</div>
                   </div>
                   <span style={{ fontWeight: 800, color: app.cibil_score >= 700 ? 'var(--success)' : 'var(--warning)' }}>{app.cibil_score || '—'}</span>
@@ -536,7 +548,7 @@ export default function CaseDetailPage() {
                 {caseData.applicants.map(app => (
                   <tr key={app.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <div style={{ fontWeight: 600 }}>{app.name || 'Unnamed Applicant'}</div>
+                      <div style={{ fontWeight: 600 }}>{applicantDisplayName(app)}</div>
                       <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{app.type}</div>
                     </td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>{app.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower / Guarantor'}</td>

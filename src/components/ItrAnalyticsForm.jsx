@@ -94,6 +94,7 @@ const ItrAnalyticsForm = ({
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const [cancelling, setCancelling] = useState(false);
+    const [refetching, setRefetching] = useState(false);
 
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
 
@@ -124,6 +125,27 @@ const ItrAnalyticsForm = ({
             toast.error(error.response?.data?.error || error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Re-run the provider sync for a request that is COMPLETED but has no
+    // stored report. Safe to repeat: syncItrRequest short-circuits once a
+    // document exists, so this can only ever move the record forwards.
+    const handleRefetch = async () => {
+        if (!referenceId) return toast.error('No reference id on this request');
+        setRefetching(true);
+        try {
+            const res = await api.post('/external/itr/sync', { reference_id: referenceId });
+            if (res.data?.documentId || res.data?.excel_url) {
+                toast.success('ITR report retrieved');
+            } else {
+                toast('The provider has no report file for this request.', { icon: 'ℹ️' });
+            }
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Could not fetch the ITR report');
+        } finally {
+            setRefetching(false);
         }
     };
 
@@ -197,7 +219,21 @@ const ItrAnalyticsForm = ({
                                 <a href={excelUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
                                     <FileText size={13} /> Excel
                                 </a>
-                            ) : null}
+                            ) : (
+                                // Marked complete but no file was stored. The background worker can
+                                // close out a job before the analytics were ever pulled, in which
+                                // case re-syncing genuinely recovers the report — so offer it
+                                // rather than leaving a dead row with no action.
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={handleRefetch}
+                                    disabled={refetching}
+                                    title="No report file was stored for this request — try fetching it again"
+                                >
+                                    {refetching ? 'Fetching…' : 'Fetch Report'}
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <button

@@ -310,11 +310,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
               </h3>
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
             </div>
+            {/* Download sits left of the score so the Bureau Score stays the
+                right-most element of the header, on both the DSA and MSME
+                self-service journeys (same component, rendered inline by
+                AddCustomerWizardPage for each). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bureau Score</div>
-              </div>
               {bureauReports[applicant.id] && (
                 <button
                   className="btn btn-secondary btn-sm"
@@ -327,6 +327,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                   {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
                 </button>
               )}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bureau Score</div>
+              </div>
             </div>
           </div>
 
