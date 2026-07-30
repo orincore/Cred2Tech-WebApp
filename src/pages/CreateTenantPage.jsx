@@ -68,7 +68,7 @@ const CreateTenantPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const labelStyle = { fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6, display: 'block', fontWeight: 600 };
+  const labelStyle = { fontSize: 12, color: 'var(--on-muted)', marginBottom: 6, display: 'block', fontWeight: 600 };
   const inputStyle = {
     width: '100%', background: 'transparent', border: 'none', outline: 'none',
     borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628',
@@ -369,7 +369,7 @@ const CreateTenantPage = () => {
             <h1 className="text-[24px] md:text-[28px] lg:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
               Create DSA Organization
             </h1>
-            <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[13px] md:text-[14px] lg:text-[15px]">
+            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[13px] md:text-[14px] lg:text-[15px]">
               Onboard a new DSA or Team ecosystem with an initial admin user
             </p>
           </div>
@@ -456,7 +456,7 @@ const CreateTenantPage = () => {
                     />
                   </div>
                   {errors.mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
-                  <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Optional contact number</div>
+                  <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional contact number</div>
                 </div>
                 <div>
                   <label style={labelStyle}>Organization Type *</label>
@@ -605,7 +605,7 @@ const CreateTenantPage = () => {
                   Initial Admin User
                 </h3>
               </div>
-              <p style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 20 }}>
+              <p style={{ fontSize: 13, color: 'var(--on-muted)', marginBottom: 20 }}>
                 This user will be created as <strong>DSA Admin</strong> for the new organization and will be able to log in immediately.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -668,7 +668,7 @@ const CreateTenantPage = () => {
                     />
                   </div>
                   {errors.admin_mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.admin_mobile}</div>}
-                  <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Optional</div>
+                  <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional</div>
                 </div>
                 <div>
                   <label style={labelStyle}>Login Password *</label>

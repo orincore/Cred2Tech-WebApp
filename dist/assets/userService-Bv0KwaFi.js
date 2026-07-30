@@ -1,1 +1,0 @@
-import{c as e}from"./index-Cw-uzUII.js";const n=async()=>(await e.get("/users")).data,o=async s=>(await e.get(`/users/${s}`)).data,c=async s=>(await e.post("/users",s)).data,p=async(s,a)=>(await e.patch(`/users/${s}`,a)).data;export{o as a,c,n as g,p as u};

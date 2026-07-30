@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { CheckCircle2, AlertCircle, FileText, Download } from 'lucide-react';
 import FormField from './ui/FormField';
-import PullingIndicator from './ui/PullingIndicator';
+import PullStatusTracker from './ui/PullStatusTracker';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
-import { formatStatusLabel } from '../utils/helpers';
+import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
+import { useCasePullStatus, usePhaseTransition } from '../hooks/useCasePullStatus';
 
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
@@ -41,35 +42,40 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         mobile_numbers: ''
     });
 
-    const [activeRequests, setActiveRequests] = useState([]);
     const [loading, setLoading] = useState(false);
     const [cancelling, setCancelling] = useState(false);
-    const activeRequestsRef = useRef(activeRequests);
+
+    // Live status is pushed from the server (see hooks/useCasePullStatus) — no
+    // client-side polling. The server keeps one sync loop per case, so this
+    // stays current even while the user is on another wizard step, and the
+    // snapshot handed back on (re)join means remounting this component paints
+    // the real state immediately rather than a stale "Pending".
+    const { snapshot, refresh } = useCasePullStatus(caseId);
+
+    // Websockets can be blocked by corporate proxies; this one-shot REST read
+    // keeps the component usable in that case until/unless a push arrives.
+    const [fallbackRequests, setFallbackRequests] = useState([]);
+    const activeRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
 
     useEffect(() => {
-        activeRequestsRef.current = activeRequests;
-    }, [activeRequests]);
-
-    useEffect(() => {
-        if (caseId) {
-            fetchRequests();
-        }
+        if (caseId) fetchRequests();
     }, [caseId]);
 
-    // Auto-poll pending GST journeys in the background — no manual "check status" needed.
+    // Announce completion exactly once per transition — snapshots arrive every
+    // couple of seconds while a pull is live, so reacting to the raw value
+    // would re-toast continuously.
+    const gstPhase = snapshot?.gst?.overall?.phase;
+    usePhaseTransition(gstPhase, {
+        COMPLETED: () => toast.success('GST report ready!'),
+        FAILED: () => toast.error('GST request failed'),
+    });
+
+    // Separate from the toast above: this also has to fire when the pull was
+    // already complete before this component mounted (no transition to observe).
     useEffect(() => {
-        if (!caseId) return;
-        let cancelled = false;
-
-        const tick = async () => {
-            const pollable = activeRequestsRef.current.filter(r => ['PROCESSING', 'DATA_READY', 'CALLBACK_RECEIVED'].includes(r.status));
-            await Promise.allSettled(pollable.map(r => silentSync(r.id)));
-            if (!cancelled) timeoutId = setTimeout(tick, 15000);
-        };
-
-        let timeoutId = setTimeout(tick, 15000);
-        return () => { cancelled = true; clearTimeout(timeoutId); };
-    }, [caseId]);
+        if (gstPhase === 'COMPLETED') onComplete && onComplete();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gstPhase]);
 
     useEffect(() => {
         if (linkedGstins && linkedGstins.length > 0 && !formData.gstin) {
@@ -82,7 +88,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         try {
             const res = await api.get(`/external/gst/requests?case_id=${caseId}`);
             if (res.data.success) {
-                setActiveRequests(res.data.data);
+                setFallbackRequests(res.data.data);
                 if (res.data.data.some(r => r.status === 'REPORT_READY' || r.status === 'COMPLETED')) {
                     onComplete && onComplete();
                 }
@@ -128,6 +134,9 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             await api.post(`/external/gst/create`, payload);
 
             toast.success("GST Request initiated successfully");
+            // Ask the server to re-broadcast now rather than waiting for its
+            // next tick, so the new journey appears the instant it exists.
+            refresh();
             await fetchRequests();
 
             // clear sensitive
@@ -146,27 +155,12 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         try {
             await api.post(`/external/gst/cancel`, { request_id: requestId });
             toast.success('GST request cancelled');
+            refresh();
             await fetchRequests();
         } catch (error) {
             toast.error(error.response?.data?.error || 'Failed to cancel GST request');
         } finally {
             setCancelling(false);
-        }
-    };
-
-    // Background poll — does not touch the shared `loading` flag so it never disables the
-    // "Initialize GST Request" button, and only surfaces a toast once there's real news.
-    const silentSync = async (requestId) => {
-        try {
-            const res = await api.post(`/external/gst/sync`, { request_id: requestId });
-            const data = res.data;
-
-            if (data.dataSynced || data.status === 'REPORT_READY') {
-                toast.success("GST report ready!");
-            }
-            await fetchRequests();
-        } catch (error) {
-            console.error('[GST auto-sync]', error.response?.data?.error || error.message);
         }
     };
 
@@ -202,7 +196,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                                 <option value="">Select GSTIN</option>
                                 {linkedGstins.map(g => (
                                     <option key={g.gstin} value={g.gstin}>
-                                        {g.gstin} ({g.registration_name || 'No Name'}) - {formatStatusLabel(g.status)}
+                                        {g.gstin}{isUsableEntityName(g.registration_name) ? ` (${g.registration_name})` : ''} - {formatStatusLabel(g.status)}
                                     </option>
                                 ))}
                                 <option value="__manual__">Enter manually...</option>
@@ -277,17 +271,30 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                 // Only the most recent journey is shown — no journey list/history,
                 // no raw GSTIN/mode/status/timestamp/auth-link plumbing surfaced to the user.
                 const req = visible[0];
-                const isSuccess = req.status === 'REPORT_READY' || req.status === 'COMPLETED';
-                const isDead = req.status === 'FAILED' || req.status === 'EXPIRED';
+                // `phase` is only present on realtime snapshots; the REST
+                // fallback shape has just the raw status, so derive from that
+                // when a push hasn't arrived yet.
+                const phase = req.phase
+                    || (['REPORT_READY', 'COMPLETED'].includes(req.status) ? 'COMPLETED'
+                        : ['FAILED', 'EXPIRED'].includes(req.status) ? 'FAILED' : 'PROCESSING');
+                const isSuccess = phase === 'COMPLETED';
+                const isDead = phase === 'FAILED';
                 return (
                     <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
                         {isDead ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
-                                <AlertCircle size={16} /> {req.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed'}
+                                <AlertCircle size={16} /> {req.label || (req.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
                             </div>
                         ) : !isSuccess ? (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                                <PullingIndicator label="Pulling GST data…" />
+                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                    <PullStatusTracker
+                                        variant="panel"
+                                        phase={phase}
+                                        label={req.label || 'Pulling GST data…'}
+                                        progress={req.progress ?? 45}
+                                    />
+                                </div>
                                 <button type="button" onClick={() => handleCancelRequest(req.id)} disabled={cancelling}
                                     className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', border: '1px solid var(--error)' }}>
                                     {cancelling ? 'Cancelling...' : 'Cancel Request'}
@@ -320,18 +327,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                                     ) : req.report_excel_url ? (
                                         <a href={req.report_excel_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <Download size={14} /> Excel Report
-                                        </a>
-                                    ) : null}
-
-                                    {/* JSON */}
-                                    {req.gst_json_document_id ? (
-                                        <button type="button" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                            onClick={() => downloadDocument(req.gst_json_document_id, `gst_${req.gstin}.json`).catch(e => toast.error(e.message))}>
-                                            <Download size={14} /> Raw JSON
-                                        </button>
-                                    ) : req.report_json_url ? (
-                                        <a href={req.report_json_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Download size={14} /> Raw JSON
                                         </a>
                                     ) : null}
                                 </div>

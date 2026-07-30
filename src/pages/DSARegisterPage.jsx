@@ -81,10 +81,10 @@ const CustomDropdown = ({
           }
         }}
       >
-        <span className={!value ? 'text-[#4a5d73]/60 dark:text-[#94a3b8]/60' : ''}>
+        <span className={!value ? 'text-[#0a1628]/60 dark:text-[#e6edf7]/60' : ''}>
           {value || placeholder}
         </span>
-        <span className={`material-symbols-outlined text-[18px] text-[#4a5d73] dark:text-[#94a3b8] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+        <span className={`material-symbols-outlined text-[18px] text-[#0a1628] dark:text-[#e6edf7] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
           expand_more
         </span>
       </div>
@@ -100,7 +100,7 @@ const CustomDropdown = ({
               <div
                 key={`${optValue}-${idx}`}
                 className={`px-4 py-2.5 text-[14px] cursor-pointer transition-colors truncate
-                  ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-[#4a5d73] dark:text-[#e6edf7] hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                  ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-[#0a1628] dark:text-[#e6edf7] hover:bg-gray-50 dark:hover:bg-white/5'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange({ target: { name, value: optValue } });
@@ -593,7 +593,7 @@ const DSARegisterPage = () => {
                 {step === 2 && 'Fill your address below'}
                 {step === 3 && 'Create your admin account'}
               </h2>
-              <p className="text-[15px] text-slate-500 dark:text-slate-400">
+              <p className="text-[15px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
                 {step === 1 && 'We need these details to verify your business identity and compliance.'}
                 {step === 2 && 'We need your permanent address for background verification and communications.'}
                 {step === 3 && 'This will be your DSA Admin login. You can add team members later.'}
@@ -607,17 +607,17 @@ const DSARegisterPage = () => {
                 {step === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
                     <div className="md:col-span-2">
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Organization Name *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Organization Name *</label>
                       <input name="name" placeholder="e.g. Acme FinServe Pvt Ltd" value={form.name} onChange={handleChange} onBlur={() => handleFieldBlur('name')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.name && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.name}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Official Email *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Official Email *</label>
                       <input name="email" type="email" placeholder="office@acme.com" value={form.email} onChange={handleChange} onBlur={() => handleFieldBlur('email')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.email ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.email && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.email}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Business Mobile *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Business Mobile *</label>
                       <div className={`flex items-center pb-3 border-b ${errors.mobile ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
                         <CustomDropdown
                           name="mobile_country_code"
@@ -631,17 +631,17 @@ const DSARegisterPage = () => {
                       {errors.mobile && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.mobile}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">PAN Number *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">PAN Number *</label>
                       <input name="pan_number" placeholder="ABCDE1234F" value={form.pan_number} onChange={handleChange} onBlur={() => handleFieldBlur('pan_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pan_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.pan_number && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pan_number}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">GST Number (optional)</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">GST Number (optional)</label>
                       <input name="gst_number" placeholder="27AAACR5055K1Z7" value={form.gst_number} onChange={handleChange} onBlur={() => handleFieldBlur('gst_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.gst_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.gst_number && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.gst_number}</span>}
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Company Type *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Company Type *</label>
                       <CustomDropdown
                         name="company_type"
                         value={form.company_type}
@@ -659,7 +659,7 @@ const DSARegisterPage = () => {
                 {step === 2 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Pin Code *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Pin Code *</label>
                       <div className="relative">
                         <input name="pincode" placeholder="123 456" maxLength={6} value={form.pincode} onChange={handleChange} onBlur={(e) => handleFieldBlur('pincode', e.target.value)} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                         {isPincodeFetching && (
@@ -669,7 +669,7 @@ const DSARegisterPage = () => {
                       {errors.pincode && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pincode}</span>}
                     </div>
                     <div className="md:col-span-2">
-                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#4a5d73] dark:text-[#94a3b8]'}`}>State *</label>
+                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#0a1628] dark:text-[#e6edf7] font-semibold'}`}>State *</label>
                       <CustomDropdown
                         name="state"
                         value={form.state}
@@ -683,7 +683,7 @@ const DSARegisterPage = () => {
                       {errors.state && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.state}</span>}
                     </div>
                     <div className="md:col-span-2">
-                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#4a5d73] dark:text-[#94a3b8]'}`}>City *</label>
+                      <label className={`block text-[12px] mb-1.5 ${form.pincode.length < 6 ? 'text-gray-300 dark:text-gray-600' : 'text-[#0a1628] dark:text-[#e6edf7] font-semibold'}`}>City *</label>
                       <input
                         name="city"
                         placeholder={form.pincode.length < 6 ? "Enter pincode first…" : "e.g. Bangalore"}
@@ -701,17 +701,17 @@ const DSARegisterPage = () => {
                 {step === 3 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
                     <div className="md:col-span-2">
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Full Name *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Full Name *</label>
                       <input name="admin_name" placeholder="e.g. Rahul Sharma" value={form.admin_name} onChange={handleChange} onBlur={() => handleFieldBlur('admin_name')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.admin_name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.admin_name && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.admin_name}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Login Email *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Login Email *</label>
                       <input name="admin_email" type="email" placeholder="rahul@acme.com" value={form.admin_email} onChange={handleChange} onBlur={() => handleFieldBlur('admin_email')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.admin_email ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.admin_email && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.admin_email}</span>}
                     </div>
                     <div>
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Admin Mobile *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Admin Mobile *</label>
                       <div className={`flex items-center pb-3 border-b ${errors.admin_mobile ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
                         <CustomDropdown
                           name="admin_mobile_country_code"
@@ -725,10 +725,10 @@ const DSARegisterPage = () => {
                       {errors.admin_mobile && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.admin_mobile}</span>}
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Password *</label>
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Password *</label>
                       <div className={`flex items-center pb-3 border-b ${errors.admin_password && form.admin_password.length > 0 && !allPasswordRequirementsMet(form.admin_password) ? 'border-gray-200 dark:border-gray-700' : errors.admin_password ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors`}>
                         <input type={showPwd ? 'text' : 'password'} name="admin_password" placeholder="Create password" value={form.admin_password} onChange={handleChange} onBlur={() => handleFieldBlur('admin_password')} className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0" />
-                        <span onClick={() => setShowPwd(!showPwd)} className="material-symbols-outlined text-[18px] text-[#4a5d73] dark:text-[#94a3b8] cursor-pointer hover:text-indigo-600 transition-colors ml-2">
+                        <span onClick={() => setShowPwd(!showPwd)} className="material-symbols-outlined text-[18px] text-[#0a1628] dark:text-[#e6edf7] cursor-pointer hover:text-indigo-600 transition-colors ml-2">
                           {showPwd ? 'visibility_off' : 'visibility'}
                         </span>
                       </div>
@@ -772,7 +772,7 @@ const DSARegisterPage = () => {
                 </TravelingBorderButton>
 
                 {step === 1 && (
-                  <p className="text-center text-sm mt-6 text-slate-500 dark:text-slate-400">
+                  <p className="text-center text-sm mt-6 text-[#0a1628] dark:text-[#e6edf7] font-medium">
                     Already have an account?{' '}
                     <Link
                       to="/login"
@@ -796,7 +796,7 @@ const DSARegisterPage = () => {
               <span className="material-symbols-outlined text-3xl">build</span>
             </div>
             <h3 className="text-2xl font-bold text-[#0a1628] dark:text-white mb-4">Under Development</h3>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-8 text-[15px]">
+            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium leading-relaxed mb-8 text-[15px]">
               Oops! We know that you are interested in our platform to onboard. Our team is currently developing this platform and will be able to serve you at the earliest. Sorry for the inconvenience.
             </p>
             <button

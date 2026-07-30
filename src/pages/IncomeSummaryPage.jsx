@@ -6,10 +6,16 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Panel from '../components/ui/Panel';
 import { PlusCircle, Trash2, ChevronRight, BarChart3, PenLine } from 'lucide-react';
 
-const INCOME_TYPES = [
+const INCOME_TYPES_MSME = [
   'Director Salary', "Partner's Salary", 'Interest on Capital',
   'Rental Income — Bank', 'Rental Income — Cash', 'Interest Income',
   'Dividend Income', 'Agriculture Income', 'Professional Fees', 'Other'
+];
+// A salaried employee has no business/directorial income concepts — swap
+// those out for a plain Salary/Bonus entry instead.
+const INCOME_TYPES_SALARIED = [
+  'Salary', 'Bonus / Incentive', 'Rental Income — Bank', 'Rental Income — Cash',
+  'Interest Income', 'Dividend Income', 'Other'
 ];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'Bank Credit', 'None'];
 
@@ -28,7 +34,7 @@ const useIsMobile = () => {
 // Step 4 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext as props instead of
 // reading useParams()/navigating itself.
-export default function IncomeSummaryPage({ caseId, onNext }) {
+export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }) {
   const isMobile = useIsMobile();
 
   const [loading, setLoading] = useState(true);
@@ -113,6 +119,8 @@ export default function IncomeSummaryPage({ caseId, onNext }) {
   const fyLatestLabel = api.gst_turnover?.fy_latest || api.net_profit?.fy_latest || api.avg_bank_balance?.fy_latest || 'Latest Year';
   const fyPrevLabel   = api.gst_turnover?.fy_prev   || api.net_profit?.fy_prev   || api.avg_bank_balance?.fy_prev   || 'Previous Year';
 
+  const incomeTypes = isSalaried ? INCOME_TYPES_SALARIED : INCOME_TYPES_MSME;
+
   const addEntryGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1.5fr 2fr auto';
 
   return (
@@ -143,7 +151,11 @@ export default function IncomeSummaryPage({ caseId, onNext }) {
         }
       `}</style>
 
-      {/* API-Pulled Income Table */}
+      {/* API-Pulled Income Table — GST/ITR/Bank are self-employed/business
+          concepts; a salaried employee's only income source is their salary,
+          which is captured entirely via the salary-slip OCR step + Manual
+          Income Addition below, so this panel doesn't apply to them at all. */}
+      {!isSalaried && (
       <Panel
         icon={BarChart3}
         accentColor="var(--success)"
@@ -208,14 +220,16 @@ export default function IncomeSummaryPage({ caseId, onNext }) {
             </div>
           );
         })()}
-
       </Panel>
+      )}
 
       {/* Manual Income Addition */}
       <Panel
         icon={PenLine}
         title="Manual Income Addition"
-        subtitle="Add income not captured via API — Director salary, rental, agriculture, other"
+        subtitle={isSalaried
+          ? 'Add income not captured via OCR — additional salary, bonus, rental, other'
+          : 'Add income not captured via API — Director salary, rental, agriculture, other'}
         bodyPadding={0}
         delay={0.08}
         style={{ marginBottom: 24 }}
@@ -242,7 +256,7 @@ export default function IncomeSummaryPage({ caseId, onNext }) {
                     <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
                     <select className="form-control" value={newEntry.income_type} onChange={e => setNewEntry({ ...newEntry, income_type: e.target.value })}>
                       <option value="">— Select —</option>
-                      {INCOME_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      {incomeTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
@@ -354,7 +368,7 @@ export default function IncomeSummaryPage({ caseId, onNext }) {
           )
         ) : !adding ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-            No manual entries yet. Click <strong>Add Entry</strong> to record Director salary, rental income, etc.
+            No manual entries yet. Click <strong>Add Entry</strong> to record {isSalaried ? 'additional salary, bonus, rental income, etc.' : 'Director salary, rental income, etc.'}
           </div>
         ) : null}
 

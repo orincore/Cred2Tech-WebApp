@@ -6,6 +6,7 @@ import { getUsers } from '../api/userService';
 import { MOCK_USERS } from '../constants/mockData';
 import { ROLE_OPTIONS, STATUS_OPTIONS } from '../constants/roles';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import PageHeader from '../components/ui/PageHeader';
 import { formatDateTime, getInitials } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
@@ -90,7 +91,7 @@ const UsersListPage = () => {
   const avatarColors = (name = '') => avatarPalette[(name.charCodeAt(0) || 0) % avatarPalette.length];
 
   /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
     borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -102,30 +103,22 @@ const UsersListPage = () => {
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
       {/* ─── Top header ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            Admin › Employee Management
-          </p>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-            Employee Management
-          </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
-            Manage Your Employees Easily
-          </p>
-        </div>
+      <div style={{ padding: isMobile ? '80px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader title="Team Management" subtitle="Manage Your Employees Easily" />
 
-        <TravelingBorderButton
-          onClick={() => navigate('/users/create')}
-          size={isMobile ? 'sm' : 'sm'}
-          solid
-          showIcon={false}
-          className={isMobile ? 'px-4 py-2 text-xs' : ''}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-            <UserPlus size={isMobile ? 12 : 14} /> Add Employee
-          </div>
-        </TravelingBorderButton>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <TravelingBorderButton
+            onClick={() => navigate('/users/create')}
+            size={isMobile ? 'sm' : 'sm'}
+            solid
+            showIcon={false}
+            className={isMobile ? 'px-4 py-2 text-xs' : ''}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
+              <UserPlus size={isMobile ? 12 : 14} /> Add Employee
+            </div>
+          </TravelingBorderButton>
+        </div>
       </div>
 
       {/* ─── Info bar ─── */}
@@ -198,9 +191,9 @@ const UsersListPage = () => {
         {hasFilters && (
           <button
             onClick={() => { setSearch(''); setFilterRole(''); setFilterStatus(''); setFilterLevel(''); }}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
+            style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
             onMouseEnter={e => e.currentTarget.style.color = '#f43f5e'}
-            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--on-muted)'}
           >
             Clear all
           </button>
@@ -233,7 +226,7 @@ const UsersListPage = () => {
           {/* Sub-header */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Team Information</span>
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} of {users.length} employees</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {users.length} employees</span>
           </div>
 
           {/* Table */}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
+import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Sparkles } from 'lucide-react';
 
 const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -274,17 +275,17 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
           type="button"
           onClick={() => setMode('OCR')}
           className="btn"
-          style={{ flex: 1, justifyContent: 'center', border: mode === 'OCR' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'OCR' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'OCR' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
+          style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8, border: mode === 'OCR' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'OCR' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'OCR' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
         >
-          📄 Upload OCR
+          <FileText size={15} /> Upload OCR
         </button>
         <button
           type="button"
           onClick={() => setMode('MANUAL')}
           className="btn"
-          style={{ flex: 1, justifyContent: 'center', border: mode === 'MANUAL' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'MANUAL' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'MANUAL' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
+          style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8, border: mode === 'MANUAL' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'MANUAL' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'MANUAL' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
         >
-          ✍️ Manual Entry
+          <PenLine size={15} /> Manual Entry
         </button>
       </div>
 
@@ -348,10 +349,10 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
         {months.map((m) => (
-          <div key={m.id} style={{ background: 'var(--bg-elevated)', border: '1.5px dashed var(--border)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+          <div key={m.id} style={{ background: 'var(--bg-elevated)', border: '1.5px dashed var(--border)', borderRadius: 0, padding: 16, textAlign: 'center' }}>
             {m.ocrStatus === 'COMPLETED' ? (
               <>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>✅</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><CheckCircle2 size={24} color="var(--success)" /></div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>{m.label} Processed</div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>Net: ₹{m.result?.net_salary?.toLocaleString('en-IN') || 0}</div>
                 <button
@@ -366,7 +367,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               </>
             ) : m.isUploaded ? (
               <>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>📄</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><FileCheck2 size={24} color="var(--info)" /></div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)', marginBottom: 4 }}>{m.label} Uploaded</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.fileName || 'Salary slip document'}>
                   {m.fileName || 'Document attached'}
@@ -383,7 +384,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               </>
             ) : (
               <>
-                <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><ClipboardList size={24} color="var(--text-tertiary)" /></div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{m.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>{mode === 'OCR' ? 'Upload salary slip PDF / image' : 'Enter manual salary values'}</div>
                 <button
@@ -406,40 +407,40 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
           <button
             type="button"
             className="btn btn-lg"
-            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))', color: 'white', border: 'none', width: '100%', maxWidth: 300, justifyContent: 'center' }}
+            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))', color: 'white', border: 'none', width: '100%', maxWidth: 300, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={handleRunAllOcr}
             disabled={runningAllOcr || loadingMonth !== null}
           >
-            {runningAllOcr ? 'Processing OCR...' : 'Run OCR on Uploaded Slips ✨'}
+            {runningAllOcr ? 'Processing OCR...' : <>Run OCR on Uploaded Slips <Sparkles size={16} /></>}
           </button>
         </div>
       )}
 
       {completedCount > 0 && summary && summary.length > 0 && (
-        <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', borderRadius: 12, padding: 16, marginTop: 4 }}>
+        <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', borderRadius: 0, padding: 16, marginTop: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 16 }}>✅</span>
+            <CheckCircle2 size={16} color="var(--success)" />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>OCR Extraction Complete — {applicantName || summary[0]?.employee_name}</span>
-            <span style={{ marginLeft: 'auto', background: 'var(--bg-surface)', color: 'var(--success)', padding: '4px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+            <span style={{ marginLeft: 'auto', background: 'var(--bg-surface)', color: 'var(--success)', padding: '4px 8px', borderRadius: 0, fontSize: 11, fontWeight: 700 }}>
               {completedCount} slip{completedCount > 1 ? 's' : ''} processed
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Employer</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{summary[0]?.employer_name || '-'}</div>
             </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Latest Gross Salary</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>₹{summary[0]?.gross_salary?.toLocaleString('en-IN') || 0}</div>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month</div>
             </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Deductions</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>₹{summary[0]?.deductions?.toLocaleString('en-IN') || 0}</div>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month</div>
             </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: '10px 14px', border: '2px solid var(--success)', gridColumn: '1 / -1' }}>
+            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px', border: '2px solid var(--success)', gridColumn: '1 / -1' }}>
               <div style={{ fontSize: 10, color: 'var(--success)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>Net Take-Home</div>
               <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--success)' }}>₹{avgNet.toLocaleString('en-IN')}</div>
               <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month (avg {completedCount} mo)</div>

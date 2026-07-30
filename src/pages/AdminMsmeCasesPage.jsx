@@ -8,7 +8,7 @@ import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import FormField from '../components/ui/FormField';
 import DataTable from '../components/DataTable';
-import { formatDate, toTitleCase } from '../utils/helpers';
+import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
 import {
   getDirectMsmeCases,
   getAllocationTargets,
@@ -61,7 +61,7 @@ function AllocateModal({ isOpen, onClose, caseRecord, targets, onAllocated }) {
         </div>
 
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 18 }}>
-          {toTitleCase(caseRecord.customer?.proprietor_name || caseRecord.customer?.business_name) || 'This MSME lead'} will move into the selected DSA's pipeline. The DSA will then prepare and send the loan proposal.
+          {toTitleCase(resolveEntityName(caseRecord.customer)) || 'This MSME lead'} will move into the selected DSA's pipeline. The DSA will then prepare and send the loan proposal.
         </p>
 
         <FormField label="Select DSA Partner" name="dsa_tenant" required>
@@ -151,7 +151,7 @@ const AdminMsmeCasesPage = () => {
       key: 'business', label: 'Business',
       render: (c) => (
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(c.customer?.proprietor_name || c.customer?.business_name) || 'N/A'}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(resolveEntityName(c.customer)) || 'N/A'}</div>
           <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>PAN: {c.customer?.business_pan || '—'}</div>
           <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{formatDate(c.created_at)}</div>
         </div>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  UserPlus, ClipboardCheck, CheckCircle2, Banknote, Wallet,
+  UserPlus, ClipboardCheck, CheckCircle2, Banknote,
   Plus, Users, Network, UserCircle, ArrowRight, Inbox,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -13,7 +13,7 @@ import TableSkeleton from '../../components/ui/TableSkeleton';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import TrendBadge, { AnimatedNumber } from '../../components/ui/TrendBadge';
-import { getDsaSummary, getDsaWallet, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
+import { getDsaSummary, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
 import { formatCompactINR, getErrorMessage } from '../../utils/helpers';
 
 // Fixed pipeline order — matches the product's actual case lifecycle stages.
@@ -77,7 +77,6 @@ const stageColor = (stage) => {
 const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
-  const [wallet, setWallet] = useState(null);
   const [cases, setCases] = useState([]);
   const [stageSummary, setStageSummary] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
@@ -89,7 +88,6 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
     const params = { period };
     await Promise.all([
       getDsaSummary(params).then(setSummary).catch((err) => { toast.error(getErrorMessage(err)); setSummary(null); }).finally(() => setLoadingSummary(false)),
-      getDsaWallet().then(setWallet).catch(() => setWallet(null)),
       getDsaCases(params).then((d) => setCases(Array.isArray(d) ? d : [])).catch((err) => { toast.error(getErrorMessage(err)); setCases([]); }).finally(() => setLoadingCases(false)),
       getDsaStageSummary(params).then(setStageSummary).catch(() => setStageSummary(null)),
     ]);
@@ -111,16 +109,6 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {wallet && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 0, background: 'var(--surface)', border: '1px solid var(--outline)' }}>
-            <Wallet size={14} color="var(--primary)" />
-            <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Wallet</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatCompactINR(wallet.balance)}</span>
-          </div>
-        </div>
-      )}
-
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
         {kpis.map((k, i) => {
           const d = summary?.[k.key];

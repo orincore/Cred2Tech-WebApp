@@ -23,7 +23,7 @@ export const colors = {
   surface:      '#ffffff',
   surfaceLow:   '#e0eaff',
   onSurface:    '#0a1628',
-  onMuted:      '#4a5d73',
+  onMuted:      '#0a1628',
   outline:      '#c7d2fe',
 
   // Dark Mode - Dark Blue
@@ -32,7 +32,7 @@ export const colors = {
     surface:      '#162048',
     surfaceLow:   '#1e2a5c',
     onSurface:    '#e6edf7',
-    onMuted:      '#94a3b8',
+    onMuted:      '#e6edf7',
     outline:      '#2d3a6c',
   },
 } as const;

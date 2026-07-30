@@ -9,7 +9,7 @@ import {
 import { msmeApi } from '../../api/msmeService';
 import { useMsmeAuth } from '../../context/MsmeAuthContext';
 import { loadRazorpay } from '../../utils/razorpay';
-import { toTitleCase } from '../../utils/helpers';
+import { toTitleCase, resolveEntityName } from '../../utils/helpers';
 import { getErrorMessage, formatCompactINR, CASE_STAGE_LABELS } from '../../utils/helpers';
 import StatCard from '../../components/ui/StatCard';
 import SectionCard from '../../components/ui/SectionCard';
@@ -156,7 +156,7 @@ const MsmeDashboardPage = () => {
   // are derived from GST vendor lookups and can end up holding a GST registration
   // reference number when the business never registered a real trade name — prefer
   // the reliable identity field first.
-  const businessName = toTitleCase(activeCase?.customer?.proprietor_name || activeCase?.customer?.business_name || user?.name) || 'User';
+  const businessName = toTitleCase(resolveEntityName(activeCase?.customer, user?.name)) || 'User';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const primaryApplicant = activeCase?.applicants?.find(a => a.type === 'PRIMARY');

@@ -154,12 +154,12 @@ export default function PartDisbursementPage() {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
-        <PageHeader
-          title="Part Disbursement"
-          subtitle="Track and update pending disbursement tranches across all cases"
-        />
-        <div className="search-box" style={{ position: 'relative', marginTop: 4, width: 280, maxWidth: '100%' }}>
+      <PageHeader
+        title="Part Disbursement"
+        subtitle="Track and update pending disbursement tranches across all cases"
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+        <div className="search-box" style={{ position: 'relative', width: 280, maxWidth: '100%' }}>
           <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
           <input
             type="text"
@@ -167,7 +167,7 @@ export default function PartDisbursementPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="form-control"
-            style={{ paddingLeft: 38, paddingTop: 11, paddingBottom: 11, width: '100%', background: 'var(--bg-surface)' }}
+            style={{ paddingLeft: 38, width: '100%' }}
           />
         </div>
       </div>

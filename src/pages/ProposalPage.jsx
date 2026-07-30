@@ -5,9 +5,9 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
-  AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, Square, UploadCloud,
+  AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, UploadCloud,
   X, Mail, Phone, IndianRupee, Users, BarChart3, MapPin, FolderOpen, MessageSquare,
-  Contact, Landmark
+  Contact, Landmark, Info, Home, Briefcase, Building2, FileText, ScrollText
 } from 'lucide-react';
 import { getTenantLenders, sendCaseToOtherLender } from '../api/tenantLenderService';
 import { uploadDocument } from '../api/documentHelper';
@@ -22,6 +22,16 @@ const fmtINR = (n, fallback = '—') => {
   return `₹${num.toLocaleString('en-IN')}`;
 };
 const fmtNum = (n, fallback = '—') => (n == null ? fallback : Number(n).toLocaleString('en-IN'));
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
+};
 
 const STATUS_CFG = {
   draft: { label: 'Draft', color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)', Icon: Clock },
@@ -258,38 +268,40 @@ function InfoCell({ label, value, valueColor }) {
 }
 
 // ─── Financial Summary ────────────────────────────────────────────────────────
-function FinancialSummary({ summary, prefill }) {
+function FinancialSummary({ summary, prefill, isSalaried = false }) {
   const { gst, itr_years, bank_accounts } = summary || {};
 
   return (
     <div>
-      {/* GST */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{
-            fontSize: 10, fontWeight: 800, color: 'var(--success)', background: 'var(--success-bg)',
-            padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
-          }}>GST</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST TURNOVER SUMMARY</span>
+      {/* GST — never applicable to a salaried employee, who has no business turnover to report */}
+      {!isSalaried && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 800, color: 'var(--success)', background: 'var(--success-bg)',
+              padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
+            }}>GST</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST TURNOVER SUMMARY</span>
+          </div>
+          <div className="pp-grid-5">
+            {[
+              { label: 'Avg Monthly Turnover', value: fmtINR(gst?.avg_monthly_turnover) },
+              { label: `Annual Turnover (${gst?.fy_latest || 'FY Latest'})`, value: fmtINR(gst?.turnover_latest) },
+              { label: `Annual Turnover (${gst?.fy_previous || 'FY Previous'})`, value: fmtINR(gst?.turnover_previous) },
+              { label: 'Months Filed (12M)', value: gst?.months_filed != null ? `${gst.months_filed} / 12` : '—' },
+              {
+                label: 'Nil Return Months', value: gst?.nil_months != null ? String(gst.nil_months) : '—',
+                red: gst?.nil_months > 0
+              },
+            ].map(({ label, value, red }) => (
+              <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 6, lineHeight: 1.3 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: red ? 'var(--error)' : 'var(--success)' }}>{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="pp-grid-5">
-          {[
-            { label: 'Avg Monthly Turnover', value: fmtINR(gst?.avg_monthly_turnover) },
-            { label: `Annual Turnover (${gst?.fy_latest || 'FY Latest'})`, value: fmtINR(gst?.turnover_latest) },
-            { label: `Annual Turnover (${gst?.fy_previous || 'FY Previous'})`, value: fmtINR(gst?.turnover_previous) },
-            { label: 'Months Filed (12M)', value: gst?.months_filed != null ? `${gst.months_filed} / 12` : '—' },
-            {
-              label: 'Nil Return Months', value: gst?.nil_months != null ? String(gst.nil_months) : '—',
-              red: gst?.nil_months > 0
-            },
-          ].map(({ label, value, red }) => (
-            <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '12px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 6, lineHeight: 1.3 }}>{label}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: red ? 'var(--error)' : 'var(--success)' }}>{value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* ITR */}
       {itr_years?.length > 0 && (
@@ -376,9 +388,12 @@ function FinancialSummary({ summary, prefill }) {
         </div>
       )}
 
-      {!gst?.turnover_latest && !itr_years?.length && !bank_accounts?.length && (
+      {(isSalaried || !gst?.turnover_latest) && !itr_years?.length && !bank_accounts?.length && (
         <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: 13 }}>
-          ℹ️ Financial data will appear here once GST/ITR/Bank analytics are completed for this case.
+          <Info size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+          {isSalaried
+            ? 'Financial data will appear here once ITR/Bank analytics are completed for this case.'
+            : 'Financial data will appear here once GST/ITR/Bank analytics are completed for this case.'}
         </div>
       )}
     </div>
@@ -386,144 +401,545 @@ function FinancialSummary({ summary, prefill }) {
 }
 
 // ─── Address Section ──────────────────────────────────────────────────────────
-function AddressSection({ addresses, onChange, readOnly }) {
+// Each field a reported address can be assigned to gets its own icon + accent
+// color, used consistently for both the toggle chips and the field badges
+// below — so "this chip is Office" reads the same way everywhere on screen.
+const ADDRESS_FIELD_META = {
+  residential: { label: 'Residential', icon: Home, color: 'var(--info)', bg: 'var(--info-bg)' },
+  office:      { label: 'Office',      icon: Briefcase, color: 'var(--success)', bg: 'var(--success-bg)' },
+  property:    { label: 'Property',    icon: Building2, color: 'var(--warning)', bg: 'var(--warning-bg)' },
+};
+
+function AddressSection({ addresses, onChange, readOnly, isSalaried = false, candidates = [] }) {
+  // Bureau data reports one address per tradeline/employer it ever saw — it
+  // never says which is "residential" vs "office" — and GST's principal
+  // address is only ever a business address. None of these are authoritative
+  // on their own, so the user picks which reported address (if any) is
+  // actually the residential/office address; unrelated to manual override,
+  // which always stays available in the textareas below.
+  const toggleCandidate = (candidate, field) => {
+    const isSelected = addresses[field] === candidate.text;
+    onChange({ ...addresses, [field]: isSelected ? '' : candidate.text });
+  };
+
+  const residentialSource = candidates.find(c => c.text === addresses.residential)?.source;
+  const officeSource = candidates.find(c => c.text === addresses.office)?.source;
+  const propertySource = candidates.find(c => c.text === addresses.property)?.source;
+  const sourceBadge = (source) => source === 'GST'
+    ? { label: 'FROM GST', color: 'var(--success)', bg: 'var(--success-bg)' }
+    : source === 'BUREAU'
+      ? { label: 'FROM BUREAU', color: 'var(--info)', bg: 'var(--info-bg)' }
+      : { label: 'MANUAL ENTRY', color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
+  const residentialBadge = sourceBadge(residentialSource);
+  const officeBadge = sourceBadge(officeSource);
+  const propertyBadge = sourceBadge(propertySource);
+
   return (
     <div>
+      {candidates.length > 0 && (
+        <div style={{ marginBottom: 24, border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden' }}>
+          <div style={{
+            padding: '12px 16px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <MapPin size={14} color="var(--text-secondary)" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Reported Addresses
+              </span>
+            </div>
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', background: 'var(--bg-surface)',
+              border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 999
+            }}>{candidates.length} found</span>
+          </div>
+          <div style={{ padding: '6px 16px 4px', fontSize: 11, color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border)' }}>
+            Tick which field each address applies to — one address can cover more than one field.
+          </div>
+          {candidates.map(c => {
+            const isActive = ['residential', 'office', 'property'].some(f => addresses[f] === c.text);
+            return (
+              <div key={c.id} style={{
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+                padding: '12px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap',
+                borderLeft: `3px solid ${isActive ? 'var(--primary)' : 'transparent'}`,
+                background: isActive ? 'var(--primary-subtle)' : 'transparent',
+                transition: 'background 0.15s ease, border-color 0.15s ease'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 220 }}>
+                  {c.source === 'GST' ? <ScrollText size={14} color="var(--success)" style={{ flexShrink: 0, marginTop: 2 }} /> : <FileText size={14} color="var(--info)" style={{ flexShrink: 0, marginTop: 2 }} />}
+                  <div>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>{c.text}</span>
+                    <div style={{ marginTop: 3 }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        color: c.source === 'GST' ? 'var(--success)' : 'var(--info)',
+                        background: c.source === 'GST' ? 'var(--success-bg)' : 'var(--info-bg)',
+                      }}>{c.source}</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+                  {Object.entries(ADDRESS_FIELD_META).map(([field, meta]) => {
+                    const checked = addresses[field] === c.text;
+                    const Icon = meta.icon;
+                    return (
+                      <button
+                        key={field}
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => toggleCandidate(c, field)}
+                        title={`Use as ${meta.label} address`}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                          border: `1px solid ${checked ? meta.color : 'var(--border)'}`,
+                          background: checked ? meta.color : 'var(--bg-surface)',
+                          color: checked ? '#fff' : 'var(--text-secondary)',
+                          borderRadius: 0, fontSize: 11, fontWeight: 600,
+                          cursor: readOnly ? 'default' : 'pointer',
+                          transition: 'all 0.12s ease'
+                        }}
+                      >
+                        {checked ? <CheckSquare size={13} /> : <Icon size={13} />}
+                        {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="pp-grid-2" style={{ marginBottom: 16 }}>
         <div>
           <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Home size={12} color="var(--info)" />
             CURRENT RESIDENTIAL ADDRESS
             <span style={{
-              fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600,
-              background: 'var(--bg-elevated)', padding: '1px 6px', borderRadius: 0
-            }}>MANUAL ENTRY</span>
+              fontSize: 9, color: residentialBadge.color, fontWeight: 600,
+              background: residentialBadge.bg, padding: '1px 6px', borderRadius: 0
+            }}>{residentialBadge.label}</span>
           </label>
           <textarea rows={3} value={addresses.residential || ''} readOnly={readOnly}
             onChange={e => onChange({ ...addresses, residential: e.target.value })}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Current residential address" />
-          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>Not available from bureau data — enter manually</div>
+          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
+            {residentialSource ? 'Selected from reported addresses above — editable' : (candidates.length > 0 ? 'None selected above — enter manually' : 'Not available from bureau data — enter manually')}
+          </div>
         </div>
         <div>
           <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Briefcase size={12} color="var(--success)" />
             OFFICE / BUSINESS ADDRESS
             <span style={{
-              fontSize: 9, color: 'var(--success)', fontWeight: 600,
-              background: 'var(--success-bg)', padding: '1px 6px', borderRadius: 0
-            }}>AUTO-FETCHED · EDITABLE</span>
+              fontSize: 9, color: officeBadge.color, fontWeight: 600,
+              background: officeBadge.bg, padding: '1px 6px', borderRadius: 0
+            }}>{officeBadge.label}</span>
           </label>
           <textarea rows={3} value={addresses.office || ''} readOnly={readOnly}
             onChange={e => onChange({ ...addresses, office: e.target.value })}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Office / business address" />
-          <div style={{ fontSize: 10, color: 'var(--success)', marginTop: 3 }}>✓ Auto-fetched from GST registration</div>
+          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
+            {officeSource ? `Selected from reported addresses above — editable` : (candidates.length > 0 ? 'None selected above — enter manually' : (isSalaried ? 'No GST/bureau office address found — enter manually' : 'Not available — enter manually'))}
+          </div>
         </div>
       </div>
       <div>
-        <label style={labelStyle}>PROPERTY ADDRESS (COLLATERAL) *</label>
+        <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Building2 size={12} color="var(--warning)" />
+          PROPERTY ADDRESS (COLLATERAL) *
+          <span style={{
+            fontSize: 9, color: propertyBadge.color, fontWeight: 600,
+            background: propertyBadge.bg, padding: '1px 6px', borderRadius: 0
+          }}>{propertyBadge.label}</span>
+        </label>
         <textarea rows={3} value={addresses.property || ''} readOnly={readOnly}
           onChange={e => onChange({ ...addresses, property: e.target.value })}
           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
           placeholder="Survey no., plot no., full address of the collateral property" />
+        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
+          {propertySource ? 'Selected from reported addresses above — editable' : (candidates.length > 0 ? 'None selected above — enter manually' : 'Not available — enter manually')}
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── KYC Documents Grid ───────────────────────────────────────────────────────
-const KYC_REQUIREMENTS = [
-  { type: 'PAN_CARD', label: 'PAN Card', required: true },
-  { type: 'AADHAAR', label: 'Aadhaar', required: true },
-];
-const OTHER_REQUIRED_DOCS = [
-  { type: 'GST_PDF', label: 'GST Registration Certificate', required: true },
-  { type: 'ITR', label: 'ITR / Income Documents', required: true },
-  { type: 'BANK_STATEMENT', label: 'Bank Statements', required: true },
-  { type: 'PROPERTY_DOCUMENT', label: 'Property / Title Documents', required: false },
-  { type: 'SALE_DEED', label: 'Partnership Deed / MOA', required: false },
+// ─── KYC Document Categories (Proposal stage) ─────────────────────────────────
+// Each category groups related document sub-types under one section. Adding a
+// document picks one of `options` (or, for the plain "Others" bucket, just
+// names it) then uploads — multiple documents can be added per category (e.g.
+// both MOA and AOA under Incorporation), unlike the old one-fixed-slot-per-type
+// scheme. `perApplicant` categories (ID Proof, Residence Address Proof) render
+// once per applicant; everything else is entity-level, shared by the case.
+const KYC_CATEGORIES = [
+  {
+    id: 'id_proof', label: 'ID Proof', perApplicant: true, required: true,
+    options: [
+      { type: 'PAN_CARD', label: 'PAN Card' },
+      { type: 'DRIVING_LICENSE', label: 'Driving Licence' },
+      { type: 'VOTER_ID', label: 'Voter ID Card' },
+      { type: 'PASSPORT', label: 'Passport' },
+      { type: 'OTHER', label: 'Others', customLabel: true },
+    ],
+  },
+  {
+    id: 'residence_address_proof', label: 'Residence Address Proof', perApplicant: true, required: true,
+    options: [
+      { type: 'UTILITY_BILL', label: 'Utility Bill' },
+      { type: 'RENT_AGREEMENT', label: 'Rent Agreement' },
+      { type: 'VOTER_ID', label: 'Voter ID Card' },
+      { type: 'PASSPORT', label: 'Passport' },
+      { type: 'OTHER', label: 'Others', customLabel: true },
+    ],
+  },
+  // Business/self-employed only — never applicable to a salaried case.
+  {
+    id: 'incorporation', label: 'Incorporation Document', perApplicant: false, msmeOnly: true, required: false,
+    options: [
+      { type: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation' },
+      { type: 'MOA', label: 'MOA (Memorandum of Association)' },
+      { type: 'AOA', label: 'AOA (Articles of Association)' },
+      { type: 'PARTNERSHIP_DEED', label: 'Partnership Deed' },
+    ],
+  },
+  {
+    id: 'office_address_proof', label: 'Office Address Proof', perApplicant: false, msmeOnly: true, required: false,
+    options: [
+      { type: 'UTILITY_BILL', label: 'Utility Bill' },
+      { type: 'RENT_AGREEMENT', label: 'Rent Agreement / Lease Deed' },
+      { type: 'TRADE_LICENSE', label: 'Trade License' },
+      { type: 'GST_PDF', label: 'GST Registration Certificate' },
+    ],
+  },
+  {
+    id: 'income_documents', label: 'Income Documents', perApplicant: false, required: true,
+    options: [
+      { type: 'ITR', label: 'ITR' },
+      { type: 'BANK_STATEMENT', label: 'Bank Statement' },
+      { type: 'GST_RETURNS', label: 'GST Returns' },
+      { type: 'SALARY_SLIP', label: 'Salary Slip' },
+      { type: 'FORM_16', label: 'Form 16' },
+      { type: 'OTHER', label: 'Others', customLabel: true },
+    ],
+  },
+  {
+    id: 'property_documents', label: 'Property Documents', perApplicant: false, required: false,
+    options: [
+      { type: 'SALE_DEED', label: 'Sale Deed' },
+      { type: 'ENCUMBRANCE_CERTIFICATE', label: 'Encumbrance Certificate (EC)' },
+      { type: 'KHATA', label: 'Khata / Property Tax Receipt' },
+      { type: 'OTHER', label: 'Others', customLabel: true },
+    ],
+  },
+  // Freeform catch-all — no fixed sub-type list, just a name + upload.
+  { id: 'others', label: 'Other Documents', perApplicant: false, required: false, freeform: true },
 ];
 
-function KYCDocumentsSection({ applicationApplicants, docs, onToggle, isSubmitted, caseId, onUploaded }) {
-  const getPrimary = () => applicationApplicants.find(a => a.type === 'PRIMARY');
-  const getCoApplicants = () => applicationApplicants.filter(a => a.type !== 'PRIMARY');
+// Master dropdown offered on any user-created custom category — every
+// sub-type across the fixed categories, deduped, plus an Others entry.
+const ALL_DOCUMENT_OPTIONS = (() => {
+  const seen = new Map();
+  for (const cat of KYC_CATEGORIES) {
+    for (const opt of cat.options || []) {
+      if (opt.type !== 'OTHER' && !seen.has(opt.type)) seen.set(opt.type, opt.label);
+    }
+  }
+  return [
+    ...[...seen.entries()].map(([type, label]) => ({ type, label })),
+    { type: 'OTHER', label: 'Others', customLabel: true },
+  ];
+})();
+
+// A doc belongs to a category if its type is one of the category's fixed
+// options — except type OTHER, which is shared by several categories'
+// "Others" sub-option, the freeform bucket, and every custom category (custom
+// categories always upload as OTHER regardless of which dropdown sub-type was
+// picked, so they never collide with a fixed category that happens to share
+// the same sub-type label), so those are disambiguated by metadata.category
+// (stamped at upload time). Legacy/foreign OTHER docs with no such tag fall
+// back to the freeform "Other Documents" bucket.
+function docBelongsToCategory(doc, category) {
+  if (doc.document_type === 'OTHER' || category.custom) {
+    return (doc.metadata?.category || 'others') === category.id;
+  }
+  return (category.options || []).some(o => o.type === doc.document_type);
+}
+
+function KYCDocumentsSection({ applicationApplicants, docs, onToggle, isSubmitted, caseId, onUploaded, isSalaried = false }) {
+  const primary = applicationApplicants.find(a => a.type === 'PRIMARY');
+  const coApplicants = applicationApplicants.filter(a => a.type !== 'PRIMARY');
+  const allApplicants = [primary, ...coApplicants].filter(Boolean);
 
   const allDocs = Object.values(docs).flat();
-  const findDoc = (type) => allDocs.filter(d => d.document_type === type);
-  const pendingCount = [...KYC_REQUIREMENTS, ...OTHER_REQUIRED_DOCS]
-    .filter(r => r.required && findDoc(r.type).length === 0).length;
+  const fixedCategories = KYC_CATEGORIES.filter(cat => !(cat.msmeOnly && isSalaried));
+  const fixedIds = new Set(fixedCategories.map(c => c.id));
 
-  const primary = getPrimary();
-  const coApplicants = getCoApplicants();
+  // Custom categories a user already uploaded something into (in this or an
+  // earlier session) — recovered from doc metadata so they survive a reload
+  // even though they aren't in the fixed KYC_CATEGORIES list.
+  const discoveredCustomCategories = [];
+  const seenCustomIds = new Set();
+  for (const d of allDocs) {
+    const catId = d.metadata?.category;
+    if (!catId || fixedIds.has(catId) || seenCustomIds.has(catId)) continue;
+    seenCustomIds.add(catId);
+    discoveredCustomCategories.push({
+      id: catId,
+      label: d.metadata?.category_label || catId,
+      perApplicant: false, required: false, custom: true,
+      options: ALL_DOCUMENT_OPTIONS,
+    });
+  }
+
+  // Custom categories created this session but with nothing uploaded to them
+  // yet (so they wouldn't otherwise show up via the discovery pass above).
+  const [draftCustomCategories, setDraftCustomCategories] = useState([]);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setDraftCustomCategories(prev => [...prev, {
+      id, label: name, perApplicant: false, required: false, custom: true,
+      options: ALL_DOCUMENT_OPTIONS,
+    }]);
+    setNewCategoryName('');
+    setAddingCategory(false);
+  };
+
+  const customCategories = [
+    ...discoveredCustomCategories,
+    ...draftCustomCategories.filter(c => !seenCustomIds.has(c.id)),
+  ];
+  const categories = [...fixedCategories, ...customCategories];
+
+  const findCategoryDocs = (category, applicantId) => allDocs.filter(d =>
+    (applicantId === undefined || d.applicant_id === applicantId) && docBelongsToCategory(d, category)
+  );
 
   return (
-    <div>
-      {/* KYC per applicant */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 12, marginBottom: 20 }}>
-        {/* Primary */}
-        {primary && KYC_REQUIREMENTS.map(req => {
-          const docList = findDoc(req.type);
-          const uploaded = docList.length > 0;
-          return (
-            <DocCard key={`primary_${req.type}`}
-              label={`${req.label} — Primary`}
-              uploaded={uploaded}
-              doc={docList[0]}
-              onToggle={onToggle && docList[0] ? () => onToggle(docList[0]) : null}
-              isSubmitted={isSubmitted}
-              caseId={caseId}
-              docType={req.type}
-              onUploaded={onUploaded}
-            />
-          );
-        })}
-        {/* Co-applicants */}
-        {coApplicants.map((ca, ci) =>
-          KYC_REQUIREMENTS.map(req => {
-            const docList = findDoc(req.type).slice(ci + 1, ci + 2);
-            const uploaded = docList.length > 0;
-            return (
-              <DocCard key={`ca${ci}_${req.type}`}
-                label={`${req.label} — Co-Borrower ${ci + 1}`}
-                uploaded={uploaded}
-                doc={docList[0]}
-                onToggle={onToggle && docList[0] ? () => onToggle(docList[0]) : null}
-                isSubmitted={isSubmitted}
-                caseId={caseId}
-                docType={req.type}
-                onUploaded={onUploaded}
-              />
-            );
-          })
-        )}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      {categories.map(category => (
+        <KYCCategoryBlock
+          key={category.id}
+          category={category}
+          applicants={category.perApplicant ? allApplicants : [null]}
+          findCategoryDocs={findCategoryDocs}
+          onToggle={onToggle}
+          isSubmitted={isSubmitted}
+          caseId={caseId}
+          onUploaded={onUploaded}
+        />
+      ))}
 
-      {/* Other required docs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 12 }}>
-        {OTHER_REQUIRED_DOCS.map(req => {
-          const docList = findDoc(req.type);
-          const uploaded = docList.length > 0;
-          return (
-            <DocCard key={req.type}
-              label={req.label}
-              uploaded={uploaded}
-              doc={docList[0]}
-              onToggle={onToggle && docList[0] ? () => onToggle(docList[0]) : null}
-              required={req.required}
-              isSubmitted={isSubmitted}
-              caseId={caseId}
-              docType={req.type}
-              onUploaded={onUploaded}
+      {!isSubmitted && (
+        addingCategory ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              autoFocus
+              className="form-control"
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') setAddingCategory(false); }}
+              placeholder="New category name (e.g. Vehicle Documents)"
+              style={{ maxWidth: 260, fontSize: 12, padding: '6px 4px' }}
             />
-          );
-        })}
-      </div>
-
-      
+            <button type="button" className="btn btn-primary btn-sm" onClick={handleAddCategory} style={{ borderRadius: 0 }}>Add</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAddingCategory(false); setNewCategoryName(''); }} style={{ borderRadius: 0 }}>Cancel</button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddingCategory(true)}
+            style={{
+              alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', background: 'transparent', color: 'var(--primary)',
+              border: '1px dashed var(--primary)', borderRadius: 0, fontWeight: 600, fontSize: 12, cursor: 'pointer'
+            }}
+          >
+            + Add Custom Category
+          </button>
+        )
+      )}
     </div>
   );
 }
 
-function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted, caseId, docType, onUploaded }) {
+// Counts required categories still missing at least one document — for
+// perApplicant categories, missing for ANY applicant counts as one pending
+// item. Used by the "X Pending" badge above this section.
+function countKycPending(applicants, allDocs, isSalaried) {
+  const categories = KYC_CATEGORIES.filter(cat => !(cat.msmeOnly && isSalaried) && cat.required);
+  const primary = applicants.find(a => a.type === 'PRIMARY');
+  const coApplicants = applicants.filter(a => a.type !== 'PRIMARY');
+  const allApplicants = [primary, ...coApplicants].filter(Boolean);
+
+  return categories.reduce((count, category) => {
+    if (category.perApplicant) {
+      const missing = allApplicants.filter(app =>
+        !allDocs.some(d => d.applicant_id === app.id && docBelongsToCategory(d, category))
+      ).length;
+      return count + missing;
+    }
+    return count + (allDocs.some(d => docBelongsToCategory(d, category)) ? 0 : 1);
+  }, 0);
+}
+
+function KYCCategoryBlock({ category, applicants, findCategoryDocs, onToggle, isSubmitted, caseId, onUploaded }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{category.label}</span>
+        {category.required && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--error)', background: 'var(--error-bg)', padding: '2px 6px', borderRadius: 4 }}>REQUIRED</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {applicants.map((app, idx) => {
+          const docList = findCategoryDocs(category, app?.id);
+          const applicantLabel = app ? (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Borrower ${idx}`) : null;
+          return (
+            <div key={app?.id ?? 'entity'}>
+              {applicantLabel && (
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{applicantLabel}</div>
+              )}
+              {docList.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 10, marginBottom: 8 }}>
+                  {docList.map(doc => (
+                    <DocCard key={doc.id}
+                      label={doc.document_type === 'OTHER' ? (doc.metadata?.custom_label || 'Other Document') : (category.options?.find(o => o.type === doc.document_type)?.label || doc.document_type)}
+                      uploaded
+                      doc={doc}
+                      onToggle={onToggle ? () => onToggle(doc) : null}
+                      required={category.required}
+                      isSubmitted={isSubmitted}
+                      caseId={caseId}
+                      docType={doc.document_type}
+                      applicantId={app?.id}
+                      onUploaded={onUploaded}
+                    />
+                  ))}
+                </div>
+              )}
+              <AddDocumentRow
+                category={category}
+                applicantId={app?.id}
+                caseId={caseId}
+                isSubmitted={isSubmitted}
+                onUploaded={onUploaded}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded }) {
+  const [selectedType, setSelectedType] = useState(category.options?.[0]?.type || 'OTHER');
+  const [customLabel, setCustomLabel] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const inputRef = React.useRef(null);
+
+  const selectedOption = category.options?.find(o => o.type === selectedType);
+  const needsCustomLabel = category.freeform || !!selectedOption?.customLabel;
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (needsCustomLabel && !customLabel.trim()) {
+      toast.error('Enter a document name first');
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
+    setUploading(true);
+    try {
+      // A custom (user-created) category always uploads as document_type
+      // OTHER, tagged with its own category id/label — regardless of which
+      // sub-type was picked from the master dropdown, since that dropdown is
+      // just for a descriptive label here, not a real per-type slot (picking
+      // "PAN Card" in a custom category must never make the doc also show up
+      // under the fixed "ID Proof" category).
+      const docType = (category.freeform || category.custom) ? 'OTHER' : selectedType;
+      const label = needsCustomLabel
+        ? customLabel.trim()
+        : (category.custom ? selectedOption?.label : undefined);
+      await uploadDocument(file, caseId, docType, {
+        applicantId,
+        label,
+        category: (needsCustomLabel || category.custom) ? category.id : undefined,
+        categoryLabel: category.custom ? category.label : undefined,
+      });
+      toast.success(`${file.name} uploaded ✓`);
+      setCustomLabel('');
+      onUploaded?.();
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  if (isSubmitted) return null;
+
+  return (
+    <div style={{
+      display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
+      padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 0
+    }}>
+      <input
+        ref={inputRef}
+        type="file"
+        style={{ display: 'none' }}
+        accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.docx,.doc,.zip"
+        onChange={handleFileChange}
+        disabled={uploading}
+      />
+      {!category.freeform && (
+        <select
+          className="form-control"
+          value={selectedType}
+          onChange={e => setSelectedType(e.target.value)}
+          style={{ maxWidth: 220, fontSize: 12, padding: '6px 4px' }}
+          disabled={uploading}
+        >
+          {category.options.map(o => <option key={o.type} value={o.type}>{o.label}</option>)}
+        </select>
+      )}
+      {needsCustomLabel && (
+        <input
+          value={customLabel}
+          onChange={e => setCustomLabel(e.target.value)}
+          placeholder={category.freeform ? 'Document name (e.g. Udyam Registration)' : 'Document name'}
+          className="form-control"
+          style={{ maxWidth: 220, fontSize: 12, padding: '6px 4px' }}
+          disabled={uploading}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        className="btn btn-secondary btn-sm"
+        style={{ display: 'flex', alignItems: 'center', gap: 5, borderRadius: 0 }}
+      >
+        <UploadCloud size={12} /> {uploading ? 'Uploading…' : 'Add Document'}
+      </button>
+    </div>
+  );
+}
+
+function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted, caseId, docType, applicantId, onUploaded }) {
   const isAttached = doc?.is_attached;
   const [uploading, setUploading] = useState(false);
   const inputRef = React.useRef(null);
@@ -533,7 +949,12 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
     if (!file) return;
     setUploading(true);
     try {
-      await uploadDocument(file, caseId, docType || 'OTHER');
+      await uploadDocument(file, caseId, docType || 'OTHER', {
+        applicantId,
+        label: doc?.document_type === 'OTHER' ? doc?.metadata?.custom_label : undefined,
+        category: doc?.metadata?.category,
+        categoryLabel: doc?.metadata?.category_label,
+      });
       toast.success(`${file.name} uploaded ✓`);
       onUploaded?.();
     } catch (err) {
@@ -622,9 +1043,9 @@ const labelStyle = {
   textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 5
 };
 const inputStyle = {
-  width: '100%', padding: '9px 12px', borderRadius: 0,
-  border: '1px solid var(--border)', fontSize: 14,
-  background: 'var(--bg-surface)', color: 'var(--text-primary)',
+  width: '100%', padding: '8px 0', borderRadius: 0,
+  border: 'none', borderBottom: '2px solid var(--border)', fontSize: 14, fontWeight: 600,
+  background: 'transparent', color: 'var(--text-primary)', outline: 'none',
   fontFamily: 'inherit', boxSizing: 'border-box'
 };
 const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
@@ -633,7 +1054,8 @@ const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
 // Step 7 of the case journey — rendered inline by AddCustomerWizardPage (not
 // its own route), so it takes caseId/proposalId/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function ProposalPage({ caseId, proposalId, onBack, isMsme = false }) {
+export default function ProposalPage({ caseId, proposalId, onBack, isMsme = false, isSalaried = false }) {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -661,13 +1083,16 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         preferred_banking_program: p.preferred_banking_program || '',
       });
       // Parse addresses + references from additional_notes JSON; fall back to
-      // the GST-registered office address when nothing was saved yet.
-      // (Residential has no source: the bureau integration is a credit-score
-      // check only — no KYC/address payload exists anywhere in the system.)
+      // prefill defaults when nothing was saved yet — office from the
+      // GST-registered principal address (self-employed only; a salaried case
+      // has no GST registration, so this is always empty for them), and
+      // residential from the bureau's most-recently-reported address. Both
+      // are just best-guess defaults — the user confirms/corrects them via
+      // the address_candidates checkbox picker or manual entry.
       try {
         const stored = p.additional_notes ? JSON.parse(p.additional_notes) : null;
         setAddresses({
-          residential: stored?.__addresses?.residential || '',
+          residential: stored?.__addresses?.residential || res.prefill?.residential_address || '',
           office: stored?.__addresses?.office || res.prefill?.office_address || '',
           property: stored?.__addresses?.property || '',
         });
@@ -754,7 +1179,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     : null;
   const isSubmitted = proposal.proposal_status === 'submitted';
   const allDocs = Object.values(documents_by_category || {}).flat();
-  const pendingKyc = allDocs.filter(d => !d.is_attached && ['PAN_CARD', 'AADHAAR'].includes(d.document_type)).length;
+  const pendingKyc = countKycPending(applicants, allDocs, isSalaried);
 
   return (
     <div className="proposal-page">
@@ -846,17 +1271,19 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
 
       {/* ── 3. Financial Summary ─────────────────────────────────────── */}
       <Section icon={BarChart3} title="Financial Summary"
-        subtitle="Auto-compiled from GST, ITR and Bank Statement data">
-        <FinancialSummary summary={financial_summary} prefill={prefill} />
+        subtitle={isSalaried ? 'Auto-compiled from ITR and Bank Statement data' : 'Auto-compiled from GST, ITR and Bank Statement data'}>
+        <FinancialSummary summary={financial_summary} prefill={prefill} isSalaried={isSalaried} />
       </Section>
 
       {/* ── 4. Addresses ─────────────────────────────────────────────── */}
       <Section icon={MapPin} title="Addresses"
-        subtitle="auto-fetched from Aadhaar / bureau, editable">
+        subtitle="Select from reported bureau/GST addresses, or enter manually">
         <AddressSection
           addresses={addresses}
           onChange={setAddresses}
           readOnly={isSubmitted}
+          isSalaried={isSalaried}
+          candidates={prefill?.address_candidates || []}
         />
       </Section>
 
@@ -884,6 +1311,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
           isSubmitted={isSubmitted}
           caseId={caseId}
           onUploaded={load}
+          isSalaried={isSalaried}
         />
       </Section>
 
@@ -996,49 +1424,99 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
           boxShadow: '0 -4px 24px rgba(0,0,0,0.12)'
         }}>
-          {/* Lender branding bar */}
-          <div style={{
-            background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', padding: '10px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            flexWrap: 'wrap', gap: 10
-          }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>Ready to send to</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
-                {lenderName}
+          {/* Lender branding bar — on mobile this collapses to a single ~40px
+              row: lender name + Cancel share a line, and Save/Other-lender
+              shrink to icon-only buttons so the primary Send CTA can flex to
+              fill the remaining width. Desktop keeps the original spelled-out
+              layout since height isn't at a premium there. */}
+          {isMobile ? (
+            <div style={{
+              background: 'var(--bg-surface)', borderTop: '1px solid var(--border)',
+              padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Send to <strong style={{ color: 'var(--text-primary)', fontWeight: 800 }}>{lenderName}</strong>
+                </div>
+                <button onClick={onBack} aria-label="Cancel"
+                  style={{
+                    flexShrink: 0, background: 'none', border: 'none', color: 'var(--text-tertiary)',
+                    fontSize: 12, fontWeight: 600, padding: '2px 4px', cursor: 'pointer'
+                  }}>Cancel</button>
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-ghost" onClick={onBack}
-                style={{ borderRadius: 0, fontSize: 12 }}>Cancel</button>
               {!isMsme && (
-                <>
-                  <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 0 }}>
-                    <Save size={13} /> {saving ? 'Saving…' : 'Save Draft'}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                  <button onClick={() => handleSave()} disabled={saving} aria-label="Save draft"
+                    className="btn btn-secondary"
+                    style={{ flexShrink: 0, padding: '0 12px', borderRadius: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Save size={14} />
                   </button>
-                  <button onClick={() => setShowOtherLenderModal(true)}
+                  <button onClick={() => setShowOtherLenderModal(true)} aria-label="Send to another lender"
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px',
+                      flexShrink: 0, padding: '0 12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: 'transparent', color: 'var(--primary)',
-                      border: '1px solid var(--primary)', borderRadius: 0,
-                      fontWeight: 700, fontSize: 13, cursor: 'pointer'
+                      border: '1px solid var(--primary)', borderRadius: 0, cursor: 'pointer'
                     }}>
-                    ↗ Send to Another Lender
+                    <Send size={14} style={{ transform: 'rotate(-45deg)' }} />
                   </button>
                   <button onClick={handleSubmit} disabled={submitting}
                     className="btn btn-primary"
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, padding: '11px 28px',
-                      borderRadius: 0, fontWeight: 800, fontSize: 14
+                      flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '9px 8px', borderRadius: 0, fontWeight: 800, fontSize: 12
                     }}>
-                    <Send size={15} />
-                    {submitting ? 'Submitting…' : `Send Lead to ${lenderName} →`}
+                    <Send size={14} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {submitting ? 'Sending…' : `Send to ${lenderName}`}
+                    </span>
                   </button>
-                </>
+                </div>
               )}
             </div>
-          </div>
+          ) : (
+            <div style={{
+              background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', padding: '10px 20px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 10
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>Ready to send to</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {lenderName}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost" onClick={onBack}
+                  style={{ borderRadius: 0, fontSize: 12 }}>Cancel</button>
+                {!isMsme && (
+                  <>
+                    <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 0 }}>
+                      <Save size={13} /> {saving ? 'Saving…' : 'Save Draft'}
+                    </button>
+                    <button onClick={() => setShowOtherLenderModal(true)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px',
+                        background: 'transparent', color: 'var(--primary)',
+                        border: '1px solid var(--primary)', borderRadius: 0,
+                        fontWeight: 700, fontSize: 13, cursor: 'pointer'
+                      }}>
+                      ↗ Send to Another Lender
+                    </button>
+                    <button onClick={handleSubmit} disabled={submitting}
+                      className="btn btn-primary"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '11px 28px',
+                        borderRadius: 0, fontWeight: 800, fontSize: 14
+                      }}>
+                      <Send size={15} />
+                      {submitting ? 'Submitting…' : `Send Lead to ${lenderName} →`}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{

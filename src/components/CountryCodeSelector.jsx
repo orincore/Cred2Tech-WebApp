@@ -43,7 +43,7 @@ const CountryCodeSelector = ({ value, onChange, error }) => {
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className="text-sm font-medium">{selectedCountry.code}</span>
-        <span className="material-symbols-outlined text-[14px] text-[#4a5d73] dark:text-[#94a3b8]">
+        <span className="material-symbols-outlined text-[14px] text-[#0a1628] dark:text-[#e6edf7]">
           {isOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
         </span>
       </div>
@@ -58,7 +58,7 @@ const CountryCodeSelector = ({ value, onChange, error }) => {
             >
               <span className="text-lg">{country.flag}</span>
               <span className="text-sm font-medium text-[#0a1628] dark:text-[#e6edf7]">{country.code}</span>
-              <span className="text-xs text-[#4a5d73] dark:text-[#94a3b8]">{country.name}</span>
+              <span className="text-xs text-[#0a1628] dark:text-[#e6edf7] font-medium">{country.name}</span>
             </div>
           ))}
         </div>

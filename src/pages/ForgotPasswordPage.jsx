@@ -52,7 +52,7 @@ const ForgotPasswordPage = () => {
                 <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[28px]">mark_email_read</span>
               </div>
               <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">Check your inbox</h1>
-              <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] leading-relaxed">
+              <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] leading-relaxed">
                 If an account exists for <strong className="text-[#0a1628] dark:text-[#e6edf7]">{email}</strong>, a password reset link has been sent.
               </p>
             </div>
@@ -61,7 +61,7 @@ const ForgotPasswordPage = () => {
               <h1 className="text-[24px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
                 Forgot Password
               </h1>
-              <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] mb-8">
+              <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-8">
                 Enter your registered email and we'll send you a reset link.
               </p>
 
@@ -74,7 +74,7 @@ const ForgotPasswordPage = () => {
 
               <form onSubmit={handleSubmit}>
                 <div className="mb-8">
-                  <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Email *</label>
+                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Email *</label>
                   <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
                     <input
                       type="email"

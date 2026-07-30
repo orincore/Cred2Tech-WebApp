@@ -152,7 +152,7 @@ const MsmeLoginPage = () => {
             <h1 className="text-[28px] md:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
               {step === 1 ? 'Welcome Back' : 'Verify OTP'}
             </h1>
-            <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] md:text-[15px]">
+            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] md:text-[15px]">
               {step === 1
                 ? 'Sign in to your Cred2Tech MSME portal'
                 : <>Enter the code sent to <span className="font-bold text-[#0a1628] dark:text-[#e6edf7]">+91 ******{mobile.slice(-4)}</span> and your registered email</>}
@@ -187,7 +187,7 @@ const MsmeLoginPage = () => {
 
                 {/* Mobile */}
                 <div className="mb-8">
-                  <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Registered Mobile Number *</label>
+                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Registered Mobile Number *</label>
                   <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
                     <span className="text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold select-none">+91</span>
                     <input
@@ -238,7 +238,7 @@ const MsmeLoginPage = () => {
                 {/* OTP */}
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8]">Enter OTP *</label>
+                    <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold">Enter OTP *</label>
                     <button
                       type="button"
                       onClick={handleChangeNumber}
@@ -262,7 +262,7 @@ const MsmeLoginPage = () => {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-[#4a5d73] dark:text-[#94a3b8] text-center mb-8">
+                <p className="text-[11px] text-[#0a1628] dark:text-[#e6edf7] font-medium text-center mb-8">
                   OTP valid for 10 minutes ·{' '}
                   <button
                     type="button"
@@ -292,7 +292,7 @@ const MsmeLoginPage = () => {
           </AnimatePresence>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <p className="text-[12px] text-[#4a5d73] dark:text-[#94a3b8]">
+            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
               Platform acts as technology facilitator only. Not a lender or credit institution.
             </p>
           </div>

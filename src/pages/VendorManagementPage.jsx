@@ -146,7 +146,7 @@ const VendorManagementPage = () => {
   }, [vendors, search]);
 
   /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
     borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -216,7 +216,7 @@ const VendorManagementPage = () => {
           {/* Sub-header */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Vendor Registry</span>
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} vendors</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} vendors</span>
           </div>
 
           {/* Table */}
@@ -331,7 +331,7 @@ const VendorManagementPage = () => {
                {/* FORM TOP SECTION */}
                <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24, marginBottom: 16}}>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Vendor Name</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Vendor Name</label>
                     <input
                       type="text"
                       value={editForm.name}
@@ -342,7 +342,7 @@ const VendorManagementPage = () => {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>API Type</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>API Type</label>
                     <select
                       value={editForm.apiType}
                       onChange={e => setEditForm({...editForm, apiType: e.target.value})}
@@ -357,7 +357,7 @@ const VendorManagementPage = () => {
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Role</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Role</label>
                     <select
                       value={editForm.role}
                       onChange={e => setEditForm({...editForm, role: e.target.value})}
@@ -373,7 +373,7 @@ const VendorManagementPage = () => {
 
                <div style={{display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24, marginBottom: 24}}>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Contract Start</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Contract Start</label>
                     <input
                       type="text"
                       value={editForm.contract_start}
@@ -384,7 +384,7 @@ const VendorManagementPage = () => {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Contract End</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Contract End</label>
                     <input
                       type="text"
                       value={editForm.contract_end}
@@ -395,7 +395,7 @@ const VendorManagementPage = () => {
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: isDark ? '#94a3b8' : '#4a5d73', display: 'block', marginBottom: 6 }}>Billing Cycle</label>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Billing Cycle</label>
                     <select
                       value={editForm.billingModel}
                       onChange={e => setEditForm({...editForm, billingModel: e.target.value})}
@@ -443,20 +443,20 @@ const VendorManagementPage = () => {
                         type="number"
                         value={slab.from}
                         onChange={e => updateSlab(i, 'from', e.target.value)}
-                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                        style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '2px solid var(--outline)', borderRadius: 0, color: 'var(--on-surface)', padding: '6px 0', outline: 'none' }}
                       />
                       <input
                         type="text"
                         placeholder="To (blank = unl)"
                         value={slab.to === null ? '' : slab.to}
                         onChange={e => updateSlab(i, 'to', e.target.value)}
-                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                        style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '2px solid var(--outline)', borderRadius: 0, color: 'var(--on-surface)', padding: '6px 0', outline: 'none' }}
                       />
                       <input
                         type="number"
                         value={slab.rate}
                         onChange={e => updateSlab(i, 'rate', e.target.value)}
-                        style={{ width: '100%', background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', padding: '8px 12px', borderRadius: 6 }}
+                        style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '2px solid var(--outline)', borderRadius: 0, color: 'var(--on-surface)', padding: '6px 0', outline: 'none' }}
                       />
                       <button
                         onClick={() => removeSlab(i)}

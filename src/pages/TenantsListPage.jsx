@@ -95,7 +95,7 @@ const TenantsListPage = () => {
   const avatarColors = (name = '') => avatarPalette[(name.charCodeAt(0) || 0) % avatarPalette.length];
 
   /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
     borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -194,9 +194,9 @@ const TenantsListPage = () => {
         {hasFilters && (
           <button
             onClick={() => { setSearch(''); setFilterType(''); setFilterStatus(''); }}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
+            style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
             onMouseEnter={e => e.currentTarget.style.color = '#f43f5e'}
-            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--on-muted)'}
           >
             Clear all
           </button>
@@ -229,7 +229,7 @@ const TenantsListPage = () => {
           {/* Sub-header */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>DSA Information</span>
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} of {tenants.length} DSAs</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tenants.length} DSAs</span>
           </div>
 
           {/* Table */}
@@ -264,7 +264,7 @@ const TenantsListPage = () => {
               { key: 'type', label: 'Type', render: (t) => (
                 <span style={{
                   background: t.type === 'DSA' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#334155' : '#f1f5f9'),
-                  color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : (isDark ? '#94a3b8' : '#64748b'),
+                  color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : ('var(--on-muted)'),
                   padding: '3px 8px', borderRadius: 4,
                   fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
                 }}>

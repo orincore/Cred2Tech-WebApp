@@ -333,14 +333,14 @@ export default function SalesIncentivePage() {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-        <PageHeader title="Sales Incentive" subtitle="Performance incentives & bonuses for team members — tracking & payout" />
-        {isAdmin && (
-          <button className="btn btn-secondary" onClick={() => setShowConfigModal(true)} style={{ marginTop: 4 }}>
+      <PageHeader title="Sales Incentive" subtitle="Performance incentives & bonuses for team members — tracking & payout" />
+      {isAdmin && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+          <button className="btn btn-secondary" onClick={() => setShowConfigModal(true)}>
             <FileText size={14} /> Rule Configuration
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="card filter-bar" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', padding: '12px 16px', marginBottom: 20 }}>
         <div style={{ flex: 1, minWidth: 150 }}>

@@ -40,6 +40,7 @@ const PddManagementPage = lazy(() => import('../pages/PddManagementPage'));
 const SalesIncentivePage = lazy(() => import('../pages/SalesIncentivePage'));
 const LenderCommissionPage = lazy(() => import('../pages/LenderCommissionPage'));
 const SubDsaPayoutPage = lazy(() => import('../pages/SubDsaPayoutPage'));
+const MyWalletPage = lazy(() => import('../pages/MyWalletPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -262,6 +263,14 @@ const AppRouter = () => (
               element={
                 <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
                   <SubDsaPayoutPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/wallet"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}>
+                  <MyWalletPage />
                 </ProtectedRoute>
               }
             />

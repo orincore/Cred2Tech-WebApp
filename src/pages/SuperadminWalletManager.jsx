@@ -55,7 +55,7 @@ const SuperadminWalletManager = () => {
    }, [wallets, searchTerm]);
 
    /* ---- label style shared across filters ---- */
-   const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
    const underlineInput = (active) => ({
       background: 'transparent', border: 'none',
       borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -127,7 +127,7 @@ const SuperadminWalletManager = () => {
                {/* Sub-header */}
                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>All DSA Wallets</span>
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} wallets</span>
+                  <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} wallets</span>
                </div>
 
                {/* Table */}

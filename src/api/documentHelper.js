@@ -67,12 +67,25 @@ export function getDocumentViewUrl(documentId) {
  * @param {File} file
  * @param {number} caseId
  * @param {string} docType
+ * @param {{applicantId?: number, label?: string, category?: string, categoryLabel?: string}} [options] -
+ *   applicantId scopes the document to one applicant (ID/address proof);
+ *   label is a free-text name for docType OTHER uploads that don't fit a
+ *   fixed sub-type; category tags which KYC document category an OTHER
+ *   upload belongs to (docType OTHER is shared by several categories'
+ *   "Others" option, the freeform bucket, and every user-created custom
+ *   category, so this disambiguates them); categoryLabel is the display name
+ *   for a custom category, persisted so it survives a reload.
  */
-export async function uploadDocument(file, caseId, docType) {
+export async function uploadDocument(file, caseId, docType, options = {}) {
+    const { applicantId, label, category, categoryLabel } = options;
     const formData = new FormData();
     formData.append('file', file);
     formData.append('case_id', caseId);
     formData.append('document_type', docType || 'OTHER');
+    if (applicantId) formData.append('applicant_id', applicantId);
+    if (label) formData.append('label', label);
+    if (category) formData.append('category', category);
+    if (categoryLabel) formData.append('category_label', categoryLabel);
 
     const response = await api.post('/documents/upload', formData, {
         headers: {

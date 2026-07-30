@@ -494,12 +494,10 @@ export default function LenderCommissionPage() {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-        <PageHeader title="Lender Commission" subtitle="Track and invoice expected commissions from lending partners" />
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          <button className="btn btn-secondary" onClick={handleSync} disabled={syncing}>{syncing ? 'Syncing...' : '↻ Sync Past'}</button>
-          <button className="btn btn-primary" onClick={() => setShowGenerateInvoice(true)}><FileText size={14} /> Generate Invoice</button>
-        </div>
+      <PageHeader title="Lender Commission" subtitle="Track and invoice expected commissions from lending partners" />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 24 }}>
+        <button className="btn btn-secondary" onClick={handleSync} disabled={syncing}>{syncing ? 'Syncing...' : '↻ Sync Past'}</button>
+        <button className="btn btn-primary" onClick={() => setShowGenerateInvoice(true)}><FileText size={14} /> Generate Invoice</button>
       </div>
 
       {loading && data.lendersData.length === 0 ? (

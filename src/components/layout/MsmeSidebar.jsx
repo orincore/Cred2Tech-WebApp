@@ -76,7 +76,7 @@ const MsmeSidebar = ({ isOpen, isMobile, showMobile, onClose, user, onLogout }) 
       {/* Nav section label */}
       <div style={{ padding: '10px 20px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <ChevronUp size={12} color="#94a3b8" />
-        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Navigation
         </p>
       </div>

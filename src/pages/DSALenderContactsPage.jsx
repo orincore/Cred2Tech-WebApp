@@ -250,17 +250,17 @@ export default function DSALenderContactsPage() {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
-        <PageHeader
-          title="Lender Configuration"
-          subtitle="Manage lender contacts & payout slabs"
-        />
-        {isAdmin && (
-          <button onClick={() => setLenderModal({ open: true })} style={{ ...btnPrimary, marginTop: 4 }}>
+      <PageHeader
+        title="Lender Contacts"
+        subtitle="Manage lender contacts & payout slabs"
+      />
+      {isAdmin && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <button onClick={() => setLenderModal({ open: true })} style={btnPrimary}>
             <Plus size={16} /> Add Lender
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>
         Contact details & commission rules per lender — configured per product
@@ -373,7 +373,7 @@ export default function DSALenderContactsPage() {
                             value={isEditingContact ? contactEdits[lender.id].contact_name : primaryContact.contact_name || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_name: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
+                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
                             placeholder="Suresh Nair"
                           />
                         </div>
@@ -383,7 +383,7 @@ export default function DSALenderContactsPage() {
                             value={isEditingContact ? contactEdits[lender.id].contact_mobile : primaryContact.contact_mobile || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_mobile: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
+                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
                             placeholder="9820001122"
                           />
                         </div>
@@ -393,7 +393,7 @@ export default function DSALenderContactsPage() {
                             value={isEditingContact ? contactEdits[lender.id].contact_email : primaryContact.contact_email || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_email: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
+                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
                             placeholder="suresh.nair@hdfc.com"
                           />
                         </div>
@@ -620,8 +620,8 @@ const labelStyle = {
   textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8,
 };
 const inputStyle = {
-  width: '100%', padding: '10px 14px', borderRadius: 0, fontSize: 14,
-  border: '1px solid var(--border)', background: 'var(--bg-surface)',
+  width: '100%', padding: '8px 0', borderRadius: 0, fontSize: 14, fontWeight: 600,
+  border: 'none', borderBottom: '2px solid var(--border)', background: 'transparent',
   color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
   transition: 'border-color 0.2s',
 };
@@ -656,7 +656,7 @@ const slabHeader = {
   fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16
 };
 const slabInput = {
-  width: '100%', padding: '8px 12px', borderRadius: 0, border: '1px solid var(--border)',
-  background: 'var(--bg-surface)', color: 'var(--text-primary)',
-  fontSize: 13, textAlign: 'center'
+  width: '100%', padding: '8px 0', borderRadius: 0, border: 'none', borderBottom: '2px solid var(--border)',
+  background: 'transparent', color: 'var(--text-primary)', outline: 'none',
+  fontSize: 13, fontWeight: 600, textAlign: 'center'
 };

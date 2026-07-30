@@ -67,7 +67,7 @@ const SuperadminApiLogsPage = () => {
   };
 
   /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
     borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -199,9 +199,9 @@ const SuperadminApiLogsPage = () => {
         {(search || filters.api_code || filters.status) && (
           <button
             onClick={() => { setSearch(''); setFilters({ ...filters, api_code: '', status: '', page: 1 }); }}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: isMobile ? 11 : 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
+            style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: isMobile ? 11 : 12, fontWeight: 700, cursor: 'pointer', paddingBottom: 8, borderBottom: '2px solid transparent' }}
             onMouseEnter={e => e.currentTarget.style.color = '#f43f5e'}
-            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--on-muted)'}
           >
             Clear all
           </button>
@@ -227,7 +227,7 @@ const SuperadminApiLogsPage = () => {
           {/* Sub-header */}
           <div style={{ padding: isMobile ? '14px 16px' : '14px 60px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Execution Logs</span>
-            <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Page {filters.page} of {totalPages}</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>Page {filters.page} of {totalPages}</span>
           </div>
 
           {/* Table */}

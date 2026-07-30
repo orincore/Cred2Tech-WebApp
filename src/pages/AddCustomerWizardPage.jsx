@@ -13,11 +13,11 @@ import BankStatementUpload from '../components/BankStatementUpload';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import api from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
-import CaseWizardStepper from '../components/ui/CaseWizardStepper';
+import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
-import { toTitleCase } from '../utils/helpers';
+import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
 import EsrStep from './EsrPage';
@@ -107,6 +107,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     profession_type: '',
     mobile_verified: false,
     is_locked: false,
+    // True only for cases that originated from the salaried wizard
+    // (case.category === 'SALARIED') — drives which stepper labels show.
+    is_salaried: false,
     pan_verified: false,
     linked_gstins: [],
     applicants: [],
@@ -156,12 +159,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   const [panVerifying, setPanVerifying] = useState(false);
   const [panVerifyFailed, setPanVerifyFailed] = useState(false);
-  // True right after an admin resets PAN verification, until they actually
-  // edit the PAN field. Auto-verify deliberately won't re-fire for the same
-  // (unedited) PAN value post-reset (see handleResetPan), so without this
-  // flag the status area would show a "Queued…" pulling animation that never
-  // resolves — indistinguishable from a genuinely stuck fetch.
-  const [panAwaitingEdit, setPanAwaitingEdit] = useState(false);
   const [gstFetching, setGstFetching] = useState(false);
   const [gstFetchFailed, setGstFetchFailed] = useState(false);
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
@@ -183,6 +180,17 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   useEffect(() => {
     restoreSession();
   }, []);
+
+  // Steps 1-3 in this component are the self-employed Business Entity / GST
+  // / ITR / Bank flow — a salaried-origin case never had that data and must
+  // not render it (or trigger its auto-verify/auto-fetch effects) just
+  // because the stepper's steps 1-3 are shown/clickable for context. Bounce
+  // back to the salaried wizard, which owns that content, instead.
+  useEffect(() => {
+    if (formData.is_salaried && caseId && currentStep <= 3) {
+      navigate(`/customers/salaried/add?caseId=${caseId}`, { replace: true });
+    }
+  }, [formData.is_salaried, caseId, currentStep, navigate]);
 
   const restoreSession = async (preserveStep = false) => {
     try {
@@ -211,13 +219,17 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setCaseId(caseData.id);
       setFormData({
         customer_id: caseData.customer?.id,
+        // Classification lives on the Case itself, not the Customer — the
+        // same PAN/customer can have one salaried case and one MSME case at
+        // the same time without either affecting the other.
+        is_salaried: caseData.category === 'SALARIED',
         business_pan: caseData.customer?.business_pan || '',
         // proprietor_name is a plain user-entered/KYC identity field; business_name
         // is derived from GST vendor lookups and can end up holding a GST
         // registration TRN (reference number) when the business never registered
         // a real trade name yet - prefer the reliable identity field first, same
         // as the case header / MSME dashboard greeting already do.
-        business_name: toTitleCase(caseData.customer?.proprietor_name) || caseData.customer?.business_name || '',
+        business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
         proprietor_name: caseData.customer?.proprietor_name || '',
         dob: caseData.customer?.dob || '',
         business_mobile: caseData.customer?.business_mobile || '',
@@ -423,9 +435,21 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // data collection is already complete by the time a case reaches step
     // 4+, so this must not re-fire just because the wizard remounts/deep
     // links straight into a later step (it did, live, before this guard).
-    if (currentStep > 3) return;
+    // Salaried-origin cases never have real steps 1-3 here at all (that
+    // content belongs to AddSalariedCustomerWizardPage) — the redirect
+    // effect above bounces them away, but skip here too in case that
+    // hasn't landed yet on this render.
+    if (currentStep > 3 || formData.is_salaried) return;
     const pan = formData.business_pan;
-    const ready = pan && pan.length === 10 && !!formData.business_mobile;
+    // Mobile must be a genuine 10-digit number, not just non-empty — this
+    // gate fires ensureDraftSaved()/createCase(), which snapshots
+    // formData.business_mobile onto the new Applicant row right then. A
+    // truthy-only check let this fire on the very first digit typed (e.g.
+    // mobile "8"), permanently baking a 1-digit mobile onto the applicant —
+    // later edits to the field only ever update Customer.business_mobile,
+    // never that already-created Applicant row, so bureau/obligation pulls
+    // silently kept failing against an invalid mobile number forever after.
+    const ready = pan && pan.length === 10 && formData.business_mobile.length === 10;
     if (
       ready &&
       !formData.pan_verified &&
@@ -438,7 +462,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       panAutoVerifyAttempted.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.business_pan, formData.business_mobile, formData.pan_verified, panVerifying]);
+  }, [currentStep, formData.business_pan, formData.business_mobile, formData.pan_verified, panVerifying, formData.is_salaried]);
 
   // Auto-fetch GST records right after PAN verification succeeds — no manual
   // "Fetch GST" click needed. Same guard pattern as above.
@@ -454,7 +478,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // for the next render instead of burning its one attempt early.
   const gstAutoFetchAttempted = useRef(null);
   useEffect(() => {
-    if (currentStep > 3) return;
+    // GST is a self-employed/business concept — never applicable to a
+    // salaried-origin case, even if its PAN happens to be verified.
+    if (currentStep > 3 || formData.is_salaried) return;
     const pan = formData.business_pan;
     if (
       formData.pan_verified &&
@@ -469,7 +495,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       handleFetchGst();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan, caseId, formData.customer_id]);
+  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan, caseId, formData.customer_id, formData.is_salaried]);
 
   // Auto-verify each co-applicant's PAN once it's a full 10 characters — same
   // no-manual-click pattern as the primary PAN above, guarded per-index so a
@@ -494,46 +520,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, formData.applicants, coappPanVerifyingMap]);
-
-  const handleResetPan = async (isCoapplicant = false, idx = null) => {
-    let applicantId = null;
-    if (isCoapplicant) {
-      applicantId = formData.applicants[idx]?.id;
-    } else {
-      const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-      applicantId = primaryApp?.id;
-    }
-
-    if (!applicantId) return toast.error('Cannot reset: Applicant ID not found');
-    if (!window.confirm('Are you sure you want to reset this PAN verification? This will clear verified names and lock status.')) return;
-
-    try {
-      setSaving(true);
-      await api.post('/external/pan/reset', { applicant_id: applicantId, case_id: caseId });
-      toast.success('PAN Verification reset successfully. Enter the correct PAN to re-verify.');
-      if (!isCoapplicant) {
-        setPanAwaitingEdit(true);
-        // Explicitly pin the guard to the PAN value being reset (rather than
-        // clearing it) so the auto-verify effect treats it as "already
-        // attempted" and stays quiet. The backend doesn't clear
-        // customer.business_pan on reset (only the verification flags), so
-        // the field re-populates with this same value — without this, the
-        // effect would instantly re-verify that same (possibly wrong) PAN
-        // before the admin can type a correction, and Signzy's idempotency
-        // cache would even return the same stale name/DOB, making Reset look
-        // like a no-op. Setting this unconditionally (not just when already
-        // matching) also covers the case where pan_verified was already true
-        // at mount, so the effect never ran and the ref was still null.
-        // Auto-verify only re-arms once the admin edits the PAN value.
-        panAutoVerifyAttempted.current = formData.business_pan;
-      }
-      await restoreSession(true);
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to reset PAN verification');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const checkPanDuplicate = async (pan) => {
     // Tenant-wide duplicate lookup is a DSA workflow; MSME borrowers must not
@@ -974,7 +960,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           .wizard-page { padding-left: 10px !important; padding-right: 10px !important; }
         }
       `}</style>
-      <div style={{ maxWidth: STEP_MAX_WIDTH[currentStep] || 880, margin: '0 auto', paddingBottom: 40 }}>
+      {/* Step 7 (Proposal) has grown into a dense, wide layout (address
+          picker, KYC document categories, financial summary grids) that
+          benefits from the full content width rather than the narrower
+          centered column every earlier step uses. */}
+      <div style={{ maxWidth: currentStep === 7 ? '100%' : (STEP_MAX_WIDTH[currentStep] || 880), margin: '0 auto', paddingBottom: 40 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
@@ -995,6 +985,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         currentStep={currentStep}
         caseId={caseId}
         proposalId={proposalId}
+        steps={formData.is_salaried ? SALARIED_ORIGIN_STEPS : CASE_WIZARD_STEPS}
         onStepClick={(step) => goToStep(step)}
       />
 
@@ -1071,7 +1062,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       <input
                         type="text"
                         value={formData.business_pan}
-                        onChange={e => { setPanAwaitingEdit(false); setFormData({...formData, business_pan: e.target.value.toUpperCase()}); }}
+                        onChange={e => setFormData({...formData, business_pan: e.target.value.toUpperCase()})}
                         onBlur={() => checkPanDuplicate(formData.business_pan)}
                         className="form-control"
                         placeholder="E.G. AABCE1234F"
@@ -1089,17 +1080,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <AlertCircle size={13} /> PAN verification failed — fix and re-enter
                           </span>
-                        ) : panAwaitingEdit && formData.business_pan?.length === 10 ? (
-                          <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Pencil size={13} /> Edit PAN to re-verify
-                          </span>
                         ) : formData.business_pan?.length === 10 ? (
                           <PullingIndicator label={formData.business_mobile ? 'Queued…' : 'Add mobile number to continue…'} />
                         ) : null}
-
-                        {formData.pan_verified && (user?.role === 'DSA_ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                          <button type="button" onClick={() => handleResetPan(false, null)} className="btn btn-danger btn-sm" disabled={saving}>Reset</button>
-                        )}
 
                         {formData.pan_verified && (
                           formData.pan_profile ? (
@@ -1316,9 +1299,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                                     <CheckCircle2 size={16} /> Verified
                                   </span>
-                                  {(user?.role === 'DSA_ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                                    <button type="button" onClick={() => handleResetPan(true, realIdx)} className="btn btn-danger btn-sm" disabled={saving}>Reset</button>
-                                  )}
                                 </div>
                               ) : coappPanVerifyingMap[realIdx] ? (
                                 <PullingIndicator label="Verifying PAN…" />
@@ -1677,7 +1657,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             rendered inline so they share this component's mount lifetime
             (auto-fetch effects, etc.) instead of tearing down on navigation. */}
         {currentStep === 4 && (
-          <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} />
+          <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} isSalaried={formData.is_salaried} />
         )}
         {currentStep === 5 && (
           <BureauObligationsStep caseId={caseId} onNext={() => goToStep(6)} onBack={() => goToStep(4)} />
@@ -1694,7 +1674,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           isMsme ? (
             <MsmeLoanTermsStep caseId={caseId} lender={applyLender} onBack={() => goToStep(6)} />
           ) : (
-            <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} />
+            <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} isSalaried={formData.is_salaried} />
           )
         )}
       </div>

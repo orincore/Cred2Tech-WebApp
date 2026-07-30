@@ -116,6 +116,13 @@ export const NAV_ITEMS = [
     roles: ['DSA_ADMIN'],
   },
   {
+    id: 'dsa-create-user',
+    label: 'Create User',
+    path: '/users/create',
+    icon: UserPlus,
+    roles: ['DSA_ADMIN'],
+  },
+  {
     id: 'dsa-hierarchy',
     label: 'Hierarchy Management',
     path: '/hierarchy',
@@ -128,20 +135,6 @@ export const NAV_ITEMS = [
     path: '/customers',
     icon: Briefcase,
     roles: ['DSA_ADMIN', 'DSA_MEMBER'],
-  },
-  {
-    id: 'dsa-create-user',
-    label: 'Create User',
-    path: '/users/create',
-    icon: UserPlus,
-    roles: ['DSA_ADMIN'],
-  },
-  {
-    id: 'dsa-lender-contacts',
-    label: 'Lender Contacts',
-    path: '/settings/lender-contacts',
-    icon: Mail,
-    roles: ['DSA_ADMIN'],
   },
   {
     id: 'dsa-part-disbursement',
@@ -158,11 +151,11 @@ export const NAV_ITEMS = [
     roles: ['DSA_ADMIN', 'DSA_MEMBER'],
   },
   {
-    id: 'sales-incentive',
-    label: 'Sales Incentive',
-    path: '/financials/sales-incentive',
-    icon: Target,
-    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+    id: 'dsa-lender-contacts',
+    label: 'Lender Contacts',
+    path: '/settings/lender-contacts',
+    icon: Mail,
+    roles: ['DSA_ADMIN'],
   },
   {
     id: 'lender-commission',
@@ -172,11 +165,25 @@ export const NAV_ITEMS = [
     roles: ['DSA_ADMIN'],
   },
   {
+    id: 'sales-incentive',
+    label: 'Sales Incentive',
+    path: '/financials/sales-incentive',
+    icon: Target,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+  },
+  {
     id: 'sub-dsa-payout',
     label: 'Sub DSA Payout',
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
     roles: ['DSA_ADMIN'],
+  },
+  {
+    id: 'dsa-wallet',
+    label: 'Wallet',
+    path: '/wallet',
+    icon: Wallet,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'],
   },
 
 

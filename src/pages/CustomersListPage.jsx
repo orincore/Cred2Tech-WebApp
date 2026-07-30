@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { toTitleCase } from '../utils/helpers';
+import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
+import PageHeader from '../components/ui/PageHeader';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
 
@@ -117,7 +118,7 @@ const getCibilColor = (score, isDark) => {
   return isDark ? '#fca5a5' : '#EF4444';
 };
 
-const labelSm = (isDark) => ({ fontSize: 11, fontWeight: 700, color: isDark ? '#fff' : '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 });
+const labelSm = (isDark) => ({ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 });
 const underlineInput = (active) => ({
   background: 'transparent', border: 'none',
   borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -260,7 +261,10 @@ const CustomersListPage = () => {
 
   const goToCase = (c) => {
     if (c.stage === 'DRAFT') {
-      const path = c.customer?.category === 'SALARIED' ? '/customers/salaried/add' : '/customers/add';
+      // Classification lives on the case itself, not the shared customer
+      // record — the same PAN/customer can have one salaried case and one
+      // MSME case at once.
+      const path = c.category === 'SALARIED' ? '/customers/salaried/add' : '/customers/add';
       navigate(`${path}?caseId=${c.id}`);
     } else if (c.stage === 'DATA_COLLECTION') {
       // ESR (step 6) now renders inline inside AddCustomerWizardPage.
@@ -278,21 +282,19 @@ const CustomersListPage = () => {
         .add-customer-btn-compact { padding: 5px 14px !important; font-size: 12px !important; }
       `}</style>
       {/* ─── Top header ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-            Customers & Pipeline
-          </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: mutedColor }}>
-            {stats.totalCases} active cases · {stats.totalCustomers} customers
-          </p>
-        </div>
+      <div style={{ padding: isMobile ? '80px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader
+          title="Pipeline & Customers"
+          subtitle={`${stats.totalCases} active cases · ${stats.totalCustomers} customers`}
+        />
 
-        <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <UserPlus size={13} /> Add New Customer
-          </div>
-        </TravelingBorderButton>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <UserPlus size={13} /> Add New Customer
+            </div>
+          </TravelingBorderButton>
+        </div>
       </div>
 
       <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />
@@ -401,7 +403,14 @@ const CustomersListPage = () => {
               <div key={c.id} style={{ border: '1px solid var(--outline)', borderRadius: 10, padding: 14, marginBottom: 12, background: 'var(--surface)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                        color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
+                        background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
+                      }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
+                    </div>
                     {c.parent_case_id && (
                       <div style={{ fontSize: 11, color: mutedColor, marginTop: 2 }}>↳ From CASE-{c.parent_case_id}</div>
                     )}
@@ -415,7 +424,7 @@ const CustomersListPage = () => {
                   style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
                   onClick={() => navigate(`/customers/${c.customer_id}`)}
                 >
-                  {toTitleCase(c.customer_name || c.customer?.business_name) || '—'}
+                  {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                 </div>
                 <div style={{ fontSize: 11, color: mutedColor, marginBottom: 12 }}>
                   {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}
@@ -458,8 +467,8 @@ const CustomersListPage = () => {
         <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <colgroup>
-              <col style={{ width: '9%' }} /><col style={{ width: '21%' }} /><col style={{ width: '14%' }} />
-              <col style={{ width: '6%' }} /><col style={{ width: '20%' }} /><col style={{ width: '13%' }} />
+              <col style={{ width: '9%' }} /><col style={{ width: '18%' }} /><col style={{ width: '14%' }} />
+              <col style={{ width: '9%' }} /><col style={{ width: '20%' }} /><col style={{ width: '13%' }} />
               <col style={{ width: '11%' }} /><col style={{ width: '6%' }} />
             </colgroup>
             <thead>
@@ -485,11 +494,18 @@ const CustomersListPage = () => {
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</div>
+                      <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                          color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
+                          background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
+                        }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
+                      </div>
                       {c.parent_case_id && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
-                        {toTitleCase(c.customer_name || c.customer?.business_name) || '—'}
+                        {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                       </div>
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>
                         {[c.entity_type || c.customer?.entity_type, c.customer?.industry, c.customer?.business_vintage ? `${c.customer.business_vintage} yrs` : null].filter(Boolean).join(' · ') || '—'}

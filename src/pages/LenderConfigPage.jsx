@@ -64,15 +64,15 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
                   <X size={18} />
                </button>
             </div>
-            <p style={{ fontSize: 12, color: isDark ? '#94a3b8' : '#64748b', marginBottom: 20 }}>Editing engine rule for: <strong style={{ color: isDark ? '#fff' : '#1e293b' }}>{parameterLabel}</strong></p>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 20 }}>Editing engine rule for: <strong style={{ color: isDark ? '#fff' : '#1e293b' }}>{parameterLabel}</strong></p>
 
             <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 20 }}>
                <table style={{ width: '100%', fontSize: 12 }}>
                   <thead>
                      <tr style={{ background: isDark ? '#0f172a' : '#f9fafb' }}>
-                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Min Threshold</th>
-                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Max Threshold</th>
-                        <th style={{ padding: 8, textAlign: 'left', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Rule / Multiplier</th>
+                        <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Min Threshold</th>
+                        <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Max Threshold</th>
+                        <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Rule / Multiplier</th>
                         <th style={{ padding: 8, width: 40 }}></th>
                      </tr>
                   </thead>
@@ -80,30 +80,30 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
                      {slabs.map((slab, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid var(--outline)' }}>
                            <td style={{ padding: 8 }}>
-                              <input 
-                                 type="number" 
-                                 className="form-control form-control-sm" 
-                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
-                                 value={slab.min} 
-                                 onChange={e => updateSlab(idx, 'min', e.target.value)} 
+                              <input
+                                 type="number"
+                                 className="form-control form-control-sm"
+                                 style={{ width: '100%', fontSize: 12 }}
+                                 value={slab.min}
+                                 onChange={e => updateSlab(idx, 'min', e.target.value)}
                               />
                            </td>
                            <td style={{ padding: 8 }}>
-                              <input 
-                                 type="number" 
-                                 className="form-control form-control-sm" 
-                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
-                                 value={slab.max} 
-                                 onChange={e => updateSlab(idx, 'max', e.target.value)} 
+                              <input
+                                 type="number"
+                                 className="form-control form-control-sm"
+                                 style={{ width: '100%', fontSize: 12 }}
+                                 value={slab.max}
+                                 onChange={e => updateSlab(idx, 'max', e.target.value)}
                               />
                            </td>
                            <td style={{ padding: 8 }}>
-                              <input 
-                                 type="text" 
-                                 className="form-control form-control-sm" 
-                                 style={{ width: '100%', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', color: isDark ? '#fff' : '#1e293b', fontSize: 12 }}
-                                 value={slab.value} 
-                                 onChange={e => updateSlab(idx, 'value', e.target.value)} 
+                              <input
+                                 type="text"
+                                 className="form-control form-control-sm"
+                                 style={{ width: '100%', fontSize: 12 }}
+                                 value={slab.value}
+                                 onChange={e => updateSlab(idx, 'value', e.target.value)}
                               />
                            </td>
                            <td style={{ padding: 8 }}>
@@ -364,12 +364,12 @@ const LenderConfigPage = () => {
          {/* ─── Filter row (Lender/Product selectors) ─── */}
          <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
             <div style={{ flex: 1, minWidth: 200 }}>
-               <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Lender</span>
+               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Lender</span>
                <div style={{ display: 'flex', gap: 8 }}>
-                  <select 
-                     className="form-control" 
-                     style={{ flex: 1, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }}
-                     value={selectedLenderId} 
+                  <select
+                     className="form-control"
+                     style={{ flex: 1, fontSize: 13 }}
+                     value={selectedLenderId}
                      onChange={handleLenderChange}
                   >
                      <option value="">-- Select Lender --</option>
@@ -386,13 +386,13 @@ const LenderConfigPage = () => {
                </div>
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
-               <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Product Line</span>
+               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Product Line</span>
                <div style={{ display: 'flex', gap: 8 }}>
-                  <select 
-                     className="form-control" 
-                     style={{ flex: 1, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }}
-                     value={selectedProductId} 
-                     onChange={handleProductChange} 
+                  <select
+                     className="form-control"
+                     style={{ flex: 1, fontSize: 13 }}
+                     value={selectedProductId}
+                     onChange={handleProductChange}
                      disabled={!selectedLenderId}
                   >
                      <option value="">-- Select Product --</option>

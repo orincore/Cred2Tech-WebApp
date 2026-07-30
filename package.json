@@ -18,7 +18,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-hot-toast": "^2.4.1",
-    "react-router-dom": "^7.1.1"
+    "react-router-dom": "^7.1.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

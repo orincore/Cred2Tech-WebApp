@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import OrgCard from '../components/OrgCard';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import UserSidePanel from '../components/UserSidePanel';
+import PageHeader from '../components/ui/PageHeader';
 
 // Responsive hook
 const useResponsive = () => {
@@ -165,7 +166,7 @@ const Edge = ({ parent, child, isDark }) => {
 
   // Theme-aware colors
   const lineColor = isDark ? '#64748b' : '#94a3b8';
-  const arrowColor = isDark ? '#94a3b8' : '#64748b';
+  const arrowColor = 'var(--on-muted)';
 
   return (
     <g>
@@ -419,12 +420,9 @@ const HierarchyPage = () => {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', fontFamily: "'Inter', sans-serif" }}>
 
       {/* ─── Top header ─── */}
-      <div style={{ borderBottom: '1px solid var(--outline)', padding: isMobile ? '80px 16px 14px' : '18px 20px 18px 60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'var(--bg)', flexShrink: 0 }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Admin › Hierarchy</p>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>Org Hierarchy</h1>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ padding: isMobile ? '80px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader title="Hierarchy Management" />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
           {/* View toggle */}
           <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', padding: 3, borderRadius: 8, border: '1px solid var(--outline)' }}>
             <button
@@ -562,7 +560,7 @@ const HierarchyPage = () => {
             {/* Sub-header */}
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Team Information</span>
-              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{users.length} members</span>
+              <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{users.length} members</span>
             </div>
 
             {/* Table */}

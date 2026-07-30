@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, getInitials, formatHierarchyPath } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import PageHeader from '../components/ui/PageHeader';
 
 // Responsive hook
 const useResponsive = () => {
@@ -150,7 +151,8 @@ const ProfilePage = () => {
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
-      <div style={{ padding: isMobile ? '80px 16px 24px' : '24px 32px 24px 60px', overflow: 'auto', flex: 1 }}>
+      <div style={{ padding: isMobile ? '80px 16px 24px' : '24px 24px 24px', overflow: 'auto', flex: 1 }}>
+        <PageHeader title="My Profile" subtitle="Manage your account settings and preferences" />
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 20 : 40, maxWidth: 1200 }}>
           
           {/* ─── Left Sidebar ─── */}
@@ -211,7 +213,7 @@ const ProfilePage = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               {/* Full Name */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Full Name</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Full Name</label>
                 <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                   <input
                     type="text"
@@ -229,7 +231,7 @@ const ProfilePage = () => {
 
               {/* Email */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Email Address</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Email Address</label>
                 <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                   <input
                     type="email"
@@ -247,7 +249,7 @@ const ProfilePage = () => {
 
               {/* Mobile */}
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Mobile Number</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Mobile Number</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
                   <input
                     type="tel"
@@ -256,7 +258,7 @@ const ProfilePage = () => {
                     title="Your mobile number is your verified login identity and can't be changed here."
                     style={{
                       width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 15, fontWeight: 600,
+                      color: 'var(--on-muted)', fontSize: 15, fontWeight: 600,
                       padding: 0, cursor: 'not-allowed'
                     }}
                   />
@@ -304,7 +306,7 @@ const ProfilePage = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Current Password</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Current Password</label>
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
@@ -323,7 +325,7 @@ const ProfilePage = () => {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>New Password</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>New Password</label>
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
@@ -342,7 +344,7 @@ const ProfilePage = () => {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Confirm New Password</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Confirm New Password</label>
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
@@ -380,13 +382,13 @@ const ProfilePage = () => {
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Role & Access</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Platform Role</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Platform Role</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{toTitleCase(u.role?.name) || '—'}</span>
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Role ID</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Role ID</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.role_id || '—'}</span>
                       </div>
@@ -399,25 +401,25 @@ const ProfilePage = () => {
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Hierarchy & Organization</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>DSA Organization</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>DSA Organization</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.dsa?.name || '—'}</span>
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Hierarchy Level</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Hierarchy Level</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.hierarchy_level || '—'}</span>
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Hierarchy Path</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Hierarchy Path</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatHierarchyPath(u.hierarchy_path) || 'Root'}</span>
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Manager ID</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Manager ID</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.manager_id ? `#${u.manager_id}` : '—'}</span>
                       </div>
@@ -430,7 +432,7 @@ const ProfilePage = () => {
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Session Information</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Account Created</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Account Created</label>
                       <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatDateTime(u.created_at)}</span>
                       </div>
@@ -493,7 +495,7 @@ const ProfilePage = () => {
               {/* Message */}
               <p style={{
                 fontSize: 14,
-                color: isDark ? '#94a3b8' : '#4a5d73',
+                color: 'var(--on-muted)',
                 marginBottom: 24
               }}>
                 Are you sure you want to logout? You will need to sign in again to access your account.

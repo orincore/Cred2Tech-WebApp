@@ -72,7 +72,7 @@ const ResetPasswordPage = () => {
             <span className="material-symbols-outlined text-red-600 dark:text-red-400 text-[28px]">error</span>
           </div>
           <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">Invalid Link</h1>
-          <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] leading-relaxed mb-6">
+          <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] leading-relaxed mb-6">
             This password reset link is invalid or missing its token. Please request a new one.
           </p>
           <button
@@ -92,7 +92,7 @@ const ResetPasswordPage = () => {
       <h1 className="text-[24px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
         Set New Password
       </h1>
-      <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] mb-8">
+      <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-8">
         Please enter your new password below.
       </p>
 
@@ -106,7 +106,7 @@ const ResetPasswordPage = () => {
       <form onSubmit={handleSubmit}>
         <div className="space-y-8 mb-8">
           <div className="relative">
-            <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">New Password *</label>
+            <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">New Password *</label>
             <div className="relative flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
               <input
                 type={showPwd ? 'text' : 'password'}
@@ -119,7 +119,7 @@ const ResetPasswordPage = () => {
               <button
                 onClick={() => setShowPwd(p => !p)}
                 type="button"
-                className="absolute right-0 text-[#4a5d73] dark:text-[#94a3b8] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
+                className="absolute right-0 text-[#0a1628] dark:text-[#e6edf7] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
               </button>
@@ -127,7 +127,7 @@ const ResetPasswordPage = () => {
           </div>
 
           <div>
-            <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Confirm Password *</label>
+            <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Confirm Password *</label>
             <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
               <input
                 type={showPwd ? 'text' : 'password'}

@@ -27,7 +27,7 @@ const PhoneField = ({
         <svg>
           <rect />
         </svg>
-        <span className="material-symbols-outlined text-[17px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0 relative z-10">phone</span>
+        <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">phone</span>
         
         <div className="flex items-center gap-1 flex-1">
           <div className="min-w-0">
@@ -44,7 +44,7 @@ const PhoneField = ({
             onChange={handlePhoneInputChange}
             onBlur={handleBlur}
             placeholder={placeholder}
-            className="flex-1 bg-transparent border-none outline-none text-[0.88rem] text-[#0a1628] dark:text-[#e6edf7] placeholder-[#4a5d73] dark:placeholder-[#94a3b8] font-medium relative z-10 h-full"
+            className="flex-1 bg-transparent border-none outline-none text-[0.88rem] text-[#0a1628] dark:text-[#e6edf7] placeholder-[#0a1628] dark:placeholder-[#e6edf7] font-medium relative z-10 h-full"
             maxLength={10}
           />
         </div>

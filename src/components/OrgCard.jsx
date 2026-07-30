@@ -50,11 +50,11 @@ const OrgCard = ({
   const borderColor = isDark ? (isSelected ? color : '#334155') : (isSelected ? color : '#e2e8f0');
   const borderHoverColor = isDark ? '#475569' : '#cbd5e1';
   const textColor = isDark ? '#f1f5f9' : '#0f172a';
-  const subtitleColor = isDark ? '#94a3b8' : '#64748b';
-  const roleLabelColor = isDark ? '#94a3b8' : '#94a3b8';
+  const subtitleColor = 'var(--on-muted)';
+  const roleLabelColor = 'var(--on-muted)';
   const expandBtnBg = isDark ? '#1e293b' : '#ffffff';
   const expandBtnBorder = isDark ? '#475569' : '#e2e8f0';
-  const expandBtnColor = isDark ? '#94a3b8' : '#64748b';
+  const expandBtnColor = 'var(--on-muted)';
   const dividerColor = isDark ? '#334155' : '#f1f5f9';
   const viewProfileColor = '#4f46e5';
   const viewProfileBg = isDark ? '#1e1b4b' : '#f8f7ff';
@@ -146,7 +146,7 @@ const OrgCard = ({
           {node.name}
         </p>
         {/* Subtitle: email or designation */}
-        <p style={{ margin: '2px 0 0', fontSize: 11, color: subtitleColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ margin: '2px 0 0', fontSize: 11, fontWeight: 500, color: subtitleColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {node.designation || node.email}
         </p>
 
@@ -154,7 +154,7 @@ const OrgCard = ({
         {(showReports || showViewProfile) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${dividerColor}` }}>
             {showReports && (
-              <span style={{ fontSize: 11, color: subtitleColor, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: subtitleColor, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
                 <span style={{ fontSize: 10 }}>•</span> {originalChildCount} reports
               </span>
             )}

@@ -178,7 +178,7 @@ export default function PddManagementPage() {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search by customer, case ID or mobile..."
             className="form-control"
-            style={{ paddingLeft: 38, paddingTop: 11, paddingBottom: 11, background: 'var(--bg-surface)' }}
+            style={{ paddingLeft: 38 }}
           />
         </div>
       </div>

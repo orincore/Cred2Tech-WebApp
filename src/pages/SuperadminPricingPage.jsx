@@ -143,7 +143,7 @@ const SuperadminPricingPage = () => {
   }, [pricing, search]);
 
   /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
+  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
     borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
@@ -212,7 +212,7 @@ const SuperadminPricingPage = () => {
         {/* Sub-header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — DSA Pricing</span>
-          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>{filtered.length} APIs</span>
+          <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} APIs</span>
         </div>
 
         {/* Table */}
@@ -227,11 +227,11 @@ const SuperadminPricingPage = () => {
             { key: 'description', label: 'Description', render: (p) => {
               const isEditing = editingId === p.id;
               return isEditing ? (
-                <input 
-                  className="form-control form-control-sm" 
-                  value={editForm.description} 
+                <input
+                  className="form-control form-control-sm"
+                  value={editForm.description}
                   onChange={e => setEditForm({...editForm, description: e.target.value})}
-                  style={{ background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 12 }}
+                  style={{ fontSize: 12 }}
                 />
               ) : (
                 p.description || '—'
@@ -241,12 +241,12 @@ const SuperadminPricingPage = () => {
               const isEditing = editingId === p.id;
               const current = isEditing ? editForm : p;
               return isEditing ? (
-                <input 
-                  type="number" 
-                  className="form-control form-control-sm" 
-                  value={editForm.vendor_cost} 
+                <input
+                  type="number"
+                  className="form-control form-control-sm"
+                  value={editForm.vendor_cost}
                   onChange={e => setEditForm({...editForm, vendor_cost: parseFloat(e.target.value)})}
-                  style={{ width: 80, background: isDark ? '#1e293b' : '#fff', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 12 }}
+                  style={{ width: 80, fontSize: 12 }}
                 />
               ) : (
                 `₹${p.vendor_cost.toFixed(2)}`
@@ -256,12 +256,12 @@ const SuperadminPricingPage = () => {
               const isEditing = editingId === p.id;
               const current = isEditing ? editForm : p;
               return isEditing ? (
-                <input 
-                  type="number" 
-                  className="form-control" 
-                  value={editForm.default_credit_cost} 
+                <input
+                  type="number"
+                  className="form-control"
+                  value={editForm.default_credit_cost}
                   onChange={e => setEditForm({...editForm, default_credit_cost: parseInt(e.target.value) || 0})}
-                  style={{ width: 100, fontWeight: 700, borderColor: '#4f46e5', background: isDark ? '#1e293b' : '#fff', color: 'var(--on-surface)' }} 
+                  style={{ width: 100, fontWeight: 700, borderBottomColor: 'var(--primary)' }}
                 />
               ) : (
                 <div style={{ background: isDark ? '#1e293b' : '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
@@ -379,23 +379,23 @@ const SuperadminPricingPage = () => {
                 }}>
                     <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ color: 'var(--on-muted)', fontSize: 12 }}>₹</span>
-                        <input 
-                          type="number" 
-                          className="form-control" 
-                          value={d.min_topup_amount} 
-                          onChange={e => handleSlabChange(d.id, 'min_topup_amount', parseFloat(e.target.value) || 0)} 
-                          style={{ width: 120, background: 'transparent', border: '1px solid var(--outline)', fontWeight: 600, color: 'var(--on-surface)', fontSize: 13 }} 
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={d.min_topup_amount}
+                          onChange={e => handleSlabChange(d.id, 'min_topup_amount', parseFloat(e.target.value) || 0)}
+                          style={{ width: 120, fontWeight: 600, fontSize: 13 }}
                         />
                         <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>and above</span>
                     </td>
                     <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input 
-                              type="number" 
-                              className="form-control" 
-                              value={d.bonus_percentage} 
-                              onChange={e => handleSlabChange(d.id, 'bonus_percentage', parseFloat(e.target.value) || 0)} 
-                              style={{ width: 60, textAlign: 'center', fontWeight: 700, background: 'transparent', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 13 }} 
+                            <input
+                              type="number"
+                              className="form-control"
+                              value={d.bonus_percentage}
+                              onChange={e => handleSlabChange(d.id, 'bonus_percentage', parseFloat(e.target.value) || 0)}
+                              style={{ width: 60, textAlign: 'center', fontWeight: 700, fontSize: 13 }}
                             />
                             <span style={{ fontWeight: 600, color: 'var(--on-surface)', fontSize: 13 }}>%</span>
                         </div>

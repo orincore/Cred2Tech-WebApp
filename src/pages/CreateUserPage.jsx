@@ -7,7 +7,7 @@ import { getRoles } from '../api/roleService';
 import { useAuth } from '../context/AuthContext';
 import { HIERARCHY_LEVELS } from '../constants/roles';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-import { useTheme } from '../context/ThemeContext';
+import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
 import { getErrorMessage } from '../utils/helpers';
 
@@ -41,8 +41,6 @@ const countryOptions = countries.map(c => ({
 const CreateUserPage = () => {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
@@ -62,13 +60,13 @@ const CreateUserPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const labelStyle = { fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6, display: 'block', fontWeight: 600 };
+  const labelStyle = { fontSize: 12, color: 'var(--on-muted)', marginBottom: 6, display: 'block', fontWeight: 600 };
   const inputStyle = {
     width: '100%', background: 'transparent', border: 'none', outline: 'none',
-    borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628',
+    borderBottom: '2px solid var(--outline)', color: 'var(--on-surface)',
     fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s',
   };
-  const inputFocusStyle = { borderBottomColor: '#4f46e5' };
+  const inputFocusStyle = { borderBottomColor: 'var(--primary)' };
 
   useEffect(() => {
     // Fetch same-tenant users for manager dropdown
@@ -272,20 +270,18 @@ const CreateUserPage = () => {
   const eligibleManagers = tenantUsers.filter(u => u.tenant_id === currentUser?.tenant_id);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-y-auto">
-      <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center w-full">
-        <div className="mb-10">
-          <h1 className="text-[24px] md:text-[28px] lg:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-            Create User
-          </h1>
-          <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[13px] md:text-[14px] lg:text-[15px]">
-            Add a new user to the platform
-          </p>
-        </div>
+    <div className="cup-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .cup-page > div { padding: 80px 24px 24px !important; }
+        }
+      `}</style>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+        <PageHeader title="Create User" subtitle="Add a new user to the platform" />
 
         {/* Success banner */}
         {success && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)' }}>
             <CheckCircle size={16} />
             User created successfully! Redirecting to users list…
           </div>
@@ -293,7 +289,7 @@ const CreateUserPage = () => {
 
         {/* Error banner */}
         {apiError && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--error-bg)', border: '1px solid var(--error)', color: 'var(--error)' }}>
             <AlertCircle size={16} />
             {apiError}
           </div>
@@ -302,7 +298,7 @@ const CreateUserPage = () => {
         <form onSubmit={handleSubmit}>
           {/* Basic Info */}
           <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Basic Information
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -315,10 +311,10 @@ const CreateUserPage = () => {
                   onChange={handleChange}
                   placeholder="e.g. John Doe"
                   style={{ ...inputStyle, ...(errors.name ? inputFocusStyle : {}) }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                  onBlur={e => e.target.style.borderBottomColor = errors.name ? '#dc2626' : 'var(--outline)'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                  onBlur={e => e.target.style.borderBottomColor = errors.name ? 'var(--error)' : 'var(--outline)'}
                 />
-                {errors.name && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
+                {errors.name && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.name}</div>}
               </div>
               <div>
                 <label style={labelStyle}>Email Address *</label>
@@ -329,13 +325,13 @@ const CreateUserPage = () => {
                   onChange={handleChange}
                   placeholder="e.g. john@example.com"
                   style={{ ...inputStyle, ...(errors.email ? inputFocusStyle : {}) }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {
                     handleFieldBlur('email');
-                    e.target.style.borderBottomColor = errors.email ? '#dc2626' : 'var(--outline)';
+                    e.target.style.borderBottomColor = errors.email ? 'var(--error)' : 'var(--outline)';
                   }}
                 />
-                {errors.email && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
+                {errors.email && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.email}</div>}
               </div>
               <div>
                 <label style={labelStyle}>Mobile Number</label>
@@ -345,7 +341,7 @@ const CreateUserPage = () => {
                     value={form.mobile_country_code}
                     onChange={e => handleCountryCodeChange('mobile_country_code', e.target.value)}
                     style={{ ...inputStyle, width: '45px', cursor: 'pointer', appearance: 'none' }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                   >
                     {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
@@ -357,15 +353,15 @@ const CreateUserPage = () => {
                     onChange={e => handlePhoneChange('mobile', e.target.value)}
                     placeholder="9876543210"
                     style={{ ...inputStyle, flex: 1 }}
-                    onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {
                       handleFieldBlur('mobile');
-                      e.target.style.borderBottomColor = errors.mobile ? '#dc2626' : 'var(--outline)';
+                      e.target.style.borderBottomColor = errors.mobile ? 'var(--error)' : 'var(--outline)';
                     }}
                   />
                 </div>
-                {errors.mobile && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Optional — 10-digit mobile number</div>
+                {errors.mobile && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.mobile}</div>}
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional — 10-digit mobile number</div>
               </div>
               <div>
                 <label style={labelStyle}>Designation</label>
@@ -376,10 +372,10 @@ const CreateUserPage = () => {
                   onChange={handleChange}
                   placeholder="e.g. Operations Executive"
                   style={inputStyle}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 />
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Optional</div>
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Optional</div>
               </div>
               <div>
                 <label style={labelStyle}>Password *</label>
@@ -390,20 +386,20 @@ const CreateUserPage = () => {
                   onChange={handleChange}
                   placeholder="Min. 8 characters"
                   style={{ ...inputStyle, ...(errors.password ? inputFocusStyle : {}) }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {
                     handleFieldBlur('password');
-                    e.target.style.borderBottomColor = errors.password ? '#dc2626' : 'var(--outline)';
+                    e.target.style.borderBottomColor = errors.password ? 'var(--error)' : 'var(--outline)';
                   }}
                 />
-                {errors.password && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.password}</div>}
+                {errors.password && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.password}</div>}
               </div>
             </div>
           </div>
 
           {/* Role & Access */}
           <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Role & Access
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -414,8 +410,8 @@ const CreateUserPage = () => {
                   value={form.role_id}
                   onChange={handleChange}
                   style={{ ...inputStyle, ...(errors.role_id ? inputFocusStyle : {}), cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-                  onBlur={e => e.target.style.borderBottomColor = errors.role_id ? '#dc2626' : 'var(--outline)'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                  onBlur={e => e.target.style.borderBottomColor = errors.role_id ? 'var(--error)' : 'var(--outline)'}
                   disabled={isLoadingRoles || !!rolesError}
                 >
                   <option value="">
@@ -427,16 +423,16 @@ const CreateUserPage = () => {
                     </option>
                   ))}
                 </select>
-                {errors.role_id && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{errors.role_id}</div>}
-                {rolesError && <div style={{ color: '#dc2626', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Determines what the user can access on the platform</div>
+                {errors.role_id && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.role_id}</div>}
+                {rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Determines what the user can access on the platform</div>
               </div>
             </div>
           </div>
 
           {/* Organization & Hierarchy */}
           <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Organization & Hierarchy
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
@@ -447,13 +443,13 @@ const CreateUserPage = () => {
                   value={form.hierarchy_level}
                   onChange={handleChange}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">None (root level)</option>
                   {HIERARCHY_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Only for DSA_MEMBER role users (L1, L2, L3…)</div>
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Only for DSA_MEMBER role users (L1, L2, L3…)</div>
               </div>
               <div>
                 <label style={labelStyle}>Manager</label>
@@ -462,7 +458,7 @@ const CreateUserPage = () => {
                   value={form.manager_id}
                   onChange={handleChange}
                   style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
-                  onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">None (root level)</option>
@@ -470,19 +466,19 @@ const CreateUserPage = () => {
                     <option key={u.id} value={u.id}>{u.name} ({u.role?.name || u.role})</option>
                   ))}
                 </select>
-                <div style={{ color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 11, marginTop: 4 }}>Select a manager from your tenant. Leave blank if none</div>
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Select a manager from your tenant. Leave blank if none</div>
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 32 }}>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', marginTop: 32 }}>
             <button
               type="button"
               onClick={() => navigate('/users')}
               disabled={isLoading}
               style={{
-                padding: '8px 20px', background: 'transparent', border: '2px solid var(--outline)',
-                borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--on-surface)',
+                padding: '6px 14px', background: 'transparent', border: '2px solid var(--outline)',
+                borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)',
                 cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
               }}
             >
@@ -490,8 +486,10 @@ const CreateUserPage = () => {
             </button>
             <TravelingBorderButton
               type="submit"
+              size="sm"
+              solid
+              showIcon={false}
               disabled={isLoading || success}
-              className="px-6 py-2.5 text-[13px] rounded-[10px]"
             >
               {isLoading ? (
                 <div className="flex justify-center items-center w-full h-full">

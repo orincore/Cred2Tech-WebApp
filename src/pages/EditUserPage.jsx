@@ -79,7 +79,7 @@ const EditUserPage = () => {
     fetchUser();
   }, [id]);
 
-  const labelStyle = { fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6, display: 'block', fontWeight: 600 };
+  const labelStyle = { fontSize: 12, color: 'var(--on-muted)', marginBottom: 6, display: 'block', fontWeight: 600 };
   const inputStyle = {
     width: '100%', background: 'transparent', border: 'none', outline: 'none',
     borderBottom: '2px solid var(--outline)', color: isDark ? '#e6edf7' : '#0a1628',
@@ -167,7 +167,7 @@ const EditUserPage = () => {
           <h1 className="text-[24px] md:text-[28px] lg:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
             Edit User
           </h1>
-          <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[13px] md:text-[14px] lg:text-[15px]">
+          <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[13px] md:text-[14px] lg:text-[15px]">
             Modify user information for {user?.name || 'this user'}
           </p>
         </div>

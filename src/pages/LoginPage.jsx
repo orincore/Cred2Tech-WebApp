@@ -106,7 +106,7 @@ const LoginPage = () => {
             <h1 className="text-[28px] md:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
               Sign In
             </h1>
-            <p className="text-[#4a5d73] dark:text-[#94a3b8] text-[14px] md:text-[15px]">
+            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] md:text-[15px]">
               Access your secure Cred2Tech portal
             </p>
           </div>
@@ -123,7 +123,7 @@ const LoginPage = () => {
           <div className="space-y-8 mb-8">
             {/* Email */}
             <div>
-              <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Email *</label>
+              <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Email *</label>
               <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
                 <input
                   type="email"
@@ -138,7 +138,7 @@ const LoginPage = () => {
 
             {/* Password */}
             <div className="relative">
-              <label className="block text-[12px] text-[#4a5d73] dark:text-[#94a3b8] mb-1.5">Password *</label>
+              <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Password *</label>
               <div className="relative flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
                 <input
                   type={showPwd ? 'text' : 'password'}
@@ -151,7 +151,7 @@ const LoginPage = () => {
                 <button
                   onClick={() => setShowPwd(p => !p)}
                   type="button"
-                  className="absolute right-0 text-[#4a5d73] dark:text-[#94a3b8] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
+                  className="absolute right-0 text-[#0a1628] dark:text-[#e6edf7] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
                 </button>
@@ -190,13 +190,13 @@ const LoginPage = () => {
           </TravelingBorderButton>
 
           {/* Trust */}
-          <div className="flex items-center justify-center gap-1.5 mt-8 text-[11px] text-[#4a5d73] dark:text-[#94a3b8]">
+          <div className="flex items-center justify-center gap-1.5 mt-8 text-[11px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
             <span className="material-symbols-outlined text-[13px] text-indigo-600">lock</span>
             256-bit encryption · Trusted by 10,000+ businesses
           </div>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <p className="text-[13px] text-[#4a5d73] dark:text-[#94a3b8]">
+            <p className="text-[13px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
               New to the platform?
               <button
                 className="text-indigo-600 dark:text-indigo-400 font-bold ml-1 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer bg-transparent border-0"

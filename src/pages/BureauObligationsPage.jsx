@@ -17,6 +17,39 @@ const getCibilColor = (score) => {
   return 'var(--error)';
 };
 
+const MONTH_MS = 1000 * 60 * 60 * 24 * 30.44; // average month length
+
+// Two independent facts per obligation, not a single status:
+//  - "Availed within X months" — how recently the loan was taken (loan_start_date vs today)
+//  - "O/s < X months" — approximate remaining tenure, estimated as
+//    outstanding_amount / emi_per_month (a flat, interest-free estimate —
+//    there's no stored maturity/tenure field to compute this exactly, this
+//    is the agreed quick-screening heuristic)
+// Each side always shows a label when the underlying data exists — including
+// a "12+" fallback once a loan ages/outlasts both thresholds — so a row only
+// goes blank on a side when that side's source data is genuinely missing
+// (no loan_start_date, or EMI unverified/zero so remaining tenure can't be
+// estimated at all).
+const getObligationDetails = (obl) => {
+  const details = [];
+
+  if (obl.loan_start_date) {
+    const monthsSinceStart = (Date.now() - new Date(obl.loan_start_date).getTime()) / MONTH_MS;
+    if (monthsSinceStart <= 6) details.push({ label: 'Availed within 6 months', color: 'var(--info)', bg: 'var(--info-bg)' });
+    else if (monthsSinceStart <= 12) details.push({ label: 'Availed within 12 months', color: 'var(--info)', bg: 'var(--info-bg)' });
+    else details.push({ label: 'Availed 12+ months ago', color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' });
+  }
+
+  if (obl.emi_per_month > 0 && obl.outstanding_amount != null) {
+    const monthsRemaining = obl.outstanding_amount / obl.emi_per_month;
+    if (monthsRemaining <= 6) details.push({ label: 'O/s < 6 months', color: 'var(--success)', bg: 'var(--success-bg)' });
+    else if (monthsRemaining <= 12) details.push({ label: 'O/s < 12 months', color: 'var(--success)', bg: 'var(--success-bg)' });
+    else details.push({ label: 'O/s 12+ months', color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' });
+  }
+
+  return details;
+};
+
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -121,11 +154,23 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // `load()` also re-syncs bureau data and can re-run bureau verification —
+  // necessary on initial mount, but massive overkill (and a jarring full-page
+  // spinner, since it flips `loading` and this component returns a full-page
+  // replacement while loading) for reflecting a single EMI edit or a manually
+  // added obligation. Just re-fetch the already-correct server-aggregated
+  // grouped/summary data instead, with no loading flag flip.
+  const refreshObligations = useCallback(async () => {
+    const result = await caseService.getObligations(caseId);
+    setData(result);
+    return result;
+  }, [caseId]);
+
   const handleEmiBlur = async (oblId, val) => {
     if (val === undefined || val === null) return;
     try {
       await caseService.updateObligation(caseId, oblId, { emi_per_month: parseFloat(val) || 0 });
-      await load();
+      await refreshObligations();
     } catch (e) {
       toast.error('Failed to update EMI');
     }
@@ -139,7 +184,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
       toast.success('Obligation added');
       setAddingFor(null);
       setNewObl({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
-      await load();
+      await refreshObligations();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to add obligation');
     } finally {
@@ -315,16 +360,20 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                       <span style={{ color: 'var(--text-secondary)' }}>Outstanding</span>
                       <strong>{fmt(obl.outstanding_amount)}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Start</span>
-                      <span style={{ color: 'var(--text-tertiary)' }}>{obl.loan_start_date ? new Date(obl.loan_start_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: 12, marginBottom: 8, gap: 8 }}>
+                      <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>Obligation Details</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
+                          <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                        )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
                           type="number"
-                          style={{ width: 100, padding: '5px 8px', border: obl.needs_verification ? '1.5px solid var(--warning)' : '1.5px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', background: 'var(--bg-surface)' }}
+                          style={{ width: 100, padding: '5px 0', background: 'transparent', border: 'none', borderBottom: obl.needs_verification ? '2px solid var(--warning)' : '2px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', outline: 'none' }}
                           value={editEmi[obl.id] !== undefined ? editEmi[obl.id] : obl.emi_per_month}
                           onChange={e => setEditEmi({ ...editEmi, [obl.id]: e.target.value })}
                           onBlur={e => { handleEmiBlur(obl.id, e.target.value); setEditEmi(prev => { const n = { ...prev }; delete n[obl.id]; return n; }); }}
@@ -340,7 +389,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['Lender', 'Type of Loan', 'Loan Amount', 'Outstanding', 'Start', 'EMI / Month', 'Status'].map(h => (
+                    {['Lender', 'Type of Loan', 'Loan Amount', 'Outstanding', 'Obligation Details', 'EMI / Month', 'Status'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
                     ))}
                   </tr>
@@ -352,12 +401,18 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                       <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>{obl.loan_type || '—'}</td>
                       <td style={{ padding: '12px 14px' }}>{fmt(obl.loan_amount)}</td>
                       <td style={{ padding: '12px 14px' }}>{fmt(obl.outstanding_amount)}</td>
-                      <td style={{ padding: '12px 14px', color: 'var(--text-tertiary)' }}>{obl.loan_start_date ? new Date(obl.loan_start_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                          {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
+                            <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                          )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                        </div>
+                      </td>
                       <td style={{ padding: '8px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <input
                             type="number"
-                            style={{ width: 90, padding: '5px 8px', border: obl.needs_verification ? '1.5px solid var(--warning)' : '1.5px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', background: 'var(--bg-surface)' }}
+                            style={{ width: 90, padding: '5px 0', background: 'transparent', border: 'none', borderBottom: obl.needs_verification ? '2px solid var(--warning)' : '2px solid var(--border)', borderRadius: 0, fontSize: 13, fontWeight: 600, color: obl.needs_verification ? 'var(--warning)' : 'var(--text-primary)', outline: 'none' }}
                             value={editEmi[obl.id] !== undefined ? editEmi[obl.id] : obl.emi_per_month}
                             onChange={e => setEditEmi({ ...editEmi, [obl.id]: e.target.value })}
                             onBlur={e => { handleEmiBlur(obl.id, e.target.value); setEditEmi(prev => { const n = { ...prev }; delete n[obl.id]; return n; }); }}

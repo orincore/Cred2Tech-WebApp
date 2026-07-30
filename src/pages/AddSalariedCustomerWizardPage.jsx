@@ -6,10 +6,13 @@ import { otpService } from '../api/otpService';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Search, CheckCircle2, Check } from 'lucide-react';
+import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import DataPullProgress from '../components/onboarding/DataPullProgress';
+import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
+import Panel from '../components/ui/Panel';
+import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase } from '../utils/helpers';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -23,7 +26,18 @@ const AddSalariedCustomerWizardPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  // Step 1 is split into two sub-pages (Personal Details, then Co-Applicants)
+  // without affecting the overall wizard step count — the stepper still only
+  // ever sees currentStep === 1 for both, matching AddCustomerWizardPage.
+  const [step1SubPage, setStep1SubPage] = useState('business');
   const [caseId, setCaseId] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const [formData, setFormData] = useState({
     customer_id: null,
@@ -44,6 +58,45 @@ const AddSalariedCustomerWizardPage = () => {
 
   const [panVerifying, setPanVerifying] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
+  const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
+
+  // Bureau reports (Experian PDF) get ingested into document storage per
+  // applicant at pull time — fetch them once a case exists so a "Download
+  // Report" button can appear next to a completed bureau pull.
+  useEffect(() => {
+    if (!caseId) return;
+    listDocuments({ caseId })
+      .then(docs => {
+        const reports = {};
+        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
+          .forEach(d => { reports[d.applicant_id] = d; });
+        setBureauReports(reports);
+      })
+      .catch(() => {}); // non-fatal — just no download button
+  }, [caseId, formData.applicants]);
+
+  const handleDownloadReport = async (applicantId) => {
+    const doc = bureauReports[applicantId];
+    if (!doc) return;
+    setDownloadingFor(applicantId);
+    try {
+      await downloadDocument(doc.id, doc.original_file_name);
+    } catch (e) {
+      toast.error('Failed to download bureau report');
+    } finally {
+      setDownloadingFor(null);
+    }
+  };
+
+  // Applicant.name is often unset for the primary borrower (it lives on
+  // formData.business_name instead) — prefer a real name over the generic
+  // "Primary Borrower" / "Co-Applicant #N" placeholder wherever one exists.
+  const getApplicantDisplayName = (app, idx) => {
+    const name = app.name || (app.type === 'PRIMARY' ? formData.business_name : '');
+    if (name) return toTitleCase(name);
+    return app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`;
+  };
 
   const [otpModal, setOtpModal] = useState({
     isOpen: false,
@@ -131,7 +184,12 @@ const AddSalariedCustomerWizardPage = () => {
       setFormData({
         customer_id: caseData.customer?.id,
         business_pan: caseData.customer?.business_pan || '',
-        business_name: caseData.customer?.business_name || '',
+        // proprietor_name/pan_holder_name are always set from the plain PAN-verify
+        // API's own name field, regardless of anything GST-derived — business_name
+        // can end up holding a stale legal_business_name/trade_name (a GST artifact,
+        // sometimes even a raw GST TRN placeholder string) left over from a
+        // different flow, which is never applicable to a salaried customer.
+        business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
         business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
         business_email: caseData.customer?.business_email || '',
         pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
@@ -392,20 +450,29 @@ const AddSalariedCustomerWizardPage = () => {
       setSaving(true);
       const { targetCaseId, savedCase } = await ensureDraftSaved();
 
-      const currentApplicants = [...formData.applicants];
-      if (savedCase.applicants) {
-        savedCase.applicants.forEach(sa => {
-          const idx = currentApplicants.findIndex(a => a.pan_number === sa.pan_number);
-          if (idx !== -1) currentApplicants[idx].id = sa.id;
+      // The primary applicant is created server-side (by /customers/salaried/start
+      // on first save, or already existing on resume) — it never lives in
+      // local co-applicant state, and on a brand-new case ensureDraftSaved's
+      // own setFormData(...) hasn't landed yet by this point in the same
+      // call, so formData.applicants here can't be trusted to contain it.
+      // Source it fresh from savedCase instead, merging in formData.pincode
+      // (the top-level field the user actually typed into) — without this
+      // the pincode never reaches the Applicant row and reads back blank on
+      // the next load.
+      const savedApps = [];
+      const primaryFromBackend = savedCase.applicants?.find(a => a.type === 'PRIMARY');
+      if (primaryFromBackend) {
+        const savedPrimary = await caseService.addApplicant(targetCaseId, {
+          ...primaryFromBackend,
+          pincode: formData.pincode
         });
+        savedApps.push(savedPrimary);
       }
 
-      const savedApps = [];
-      for (const app of currentApplicants) {
-        if (app.pan_number) {
-          const savedApp = await caseService.addApplicant(targetCaseId, app);
-          savedApps.push(savedApp);
-        }
+      const coApplicants = formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.pan_number);
+      for (const app of coApplicants) {
+        const savedApp = await caseService.addApplicant(targetCaseId, app);
+        savedApps.push(savedApp);
       }
 
       setFormData(prev => ({ ...prev, applicants: savedApps }));
@@ -433,9 +500,11 @@ const AddSalariedCustomerWizardPage = () => {
       }
       toast.success('Bureau pull success!');
 
-      const updatedApps = formData.applicants.map(a =>
-        a.id === applicantId ? { ...a, bureau_fetched: true } : a
-      );
+      const updatedApps = formData.applicants.map(a => {
+        if (a.id !== applicantId) return a;
+        const newScore = a.type === 'PRIMARY' ? data.applicantScore : data.coApplicantScores?.find(cs => cs.applicantId === a.id)?.score;
+        return { ...a, bureau_fetched: true, cibil_score: newScore || a.cibil_score };
+      });
       setFormData(prev => ({ ...prev, applicants: updatedApps }));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Bureau fetch failed');
@@ -490,12 +559,59 @@ const AddSalariedCustomerWizardPage = () => {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
 
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 40 }}>
+    <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
+      <style>{`
+        .wizard-page .card,
+        .wizard-page .btn,
+        .wizard-page .form-control,
+        .wizard-page .modal-box,
+        .wizard-page .notice {
+          border-radius: 0 !important;
+        }
+        /* Dark mode: the shared grey text tokens read too low-contrast on
+           this data-heavy page — bump them to white here specifically,
+           without touching the global theme. */
+        :root.dark .wizard-page {
+          --text-secondary: #ffffff;
+          --text-tertiary: #ffffff;
+        }
+        /* Light mode: same low-contrast grey complaint — use black instead. */
+        :root:not(.dark) .wizard-page {
+          --text-secondary: #000000;
+          --text-tertiary: #000000;
+        }
+        .hide-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        /* Responsive form grids — mobile-first collapse of fixed columns */
+        .wizard-page .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .wizard-page .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+        @media (max-width: 900px) {
+          .wizard-page .grid-3 { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 640px) {
+          .wizard-page .grid-2, .wizard-page .grid-3 { grid-template-columns: 1fr; gap: 16px; }
+          .wizard-page .modal-box { padding: 24px 16px !important; }
+          .wizard-page .card > div { padding: 14px 12px !important; }
+          .wizard-page .coapp-box { padding: 14px 12px !important; }
+          .wizard-page .wizard-footer-actions { flex-direction: column; align-items: stretch; }
+          .wizard-page .wizard-footer-actions .btn { width: 100%; justify-content: center; }
+        }
+        @media (max-width: 400px) {
+          .wizard-page { padding-left: 10px !important; padding-right: 10px !important; }
+        }
+      `}</style>
+      <div style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 40 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{caseId ? 'Resume Salaried Case' : 'Add Salaried Customer'}</h1>
-          <p style={{ color: 'var(--text-tertiary)', marginTop: 4 }}>Step {currentStep} of 3 — {currentStep === 1 ? 'Personal Details' : currentStep === 2 ? 'Salary & Income Information' : 'Product Selection'}</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {caseId ? (formData.business_name ? toTitleCase(formData.business_name) : 'Resume Salaried Case') : 'Add Salaried Customer'}
+          </h1>
         </div>
         {caseId && (
           <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -504,55 +620,69 @@ const AddSalariedCustomerWizardPage = () => {
         )}
       </div>
 
-      {/* Stepper */}
-      <div className="card" style={{ padding: '24px 40px', marginBottom: 30, display: 'flex', position: 'relative', justifyContent: 'space-between' }}>
-        <div style={{ position: 'absolute', top: '50%', left: 60, right: 60, height: 2, background: 'var(--border)', zIndex: 0, transform: 'translateY(-50%)' }} />
-        {[{ step: 1, label: 'Personal Details' }, { step: 2, label: 'Salary & Income' }, { step: 3, label: 'Product & Property' }].map((s) => {
-          const isActive = currentStep === s.step;
-          const isPast = currentStep > s.step;
-          return (
-            <div key={s.step} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-surface)', zIndex: 1, padding: '0 10px' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isActive ? 'var(--success)' : isPast ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: isPast ? '2px solid var(--success)' : 'none', color: isActive ? 'white' : isPast ? 'var(--success)' : 'var(--text-tertiary)', fontWeight: 600, fontSize: 13 }}>
-                {isPast ? <Check size={16} strokeWidth={3} /> : s.step}
-              </div>
-              <span style={{ fontWeight: isActive ? 600 : 500, color: isActive ? 'var(--success)' : 'var(--text-secondary)', fontSize: 14 }}>{s.label}</span>
-            </div>
-          );
-        })}
-      </div>
+      <CaseWizardStepper
+        currentStep={currentStep}
+        caseId={caseId}
+        steps={SALARIED_ORIGIN_STEPS}
+        onStepClick={(step) => {
+          // This page only ever renders content for its own steps 1-3 —
+          // steps 4-7 (Income Summary onward) live on AddCustomerWizardPage,
+          // same handoff used after completing step 3 normally.
+          if (step <= 3) setCurrentStep(step);
+          else navigate(`/customers/add?caseId=${caseId}&step=${step}`);
+        }}
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {currentStep === 1 && (
           <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Step 1 sub-navigation — Personal Details / Co-Applicants, both still "Step 1" */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setStep1SubPage('business')}
+                className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 180px', fontWeight: 600 }}
+              >
+                1. Personal Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep1SubPage('coapplicants')}
+                className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: '1 1 180px', fontWeight: 600 }}
+              >
+                2. Co-Applicants
+              </button>
+            </div>
+
+            {step1SubPage === 'business' && (
+            <>
             {duplicateWarning && !caseId && (
-              <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 12, padding: 20, marginBottom: 10 }}>
+              <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
                 <div style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--warning)' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Search size={22} color="var(--warning)" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                       <div>
-                        <h4 style={{ fontWeight: 700, fontSize: 16, color: 'var(--warning)', marginBottom: 4 }}>Existing individual found: {duplicateWarning.name || 'N/A'}</h4>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse their profile and data for a new case.</p>
+                        <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
                       </div>
-                      <button type="button" onClick={() => navigate(`/customers/${duplicateWarning.id}`)} className="btn btn-secondary btn-sm">View Profile</button>
+                      <button type="button" onClick={() => navigate(`/customers/${duplicateWarning.id}`)} className="btn btn-secondary btn-sm">View Existing Profile</button>
                     </div>
 
-                    <div style={{ background: 'var(--bg-surface)', borderRadius: 8, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                      <div style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
-                      {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                      {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
-                      {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-secondary)' }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
-                    </div>
+                    {duplicateWarning.summary && (
+                      <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
+                        {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
+                        {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
+                        {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
+                      </div>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={handleContinueAsNewCase}
-                      disabled={saving}
-                      className="btn"
-                      style={{ background: 'var(--warning)', color: 'white', border: 'none' }}
-                    >
+                    <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
                       {saving ? 'Creating...' : 'Continue as New Case →'}
                     </button>
                   </div>
@@ -562,15 +692,39 @@ const AddSalariedCustomerWizardPage = () => {
 
             {/* Primary Applicant Card */}
             <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700 }}>Primary Applicant</h3>
                 <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Salaried Individual Details</span>
               </div>
 
               <div style={{ padding: 24 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-                  <FormField label="MOBILE NUMBER" name="business_mobile" required disabled={formData.mobile_verified}>
-                    <div style={{ display: 'flex', gap: 10 }}>
+                <div className="grid-2" style={{ marginBottom: 24 }}>
+                  <FormField label="PAN Number" name="business_pan" required disabled={!!caseId || formData.mobile_verified}>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        value={formData.business_pan}
+                        onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
+                        onBlur={() => checkPanDuplicate(formData.business_pan)}
+                        className="form-control"
+                        placeholder="ABCDE1234F"
+                        disabled={!!caseId || formData.mobile_verified}
+                        style={{ textTransform: 'uppercase' }}
+                      />
+                      {formData.pan_verified ? (
+                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 size={13} /> Verified
+                        </span>
+                      ) : (
+                        <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan} className="btn btn-secondary">
+                          {panVerifying ? 'Wait...' : 'Verify PAN'}
+                        </button>
+                      )}
+                    </div>
+                  </FormField>
+
+                  <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input
                         type="tel"
                         value={formData.business_mobile}
@@ -583,41 +737,33 @@ const AddSalariedCustomerWizardPage = () => {
                         disabled={formData.mobile_verified}
                       />
                       {!formData.mobile_verified ? (
-                        <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn" style={{ background: 'var(--success)', color: 'white', border: 'none', padding: '0 20px' }}>Send OTP</button>
+                        <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
-                          <CheckCircle2 size={18} /> Verified
-                          <button type="button" onClick={() => setFormData({ ...formData, mobile_verified: false })} style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Edit</button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                            <CheckCircle2 size={18} /> Verified
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setFormData({ ...formData, mobile_verified: false })}
+                            title="Edit mobile number"
+                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Pencil size={13} /> Edit
+                          </button>
                         </div>
                       )}
                     </div>
                   </FormField>
-
-                  <FormField label="PAN NUMBER" name="business_pan" required disabled={!!caseId || formData.mobile_verified}>
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <input
-                        type="text"
-                        value={formData.business_pan}
-                        onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
-                        onBlur={() => checkPanDuplicate(formData.business_pan)}
-                        className="form-control"
-                        placeholder="ABCDE1234F"
-                        disabled={!!caseId || formData.mobile_verified}
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                      <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || formData.pan_verified} className="btn btn-secondary">
-                        {panVerifying ? 'Wait...' : (formData.pan_verified ? 'Verified' : 'Verify PAN')}
-                      </button>
-                    </div>
-                  </FormField>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-                  <FormField label="FULL NAME (AS PER PAN)" name="business_name" required>
+                <div className="grid-2" style={{ marginBottom: 24 }}>
+                  <FormField label="Full Name (As Per PAN)" name="business_name" required>
                     <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Arjun Sharma" disabled={!!caseId} />
                   </FormField>
 
-                  <FormField label="DATE OF BIRTH" name="dob">
+                  <FormField label="Date Of Birth" name="dob">
                     <input
                       type="date"
                       value={formData.dob || ''}
@@ -627,8 +773,8 @@ const AddSalariedCustomerWizardPage = () => {
                   </FormField>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                  <FormField label="EMAIL ADDRESS" name="business_email" required>
+                <div className="grid-2">
+                  <FormField label="Email Address" name="business_email" required>
                     <input
                       type="email"
                       value={formData.business_email}
@@ -638,7 +784,7 @@ const AddSalariedCustomerWizardPage = () => {
                     />
                   </FormField>
 
-                  <FormField label="PINCODE" name="pincode" required>
+                  <FormField label="Pincode" name="pincode" required>
                     <input
                       type="text"
                       value={formData.pincode || ''}
@@ -652,9 +798,23 @@ const AddSalariedCustomerWizardPage = () => {
               </div>
             </div>
 
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg"
+                onClick={() => setStep1SubPage('coapplicants')}
+              >
+                Next: Co-Applicants →
+              </button>
+            </div>
+            </>
+            )}
+
+            {step1SubPage === 'coapplicants' && (
+            <>
             {/* Co-Applicants Card */}
             <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
                 <div>
                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
                   <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Add each co-applicant's details. You can specify if they are Salaried or Self-Employed.</p>
@@ -664,7 +824,7 @@ const AddSalariedCustomerWizardPage = () => {
 
               <div style={{ padding: 24 }}>
                 {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius)', color: 'var(--text-tertiary)' }}>
+                  <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
                     No Co-Applicants appended to this profile yet.
                   </div>
                 ) : (
@@ -674,25 +834,53 @@ const AddSalariedCustomerWizardPage = () => {
                       const coApplicantDisplayIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
 
                       return (
-                        <div key={realIdx} style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 'var(--radius)', position: 'relative' }}>
-                          <div style={{ position: 'absolute', top: 18, right: 24, display: 'flex', gap: 12 }}>
-                            <button type="button" onClick={() => removeApplicant(realIdx)} style={{ color: 'var(--error)', fontSize: 13, fontWeight: 600, border: 'none', background: 'none' }}>Remove ×</button>
+                        <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                            <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantDisplayIdx + 1}</h4>
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => removeApplicant(realIdx)}>Remove ×</button>
                           </div>
-                          <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16, color: 'var(--text-secondary)' }}>Applicant #{coApplicantDisplayIdx + 1}</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, alignItems: 'end', marginBottom: 16 }}>
-                            <FormField label="EMPLOYMENT TYPE" name={`coemp_${realIdx}`}>
+
+                          <div className="grid-2" style={{ marginBottom: 16 }}>
+                            <FormField label="PAN Number" name={`copan_${realIdx}`}>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }} disabled={app.otp_verified} placeholder="ABCDE1234F" />
+                                {app.pan_verified ? (
+                                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                    <CheckCircle2 size={16} /> Verified
+                                  </span>
+                                ) : app.otp_verified ? (
+                                  <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying} className="btn btn-secondary btn-sm">
+                                    {panVerifying ? 'Wait...' : 'Verify PAN'}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </FormField>
+                            <FormField label="Mobile Number" name={`comob_${realIdx}`}>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <input type="tel" value={app.mobile || ''} onChange={e => {
+                                  const val = e.target.value.replace(/\D/g, '');
+                                  updateApplicantRow(realIdx, 'mobile', val);
+                                }} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
+                                {!app.otp_verified ? (
+                                  <button type="button" className="btn btn-primary" onClick={() => handleSendCoapplicantOtp(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Send OTP</button>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
+                                    <CheckCircle2 size={16} /> Verified
+                                  </div>
+                                )}
+                              </div>
+                            </FormField>
+                          </div>
+
+                          <div className="grid-3" style={{ marginBottom: 16 }}>
+                            <FormField label="Employment Type" name={`coemp_${realIdx}`}>
                               <select className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                                 <option value="SALARIED">Salaried</option>
                                 <option value="SELF_EMPLOYED">Self Employed</option>
+                                <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
                               </select>
                             </FormField>
-                            <FormField label="FULL NAME" name={`coname_${realIdx}`}>
-                              <input type="text" value={app.name || ''} onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)} className="form-control" placeholder="Enter Full Name" />
-                            </FormField>
-                            <FormField label="DATE OF BIRTH" name={`codob_${realIdx}`}>
-                              <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
-                            </FormField>
-                            <FormField label="PINCODE" name={`copincode_${realIdx}`} required>
+                            <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                               <input
                                 type="text"
                                 value={app.pincode || ''}
@@ -702,37 +890,17 @@ const AddSalariedCustomerWizardPage = () => {
                                 maxLength={6}
                               />
                             </FormField>
+                            <FormField label="Email" name={`coemail_${realIdx}`}>
+                              <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" />
+                            </FormField>
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1.2fr', gap: 16, alignItems: 'end' }}>
-                            <FormField label="PAN NUMBER" name={`copan_${realIdx}`}>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase' }} disabled={app.otp_verified} />
-                                {app.otp_verified && (
-                                  <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying || app.pan_verified} className="btn btn-secondary">
-                                    {panVerifying ? 'Wait...' : (app.pan_verified ? 'Verified' : 'Verify PAN')}
-                                  </button>
-                                )}
-                              </div>
+
+                          <div className="grid-2">
+                            <FormField label="Full Name" name={`coname_${realIdx}`}>
+                              <input type="text" value={app.name || ''} onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)} className="form-control" placeholder="Enter Full Name" />
                             </FormField>
-                            <FormField label="MOBILE NUMBER" name={`comob_${realIdx}`}>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <input type="tel" value={app.mobile || ''} onChange={e => {
-                                  const val = e.target.value.replace(/\D/g, '');
-                                  updateApplicantRow(realIdx, 'mobile', val);
-                                }} className="form-control" disabled={app.otp_verified} />
-                              </div>
-                            </FormField>
-                            <FormField label="EMAIL ADDRESS" name={`coemail_${realIdx}`}>
-                              <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="Optional" />
-                            </FormField>
-                            <FormField label="" name={`cobtn_${realIdx}`}>
-                              {!app.otp_verified ? (
-                                <button type="button" className="btn" style={{ background: 'var(--success)', color: 'white', border: 'none', width: '100%', justifyContent: 'center' }} onClick={() => handleSendCoapplicantOtp(realIdx)} disabled={saving}>Send OTP</button>
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '10px 0', whiteSpace: 'nowrap', fontSize: 13 }}>
-                                  <CheckCircle2 size={18} /> Verified
-                                </div>
-                              )}
+                            <FormField label="Date Of Birth" name={`codob_${realIdx}`}>
+                              <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
                             </FormField>
                           </div>
                         </div>
@@ -743,11 +911,14 @@ const AddSalariedCustomerWizardPage = () => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button className="btn btn-lg" type="submit" disabled={saving || !formData.mobile_verified} style={{ background: 'var(--success)', color: 'white', border: 'none' }}>
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
                 {saving ? 'Processing...' : 'Continue to Financials →'}
               </button>
             </div>
+            </>
+            )}
           </form>
         )}
 
@@ -764,9 +935,12 @@ const AddSalariedCustomerWizardPage = () => {
                   {[...formData.applicants].sort((a, b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => (
                     <DataPullProgress
                       key={app.id || idx}
-                      label={app.name || (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`)}
+                      label={getApplicantDisplayName(app, idx)}
                       status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
-                      description={app.cibil_score ? `Bureau Score: ${app.cibil_score}` : `${app.pan_number} • ${app.type}`}
+                      description={app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'}
+                      score={app.cibil_score}
+                      onDownload={bureauReports[app.id] ? () => handleDownloadReport(app.id) : null}
+                      downloading={downloadingFor === app.id}
                       onStart={() => handleRunBureau(app.id)}
                       loading={saving}
                     />
@@ -778,17 +952,19 @@ const AddSalariedCustomerWizardPage = () => {
             {/* Salary Slip Upload section */}
             <div className="card">
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>📄 Salary Slip Upload <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-tertiary)' }}>(Last 3 months — OCR auto-extracts data)</span></h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileText size={17} /> Salary Slip Upload <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-tertiary)' }}>(Last 3 months — OCR auto-extracts data)</span>
+                </h3>
               </div>
               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {formData.applicants.filter(a => a.id).map((app, idx) => (
                   <div key={app.id} style={{ borderBottom: idx < formData.applicants.filter(a => a.id).length - 1 ? '1px solid var(--border)' : 'none', paddingBottom: idx < formData.applicants.filter(a => a.id).length - 1 ? 40 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--success-bg)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 0, background: 'var(--success-bg)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
                         {idx + 1}
                       </div>
                       <h4 style={{ fontSize: 16, fontWeight: 700 }}>
-                        {toTitleCase(app.name) || app.pan_number || (app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`)}
+                        {getApplicantDisplayName(app, idx)}
                         <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 8 }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
                       </h4>
                     </div>
@@ -796,55 +972,42 @@ const AddSalariedCustomerWizardPage = () => {
                     <SalarySlipUploader
                       caseId={caseId}
                       applicantId={app.id}
-                      applicantName={toTitleCase(app.name) || app.pan_number}
+                      applicantName={getApplicantDisplayName(app, idx)}
                     />
                   </div>
                 ))}
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 10 }}>
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
-              <button className="btn btn-lg" type="submit" disabled={saving} style={{ background: 'var(--success)', color: 'white', border: 'none' }}>Continue to Product Selection →</button>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
             </div>
           </form>
         )}
 
         {currentStep === 3 && (
           <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <div className="card">
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg,var(--success-bg),transparent)' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>🏦 Loan Product <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></h3>
-                </div>
-                <div style={{ padding: 24 }}>
-                  <FormField label="SELECT PRODUCT" name="product_type" required>
-                    <select
-                      className="form-control"
-                      value={formData.product_type}
-                      onChange={e => setFormData({ ...formData, product_type: e.target.value })}
-                      required
-                      style={{ border: formData.product_type ? '2px solid var(--success)' : undefined, background: formData.product_type ? 'var(--success-bg)' : undefined, color: formData.product_type ? 'var(--success)' : undefined, fontWeight: 600 }}
-                    >
-                      <option value="">— Select a loan product —</option>
-                      <option value="HL">HL — Home Loan</option>
-                      <option value="LAP">LAP — Loan Against Property</option>
-                      <option value="PL">PL — Personal Loan</option>
-                    </select>
-                  </FormField>
-                </div>
-              </div>
-            </div>
+            <Panel icon={Landmark} accentColor="var(--warning)" title={<>Loan Product &amp; Collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
+              <div className="grid-3">
+                <FormField label="Select Product" name="product_type" required>
+                  <select
+                    className="form-control"
+                    value={formData.product_type}
+                    onChange={e => setFormData({ ...formData, product_type: e.target.value })}
+                    required
+                    style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
+                  >
+                    <option value="">— Select a loan product —</option>
+                    <option value="HL">HL — Home Loan</option>
+                    <option value="LAP">LAP — Loan Against Property</option>
+                    <option value="PL">PL — Personal Loan</option>
+                  </select>
+                </FormField>
 
-            {PROPERTY_REQUIRED.includes(formData.product_type) && (
-              <div className="card">
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>🏡 Property &amp; Collateral Details</h3>
-                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Required for {formData.product_type}</span>
-                </div>
-                <div style={{ padding: 24 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20, marginBottom: 20 }}>
-                    <FormField label="PROPERTY TYPE" name="property_type" required>
+                {PROPERTY_REQUIRED.includes(formData.product_type) && (
+                  <>
+                    <FormField label="Property Type" name="property_type" required>
                       <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
                         <option value="">— Select —</option>
                         <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
@@ -853,70 +1016,85 @@ const AddSalariedCustomerWizardPage = () => {
                         <option value="Plot / Land">Plot / Land</option>
                       </select>
                     </FormField>
-                    <FormField label="OCCUPANCY STATUS" name="occupancy_status">
+                    <FormField label="Occupancy Status" name="occupancy_status">
                       <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
                         <option value="Self Occupied">Self Occupied</option>
                         <option value="Rented Out">Rented Out</option>
                         <option value="Vacant">Vacant</option>
                       </select>
                     </FormField>
-                    <FormField label="OWNERSHIP" name="ownership_type">
+                    <FormField label="Ownership" name="ownership_type">
                       <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
                         <option value="Sole Owner">Sole Owner</option>
                         <option value="Joint Owner">Joint Owner</option>
                         <option value="Company Owned">Company Owned</option>
                       </select>
                     </FormField>
-                  </div>
-                  <div style={{ maxWidth: 300 }}>
-                    <FormField label="MARKET VALUE (₹)" name="market_value" required>
-                      <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
-                    </FormField>
-                    <div style={{ fontSize: 11, color: 'black', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
-                  </div>
-                  <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--primary-dark)' }}>
-                    💡 Property location, title clearance, full address will be collected after the lender is identified.
-                  </div>
-                </div>
+                    <div>
+                      <FormField label="Market Value (₹)" name="market_value" required>
+                        <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
+                      </FormField>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
 
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', marginTop: 10 }}>
+              {PROPERTY_REQUIRED.includes(formData.product_type) && (
+                <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>Property location, title clearance, full address will be collected after the lender is identified.</span>
+                </div>
+              )}
+            </Panel>
+
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
-              <button className="btn btn-lg" type="submit" disabled={saving} style={{ background: 'var(--success)', color: 'white', border: 'none' }}>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>
                 {saving ? 'Saving...' : 'Complete Salaried Customer Profile →'}
               </button>
             </div>
           </form>
         )}
       </div>
+      </div>
 
+      {/* OTP Modal */}
       {otpModal.isOpen && (
         <div className="modal-overlay">
-          <div className="modal-box" style={{ maxWidth: 400 }}>
-            <h3 style={{ margin: 0, marginBottom: 8, fontSize: 18, color: 'var(--text-primary)' }}>Enter OTP</h3>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, marginBottom: 16 }}>Sent to {otpModal.mobile}</p>
-            <input
-              type="text"
-              maxLength={6}
-              value={otpModal.otpInput}
-              onChange={e => setOtpModal(prev => ({ ...prev, otpInput: e.target.value.replace(/\D/g, '') }))}
-              className="form-control"
-              placeholder="123456"
-              autoFocus
-              style={{ letterSpacing: '8px', fontSize: 20, textAlign: 'center', fontWeight: 700, marginBottom: 16 }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={handleResendOtp} disabled={otpModal.loading}>
-                Resend OTP
-              </button>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-secondary" onClick={() => setOtpModal(prev => ({ ...prev, isOpen: false }))} disabled={otpModal.loading}>Cancel</button>
-                <button className="btn" onClick={handleVerifyOtpSubmit} disabled={otpModal.loading} style={{ background: 'var(--success)', color: 'white', border: 'none' }}>
-                  {otpModal.loading ? 'Verifying...' : 'Verify'}
+          <div className="modal-box hide-scrollbar" style={{ width: 'min(480px, calc(100vw - 32px))', maxWidth: 480, padding: '32px 40px', maxHeight: '90vh', overflowY: 'auto' }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+               <h3 style={{ fontSize: 20, fontWeight: 700 }}>Verify Mobile OTP</h3>
+             </div>
+             <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>
+               We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
+             </p>
+             <FormField label="Enter 6-Digit OTP" name="otpInput">
+               <input
+                 autoFocus
+                 type="text"
+                 pattern="\d*"
+                 maxLength={6}
+                 className="form-control"
+                 placeholder="000000"
+                 value={otpModal.otpInput}
+                 onChange={e => setOtpModal(prev => ({ ...prev, otpInput: e.target.value.replace(/\D/g, '') }))}
+                 style={{ fontSize: 24, letterSpacing: '0.5em', textAlign: 'center', padding: '16px 0', fontFamily: 'monospace' }}
+               />
+             </FormField>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={handleResendOtp} disabled={otpModal.loading}>
+                   Resend OTP
                 </button>
-              </div>
-            </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setOtpModal(prev => ({ ...prev, isOpen: false }))} disabled={otpModal.loading}>
+                     Cancel
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={handleVerifyOtpSubmit} disabled={otpModal.loading || otpModal.otpInput.length < 6}>
+                     {otpModal.loading ? 'Verifying...' : 'Verify →'}
+                  </button>
+                </div>
+             </div>
           </div>
         </div>
       )}

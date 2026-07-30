@@ -39,7 +39,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon = TrendingUp, color = 'va
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
             {title}
           </p>
           <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', lineHeight: 1.15, margin: '4px 0 0 0' }}>

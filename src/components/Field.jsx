@@ -6,7 +6,7 @@ const Field = ({ name, icon, placeholder, type = 'text', error, inputStyle = {},
       <svg>
         <rect />
       </svg>
-      <span className="material-symbols-outlined text-[17px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0 relative z-10">{icon}</span>
+      <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">{icon}</span>
       <input
         name={name}
         value={value}
@@ -14,7 +14,7 @@ const Field = ({ name, icon, placeholder, type = 'text', error, inputStyle = {},
         onBlur={onBlur}
         placeholder={placeholder}
         type={type}
-        className="flex-1 bg-transparent border-none outline-none text-[0.88rem] text-[#0a1628] dark:text-[#e6edf7] placeholder-[#4a5d73] dark:placeholder-[#94a3b8] font-medium relative z-10 h-full"
+        className="flex-1 bg-transparent border-none outline-none text-[0.88rem] text-[#0a1628] dark:text-[#e6edf7] placeholder-[#0a1628] dark:placeholder-[#e6edf7] font-medium relative z-10 h-full"
         style={inputStyle}
       />
     </div>

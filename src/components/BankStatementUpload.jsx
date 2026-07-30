@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, UploadCloud, Briefcase, Plus, X, Download } from 'lucide-react';
-import PullingIndicator from './ui/PullingIndicator';
+import { AlertCircle, UploadCloud, Plus, X, Download, Trash2 } from 'lucide-react';
+import PullStatusTracker from './ui/PullStatusTracker';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
+import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
@@ -14,18 +15,75 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
-    const [status, setStatus] = useState(existingStatus?.status || 'INITIATED');
-    const [reportId, setReportId] = useState(existingStatus?.report_id || null);
+    // Live server-pushed status for this case (see hooks/useCasePullStatus).
+    // The server now owns the whole "analysing → generating report files →
+    // ready" loop, including the retry that used to run here as AWAITING_LINKS,
+    // so it keeps advancing while the user is elsewhere in the wizard.
+    const { snapshot, refresh } = useCasePullStatus(caseId);
+    const livePull = selectPullForApplicant(snapshot, 'bank', applicantId);
+
+    // Local mirror, authoritative only until the first snapshot arrives.
+    const [localStatus, setLocalStatus] = useState(existingStatus?.status || 'INITIATED');
+    const [localReportId, setLocalReportId] = useState(existingStatus?.report_id || null);
     // documentIds: our internal stored file IDs — used for secure serving via /api/documents/:id
-    const [documentIds, setDocumentIds] = useState({
+    const [localDocumentIds, setLocalDocumentIds] = useState({
         excel: existingStatus?.bank_excel_document_id || null,
         json: existingStatus?.bank_json_document_id || null,
     });
     // sourceUrls: vendor URLs kept as audit fallback only for pre-existing records
-    const [sourceUrls, setSourceUrls] = useState({
+    const [localSourceUrls, setLocalSourceUrls] = useState({
         excel: existingStatus?.report_excel_url || null,
         json: existingStatus?.report_json_url || null,
     });
+
+    const status = livePull?.status || localStatus;
+    const reportId = livePull?.report_id || localReportId;
+    const documentIds = livePull
+        ? { excel: livePull.bank_excel_document_id || null, json: livePull.bank_json_document_id || null }
+        : localDocumentIds;
+    const sourceUrls = livePull
+        ? { excel: livePull.report_excel_url || null, json: livePull.report_json_url || null }
+        : localSourceUrls;
+    const phase = livePull?.phase
+        || (localStatus === 'COMPLETED' ? 'COMPLETED'
+            : localStatus === 'FAILED' ? 'FAILED'
+                : ['ANALYZING', 'PRE_ANALYZING'].includes(localStatus) ? 'PROCESSING' : 'NOT_STARTED');
+    const phaseLabel = livePull?.label || '';
+    const progress = livePull?.progress ?? 0;
+
+    // existingStatus can legitimately arrive/update after this component's
+    // first render (derived from the parent case's own async load) —
+    // useState's initial value only applies once, so a late-arriving prop
+    // would otherwise leave this stuck showing "not started" until a full page
+    // reload re-mounts everything fresh. Only adopt it while nothing has
+    // happened client-side yet, so it can never clobber in-progress local
+    // state with a stale snapshot.
+    useEffect(() => {
+        if (!existingStatus || localReportId) return;
+        setLocalStatus(existingStatus.status || 'INITIATED');
+        setLocalReportId(existingStatus.report_id || null);
+        setLocalDocumentIds({
+            excel: existingStatus.bank_excel_document_id || null,
+            json: existingStatus.bank_json_document_id || null,
+        });
+        setLocalSourceUrls({
+            excel: existingStatus.report_excel_url || null,
+            json: existingStatus.report_json_url || null,
+        });
+    }, [existingStatus, localReportId]);
+
+    usePhaseTransition(livePull ? phase : null, {
+        COMPLETED: () => toast.success('Bank analysis completed.'),
+        FAILED: () => toast.error('Bank statement analysis failed at provider'),
+    });
+
+    const notifiedRef = React.useRef(false);
+    useEffect(() => {
+        if (phase !== 'COMPLETED' || notifiedRef.current) return;
+        notifiedRef.current = true;
+        onComplete && onComplete('COMPLETED', documentIds);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase]);
 
     // Store physical file data
     const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '' }]);
@@ -33,7 +91,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     // UI state
     const [isUploadOpen, setIsUploadOpen] = useState(false);
-    const [downloadAttempted, setDownloadAttempted] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const handleFileChange = (index, field, value) => {
         const newFiles = [...files];
@@ -78,9 +136,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             const data = res.data;
 
             toast.success("Bank Analysis Successfully Scheduled");
-            setReportId(data.bankRequest.report_id);
-            setStatus('ANALYZING');
+            setLocalReportId(data.bankRequest.report_id);
+            setLocalStatus('ANALYZING');
             setIsUploadOpen(false); // Close the inline drop-down securely
+            // Collapse the wait for the next server tick.
+            refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || error.message);
         } finally {
@@ -88,69 +148,46 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         }
     };
 
-    const pollStatus = async () => {
+    const handleDelete = async () => {
+        if (!reportId) return;
+        if (!window.confirm('Delete this bank statement analysis? You can upload a fresh one afterwards.')) return;
+        setDeleting(true);
         try {
-            const res = await api.post(`/external/bank/sync`, { report_id: reportId });
-            const data = res.data;
-
-            setStatus(data.status);
-            if (data.status === 'COMPLETED') {
-                toast.success("Bank Analysis processing completed.");
-                await fetchDownloads();
-            } else if (data.status === 'FAILED') {
-                toast.error(`Analysis failed at provider: ${data.rawStatus || 'Unknown Error'}`);
-            }
-            // else still analyzing — the background poller below will check again automatically
+            await api.post('/external/bank/delete', { report_id: reportId });
+            toast.success('Bank statement deleted');
+            setLocalStatus('INITIATED');
+            setLocalReportId(null);
+            setLocalDocumentIds({ excel: null, json: null });
+            setLocalSourceUrls({ excel: null, json: null });
+            notifiedRef.current = false;
+            refresh();
         } catch (error) {
-            console.error("Sync error:", error.response?.data?.error || error.message);
+            toast.error(error.response?.data?.error || 'Failed to delete bank statement');
+        } finally {
+            setDeleting(false);
         }
     };
 
-    // Auto-poll while analyzing — no manual "Check Status" click needed.
-    useEffect(() => {
-        if (status !== 'ANALYZING') return;
-        const interval = setInterval(pollStatus, 15000);
-        return () => clearInterval(interval);
-    }, [status, reportId]);
-
-    // Recover resumed cases that were left "COMPLETED" without secure links
-    // (from before auto-retry existed) — fetch them automatically instead of
-    // requiring a manual click.
-    useEffect(() => {
-        if (status === 'COMPLETED' && reportId && !documentIds.excel && !documentIds.json && !sourceUrls.excel && !sourceUrls.json) {
-            fetchDownloads();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Auto-retry fetching the secure report links — no manual "Fetch Reports"
-    // click needed. The provider can take a few minutes to finish generating
-    // the report after analysis completes, so this keeps polling silently.
-    useEffect(() => {
-        if (status !== 'AWAITING_LINKS') return;
-        const interval = setInterval(fetchDownloads, 15000);
-        return () => clearInterval(interval);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, reportId]);
-
+    // Manual escape hatch only. The provider can take minutes to finish
+    // generating the report files after analysis itself completes; the server's
+    // per-case supervisor now retries that automatically (and keeps retrying
+    // while the user is on a different step), so this is no longer on a timer
+    // here — it just lets someone force an immediate attempt.
     const fetchDownloads = async () => {
-        setStatus((s) => (s === 'AWAITING_LINKS' ? s : 'LOADING_LINKS'));
         try {
             const res = await api.post(`/external/bank/download`, { report_id: reportId });
             const data = res.data;
 
             if (res.status === 202 || data.success === false) {
-                setStatus('AWAITING_LINKS'); // keeps auto-retrying every 15s, no manual click needed
+                // Still generating — the server keeps retrying; nothing to do.
                 return;
             }
 
-            // Prefer internal document IDs for serving — fall back to source URLs for old records
-            setDocumentIds(data.documentIds || { excel: null, json: null });
-            setSourceUrls(data.sourceUrls || { excel: null, json: null });
-            setStatus('COMPLETED');
-            onComplete && onComplete('COMPLETED', data.documentIds);
+            setLocalDocumentIds(data.documentIds || { excel: null, json: null });
+            setLocalSourceUrls(data.sourceUrls || { excel: null, json: null });
+            setLocalStatus('COMPLETED');
+            refresh();
         } catch (error) {
-            setStatus('FAILED_DOWNLOAD');
             toast.error(error.response?.data?.error || error.message);
         }
     };
@@ -173,16 +210,8 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 {/* Right: Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
 
-                    {/* Status Pills */}
-                    {(status === 'COMPLETED' || status === 'FAILED_DOWNLOAD') ? (
-                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CheckCircle2 size={14} /> Uploaded
-                        </span>
-                    ) : (
-                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
-                            {['ANALYZING', 'LOADING_LINKS', 'AWAITING_LINKS'].includes(status) ? 'Processing' : 'Pending'}
-                        </span>
-                    )}
+                    {/* Live status — pushed from the server, animated while work is in flight */}
+                    <PullStatusTracker phase={phase} label={phaseLabel} progress={progress} />
 
                     {/* Action Buttons */}
                     {status === 'COMPLETED' ? (
@@ -204,18 +233,19 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                     </a>
                                 )
                             )}
+                            {/* The provider is still generating the files. The server
+                                retries on its own — this only forces an early attempt. */}
                             {(!documentIds.excel && !documentIds.json && !sourceUrls.excel && !sourceUrls.json) && (
-                                <PullingIndicator label="Retrieving your reports…" />
+                                <button type="button" className="btn btn-ghost btn-sm" onClick={fetchDownloads}>
+                                    Check now
+                                </button>
                             )}
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
-                                Replace
+                            <button type="button" className="btn btn-danger btn-sm" onClick={handleDelete} disabled={deleting}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete'}
                             </button>
                         </div>
-                    ) : status === 'FAILED_DOWNLOAD' ? (
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => { setDownloadAttempted(false); fetchDownloads(); }} disabled={loading}>
-                            {loading ? '...' : 'Retry Download'}
-                        </button>
-                    ) : status === 'ANALYZING' ? null : (
+                    ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? null : (
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
                             Upload PDF
                         </button>
@@ -259,7 +289,6 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                         placeholder="PDF Password (Optional - if your bank locks the statement)"
                                         value={file.password}
                                         onChange={e => handleFileChange(index, 'password', e.target.value)}
-                                        style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', borderLeft: '3px solid var(--warning)' }}
                                     />
                                 </div>
                                 {files.length > 1 && (

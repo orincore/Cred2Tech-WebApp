@@ -1,5 +1,12 @@
 import React from 'react';
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw, Clock } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, RefreshCw, Clock, AlertTriangle, FileDown } from 'lucide-react';
+
+const getScoreColor = (score) => {
+  if (!score) return 'var(--text-tertiary)';
+  if (score >= 750) return 'var(--success)';
+  if (score >= 700) return 'var(--warning)';
+  return 'var(--error)';
+};
 
 const DataPullProgress = ({
   label,
@@ -9,7 +16,10 @@ const DataPullProgress = ({
   loading = false,
   error = null,
   cost = 0,
-  description = null
+  description = null,
+  score = null,
+  onDownload = null,
+  downloading = false
 }) => {
   const getStatusConfig = () => {
     switch (status) {
@@ -36,14 +46,14 @@ const DataPullProgress = ({
       padding: '12px 16px',
       background: 'var(--bg-surface)',
       border: '1px solid var(--border)',
-      borderRadius: 12,
+      borderRadius: 0,
       marginBottom: 12
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
           width: 36,
           height: 36,
-          borderRadius: 10,
+          borderRadius: 0,
           background: config.bg,
           display: 'flex',
           alignItems: 'center',
@@ -58,7 +68,7 @@ const DataPullProgress = ({
               fontSize: 11,
               fontWeight: 600,
               padding: '2px 8px',
-              borderRadius: 20,
+              borderRadius: 0,
               background: config.bg,
               color: config.color,
               textTransform: 'uppercase'
@@ -67,20 +77,39 @@ const DataPullProgress = ({
             </span>
           </div>
           {description && <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{description}</p>}
-          {error && <p style={{ fontSize: 11, color: 'var(--error)', marginTop: 2, fontWeight: 500 }}>⚠️ {error}</p>}
+          {error && <p style={{ fontSize: 11, color: 'var(--error)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12} /> {error}</p>}
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {status === 'COMPLETE' ? (
-          <CheckCircle2 size={20} color="var(--success)" />
+          <>
+            {onDownload && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={onDownload}
+                disabled={downloading}
+                title="Download the full bureau report for this applicant"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <FileDown size={13} /> {downloading ? 'Downloading…' : 'Download Report'}
+              </button>
+            )}
+            {score != null && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: getScoreColor(score) }}>{score}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Bureau Score</div>
+              </div>
+            )}
+            <CheckCircle2 size={20} color="var(--success)" />
+          </>
         ) : (
           <button
             type="button"
-            className={`btn btn-sm ${status === 'FAILED' ? 'btn-secondary' : ''}`}
+            className={`btn btn-sm ${status === 'FAILED' ? 'btn-secondary' : 'btn-primary'}`}
             disabled={loading || status === 'PROCESSING'}
             onClick={status === 'FAILED' ? onRetry : onStart}
-            style={status !== 'FAILED' ? { background: 'var(--success)', color: 'white', border: 'none' } : {}}
           >
             {loading ? (
               <Loader2 size={14} className="animate-spin" />

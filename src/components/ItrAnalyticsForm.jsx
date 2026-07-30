@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
-    CheckCircle2, AlertCircle,
-    FileText, X, Download
+    AlertCircle,
+    FileText, Download
 } from 'lucide-react';
 import FormField from './ui/FormField';
-import PullingIndicator from './ui/PullingIndicator';
+import PullStatusTracker from './ui/PullStatusTracker';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
+import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
 const ItrAnalyticsForm = ({
     caseId,
@@ -30,12 +31,62 @@ const ItrAnalyticsForm = ({
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
-    const [status, setStatus] = useState(existingRecord?.status || 'INITIATED');
-    const [referenceId, setReferenceId] = useState(existingRecord?.reference_id || null);
-    // documentId is the internal stored file ID — use this for secure serving
-    const [documentId, setDocumentId] = useState(existingRecord?.itr_document_id || null);
-    // excelUrl kept only for audit/fallback display, NOT used for download
-    const [excelUrl, setExcelUrl] = useState(existingRecord?.excel_url || null);
+    // Live server-pushed status for this case (see hooks/useCasePullStatus).
+    // One socket room per case is shared by every mounted pull component, so
+    // this costs the same whether there is one applicant or ten.
+    const { snapshot, refresh } = useCasePullStatus(caseId);
+    const livePull = selectPullForApplicant(snapshot, 'itr', applicantId);
+
+    // Local mirror, used only until the first snapshot arrives (initial paint,
+    // or if websockets are blocked). Once `livePull` exists the server is
+    // authoritative — which is what makes returning to this step show the true
+    // current state with no refresh, even if the pull finished while the user
+    // was three steps away.
+    const [localStatus, setLocalStatus] = useState(existingRecord?.status || 'INITIATED');
+    const [localReferenceId, setLocalReferenceId] = useState(existingRecord?.reference_id || null);
+    const [localDocumentId, setLocalDocumentId] = useState(existingRecord?.itr_document_id || null);
+    const [localExcelUrl, setLocalExcelUrl] = useState(existingRecord?.excel_url || null);
+
+    const status = livePull?.status || localStatus;
+    const referenceId = livePull?.reference_id || localReferenceId;
+    const documentId = livePull?.itr_document_id || localDocumentId;
+    const excelUrl = livePull?.excel_url || localExcelUrl;
+    const phase = livePull?.phase
+        || (localStatus === 'COMPLETED' ? 'COMPLETED'
+            : localStatus === 'FAILED' ? 'FAILED'
+                : localStatus === 'PROCESSING' ? 'PROCESSING' : 'NOT_STARTED');
+    const phaseLabel = livePull?.label || '';
+    const progress = livePull?.progress ?? 0;
+
+    // existingRecord can legitimately arrive/update after this component's
+    // first render (it's derived from the parent case's own async load) —
+    // useState's initial value only ever applies once, so a late-arriving
+    // prop would otherwise leave this stuck showing "not started" until a
+    // full page reload re-mounts everything fresh. Only adopt it while
+    // nothing has happened client-side yet, so it can never clobber
+    // in-progress local state with a stale snapshot.
+    useEffect(() => {
+        if (!existingRecord || localReferenceId) return;
+        setLocalStatus(existingRecord.status || 'INITIATED');
+        setLocalReferenceId(existingRecord.reference_id || null);
+        setLocalDocumentId(existingRecord.itr_document_id || null);
+        setLocalExcelUrl(existingRecord.excel_url || null);
+    }, [existingRecord, localReferenceId]);
+
+    usePhaseTransition(livePull ? phase : null, {
+        COMPLETED: () => toast.success('ITR analytics ready!'),
+        FAILED: () => toast.error('ITR analytics processing failed at provider'),
+    });
+
+    // Hand the finished payload up once it exists — also covers the case where
+    // it completed before this component ever mounted.
+    const notifiedRef = React.useRef(false);
+    useEffect(() => {
+        if (phase !== 'COMPLETED' || notifiedRef.current) return;
+        notifiedRef.current = true;
+        onComplete && onComplete({ documentId, excel_url: excelUrl });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase]);
 
     const [pan, setPan] = useState(prefillPan || '');
     const [password, setPassword] = useState('');
@@ -62,36 +113,17 @@ const ItrAnalyticsForm = ({
             const data = res.data;
 
             toast.success('ITR analytics request submitted successfully');
-            setReferenceId(data.referenceId);
-            setStatus('PROCESSING');
+            setLocalReferenceId(data.referenceId);
+            setLocalStatus('PROCESSING');
             setIsOpen(false);
             setPassword(''); // Clear sensitive field immediately
+            // Collapse the wait for the next server tick so the row flips to
+            // "Processing" immediately.
+            refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || error.message);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleSync = async () => {
-        if (!referenceId) return;
-        try {
-            const res = await api.post('/external/itr/sync', { reference_id: referenceId });
-            const data = res.data;
-
-            if (data.status === 'COMPLETED') {
-                setStatus('COMPLETED');
-                setDocumentId(data.documentId || null);
-                setExcelUrl(data.excel_url || null);  // Audit reference only
-                toast.success('ITR analytics ready!');
-                onComplete && onComplete({ documentId: data.documentId, excel_url: data.excel_url, analytics_payload: data.analytics_payload });
-            } else if (data.status === 'FAILED') {
-                setStatus('FAILED');
-                toast.error('ITR analytics processing failed at provider');
-            }
-            // else still processing — the background poller below will check again automatically
-        } catch (error) {
-            console.error('[ITR auto-sync]', error.response?.data?.error || error.message);
         }
     };
 
@@ -101,21 +133,15 @@ const ItrAnalyticsForm = ({
         setCancelling(true);
         try {
             await api.post('/external/itr/cancel', { reference_id: referenceId });
-            setStatus('FAILED');
+            setLocalStatus('FAILED');
             toast.success('ITR request cancelled');
+            refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || 'Failed to cancel ITR request');
         } finally {
             setCancelling(false);
         }
     };
-
-    // Auto-poll while processing — no manual "Check Status" click needed.
-    useEffect(() => {
-        if (status !== 'PROCESSING') return;
-        const interval = setInterval(handleSync, 15000);
-        return () => clearInterval(interval);
-    }, [status, referenceId]);
 
     return (
         <div style={{
@@ -142,24 +168,8 @@ const ItrAnalyticsForm = ({
 
                 {/* Right: Pills + Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
-                    {/* Status Pill */}
-                    {status === 'COMPLETED' ? (
-                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CheckCircle2 size={13} /> Done
-                        </span>
-                    ) : status === 'PROCESSING' ? (
-                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
-                            Processing
-                        </span>
-                    ) : status === 'FAILED' ? (
-                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600 }}>
-                            Failed
-                        </span>
-                    ) : (
-                        <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, border: '1px solid var(--warning)' }}>
-                            Pending
-                        </span>
-                    )}
+                    {/* Live status — pushed from the server, animated while work is in flight */}
+                    <PullStatusTracker phase={phase} label={phaseLabel} progress={progress} />
 
                     {/* Action Button */}
                     {status === 'PROCESSING' ? (
@@ -224,7 +234,7 @@ const ItrAnalyticsForm = ({
                                 value={pan}
                                 onChange={e => setPan(e.target.value.toUpperCase())}
                                 placeholder="ABCDE1234F"
-                                style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', textTransform: 'uppercase' }}
+                                style={{ textTransform: 'uppercase' }}
                             />
                         </FormField>
                         <FormField label="ITR Portal Password" required>
@@ -234,7 +244,6 @@ const ItrAnalyticsForm = ({
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 placeholder="Enter portal password"
-                                style={{ backgroundColor: 'var(--bg-elevated)', border: 'none', borderLeft: '3px solid var(--primary)' }}
                             />
                         </FormField>
                     </div>

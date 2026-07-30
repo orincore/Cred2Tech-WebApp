@@ -63,14 +63,14 @@ const LocationStateDropdown = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="relative">
-        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+        <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           State <span className="text-indigo-600">*</span>
         </label>
         <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${stateError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
           <svg>
             <rect />
           </svg>
-          <span className="material-symbols-outlined text-[17px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0 relative z-10">map</span>
+          <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">map</span>
           <select
             name="state"
             value={state}
@@ -81,7 +81,7 @@ const LocationStateDropdown = ({
             <option value="">Select State…</option>
             {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <span className="material-symbols-outlined text-[18px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0">arrow_drop_down</span>
+          <span className="material-symbols-outlined text-[18px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0">arrow_drop_down</span>
         </div>
         {stateError && (
           <div className="flex items-center gap-1.5 mt-1.5 text-xs text-red-600">
@@ -91,14 +91,14 @@ const LocationStateDropdown = ({
         )}
       </div>
       <div className="relative">
-        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+        <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           City <span className="text-indigo-600">*</span>
         </label>
         <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${cityError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
           <svg>
             <rect />
           </svg>
-          <span className="material-symbols-outlined text-[17px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0 relative z-10">location_city</span>
+          <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">location_city</span>
           <input
             type="text"
             name="city"
@@ -117,14 +117,14 @@ const LocationStateDropdown = ({
         )}
       </div>
       <div className="relative">
-        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+        <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           Pincode <span className="text-indigo-600">*</span>
         </label>
         <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${pincodeError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
           <svg>
             <rect />
           </svg>
-          <span className="material-symbols-outlined text-[17px] text-[#4a5d73] dark:text-[#94a3b8] flex-shrink-0 relative z-10">location_on</span>
+          <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">location_on</span>
           <input
             type="text"
             name="pincode"

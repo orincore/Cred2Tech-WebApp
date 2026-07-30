@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { toTitleCase, formatStatusLabel } from '../utils/helpers';
+import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -369,7 +369,7 @@ export default function CaseDetailPage() {
             <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate(isMsme ? '/msme/cases' : '/customers')}>{isMsme ? 'My Cases' : 'All Cases'}</span>
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-            CASE-{caseData.id} — {toTitleCase(caseData.customer?.proprietor_name || caseData.customer_name || caseData.customer?.business_name)}
+            CASE-{caseData.id} — {toTitleCase(resolveEntityName(caseData.customer, isUsableEntityName(caseData.customer_name) ? caseData.customer_name : ''))}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
             {caseData.lender_name || 'Unassigned'} · {caseData.product_type || 'N/A'} · {formatCurrency(caseData.loan_amount)}
