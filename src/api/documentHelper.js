@@ -94,3 +94,12 @@ export async function uploadDocument(file, caseId, docType, options = {}) {
     });
     return response.data;
 }
+
+/**
+ * Soft-delete a stored document (server flips status to DELETED, so it drops
+ * out of listDocuments without destroying the row or its audit trail).
+ */
+export async function deleteDocument(documentId) {
+    const response = await api.delete(`/documents/${documentId}`);
+    return response.data;
+}

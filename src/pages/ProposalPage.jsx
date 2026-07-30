@@ -7,10 +7,10 @@ import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, UploadCloud,
   X, Mail, Phone, IndianRupee, Users, BarChart3, MapPin, FolderOpen, MessageSquare,
-  Contact, Landmark, Info, Home, Briefcase, Building2, FileText, ScrollText
+  Contact, Landmark, Info, Home, Briefcase, Building2, FileText, ScrollText, Trash2
 } from 'lucide-react';
 import { getTenantLenders, sendCaseToOtherLender } from '../api/tenantLenderService';
-import { uploadDocument } from '../api/documentHelper';
+import { uploadDocument, deleteDocument } from '../api/documentHelper';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtINR = (n, fallback = '—') => {
@@ -942,7 +942,27 @@ function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded
 function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted, caseId, docType, applicantId, onUploaded }) {
   const isAttached = doc?.is_attached;
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const inputRef = React.useRef(null);
+
+  const handleRemove = async () => {
+    if (!doc?.id) return;
+    const name = doc.original_file_name || label;
+    if (!window.confirm(`Remove "${name}"? You can upload a replacement afterwards.`)) return;
+    setRemoving(true);
+    try {
+      await deleteDocument(doc.id);
+      toast.success('Document removed');
+      // Re-list from the server rather than mutating locally: the doc is
+      // soft-deleted, so the refreshed list simply no longer contains it, and
+      // the category's required/pending state recomputes on its own.
+      onUploaded?.();
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to remove document');
+    } finally {
+      setRemoving(false);
+    }
+  };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -1006,7 +1026,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
             {!isSubmitted && (
               <button
                 onClick={() => inputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || removing}
                 style={{
                   padding: '5px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                   border: '1px solid var(--border)', borderRadius: 0,
@@ -1014,6 +1034,21 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
                 }}
                 title="Replace file">
                 ↑
+              </button>
+            )}
+            {!isSubmitted && (
+              <button
+                onClick={handleRemove}
+                disabled={uploading || removing}
+                style={{
+                  padding: '5px 8px', fontSize: 11, fontWeight: 600,
+                  cursor: uploading || removing ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--error)', borderRadius: 0,
+                  background: 'var(--bg-surface)', color: 'var(--error)',
+                  display: 'flex', alignItems: 'center'
+                }}
+                title="Remove this file">
+                {removing ? '…' : <Trash2 size={12} />}
               </button>
             )}
           </div>
@@ -1070,11 +1105,27 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const emptyRef = () => ({ name: '', mobile: '', relationship: '', address: '' });
   const [references, setReferences] = useState([emptyRef(), emptyRef()]);
 
-  const load = useCallback(async () => {
+  /**
+   * @param {{silent?: boolean}} opts - `silent` refreshes server data in place:
+   *   it skips the page-level `loading` flag and leaves the user-editable form
+   *   state alone. Used after document upload/replace/delete/toggle, where the
+   *   only thing that changed is `documents_by_category`.
+   *
+   *   Without it, those actions called the full loader, which did two damaging
+   *   things: `setLoading(true)` hit the `if (loading) return <spinner>` below
+   *   and unmounted the entire page — losing scroll position and every piece of
+   *   local state in the KYC section (draft custom categories, the
+   *   add-category input) — and the form/address/reference setters below
+   *   overwrote any edits the user had typed but not yet saved.
+   */
+  const load = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await caseService.getProposal(caseId, proposalId);
       setData(res);
+      // A silent refresh stops here: `data` (and therefore the document lists)
+      // is current, and nothing the user is editing gets touched.
+      if (silent) return;
       const p = res.proposal;
       setForm({
         loan_purpose: p.loan_purpose || '',
@@ -1102,11 +1153,15 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     } catch (e) {
       toast.error('Failed to load proposal');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [caseId, proposalId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Refresh only what a document action changes. Stable identity so it doesn't
+  // retrigger effects or re-render the KYC tree unnecessarily.
+  const refreshDocuments = useCallback(() => load({ silent: true }), [load]);
 
   const handleSave = async (silent = false) => {
     try {
@@ -1154,7 +1209,9 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     try {
       if (doc.is_attached) await caseService.detachProposalDoc(caseId, proposalId, doc.id);
       else await caseService.attachProposalDocs(caseId, proposalId, [doc.id]);
-      await load();
+      // Attach/detach only flips is_attached — refresh in place rather than
+      // reloading the page and discarding unsaved form edits.
+      await refreshDocuments();
     } catch { toast.error('Failed to update document'); }
   };
 
@@ -1310,7 +1367,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
           onToggle={isSubmitted ? null : handleToggleDoc}
           isSubmitted={isSubmitted}
           caseId={caseId}
-          onUploaded={load}
+          onUploaded={refreshDocuments}
           isSalaried={isSalaried}
         />
       </Section>
