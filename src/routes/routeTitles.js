@@ -30,7 +30,6 @@ export const ROUTE_TITLES = [
   { path: '/msme/onboarding', title: 'Loan Application' },
   { path: '/msme/cases/:caseId', title: 'Case Status' },
   { path: '/msme/cases', title: 'My Cases' },
-  { path: '/msme/documents', title: 'My Documents' },
   { path: '/msme/profile', title: 'My Profile' },
 
   // DSA / Admin shell

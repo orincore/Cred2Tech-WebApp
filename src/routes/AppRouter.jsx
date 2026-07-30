@@ -50,7 +50,6 @@ const MsmeLoginPage = lazy(() => import('../pages/msme/MsmeLoginPage'));
 const MsmeDashboardPage = lazy(() => import('../pages/msme/MsmeDashboardPage'));
 const MsmeCasesPage = lazy(() => import('../pages/msme/MsmeCasesPage'));
 const MsmeCaseDetailPage = lazy(() => import('../pages/msme/MsmeCaseDetailPage'));
-const MsmeDocumentsPage = lazy(() => import('../pages/msme/MsmeDocumentsPage'));
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
 const PageLoader = () => (
@@ -84,7 +83,6 @@ const AppRouter = () => (
               } />
               <Route path="cases" element={<MsmeCasesPage />} />
               <Route path="cases/:caseId" element={<MsmeCaseDetailPage />} />
-              <Route path="documents" element={<MsmeDocumentsPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>

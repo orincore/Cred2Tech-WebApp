@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
-  Sparkles, FolderOpen, BarChart3, Star, FileText, UserCircle,
+  Sparkles, FolderOpen, BarChart3, Star, UserCircle,
   ShieldCheck, Sun, CloudSun, Moon, ArrowRight, Archive,
 } from 'lucide-react';
 import { msmeApi } from '../../api/msmeService';
@@ -165,7 +165,6 @@ const MsmeDashboardPage = () => {
 
   const quickActions = [
     { label: 'My Cases', icon: FolderOpen, path: '/msme/cases' },
-    { label: 'My Documents', icon: FileText, path: '/msme/documents' },
     { label: 'My Profile', icon: UserCircle, path: '/msme/profile' },
   ];
 

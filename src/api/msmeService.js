@@ -4,6 +4,13 @@ import api from './axiosInstance';
 export const msmeAuthApi = {
   sendOtp: (mobile) => api.post('/msme/auth/send-otp', { mobile }),
   verifyOtp: (mobile, otp) => api.post('/msme/auth/verify-otp', { mobile, otp }),
+  // Cross-app SSO bootstrap: silently logs the user in if they were recently
+  // authenticated on scheme.cred2tech.com (proven by the shared c2t_sso
+  // cookie). withCredentials is required here specifically — it's the one
+  // call in this app that needs the browser to actually send a cross-site
+  // cookie; every other call is pure bearer-token and doesn't need it.
+  ssoCheck: () => api.get('/msme/auth/sso-check', { withCredentials: true }),
+  ssoLogout: () => api.post('/msme/auth/sso-logout', {}, { withCredentials: true }),
 };
 
 // MSME Direct Portal — authenticated (MSME_CUSTOMER token)

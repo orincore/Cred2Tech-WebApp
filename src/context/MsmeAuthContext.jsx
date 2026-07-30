@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { msmeApi } from '../api/msmeService';
+import { msmeApi, msmeAuthApi } from '../api/msmeService';
 
 const MsmeAuthContext = createContext(null);
 
@@ -12,10 +12,17 @@ export const MsmeAuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const login = (userData, token) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('roleName', 'MSME_CUSTOMER');
+    setUser(userData);
+  };
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('roleName');
     setUser(null);
+    msmeAuthApi.ssoLogout().catch(() => {}); // best-effort — don't block local logout on it
     navigate('/msme/login');
   }, [navigate]);
 
@@ -32,18 +39,23 @@ export const MsmeAuthProvider = ({ children }) => {
           console.error('Failed to restore MSME session:', err);
           logout();
         }
+      } else {
+        // No local session — check whether the user was recently
+        // authenticated on scheme.cred2tech.com and can be silently signed
+        // in here too via the shared c2t_sso cookie. A 401 (no cookie, or
+        // not cross-logged-in) is the normal/expected case, not an error.
+        try {
+          const res = await msmeAuthApi.ssoCheck();
+          login(res.data.user, res.data.token);
+        } catch (err) {
+          // Not cross-logged-in — fall through to the normal login screen.
+        }
       }
       setLoading(false);
     };
     initAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const login = (userData, token) => {
-    localStorage.setItem('token', token);
-    localStorage.setItem('roleName', 'MSME_CUSTOMER');
-    setUser(userData);
-  };
 
   return (
     <MsmeAuthContext.Provider value={{ user, loading, login, logout }}>

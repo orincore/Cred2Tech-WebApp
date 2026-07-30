@@ -13,7 +13,6 @@ import {
   Network,
   Sparkles,
   FolderOpen,
-  FileText,
   UserCircle,
   Inbox,
   Wallet,
@@ -30,7 +29,6 @@ export const MSME_NAV_ITEMS = [
   { id: 'msme-dashboard', label: 'My Dashboard', path: '/msme/dashboard', icon: LayoutDashboard },
   { id: 'msme-onboarding', label: 'Check Eligibility', path: '/msme/onboarding', icon: Sparkles },
   { id: 'msme-cases', label: 'My Cases', path: '/msme/cases', icon: FolderOpen },
-  { id: 'msme-documents', label: 'My Documents', path: '/msme/documents', icon: FileText },
   { id: 'msme-profile', label: 'My Profile', path: '/msme/profile', icon: UserCircle },
 ];
 

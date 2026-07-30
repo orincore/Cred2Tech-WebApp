@@ -47,17 +47,32 @@ const MsmeCasesPage = () => {
     );
   }
 
+  // A customer can only have one case in flight at a time (mirrors the
+  // backend's dashboard.activeCase — the same non-CLOSED/REJECTED check that
+  // gates payment on the /msme/onboarding route). Once every case they've
+  // ever opened is CLOSED or REJECTED, offer a way back into a fresh
+  // application from this page — it routes through MsmePaymentGate, so a
+  // new case always requires paying the assessment fee again first.
+  const hasActiveCase = cases.some(c => c.stage !== 'CLOSED' && c.stage !== 'REJECTED');
+
   return (
     <div className="hide-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: isMobile ? 16 : 24 }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ marginBottom: 20 }}>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            MSME Portal
-          </p>
-          <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em' }}>My Cases</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {cases.length} case{cases.length === 1 ? '' : 's'} in total, across every application you've started with us.
-          </p>
+        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+              MSME Portal
+            </p>
+            <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em' }}>My Cases</h1>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
+              {cases.length} case{cases.length === 1 ? '' : 's'} in total, across every application you've started with us.
+            </p>
+          </div>
+          {cases.length > 0 && !hasActiveCase && (
+            <TravelingBorderButton size="sm" onClick={() => navigate('/msme/onboarding')} className="rounded-none">
+              Start New Case
+            </TravelingBorderButton>
+          )}
         </div>
 
         {cases.length === 0 ? (
