@@ -7,6 +7,15 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Required for the cross-app SSO cookie (c2t_sso): the frontend origin
+  // (app.cred2tech.com) and API origin (prod.api.cred2tech.com) are
+  // different subdomains, so without credentials the browser silently
+  // discards any Set-Cookie the backend sends back — including the one on
+  // a normal MSME OTP verify, which is what's supposed to bootstrap SSO on
+  // scheme.cred2tech.com in the first place. The backend's CORS already
+  // allows credentials from every allow-listed origin, so this is safe
+  // globally, not just on the sso-check/sso-logout calls.
+  withCredentials: true,
 });
 
 // Request interceptor: attach Bearer token automatically
