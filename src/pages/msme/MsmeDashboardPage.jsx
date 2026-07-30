@@ -10,7 +10,7 @@ import { msmeApi } from '../../api/msmeService';
 import { useMsmeAuth } from '../../context/MsmeAuthContext';
 import { loadRazorpay } from '../../utils/razorpay';
 import { toTitleCase } from '../../utils/helpers';
-import { getErrorMessage, formatCompactINR } from '../../utils/helpers';
+import { getErrorMessage, formatCompactINR, CASE_STAGE_LABELS } from '../../utils/helpers';
 import StatCard from '../../components/ui/StatCard';
 import SectionCard from '../../components/ui/SectionCard';
 import EmptyState from '../../components/ui/EmptyState';
@@ -308,19 +308,27 @@ const MsmeDashboardPage = () => {
                         <td style={{ fontWeight: 700 }}>CASE-{activeCase.id}</td>
                         <td>{activeCase.product_type || 'TBD'}</td>
                         <td>{activeCase.loan_amount ? formatCompactINR(activeCase.loan_amount) : '—'}</td>
-                        <td><Badge type="level" value={activeCase.stage} /></td>
+                        <td><Badge type="level" value={CASE_STAGE_LABELS[activeCase.stage] || activeCase.stage} /></td>
                         <td style={{ textAlign: 'right' }}>
-                          {!caseClosed ? (
+                          {caseClosed ? (
+                            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${activeCase.id}`)}>
+                              Track
+                            </button>
+                          ) : activeCase.assigned_dsa_user ? (
+                            // Once a DSA is allocated, the case has moved past the
+                            // self-service application wizard — the wizard's draft-
+                            // restore logic doesn't cover that stage and just errors.
+                            // Send them to the case status page instead.
+                            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${activeCase.id}`)}>
+                              View
+                            </button>
+                          ) : (
                             <button
                               className="btn btn-primary btn-sm"
                               style={{ borderRadius: 0 }}
                               onClick={() => navigate(`/msme/onboarding?caseId=${activeCase.id}`)}
                             >
                               Continue <ArrowRight size={13} />
-                            </button>
-                          ) : (
-                            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/msme/cases')}>
-                              Track
                             </button>
                           )}
                         </td>

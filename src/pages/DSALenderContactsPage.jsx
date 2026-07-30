@@ -17,20 +17,22 @@ import { useAuth } from '../context/AuthContext';
 
 const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 
+// Reuse the app's existing dark-mode-aware role tokens (index.css) instead of
+// flat hex, so these chips adapt automatically instead of staying light-only.
 const PT_COLORS = {
-  LAP: { bg: '#EBF8FF', text: '#2B6CB0', border: '#BEE3F8' },
-  HL:  { bg: '#F0FFF4', text: '#276749', border: '#9AE6B4' },
-  WC:  { bg: '#FAF5FF', text: '#553C9A', border: '#D6BCFA' },
-  TL:  { bg: '#FFFBEB', text: '#744210', border: '#F6E05E' },
-  BL:  { bg: '#FFF5F5', text: '#C53030', border: '#FEB2B2' },
-  ML:  { bg: '#EDF2F7', text: '#2D3748', border: '#CBD5E0' },
+  LAP: { bg: 'var(--role-dsa-bg)', text: 'var(--role-dsa)', border: 'var(--role-dsa)' },
+  HL:  { bg: 'var(--role-employee-bg)', text: 'var(--role-employee)', border: 'var(--role-employee)' },
+  WC:  { bg: 'var(--role-admin-bg)', text: 'var(--role-admin)', border: 'var(--role-admin)' },
+  TL:  { bg: 'var(--role-partner-bg)', text: 'var(--role-partner)', border: 'var(--role-partner)' },
+  BL:  { bg: 'var(--role-super-admin-bg)', text: 'var(--role-super-admin)', border: 'var(--role-super-admin)' },
+  ML:  { bg: 'var(--role-cred2tech-bg)', text: 'var(--role-cred2tech)', border: 'var(--role-cred2tech)' },
 };
 
 function ProductBadge({ type }) {
   const c = PT_COLORS[type] || PT_COLORS.ML;
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 10px', borderRadius: 12,
+      display: 'inline-block', padding: '2px 10px', borderRadius: 0,
       fontSize: 11, fontWeight: 700, letterSpacing: '0.5px',
       background: c.bg, color: c.text, border: `1px solid ${c.border}`,
     }}>{type}</span>
@@ -239,31 +241,35 @@ export default function DSALenderContactsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
-      <PageHeader
-        title="Lender Configuration"
-        subtitle="Manage lender contacts & payout slabs"
-      />
-
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16
-      }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Lender Configuration</h2>
+    <div className="dlc-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
+      <style>{`
+        .dlc-page .card, .dlc-page .btn, .dlc-page .badge, .dlc-page .form-control,
+        .dlc-page .modal-box, .dlc-page .table-wrapper, .dlc-page table { border-radius: 0 !important; }
+        @media (max-width: 768px) {
+          .dlc-page > div { padding: 80px 24px 24px !important; }
+        }
+      `}</style>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
+        <PageHeader
+          title="Lender Configuration"
+          subtitle="Manage lender contacts & payout slabs"
+        />
         {isAdmin && (
-          <button onClick={() => setLenderModal({ open: true })} style={{ ...btnPrimary, background: '#6366F1' }}>
+          <button onClick={() => setLenderModal({ open: true })} style={{ ...btnPrimary, marginTop: 4 }}>
             <Plus size={16} /> Add Lender
           </button>
         )}
       </div>
 
-      <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 24 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 24 }}>
         Contact details & commission rules per lender — configured per product
       </div>
 
       <div style={{
-        background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8,
+        background: 'var(--info-bg)', border: '1px solid var(--info)', borderRadius: 0,
         padding: '12px 16px', marginBottom: 24, display: 'flex', gap: 10,
-        fontSize: 13, color: '#4F46E5', lineHeight: 1.5
+        fontSize: 13, color: 'var(--info)', lineHeight: 1.5
       }}>
         <Lock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
         <div>
@@ -300,33 +306,34 @@ export default function DSALenderContactsPage() {
 
             return (
               <div key={lender.id} style={{
-                background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12,
-                boxShadow: isExpanded ? '0 10px 25px -5px rgba(0,0,0,0.05)' : '0 1px 2px 0 rgba(0,0,0,0.05)',
+                background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 0,
+                boxShadow: isExpanded ? 'var(--shadow)' : 'var(--shadow-sm)',
                 overflow: 'hidden', transition: 'all 0.2s'
               }}>
                 {/* Header */}
                 <div style={{
                   padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  cursor: 'pointer', background: isExpanded ? '#F9FAFB' : '#fff'
+                  flexWrap: 'wrap', gap: 12,
+                  cursor: 'pointer', background: isExpanded ? 'var(--bg-elevated)' : 'var(--bg-surface)'
                 }} onClick={() => toggleExpand(lender.id)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
                     <div style={{
-                      width: 40, height: 40, borderRadius: 8, background: '#1E3A8A', color: 'white',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16
+                      width: 40, height: 40, borderRadius: 0, background: 'var(--primary-dark)', color: 'white',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, flexShrink: 0
                     }}>
                       {lender.lender_name.substring(0, 2).toUpperCase()}
                     </div>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{lender.lender_name}</div>
-                      <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{lender.lender_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
                         LAP · HL · Working Capital · Term Loan
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#10B981' }}>Active</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#4B5563' }}>{configuredProductsCount} products configured</span>
-                    <button 
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)' }}>Active</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{configuredProductsCount} products configured</span>
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!isExpanded) toggleExpand(lender.id);
@@ -341,7 +348,7 @@ export default function DSALenderContactsPage() {
                         }
                       }}
                       style={{
-                        background: '#6366F1', color: 'white', border: 'none', borderRadius: 20,
+                        background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 0,
                         padding: '6px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                         display: 'flex', alignItems: 'center', gap: 6
                       }}
@@ -349,24 +356,24 @@ export default function DSALenderContactsPage() {
                       {isEditingContact ? <Check size={14} /> : <div style={{width: 14, height: 2, background: 'white'}}/>}
                       {isEditingContact ? 'Save Contact' : 'Edit Contact'}
                     </button>
-                    {isExpanded ? <ChevronUp size={20} color="#9CA3AF" /> : <ChevronDown size={20} color="#9CA3AF" />}
+                    {isExpanded ? <ChevronUp size={20} color="var(--text-tertiary)" /> : <ChevronDown size={20} color="var(--text-tertiary)" />}
                   </div>
                 </div>
 
                 {/* Expanded Content */}
                 {isExpanded && (
-                  <div style={{ borderTop: '1px solid #E5E7EB' }}>
+                  <div style={{ borderTop: '1px solid var(--border)' }}>
                     {/* Contact Details Section */}
                     <div style={{ padding: '24px' }}>
                       <div style={sectionTitle}>CONTACT DETAILS</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, marginTop: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 24, marginTop: 12 }}>
                         <div>
                           <label style={inputLabel}>CONTACT PERSON</label>
                           <input 
                             value={isEditingContact ? contactEdits[lender.id].contact_name : primaryContact.contact_name || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_name: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? '#fff' : '#F9FAFB'}}
+                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
                             placeholder="Suresh Nair"
                           />
                         </div>
@@ -376,7 +383,7 @@ export default function DSALenderContactsPage() {
                             value={isEditingContact ? contactEdits[lender.id].contact_mobile : primaryContact.contact_mobile || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_mobile: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? '#fff' : '#F9FAFB'}}
+                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
                             placeholder="9820001122"
                           />
                         </div>
@@ -386,32 +393,32 @@ export default function DSALenderContactsPage() {
                             value={isEditingContact ? contactEdits[lender.id].contact_email : primaryContact.contact_email || ''}
                             onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_email: e.target.value}})}
                             disabled={!isEditingContact}
-                            style={{...inputStyle, background: isEditingContact ? '#fff' : '#F9FAFB'}}
+                            style={{...inputStyle, background: isEditingContact ? 'var(--bg-surface)' : 'var(--bg-elevated)'}}
                             placeholder="suresh.nair@hdfc.com"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ height: 1, background: '#E5E7EB' }} />
+                    <div style={{ height: 1, background: 'var(--border)' }} />
 
                     {/* Commission Rules Section */}
                     <div style={{ padding: '24px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Briefcase size={16} color="#4B5563" />
-                          <span style={{ fontSize: 14, fontWeight: 600, color: '#4F46E5' }}>Commission Rules</span>
-                          <span style={{ fontSize: 12, color: '#6B7280' }}>Configured per product · Slabs are monthly (reset each month)</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <Briefcase size={16} color="var(--text-secondary)" />
+                          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--primary)' }}>Commission Rules</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Configured per product · Slabs are monthly (reset each month)</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
-                          <span style={{ color: '#4B5563' }}>Payout on:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, flexWrap: 'wrap' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Payout on:</span>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                            <input type="radio" checked={ruleState.payout_basis === 'NET_DISBURSED'} 
+                            <input type="radio" checked={ruleState.payout_basis === 'NET_DISBURSED'}
                               onChange={() => updateRuleEdit(lender.id, activeProduct, { payout_basis: 'NET_DISBURSED' })}/>
                             Net Disbursed
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                            <input type="radio" checked={ruleState.payout_basis === 'GROSS_SANCTIONED'} 
+                            <input type="radio" checked={ruleState.payout_basis === 'GROSS_SANCTIONED'}
                               onChange={() => updateRuleEdit(lender.id, activeProduct, { payout_basis: 'GROSS_SANCTIONED' })}/>
                             Gross Sanctioned
                           </label>
@@ -419,31 +426,31 @@ export default function DSALenderContactsPage() {
                       </div>
 
                       {/* Product Tabs */}
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 24, borderBottom: '1px solid #E5E7EB', paddingBottom: 16 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24, borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
                         {PRODUCT_TYPES.map(pt => {
                           const isConfigured = !!getRuleForLenderProduct(lender.id, pt);
                           const isActive = activeProduct === pt;
                           return (
                             <button key={pt} onClick={() => setActiveProductTabs({...activeProductTabs, [lender.id]: pt})} style={{
-                              padding: '8px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                              border: isActive ? 'none' : '1px solid #E5E7EB',
-                              background: isActive ? '#6366F1' : '#fff',
-                              color: isActive ? '#fff' : '#4B5563',
+                              padding: '8px 16px', borderRadius: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                              border: isActive ? 'none' : '1px solid var(--border)',
+                              background: isActive ? 'var(--primary)' : 'var(--bg-surface)',
+                              color: isActive ? '#fff' : 'var(--text-secondary)',
                               display: 'flex', alignItems: 'center', gap: 6
                             }}>
-                              {pt} 
-                              {isConfigured ? <Check size={12} color={isActive ? '#A7F3D0' : '#10B981'} /> : <span style={{ fontSize: 10, color: isActive ? '#C7D2FE' : '#9CA3AF' }}>Not set</span>}
+                              {pt}
+                              {isConfigured ? <Check size={12} color={isActive ? '#A7F3D0' : 'var(--success)'} /> : <span style={{ fontSize: 10, color: isActive ? '#C7D2FE' : 'var(--text-tertiary)' }}>Not set</span>}
                             </button>
                           );
                         })}
                       </div>
 
                       {/* Slabs Grids */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 40 }}>
                         {/* Volume Slabs */}
                         <div>
                           <div style={slabHeader}>VOLUME-BASED SLABS (MONTHLY DISBURSEMENT)</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8, fontSize: 11, fontWeight: 600, color: '#6B7280' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
                             <div>FROM (₹ CR)</div>
                             <div>TO (₹ CR)</div>
                             <div>RATE (%)</div>
@@ -472,12 +479,12 @@ export default function DSALenderContactsPage() {
                                       newSlabs[idx].percent_rate = e.target.value;
                                       updateRuleEdit(lender.id, activeProduct, { volume_slabs: newSlabs });
                                     }} style={slabInput} />
-                                  <span style={{ fontSize: 13, color: '#6B7280' }}>%</span>
+                                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>%</span>
                                 </div>
                                 <button onClick={() => {
                                   const newSlabs = ruleState.volume_slabs.filter((_, i) => i !== idx);
                                   updateRuleEdit(lender.id, activeProduct, { volume_slabs: newSlabs });
-                                }} style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 4, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#EF4444' }}>
+                                }} style={{ background: 'var(--error-bg)', border: '1px solid var(--error)', borderRadius: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--error)' }}>
                                   <X size={14} />
                                 </button>
                               </div>
@@ -485,7 +492,7 @@ export default function DSALenderContactsPage() {
                             <button onClick={() => {
                               const newSlabs = [...ruleState.volume_slabs, { from_amount: 0, to_amount: '', percent_rate: 0 }];
                               updateRuleEdit(lender.id, activeProduct, { volume_slabs: newSlabs });
-                            }} style={{ background: 'none', border: 'none', color: '#4F46E5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
+                            }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
                               <Plus size={14} /> Add Slab
                             </button>
                           </div>
@@ -494,7 +501,7 @@ export default function DSALenderContactsPage() {
                         {/* Cases Slabs */}
                         <div>
                           <div style={slabHeader}>CASES-BASED SLABS (MONTHLY CASE COUNT)</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8, fontSize: 11, fontWeight: 600, color: '#6B7280' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 40px', gap: 12, marginBottom: 8, fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
                             <div>FROM (CASES)</div>
                             <div>TO (CASES)</div>
                             <div>PAYOUT PER CASE (₹)</div>
@@ -517,7 +524,7 @@ export default function DSALenderContactsPage() {
                                     updateRuleEdit(lender.id, activeProduct, { case_count_slabs: newSlabs });
                                   }} style={slabInput} />
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 13, color: '#6B7280' }}>₹</span>
+                                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>₹</span>
                                   <input type="number" value={slab.payout_per_case} 
                                     onChange={e => {
                                       const newSlabs = [...ruleState.case_count_slabs];
@@ -528,7 +535,7 @@ export default function DSALenderContactsPage() {
                                 <button onClick={() => {
                                   const newSlabs = ruleState.case_count_slabs.filter((_, i) => i !== idx);
                                   updateRuleEdit(lender.id, activeProduct, { case_count_slabs: newSlabs });
-                                }} style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 4, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#EF4444' }}>
+                                }} style={{ background: 'var(--error-bg)', border: '1px solid var(--error)', borderRadius: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--error)' }}>
                                   <X size={14} />
                                 </button>
                               </div>
@@ -536,7 +543,7 @@ export default function DSALenderContactsPage() {
                             <button onClick={() => {
                               const newSlabs = [...ruleState.case_count_slabs, { from_cases: 0, to_cases: '', payout_per_case: 0 }];
                               updateRuleEdit(lender.id, activeProduct, { case_count_slabs: newSlabs });
-                            }} style={{ background: 'none', border: 'none', color: '#4F46E5', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
+                            }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
                               <Plus size={14} /> Add Slab
                             </button>
                           </div>
@@ -545,9 +552,9 @@ export default function DSALenderContactsPage() {
 
                       {/* Info Note */}
                       <div style={{
-                        background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8,
+                        background: 'var(--info-bg)', border: '1px solid var(--info)', borderRadius: 0,
                         padding: '12px 16px', marginTop: 24, display: 'flex', gap: 10,
-                        fontSize: 13, color: '#4F46E5', lineHeight: 1.5
+                        fontSize: 13, color: 'var(--info)', lineHeight: 1.5
                       }}>
                         <span style={{ fontSize: 16 }}>📌</span>
                         <div>
@@ -561,8 +568,8 @@ export default function DSALenderContactsPage() {
                           onClick={() => handleSaveRule(lender.id, activeProduct)}
                           disabled={!isEditingRule}
                           style={{
-                            ...btnPrimary, background: '#6366F1', opacity: isEditingRule ? 1 : 0.5,
-                            borderRadius: 20, padding: '8px 24px'
+                            ...btnPrimary, opacity: isEditingRule ? 1 : 0.5,
+                            borderRadius: 0, padding: '8px 24px'
                           }}
                         >
                           Save {activeProduct} Rules
@@ -584,70 +591,72 @@ export default function DSALenderContactsPage() {
         onClose={() => setLenderModal({ open: false })}
         onSave={handleAddLender}
       />
+      </div>
     </div>
   );
 }
 
-// ── Shared Styles ─────────────────────────────────────────────────────────────
+// ── Shared Styles (CSS variable tokens — same theme as the dashboard) ────────
 const overlay = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  backdropFilter: 'blur(4px)', zIndex: 9999, 
+  position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)',
+  backdropFilter: 'blur(4px)', zIndex: 9999,
   display: 'flex', justifyContent: 'center', alignItems: 'center',
 };
 const modalBox = {
-  background: '#fff', width: '94%', maxWidth: 480, borderRadius: 16,
-  boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden',
+  background: 'var(--bg-surface)', width: '94%', maxWidth: 480, borderRadius: 0,
+  boxShadow: 'var(--shadow-lg)', overflow: 'hidden',
 };
 const modalHeader = {
   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  padding: '20px 24px', borderBottom: '1px solid #E5E7EB',
+  padding: '20px 24px', borderBottom: '1px solid var(--border)',
 };
 const modalFooter = {
   display: 'flex', justifyContent: 'flex-end', gap: 12,
-  padding: '16px 24px', borderTop: '1px solid #E5E7EB',
-  background: '#F9FAFB',
+  padding: '16px 24px', borderTop: '1px solid var(--border)',
+  background: 'var(--bg-elevated)',
 };
 const labelStyle = {
-  display: 'block', fontSize: 11, fontWeight: 700, color: '#4B5563',
+  display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)',
   textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8,
 };
 const inputStyle = {
-  width: '100%', padding: '10px 14px', borderRadius: 8, fontSize: 14,
-  border: '1px solid #D1D5DB', background: '#fff',
-  color: '#111827', outline: 'none', boxSizing: 'border-box',
+  width: '100%', padding: '10px 14px', borderRadius: 0, fontSize: 14,
+  border: '1px solid var(--border)', background: 'var(--bg-surface)',
+  color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
   transition: 'border-color 0.2s',
 };
 const btnPrimary = {
   display: 'inline-flex', alignItems: 'center', gap: 8,
-  padding: '8px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600,
-  background: '#6366F1', color: '#fff', border: 'none', cursor: 'pointer',
+  padding: '8px 16px', borderRadius: 0, fontSize: 14, fontWeight: 600,
+  background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer',
 };
 const btnOutline = {
   display: 'inline-flex', alignItems: 'center', gap: 8,
-  padding: '8px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600,
-  background: '#fff', color: '#374151',
-  border: '1px solid #D1D5DB', cursor: 'pointer',
+  padding: '8px 16px', borderRadius: 0, fontSize: 14, fontWeight: 600,
+  background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+  border: '1px solid var(--border)', cursor: 'pointer',
 };
 const iconBtn = {
   background: 'none', border: 'none', cursor: 'pointer',
-  color: '#9CA3AF', display: 'flex', alignItems: 'center',
-  padding: 6, borderRadius: 8, transition: 'background 0.2s',
+  color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center',
+  padding: 6, borderRadius: 0, transition: 'background 0.2s',
 };
 
 const emptyCard = {
-  textAlign: 'center', padding: '80px 40px', background: '#fff',
-  borderRadius: 16, border: '2px dashed #D1D5DB',
+  textAlign: 'center', padding: '80px 40px', background: 'var(--bg-surface)',
+  borderRadius: 0, border: '2px dashed var(--border-strong)',
 };
 const sectionTitle = {
-  fontSize: 12, fontWeight: 700, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em'
+  fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em'
 };
 const inputLabel = {
-  display: 'block', fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', marginBottom: 6
+  display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 6
 };
 const slabHeader = {
-  fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 16
+  fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16
 };
 const slabInput = {
-  width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #D1D5DB',
+  width: '100%', padding: '8px 12px', borderRadius: 0, border: '1px solid var(--border)',
+  background: 'var(--bg-surface)', color: 'var(--text-primary)',
   fontSize: 13, textAlign: 'center'
 };

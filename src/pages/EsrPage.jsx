@@ -79,7 +79,7 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
               )}
             </div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={onClose} className="btn btn-primary">Done</button>
+              <button onClick={onClose} className="btn btn-primary btn-sm">Done</button>
             </div>
           </motion.div>
         </motion.div>
@@ -356,11 +356,7 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
 
   return (
     <div style={{ marginTop: 12 }}>
-      <button onClick={() => setOpen(!open)} style={{
-        display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px',
-        background: 'var(--bg-elevated)', color: 'var(--primary)', border: '1px solid var(--primary)',
-        borderRadius: 0, cursor: 'pointer', fontWeight: 600
-      }}>
+      <button onClick={() => setOpen(!open)} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 0 }}>
         <Calculator size={12} />
         {open ? 'Hide Calculation' : 'View Calculation'}
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -809,20 +805,18 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {isMsme ? 'Your Loan Eligibility Results' : 'Eligibility Summary Report'}
+            Your Loan Eligibility Results
           </h1>
-          {isMsme && (
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
-              Here's what you qualify for across our lending partners.
-            </p>
-          )}
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
+            Here's what you qualify for across our lending partners.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {esr && (
             <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'spin' : ''} />
-              {generating ? 'Refreshing...' : isMsme ? 'Refresh Results' : 'Regenerate ESR'}
+              {generating ? 'Refreshing...' : 'Refresh Results'}
             </button>
           )}
         </div>
@@ -838,15 +832,13 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             <BarChart3 size={32} color="var(--text-tertiary)" />
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-            {isMsme ? 'Let\'s check your eligibility' : 'No ESR generated yet'}
+            Let's check your eligibility
           </h3>
           <p style={{ color: 'var(--text-tertiary)', marginBottom: 24 }}>
-            {isMsme
-              ? 'We\'ll instantly check your eligibility across all our lending partners.'
-              : <>Click <strong>Generate ESR</strong> to run the eligibility engine against all active lenders.</>}
+            We'll instantly check your eligibility across all our lending partners.
           </p>
           <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={18} /> {isMsme ? 'Check My Eligibility' : 'Generate Eligibility Report'}
+            <Zap size={18} /> Check My Eligibility
           </button>
         </motion.div>
       )}
@@ -858,15 +850,15 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           marginBottom: 20, padding: '12px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-tertiary)', fontSize: 12, fontWeight: 700 }}>
-            <ListFilter size={14} /> {isMsme ? 'Filter Offers' : 'FILTERS'}
+            <ListFilter size={14} /> Filter Offers
           </div>
           <select className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
-            style={{ width: 'auto', minWidth: 180, padding: isMsme ? '9px 10px' : '7px 10px', fontSize: 13 }}>
+            style={{ width: 'auto', minWidth: 180, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Lenders ({lenders.length})</option>
             {lenderNames.map(name => <option key={name} value={name}>{name}</option>)}
           </select>
           <select className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
-            style={{ width: 'auto', minWidth: 160, padding: isMsme ? '9px 10px' : '7px 10px', fontSize: 13 }}>
+            style={{ width: 'auto', minWidth: 160, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Statuses</option>
             <option value="eligible">Eligible ({eligibleCount})</option>
             <option value="ineligible">Not Eligible ({ineligibleCount})</option>
@@ -911,9 +903,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                     padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
                     border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
                   }}>
-                    {isMsme
-                      ? (eligible ? 'Eligible' : 'Not Eligible')
-                      : (eligible ? 'ELIGIBLE' : 'INELIGIBLE')}
+                    {eligible ? 'Eligible' : 'Not Eligible'}
                   </span>
                 </div>
 
@@ -977,11 +967,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                   )}
                 </div>
               </div>
-              {!isMsme && (
-                <div style={{ padding: '0 16px 8px 42px' }}>
-                  <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
-                </div>
-              )}
+              <div style={{ padding: '0 16px 8px 42px' }}>
+                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
+              </div>
             </motion.div>
           );
         };
@@ -1011,30 +999,19 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             {visibleEligible.map((lender, i) => renderRow(lender, i))}
 
             {visibleIneligible.length > 0 && (
-              isMsme ? (
-                <button
-                  onClick={() => setShowIneligible(v => !v)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                    marginTop: visibleEligible.length > 0 ? 16 : 0, marginBottom: showIneligible ? 10 : 0,
-                    background: 'var(--error-bg)', border: '1px solid var(--error)',
-                    fontSize: 12, fontWeight: 800, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer'
-                  }}
-                >
-                  <XCircle size={14} />
-                  {showIneligible ? 'Hide' : 'Show'} {visibleIneligible.length} lender{visibleIneligible.length === 1 ? '' : 's'} you're not eligible with
-                  {showIneligible ? <ChevronUp size={13} style={{ marginLeft: 'auto' }} /> : <ChevronDown size={13} style={{ marginLeft: 'auto' }} />}
-                </button>
-              ) : (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  marginTop: visibleEligible.length > 0 ? 16 : 0, marginBottom: 10,
-                  padding: '8px 14px', background: 'var(--error-bg)', border: '1px solid var(--error)',
-                  color: 'var(--error)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em'
-                }}>
-                  <XCircle size={14} /> Not Eligible Loans ({visibleIneligible.length})
-                </div>
-              )
+              <button
+                onClick={() => setShowIneligible(v => !v)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px',
+                  marginTop: visibleEligible.length > 0 ? 16 : 0, marginBottom: showIneligible ? 10 : 0,
+                  background: 'var(--error-bg)', border: '1px solid var(--error)',
+                  fontSize: 13, fontWeight: 800, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer'
+                }}
+              >
+                <XCircle size={14} />
+                {showIneligible ? 'Hide' : 'Show'} {visibleIneligible.length} lender{visibleIneligible.length === 1 ? '' : 's'} you're not eligible with
+                {showIneligible ? <ChevronUp size={13} style={{ marginLeft: 'auto' }} /> : <ChevronDown size={13} style={{ marginLeft: 'auto' }} />}
+              </button>
             )}
             {showIneligible && visibleIneligible.map((lender, i) => renderRow(lender, i))}
           </div>

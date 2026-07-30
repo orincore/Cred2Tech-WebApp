@@ -9,6 +9,7 @@ export const msmeAuthApi = {
 // MSME Direct Portal — authenticated (MSME_CUSTOMER token)
 export const msmeApi = {
   getDashboard: () => api.get('/msme/dashboard'),
+  getCases: () => api.get('/msme/cases'),
   updateProfile: (data) => api.put('/msme/profile', data),
 
   initiateEligibility: () => api.post('/msme/eligibility/initiate'),

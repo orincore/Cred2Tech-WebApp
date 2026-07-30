@@ -16,6 +16,11 @@ import {
   FileText,
   UserCircle,
   Inbox,
+  Wallet,
+  ClipboardCheck,
+  Target,
+  Landmark,
+  HandCoins,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -138,7 +143,41 @@ export const NAV_ITEMS = [
     icon: Mail,
     roles: ['DSA_ADMIN'],
   },
-
+  {
+    id: 'dsa-part-disbursement',
+    label: 'Part Disbursement',
+    path: '/disbursements/partial',
+    icon: Wallet,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+  },
+  {
+    id: 'pdd-management',
+    label: 'PDD Management',
+    path: '/pdd-management',
+    icon: ClipboardCheck,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+  },
+  {
+    id: 'sales-incentive',
+    label: 'Sales Incentive',
+    path: '/financials/sales-incentive',
+    icon: Target,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+  },
+  {
+    id: 'lender-commission',
+    label: 'Lender Commission',
+    path: '/financials/lender-commission',
+    icon: Landmark,
+    roles: ['DSA_ADMIN'],
+  },
+  {
+    id: 'sub-dsa-payout',
+    label: 'Sub DSA Payout',
+    path: '/financials/sub-dsa-payout',
+    icon: HandCoins,
+    roles: ['DSA_ADMIN'],
+  },
 
 
   // DSA_MEMBER / Shared Views

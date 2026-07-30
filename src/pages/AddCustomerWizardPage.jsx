@@ -442,6 +442,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   // Auto-fetch GST records right after PAN verification succeeds — no manual
   // "Fetch GST" click needed. Same guard pattern as above.
+  //
+  // handleFetchGst() itself requires caseId + formData.customer_id and bails
+  // out silently (just a toast) without them — but pan_verified can flip true
+  // in the same render pass where ensureDraftSaved()'s caseId/customer_id
+  // updates are still landing, so this effect could previously fire one
+  // render before those were actually set. Since the "attempted" guard was
+  // marked *before* that fetch, it would never retry — visibly it just looked
+  // like "GST never showed up" until the whole page (and this ref) reloaded.
+  // Gating readiness on caseId/customer_id too means the effect simply waits
+  // for the next render instead of burning its one attempt early.
   const gstAutoFetchAttempted = useRef(null);
   useEffect(() => {
     if (currentStep > 3) return;
@@ -451,13 +461,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       pan &&
       !formData.pan_profile &&
       !gstFetching &&
+      caseId &&
+      formData.customer_id &&
       gstAutoFetchAttempted.current !== pan
     ) {
       gstAutoFetchAttempted.current = pan;
       handleFetchGst();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan]);
+  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan, caseId, formData.customer_id]);
 
   // Auto-verify each co-applicant's PAN once it's a full 10 characters — same
   // no-manual-click pattern as the primary PAN above, guarded per-index so a
@@ -1421,6 +1433,25 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
                </div>
+                {(!formData.linked_gstins || formData.linked_gstins.length === 0) && (
+                  <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                    {gstFetching ? (
+                      <PullingIndicator label="Fetching GST records for this PAN…" />
+                    ) : gstFetchFailed ? (
+                      <>
+                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
+                        </span>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst}>Retry GST Fetch</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={!formData.pan_verified}>Fetch GST Records</button>
+                      </>
+                    )}
+                  </div>
+                )}
                 <div style={{ padding: 0 }}>
                   <GstAnalyticsForm
                      caseId={caseId}

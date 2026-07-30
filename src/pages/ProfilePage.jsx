@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { User, Shield, LogOut } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
+import { msmeApi } from '../api/msmeService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, getInitials, formatHierarchyPath } from '../utils/helpers';
@@ -26,15 +28,8 @@ const ProfilePage = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('profile');
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    mobile: '',
-    street: '',
-    apt: '',
-    city: '',
-    state: ''
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', mobile: '' });
+  const [saving, setSaving] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -44,11 +39,16 @@ const ProfilePage = () => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const sidebarItems = [
-    { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
-    { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
-    { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
-  ];
+  // MSME customers authenticate via mobile OTP (no password), and "Additional
+  // Info" is DSA staff hierarchy/role/session detail that doesn't apply to them.
+  const isMsmeUser = authUser?.role?.name === 'MSME_CUSTOMER';
+  const sidebarItems = isMsmeUser
+    ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' }]
+    : [
+        { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
+        { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
+        { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
+      ];
 
   useEffect(() => {
     const fetch = async () => {
@@ -71,11 +71,7 @@ const ProfilePage = () => {
       setFormData({
         name: u.name || '',
         email: u.email || '',
-        mobile: u.mobile || '',
-        street: u.address?.street || '',
-        apt: u.address?.apt || u.address?.house_number || '',
-        city: u.address?.city || '',
-        state: u.address?.state || ''
+        mobile: u.mobile || ''
       });
     }
   }, [profile, authUser]);
@@ -97,6 +93,23 @@ const ProfilePage = () => {
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileSave = async () => {
+    if (!isMsmeUser) {
+      toast.error('Profile changes for staff accounts are managed by your admin.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await msmeApi.updateProfile({ name: formData.name, email: formData.email });
+      setProfile(prev => ({ ...prev, ...res.data }));
+      toast.success('Profile updated');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePasswordChange = (field, value) => {
@@ -235,100 +248,29 @@ const ProfilePage = () => {
               {/* Mobile */}
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Mobile Number</label>
-                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
                   <input
                     type="tel"
                     value={formData.mobile}
-                    onChange={e => handleChange('mobile', e.target.value)}
-                    placeholder="+91 98765 43210"
+                    disabled
+                    title="Your mobile number is your verified login identity and can't be changed here."
                     style={{
                       width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                      padding: 0, focusRing: 0
+                      color: isDark ? '#94a3b8' : '#4a5d73', fontSize: 15, fontWeight: 600,
+                      padding: 0, cursor: 'not-allowed'
                     }}
                   />
-                </div>
-              </div>
-
-              {/* Street & Apt */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Street Number</label>
-                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                    <input
-                      type="text"
-                      value={formData.street}
-                      onChange={e => handleChange('street', e.target.value)}
-                      placeholder="123"
-                      style={{
-                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                        padding: 0, focusRing: 0
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>Apt / House Number</label>
-                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                    <input
-                      type="text"
-                      value={formData.apt}
-                      onChange={e => handleChange('apt', e.target.value)}
-                      placeholder="A-45"
-                      style={{
-                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                        padding: 0, focusRing: 0
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* City & State */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>City</label>
-                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={e => handleChange('city', e.target.value)}
-                      placeholder="Mumbai"
-                      style={{
-                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                        padding: 0, focusRing: 0
-                      }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: isDark ? '#94a3b8' : '#4a5d73', marginBottom: 6 }}>State</label>
-                  <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                    <input
-                      type="text"
-                      value={formData.state}
-                      onChange={e => handleChange('state', e.target.value)}
-                      placeholder="Maharashtra"
-                      style={{
-                        width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                        color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                        padding: 0, focusRing: 0
-                      }}
-                    />
-                  </div>
                 </div>
               </div>
 
               {/* Update Button */}
               <div style={{ display: 'flex', gap: 12 }}>
                 <TravelingBorderButton
-                  onClick={() => console.log('Update profile')}
+                  onClick={handleProfileSave}
                   size="sm"
+                  disabled={saving}
                 >
-                  Update
+                  {saving ? 'Saving...' : 'Update'}
                 </TravelingBorderButton>
                 <TravelingBorderButton
                   onClick={() => setShowLogoutConfirm(true)}
@@ -366,6 +308,8 @@ const ProfilePage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
+                        name="current-password"
+                        autoComplete="current-password"
                         value={passwordData.currentPassword}
                         onChange={e => handlePasswordChange('currentPassword', e.target.value)}
                         placeholder="Enter current password"
@@ -383,6 +327,8 @@ const ProfilePage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
+                        name="new-password"
+                        autoComplete="new-password"
                         value={passwordData.newPassword}
                         onChange={e => handlePasswordChange('newPassword', e.target.value)}
                         placeholder="Enter new password"
@@ -400,6 +346,8 @@ const ProfilePage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
+                        name="confirm-new-password"
+                        autoComplete="new-password"
                         value={passwordData.confirmPassword}
                         onChange={e => handlePasswordChange('confirmPassword', e.target.value)}
                         placeholder="Confirm new password"

@@ -35,6 +35,11 @@ const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
 const DSALenderContactsPage = lazy(() => import('../pages/DSALenderContactsPage'));
 const AdminMsmeCasesPage = lazy(() => import('../pages/AdminMsmeCasesPage'));
+const PartDisbursementPage = lazy(() => import('../pages/PartDisbursementPage'));
+const PddManagementPage = lazy(() => import('../pages/PddManagementPage'));
+const SalesIncentivePage = lazy(() => import('../pages/SalesIncentivePage'));
+const LenderCommissionPage = lazy(() => import('../pages/LenderCommissionPage'));
+const SubDsaPayoutPage = lazy(() => import('../pages/SubDsaPayoutPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -42,6 +47,7 @@ const MsmeProtectedRoute = lazy(() => import('./MsmeProtectedRoute'));
 const MsmeLoginPage = lazy(() => import('../pages/msme/MsmeLoginPage'));
 const MsmeDashboardPage = lazy(() => import('../pages/msme/MsmeDashboardPage'));
 const MsmeCasesPage = lazy(() => import('../pages/msme/MsmeCasesPage'));
+const MsmeCaseDetailPage = lazy(() => import('../pages/msme/MsmeCaseDetailPage'));
 const MsmeDocumentsPage = lazy(() => import('../pages/msme/MsmeDocumentsPage'));
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
@@ -74,6 +80,7 @@ const AppRouter = () => (
                 </MsmePaymentGate>
               } />
               <Route path="cases" element={<MsmeCasesPage />} />
+              <Route path="cases/:caseId" element={<MsmeCaseDetailPage />} />
               <Route path="documents" element={<MsmeDocumentsPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route index element={<Navigate to="dashboard" replace />} />
@@ -217,6 +224,47 @@ const AppRouter = () => (
               }
             />
 
+            {/* Disbursement / PDD / Financials operational tools */}
+            <Route
+              path="/disbursements/partial"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                  <PartDisbursementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pdd-management"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                  <PddManagementPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financials/sales-incentive"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                  <SalesIncentivePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financials/lender-commission"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                  <LenderCommissionPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financials/sub-dsa-payout"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                  <SubDsaPayoutPage />
+                </ProtectedRoute>
+              }
+            />
 
           </Route>
 

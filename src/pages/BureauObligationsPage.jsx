@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { listDocuments, downloadDocument } from '../api/documentHelper';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw, FileDown } from 'lucide-react';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -47,6 +48,8 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const [newObl, setNewObl]       = useState({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
 
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
+  const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
+  const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
 
   // syncObligations() only re-parses obligations from a bureau report that
   // must already exist for this case_id — it never triggers the actual CIBIL
@@ -92,6 +95,21 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
       });
       setApplicantNames(names);
+
+      // The bureau vendor (Experian, via Signzy) hands back the actual report
+      // file at pull time, which gets ingested into document storage per
+      // applicant (see experian.service.js) — surface it here rather than
+      // regenerating anything client-side.
+      try {
+        const docs = await listDocuments({ caseId });
+        const reports = {};
+        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
+          .forEach(d => { reports[d.applicant_id] = d; });
+        setBureauReports(reports);
+      } catch (docErr) {
+        // Non-fatal — obligations already loaded fine, just no download button.
+      }
+
       return result;
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to load bureau obligations');
@@ -174,6 +192,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
     }
   };
 
+  const handleDownloadReport = async (applicantId) => {
+    const doc = bureauReports[applicantId];
+    if (!doc) return;
+    setDownloadingFor(applicantId);
+    try {
+      await downloadDocument(doc.id, doc.original_file_name);
+    } catch (e) {
+      toast.error('Failed to download bureau report');
+    } finally {
+      setDownloadingFor(null);
+    }
+  };
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
 
   const { grouped = [], summary = {} } = data || {};
@@ -234,9 +265,23 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
               </h3>
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{applicant.type === 'PRIMARY' ? 'Primary Borrower' : 'Co-Borrower'}</span>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bureau Score</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bureau Score</div>
+              </div>
+              {bureauReports[applicant.id] && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleDownloadReport(applicant.id)}
+                  disabled={downloadingFor === applicant.id}
+                  title="Download the full bureau report for this applicant"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <FileDown size={13} />
+                  {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
+                </button>
+              )}
             </div>
           </div>
 

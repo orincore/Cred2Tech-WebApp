@@ -8,6 +8,19 @@
 import api from './axiosInstance';
 
 /**
+ * List stored documents for a case or customer (optionally scoped to one
+ * applicant). At least one of caseId/customerId is required by the backend.
+ * @param {{caseId?: number, customerId?: number, applicantId?: number, documentType?: string}} params
+ */
+export async function listDocuments({ caseId, customerId, applicantId, documentType } = {}) {
+    const response = await api.get('/documents', {
+        params: { case_id: caseId, customer_id: customerId, document_type: documentType },
+    });
+    const docs = response.data.data || [];
+    return applicantId ? docs.filter(d => d.applicant_id === applicantId) : docs;
+}
+
+/**
  * Trigger a browser file download for a stored document.
  * @param {number} documentId
  * @param {string} fileName - display name for the saved file

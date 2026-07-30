@@ -80,9 +80,14 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
           <Search size={14} color="var(--on-muted)" />
           <input
             type="text"
+            name="nav-search"
+            id="nav-search"
             placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            autoComplete="off"
+            data-lpignore="true"
+            data-form-type="other"
             style={{
               border: 'none',
               outline: 'none',
