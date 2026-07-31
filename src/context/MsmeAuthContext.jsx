@@ -19,10 +19,18 @@ export const MsmeAuthProvider = ({ children }) => {
   };
 
   const logout = useCallback(() => {
+    // Fired before localStorage is cleared below — the axios interceptor
+    // reads the token synchronously when the request is built, so this is
+    // still authenticated even though we don't wait for the response. This
+    // is what actually revokes the session server-side (and propagates the
+    // logout to scheme.cred2tech.com) rather than just tidying up the
+    // bootstrap cookie — without it, a stolen/lingering token would keep
+    // working on both apps until its natural 1-day expiry.
+    msmeAuthApi.logout().catch(() => {});
+    msmeAuthApi.ssoLogout().catch(() => {}); // best-effort — don't block local logout on it
     localStorage.removeItem('token');
     localStorage.removeItem('roleName');
     setUser(null);
-    msmeAuthApi.ssoLogout().catch(() => {}); // best-effort — don't block local logout on it
     navigate('/msme/login');
   }, [navigate]);
 

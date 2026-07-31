@@ -11,6 +11,10 @@ export const msmeAuthApi = {
   // cookie; every other call is pure bearer-token and doesn't need it.
   ssoCheck: () => api.get('/msme/auth/sso-check', { withCredentials: true }),
   ssoLogout: () => api.post('/msme/auth/sso-logout', {}, { withCredentials: true }),
+  // Real logout — authenticated, revokes every session this user has on
+  // THIS app and tells scheme.cred2tech.com's backend to do the same for
+  // the same mobile, so logging out here ends both apps' sessions.
+  logout: () => api.post('/msme/auth/logout'),
 };
 
 // MSME Direct Portal — authenticated (MSME_CUSTOMER token)
