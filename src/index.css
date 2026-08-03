@@ -481,6 +481,25 @@ tbody td {
   vertical-align: middle;
 }
 
+/* Sticky positioning with an explicit -webkit- fallback. Some WebKit/Safari
+   versions are unreliable with unprefixed `position: sticky` on table cells
+   (<th>/<td>) specifically, and inline style OBJECTS (React `style={{}}`)
+   can only ever hold one value per property key, so they can't express a
+   "try -webkit-sticky, fall back to sticky" pair the way a real CSS rule
+   can. Use these classes instead of inline `position: sticky` for any
+   <th>/<td> that needs to stay pinned while its table scrolls. */
+.sticky-col {
+  position: -webkit-sticky;
+  position: sticky;
+  left: 0;
+}
+
+.sticky-top {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+}
+
 /* ---- Modal ---- */
 .modal-overlay {
   position: fixed;

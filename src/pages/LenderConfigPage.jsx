@@ -7,7 +7,6 @@ import {
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useTheme } from '../context/ThemeContext';
 
 // Responsive hook
 const useResponsive = () => {
@@ -27,7 +26,7 @@ const useResponsive = () => {
 };
 
 // Embedded Modal for JSON Slab editing
-const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel, isDark }) => {
+const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel }) => {
    const [slabs, setSlabs] = useState([]);
 
    useEffect(() => {
@@ -52,24 +51,24 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
    const removeRow = (idx) => setSlabs(slabs.filter((s, i) => i !== idx));
 
    return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-         <div style={{ background: isDark ? '#1e293b' : '#fff', width: '600px', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+      <div className="modal-overlay" onClick={onClose}>
+         <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600, width: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: isDark ? '#fff' : '#1e293b' }}>Configure Structured Slabs / Logic</h3>
-               <button 
-                  className="btn btn-ghost btn-icon" 
+               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Configure Structured Slabs / Logic</h3>
+               <button
+                  className="btn btn-ghost btn-icon"
                   onClick={onClose}
-                  style={{ color: isDark ? '#fff' : '#64748b' }}
+                  style={{ color: 'var(--on-muted)' }}
                >
                   <X size={18} />
                </button>
             </div>
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 20 }}>Editing engine rule for: <strong style={{ color: isDark ? '#fff' : '#1e293b' }}>{parameterLabel}</strong></p>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 20 }}>Editing engine rule for: <strong style={{ color: 'var(--on-surface)' }}>{parameterLabel}</strong></p>
 
             <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 20 }}>
                <table style={{ width: '100%', fontSize: 12 }}>
                   <thead>
-                     <tr style={{ background: isDark ? '#0f172a' : '#f9fafb' }}>
+                     <tr style={{ background: 'var(--bg-elevated)' }}>
                         <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Min Threshold</th>
                         <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Max Threshold</th>
                         <th style={{ padding: 8, textAlign: 'left', color: 'var(--on-muted)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase' }}>Rule / Multiplier</th>
@@ -107,10 +106,10 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
                               />
                            </td>
                            <td style={{ padding: 8 }}>
-                              <button 
-                                 className="btn btn-ghost btn-icon" 
+                              <button
+                                 className="btn btn-ghost btn-icon"
                                  onClick={() => removeRow(idx)}
-                                 style={{ color: '#ef4444' }}
+                                 style={{ color: 'var(--error)' }}
                               >
                                  <Trash size={12} />
                               </button>
@@ -121,24 +120,24 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
                </table>
             </div>
 
-            <button 
-               className="btn btn-outline btn-sm mb-4" 
+            <button
+               className="btn btn-outline btn-sm mb-4"
                onClick={addRow}
-               style={{ fontSize: 11, color: isDark ? '#fff' : '#1e293b', borderColor: isDark ? '#475569' : '#cbd5e1' }}
+               style={{ fontSize: 11, color: 'var(--on-surface)', borderColor: 'var(--outline)' }}
             >
                + Add Slab Tier
             </button>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid var(--outline)', paddingTop: 20 }}>
-               <button 
-                  className="btn btn-outline" 
+               <button
+                  className="btn btn-outline"
                   onClick={onClose}
-                  style={{ fontSize: 12, color: isDark ? '#fff' : '#1e293b', borderColor: isDark ? '#475569' : '#cbd5e1' }}
+                  style={{ fontSize: 12, color: 'var(--on-surface)', borderColor: 'var(--outline)' }}
                >
                   Cancel
                </button>
-               <button 
-                  className="btn btn-primary" 
+               <button
+                  className="btn btn-primary"
                   onClick={() => onSave(slabs)}
                   style={{ fontSize: 12 }}
                >
@@ -152,8 +151,6 @@ const SlabEditorModal = ({ isOpen, onClose, initialData, onSave, parameterLabel,
 
 const LenderConfigPage = () => {
    const { isMobile, isTablet } = useResponsive();
-   const { theme } = useTheme();
-   const isDark = theme === 'dark';
    const [lenders, setLenders] = useState([]);
    const [selectedLenderId, setSelectedLenderId] = useState('');
    const [products, setProducts] = useState([]);
@@ -422,20 +419,20 @@ const LenderConfigPage = () => {
          ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px' : '20px', background: 'var(--bg)' }}>
                {/* Edit Mode Banner */}
-               <div style={{ 
-                  backgroundColor: isDark ? '#7c2d12' : '#fffbe6', 
-                  border: `1px solid ${isDark ? '#9a3412' : '#ffe58f'}`, 
-                  padding: '12px 16px', 
-                  borderRadius: 8, 
-                  display: 'flex', 
-                  alignItems: 'center', 
+               <div style={{
+                  backgroundColor: 'var(--warning-bg)',
+                  border: '1px solid var(--warning)',
+                  padding: '12px 16px',
+                  borderRadius: 0,
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'space-between',
                   marginBottom: 16
                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: isDark ? '#fed7aa' : '#b45309' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--warning)' }}>
                      <span>✏️</span> <strong>Edit Mode Active</strong> — Tap any cell to modify it. Changed cells are auto-saved.
                   </div>
-                  <div style={{ fontSize: 11, color: isDark ? '#fdba74' : '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
                      <span>⚡</span> Saves affect all future eligibility calculations
                   </div>
                </div>
@@ -452,36 +449,34 @@ const LenderConfigPage = () => {
                </div>
 
                {/* Matrix Table */}
-               <div style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', position: 'relative', border: '1px solid var(--outline)', borderRadius: 8 }}>
+               <div style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', position: 'relative', border: '1px solid var(--outline)', borderRadius: 0 }}>
                   <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '100%' }}>
-                     <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                     <thead className="sticky-top" style={{ zIndex: 10 }}>
                         <tr>
-                           <th style={{ 
-                              padding: '12px 16px', 
-                              textAlign: 'left', 
-                              fontSize: 11, 
-                              fontWeight: 700, 
-                              textTransform: 'uppercase', 
-                              letterSpacing: '0.05em', 
-                              borderRight: '1px solid var(--outline)', 
-                              borderBottom: '1px solid var(--outline)', 
-                              minWidth: '250px', 
-                              position: 'sticky', 
-                              left: 0, 
+                           <th className="sticky-col" style={{
+                              padding: '12px 16px',
+                              textAlign: 'left',
+                              fontSize: 11,
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              borderRight: '1px solid var(--outline)',
+                              borderBottom: '1px solid var(--outline)',
+                              minWidth: '250px',
                               zIndex: 20,
-                              background: '#4f46e5',
+                              background: 'var(--primary)',
                               color: '#fff'
                            }}>
                               PARAMETER
                            </th>
                            {schemes.map(sch => (
-                              <th key={sch.id} style={{ 
-                                 padding: '10px 16px', 
-                                 borderRight: '1px solid var(--outline)', 
-                                 borderBottom: '1px solid var(--outline)', 
-                                 textAlign: 'center', 
+                              <th key={sch.id} style={{
+                                 padding: '10px 16px',
+                                 borderRight: '1px solid var(--outline)',
+                                 borderBottom: '1px solid var(--outline)',
+                                 textAlign: 'center',
                                  minWidth: '150px',
-                                 background: '#4f46e5',
+                                 background: 'var(--primary)',
                                  color: '#fff'
                               }}>
                                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#fff' }}>{sch.scheme_name}</div>
@@ -497,34 +492,30 @@ const LenderConfigPage = () => {
                         {Object.entries(categorizedParams).map(([category, params]) => (
                            <React.Fragment key={category}>
                               <tr style={{ borderBottom: '1px solid var(--outline)' }}>
-                                 <td colSpan={schemes.length + 1} style={{ 
-                                    padding: '10px 16px', 
-                                    fontSize: 11, 
-                                    fontWeight: 700, 
-                                    textTransform: 'uppercase', 
+                                 <td colSpan={schemes.length + 1} className="sticky-col" style={{
+                                    padding: '10px 16px',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
-                                    position: 'sticky', 
-                                    left: 0,
                                     borderRight: '1px solid var(--outline)',
-                                    background: isDark ? '#0f172a' : '#f8f9fa',
-                                    color: '#4f46e5'
+                                    background: 'var(--bg-elevated)',
+                                    color: 'var(--primary)'
                                  }}>
                                     <span style={{ marginRight: 6 }}>📐</span> {category}
                                  </td>
                               </tr>
                               {params.map(p => (
                                  <tr key={p.id} style={{ borderBottom: '1px solid var(--outline)' }}>
-                                    <td style={{ 
-                                       padding: '12px 16px', 
-                                       borderRight: '1px solid var(--outline)', 
-                                       fontSize: 13, 
-                                       fontWeight: 600, 
-                                       color: 'var(--on-surface)', 
-                                       position: 'sticky', 
-                                       left: 0, 
-                                       zIndex: 5, 
+                                    <td className="sticky-col" style={{
+                                       padding: '12px 16px',
+                                       borderRight: '1px solid var(--outline)',
+                                       fontSize: 13,
+                                       fontWeight: 600,
+                                       color: 'var(--on-surface)',
+                                       zIndex: 5,
                                        whiteSpace: 'nowrap',
-                                       background: isDark ? '#1e293b' : '#fff',
+                                       background: 'var(--surface)',
                                        boxShadow: '1px 0 0 0 var(--outline)'
                                     }}>
                                        {p.parameter_label}
@@ -541,10 +532,10 @@ const LenderConfigPage = () => {
                                                       width: '100%',
                                                       fontSize: 11,
                                                       padding: '6px 8px',
-                                                      background: isDark ? '#1e3a8a' : '#eff6ff',
-                                                      color: isDark ? '#93c5fd' : '#1d4ed8',
-                                                      border: `1px solid ${isDark ? '#1e40af' : '#bfdbfe'}`,
-                                                      borderRadius: 4,
+                                                      background: 'var(--info-bg)',
+                                                      color: 'var(--info)',
+                                                      border: '1px solid var(--info)',
+                                                      borderRadius: 0,
                                                       fontWeight: 600,
                                                       cursor: 'pointer',
                                                       transition: 'all 0.15s'
@@ -567,10 +558,20 @@ const LenderConfigPage = () => {
                                                       color: 'var(--on-surface)',
                                                       transition: 'all 0.15s'
                                                    }}
-                                                   defaultValue={typeof val === 'object' ? JSON.stringify(val) : val}
+                                                   // Every saved value comes back from the backend as the full
+                                                   // normalized wrapper it stores (e.g. {raw:"65%", type:"percent",
+                                                   // normalized:0.65} - see admin.lender.controller.js's
+                                                   // normalizeParameter()), not the bare display string. Show just
+                                                   // the human-readable `raw` field; only fall back to the raw JSON
+                                                   // for a shape we don't recognize, so nothing is silently hidden.
+                                                   defaultValue={
+                                                      val && typeof val === 'object' && !Array.isArray(val)
+                                                         ? (val.raw ?? val.value ?? JSON.stringify(val))
+                                                         : val
+                                                   }
                                                    onBlur={(e) => handleCellBlur(sch.id, p.id, p.data_type === 'integer' ? parseInt(e.target.value) || 0 : p.data_type === 'boolean' ? e.target.value === 'true' : e.target.value)}
                                                    placeholder="---"
-                                                   onFocus={e => e.target.style.background = isDark ? '#0f172a' : '#f9fafb'}
+                                                   onFocus={e => e.target.style.background = 'var(--bg-elevated)'}
                                                    onBlurCapture={e => e.target.style.background = 'transparent'}
                                                 />
                                              )}
@@ -594,7 +595,6 @@ const LenderConfigPage = () => {
             initialData={slabModalInfo?.initialData}
             onSave={handleSlabSave}
             parameterLabel={slabModalInfo?.label}
-            isDark={isDark}
          />
       </div>
    );
