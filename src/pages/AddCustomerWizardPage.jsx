@@ -143,17 +143,27 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   }, [isMsme]);
 
   // MSME self-service: prefill the borrower's own (already OTP-verified)
-  // mobile from their portal session.
+  // mobile from their portal session, plus PAN/DOB synced in from
+  // scheme.cred2tech.com if they already gave it there (see ssoProfileSync
+  // on the backend) — only for a brand-new case (urlCaseId unset); an
+  // existing case's restoreSession() effect is authoritative and will
+  // unconditionally overwrite these from the real Case/Customer record
+  // regardless of which effect happens to run first.
   useEffect(() => {
     if (!isMsme) return;
     msmeApi.getDashboard().then(res => {
+      const { mobile, synced_dob, synced_pan_number } = res.data.user;
       setFormData(prev => ({
         ...prev,
-        business_mobile: prev.business_mobile || res.data.user.mobile,
-        mobile_verified: true
+        business_mobile: prev.business_mobile || mobile,
+        mobile_verified: true,
+        ...(urlCaseId ? {} : {
+          business_pan: prev.business_pan || synced_pan_number || '',
+          dob: prev.dob || synced_dob || '',
+        }),
       }));
     }).catch(console.error);
-  }, [isMsme]);
+  }, [isMsme, urlCaseId]);
 
   const [panVerifying, setPanVerifying] = useState(false);
   const [panVerifyFailed, setPanVerifyFailed] = useState(false);
@@ -209,7 +219,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // false on /external/pan/reset and true on /external/pan/verify. A GST
       // profile fetched under a PAN that was later reset is stale, not proof
       // of current verification, so it must not be used to override this.
-      const panVerifiedNow = !!caseData.applicants?.find(a => a.type === 'PRIMARY')?.pan_verified;
+      const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
+      const panVerifiedNow = !!primaryApp?.pan_verified;
       const currentPanProfile = panVerifiedNow
         ? (caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null)
         : null;
@@ -232,7 +243,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         dob: caseData.customer?.dob || '',
         business_mobile: caseData.customer?.business_mobile || '',
         business_email: caseData.customer?.business_email || '',
-        pincode: caseData.applicants?.find(a => a.type === 'PRIMARY')?.pincode || '',
+        // Falls back to the verified PAN's own KYC pincode (principal_pincode)
+        // when the applicant row itself was never manually filled in - the
+        // salaried wizard already does this (see AddSalariedCustomerWizardPage);
+        // this page was missing it, so a case with PAN/GST verified but no
+        // manually-typed pincode rendered the field blank even though the
+        // case has a usable pincode on file.
+        pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
         is_professional: caseData.customer?.is_professional || false,
         profession_type: caseData.customer?.profession_type || '',
         mobile_verified: isMsme ? true : (caseData.customer?.mobile_verified || false),
