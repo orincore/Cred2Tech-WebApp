@@ -303,21 +303,38 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     });
     targetCustomerId = customer.id;
 
+    // Callers that need the applicant list right after this call (e.g.
+    // handleStep1Submit, to save the pincode onto the PRIMARY applicant)
+    // can't rely on formData.applicants — when a case is newly created
+    // below, the setFormData() call is async, so formData.applicants in
+    // the caller's own closure is still the stale (pre-creation) value on
+    // the very next line. Returning the up-to-date list here instead of
+    // making the caller re-read formData avoids that stale-closure trap.
+    let targetApplicants = formData.applicants;
+
     if (!targetCaseId) {
       const newCase = await caseService.createCase(customer.id);
       targetCaseId = newCase.id;
-      
+      // Keep any co-applicant rows the user already added on the
+      // coapplicants sub-page (those exist only in formData.applicants
+      // until saved) - a brand-new case can't have a PRIMARY in there yet,
+      // so this is purely additive, not a dedupe.
+      targetApplicants = [
+        ...(newCase.applicants || []),
+        ...formData.applicants.filter(a => a.type !== 'PRIMARY')
+      ];
+
       setCaseId(targetCaseId);
       setFormData(prev => ({
-        ...prev, 
+        ...prev,
         customer_id: targetCustomerId,
-        applicants: newCase.applicants || [] // Sync the newly created PRIMARY applicant
+        applicants: targetApplicants // Sync the newly created PRIMARY applicant
       }));
       navigate(`?caseId=${targetCaseId}`, { replace: true });
       localStorage.setItem('draftCaseId', targetCaseId);
     }
-    
-    return { targetCaseId, targetCustomerId };
+
+    return { targetCaseId, targetCustomerId, targetApplicants };
   };
 
   const handleVerifyPan = async (isCoapplicant = false, idx = null) => {
@@ -735,10 +752,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
     try {
       setSaving(true);
-      const { targetCaseId } = await ensureDraftSaved();
-      
+      // Use the applicants list handed back by ensureDraftSaved(), not
+      // formData.applicants directly - for a brand-new case that list was
+      // just created inside ensureDraftSaved() and formData.applicants
+      // here would still be the stale pre-creation value (see comment
+      // there), silently skipping this entire loop and dropping the
+      // pincode the user just typed.
+      const { targetCaseId, targetApplicants } = await ensureDraftSaved();
+
       const savedApps = [];
-      for (let app of formData.applicants) {
+      for (let app of targetApplicants) {
         if (app.pan_number) {
           if (app.type === 'PRIMARY') {
             // formData.dob is the customer-level DOB captured from PAN
