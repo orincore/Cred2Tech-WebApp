@@ -739,6 +739,29 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     setStep1SubPage('coapplicants');
   };
 
+  // Pincode (and every other field on this sub-page) otherwise only reaches
+  // the backend via handleStep1Submit, which fires solely from the Step 1
+  // form's own "Continue" button. CaseWizardStepper's onStepClick lets a
+  // user jump straight to any already-unlocked step (any step, once a case
+  // exists — see isStepUnlocked there), bypassing that submit entirely, so
+  // a pincode typed and then left via the stepper was silently never saved.
+  // Persisting on blur closes that gap without needing to touch the
+  // stepper's own free-navigation behavior.
+  const handlePincodeBlur = async () => {
+    if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
+    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
+    if (!primaryApp?.id || primaryApp.pincode === formData.pincode) return;
+    try {
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: formData.pincode, dob: primaryApp.dob || formData.dob });
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
+      }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save pincode');
+    }
+  };
+
   const handleStep1Submit = async (e) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error("Business PAN is required.");
@@ -1155,7 +1178,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </FormField>
 
                   <FormField label="Pincode" name="pincode" required>
-                    <input type="text" value={formData.pincode || ''} onChange={e => setFormData({...formData, pincode: e.target.value})} className="form-control" placeholder="e.g. 560026" maxLength={6} />
+                    <input type="text" value={formData.pincode || ''} onChange={e => setFormData({...formData, pincode: e.target.value})} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 560026" maxLength={6} />
                   </FormField>
 
                   <FormField label="Are You A Professional?" name="is_professional">
