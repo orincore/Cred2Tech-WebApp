@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
-import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Sparkles } from 'lucide-react';
+import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Sparkles, Trash2 } from 'lucide-react';
 
 const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -57,6 +57,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
             newMonths[idx].result = r;
             newMonths[idx].isUploaded = true;
             newMonths[idx].documentId = r.document_id;
+            newMonths[idx].fileName = r.document?.original_file_name || newMonths[idx].fileName;
           }
         });
         setMonths(newMonths);
@@ -240,6 +241,32 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
     }
   };
 
+  const handleDeleteSlip = async (monthId) => {
+    const monthIndex = months.findIndex(m => m.id === monthId);
+    if (monthIndex === -1) return;
+    const target = months[monthIndex];
+    if (!target.documentId) return;
+
+    if (!window.confirm(`Remove the salary slip for ${target.label}? This cannot be undone.`)) return;
+
+    setLoadingMonth(monthId);
+    try {
+      await api.delete(`/cases/${caseId}/applicants/${applicantId}/salary-slips/${target.documentId}`);
+      toast.success(`Salary slip removed for ${target.label}`);
+
+      const newMonths = [...months];
+      newMonths[monthIndex] = { id: target.id, label: target.label, file: null, ocrStatus: 'PENDING', result: null, isUploaded: false, documentId: null, fileName: null };
+      setMonths(newMonths);
+
+      fetchSummary();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to remove salary slip');
+      console.error(error);
+    } finally {
+      setLoadingMonth(null);
+    }
+  };
+
   const handleRunAllOcr = async () => {
     setRunningAllOcr(true);
 
@@ -368,16 +395,32 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               <>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><CheckCircle2 size={24} color="var(--success)" /></div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>{m.label} Processed</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.fileName || 'Salary slip document'}>
+                  {m.fileName || 'Document attached'}
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>Net: ₹{m.result?.net_salary?.toLocaleString('en-IN') || 0}</div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
-                  disabled={loadingMonth !== null}
-                >
-                  {mode === 'OCR' ? 'Re-upload' : 'Edit Details'}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
+                    disabled={loadingMonth !== null}
+                  >
+                    {mode === 'OCR' ? 'Re-upload' : 'Edit Details'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    title={`Remove ${m.label} salary slip`}
+                    aria-label={`Remove ${m.label} salary slip`}
+                    style={{ color: 'var(--error)', padding: '0 10px' }}
+                    onClick={() => handleDeleteSlip(m.id)}
+                    disabled={loadingMonth !== null}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </>
             ) : m.isUploaded ? (
               <>
@@ -386,15 +429,28 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.fileName || 'Salary slip document'}>
                   {m.fileName || 'Document attached'}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
-                  disabled={loadingMonth !== null || runningAllOcr}
-                >
-                  {mode === 'OCR' ? 'Change File' : 'Enter Details'}
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
+                    disabled={loadingMonth !== null || runningAllOcr}
+                  >
+                    {mode === 'OCR' ? 'Change File' : 'Enter Details'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    title={`Remove ${m.label} salary slip`}
+                    aria-label={`Remove ${m.label} salary slip`}
+                    style={{ color: 'var(--error)', padding: '0 10px' }}
+                    onClick={() => handleDeleteSlip(m.id)}
+                    disabled={loadingMonth !== null || runningAllOcr}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </>
             ) : (
               <>

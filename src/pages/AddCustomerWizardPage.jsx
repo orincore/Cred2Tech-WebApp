@@ -112,7 +112,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     linked_gstins: [],
     applicants: [],
     product_type: '',
-    loan_amount: '',
     dsa_notes: '',
     // Property (Step 3)
     property_type: '',
@@ -259,7 +258,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         linked_gstins: currentPanProfile?.gstin_records || [],
         applicants: caseData.applicants || [],
         product_type: caseData.product_type || '',
-        loan_amount: caseData.loan_amount || '',
         dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
         occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
@@ -931,7 +929,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleStep3Submit = async (e) => {
     e.preventDefault();
     if (!formData.product_type) return toast.error('Please select a loan product.');
-    if (!formData.loan_amount || Number(formData.loan_amount) <= 0) return toast.error('Please enter the requested loan amount.');
     const needsProperty = PROPERTY_REQUIRED.includes(formData.product_type);
     if (needsProperty && !formData.property_type) return toast.error('Property type is required for LAP/HL.');
     if (needsProperty && !formData.market_value)  return toast.error('Market value is required for LAP/HL.');
@@ -940,7 +937,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setSaving(true);
       const payload = {
         product_type: formData.product_type,
-        loan_amount: parseFloat(formData.loan_amount),
         dsa_notes: formData.dsa_notes || null,
         property: needsProperty ? {
           property_type:    formData.property_type,
@@ -1652,10 +1648,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     <option value="BL">Business Loan (Unsecured)</option>
                     <option value="Other">Other — Specify</option>
                   </select>
-                </FormField>
-
-                <FormField label="Requested Loan Amount (₹)" name="loan_amount" required>
-                  <input type="number" className="form-control" placeholder="e.g. 5000000" value={formData.loan_amount} onChange={e => setFormData({ ...formData, loan_amount: e.target.value })} required min="1" />
                 </FormField>
 
                 <FormField label="Additional Requirements / Notes" name="dsa_notes">
