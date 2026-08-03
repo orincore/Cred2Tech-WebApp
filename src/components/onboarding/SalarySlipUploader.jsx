@@ -42,14 +42,21 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
     try {
       const res = await api.get(`/cases/${caseId}/salary-summary?applicantId=${applicantId}`);
       if (res.data?.success && res.data.data?.length > 0) {
-        const results = res.data.data;
-        setSummary(results);
+        // The API returns every result regardless of status (PENDING/FAILED
+        // rows included, e.g. an abandoned upload from a previous session) -
+        // only a genuinely COMPLETED row should ever render as "Processed".
+        // Trusting the array position alone here previously let a stale
+        // PENDING record masquerade as a finished slip showing Net: ₹0.
+        const completed = res.data.data.filter(r => r.ocr_status === 'COMPLETED');
+        setSummary(completed);
 
         const newMonths = [...months];
-        results.forEach((r, idx) => {
+        completed.forEach((r, idx) => {
           if (idx < 3) {
             newMonths[idx].ocrStatus = 'COMPLETED';
             newMonths[idx].result = r;
+            newMonths[idx].isUploaded = true;
+            newMonths[idx].documentId = r.document_id;
           }
         });
         setMonths(newMonths);
@@ -216,6 +223,13 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
       newMonths[monthIndex].isUploaded = true;
       newMonths[monthIndex].documentId = documentId;
       newMonths[monthIndex].fileName = file.name;
+      // A re-upload replaces the file for this slot with a brand new
+      // Document row, so any previous OCR result no longer applies - without
+      // resetting these, a slot that was already COMPLETED (or a stale
+      // PENDING one mislabeled COMPLETED, see fetchSummary) stayed marked
+      // COMPLETED and "Run OCR on Uploaded Slips" silently skipped it forever.
+      newMonths[monthIndex].ocrStatus = 'PENDING';
+      newMonths[monthIndex].result = null;
       setMonths(newMonths);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to upload salary slip');
