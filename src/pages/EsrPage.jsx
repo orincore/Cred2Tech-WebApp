@@ -8,7 +8,7 @@ import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone,
   BarChart3, Landmark, ClipboardList, Wallet, Percent, TrendingDown,
-  Home, Hash, Terminal, ArrowUpRight, ChevronUp, ChevronDown, Zap,
+  Home, Hash, ArrowUpRight, ChevronUp, ChevronDown, Zap,
   ListFilter,
 } from 'lucide-react';
 import { sendCaseToLender, sendCaseToOtherLender, getTenantLenders } from '../api/tenantLenderService';
@@ -447,15 +447,6 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
                       </div>
                     </div>
                   ))}
-                </div>
-                <div style={{ marginTop: 10, padding: '8px 12px', background: '#1A202C', borderRadius: 0,
-                  fontSize: 10, color: '#A0AEC0', fontFamily: 'monospace', lineHeight: 1.8 }}>
-                  <div style={{ color: '#68D391', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Terminal size={11} /> Calculation Trace
-                  </div>
-                  <div>Max EMI = Income ({formatDynamicCurrency(monthlyIncome)}) × FOIR ({fmtPct(ev.foir_allowed_percent)}) − Obligations = {ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—'}</div>
-                  <div>Max Loan LTV = {ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—'}</div>
-                  <div style={{ color: '#68D391' }}>Final = {ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—'}</div>
                 </div>
               </div>
             </div>
