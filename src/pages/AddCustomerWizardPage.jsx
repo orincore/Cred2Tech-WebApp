@@ -142,16 +142,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   }, [isMsme]);
 
   // MSME self-service: prefill the borrower's own (already OTP-verified)
-  // mobile from their portal session, plus PAN/DOB synced in from
+  // mobile from their portal session, plus whatever else was synced in from
   // scheme.cred2tech.com if they already gave it there (see ssoProfileSync
-  // on the backend) — only for a brand-new case (urlCaseId unset); an
-  // existing case's restoreSession() effect is authoritative and will
-  // unconditionally overwrite these from the real Case/Customer record
+  // on the backend) — PAN/DOB, business name, email and pincode — so a
+  // customer who already onboarded on the sibling app has as little as
+  // possible left to retype here. Only for a brand-new case (urlCaseId
+  // unset); an existing case's restoreSession() effect is authoritative and
+  // will unconditionally overwrite these from the real Case/Customer record
   // regardless of which effect happens to run first.
   useEffect(() => {
     if (!isMsme) return;
     msmeApi.getDashboard().then(res => {
-      const { mobile, synced_dob, synced_pan_number } = res.data.user;
+      const { mobile, name, synced_dob, synced_pan_number, synced_business_name, synced_email, synced_pincode } = res.data.user;
+      const isPlaceholderName = !name || name === `Customer_${mobile}`;
       setFormData(prev => ({
         ...prev,
         business_mobile: prev.business_mobile || mobile,
@@ -159,6 +162,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         ...(urlCaseId ? {} : {
           business_pan: prev.business_pan || synced_pan_number || '',
           dob: prev.dob || synced_dob || '',
+          business_name: prev.business_name || synced_business_name || (!isPlaceholderName ? name : '') || '',
+          business_email: prev.business_email || synced_email || '',
+          pincode: prev.pincode || synced_pincode || '',
         }),
       }));
     }).catch(console.error);
