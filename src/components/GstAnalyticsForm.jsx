@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, FileText, Download } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Download, Trash2 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
+import Skeleton from './ui/Skeleton';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
@@ -19,7 +20,9 @@ const AUTO_TO_YEAR = String(toDate.getFullYear());
 const AUTO_FROM_MONTH = String(fromDate.getMonth() + 1).padStart(2, '0');
 const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onboardingMode }) => {
+const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+
+const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -44,6 +47,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     const [loading, setLoading] = useState(false);
     const [cancelling, setCancelling] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     // Live status is pushed from the server (see hooks/useCasePullStatus) — no
     // client-side polling. The server keeps one sync loop per case, so this
@@ -56,6 +60,18 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
     // keeps the component usable in that case until/unless a push arrives.
     const [fallbackRequests, setFallbackRequests] = useState([]);
     const activeRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
+
+    // Neither `snapshot` (starts null until the socket delivers its first
+    // push) nor `fallbackRequests` (starts []) carry any synchronous "has
+    // this pull already completed" signal on mount — unlike ITR/Bank, this
+    // component has no existingRecord-style prop to render from immediately.
+    // Rendering before either resolves briefly showed the empty
+    // "Enter Details / Send Auth Link" form even when a completed pull
+    // already existed, which then snapped to the real "pulled successfully"
+    // panel a moment later. Gate the whole render on one of these two
+    // sources actually resolving, and show a skeleton until then.
+    const [restLoaded, setRestLoaded] = useState(false);
+    const dataReady = snapshot !== null || restLoaded;
 
     useEffect(() => {
         if (caseId) fetchRequests();
@@ -95,6 +111,8 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             }
         } catch (error) {
             console.error(error);
+        } finally {
+            setRestLoaded(true);
         }
     };
 
@@ -164,8 +182,57 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         }
     };
 
+    // Removes an already-completed GST pull (old/wrong data, or a retry is
+    // needed under a different GSTIN) — `cancel` above only works on
+    // in-flight requests, there was previously no way to clear a finished one.
+    const handleDeleteRequest = async (requestId) => {
+        if (!window.confirm('Remove this GST record permanently? You can pull GST data again afterwards.')) return;
+        setDeleting(true);
+        try {
+            await api.post(`/external/gst/delete`, { request_id: requestId });
+            toast.success('GST record removed');
+            onRemoved && onRemoved();
+            refresh();
+            await fetchRequests();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to remove GST record');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    // Hoisted out of the old inline IIFE so both the form-visibility check
+    // below AND the status panel can agree on one computation — previously
+    // the form rendered unconditionally while only this panel checked
+    // completion, which is exactly how the fetch form kept showing up
+    // alongside an already-completed "GST data pulled successfully" panel.
+    const visibleRequests = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
+    const latestRequest = visibleRequests[0] || null;
+    // `phase` is only present on realtime snapshots; the REST fallback shape
+    // has just the raw status, so derive from that when a push hasn't arrived yet.
+    const phase = latestRequest && (latestRequest.phase
+        || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
+            : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
+    const isSuccess = phase === 'COMPLETED';
+    const isDead = phase === 'FAILED';
+
+    if (!dataReady) {
+        return (
+            <div style={{ padding: 24 }}>
+                <Skeleton width={160} height={13} style={{ marginBottom: 10 }} />
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                    <Skeleton height={38} />
+                    <Skeleton height={38} />
+                </div>
+                <Skeleton height={38} width={140} />
+            </div>
+        );
+    }
+
     return (
         <div style={{ padding: 24 }}>
+            {!isSuccess && (
+            <>
             <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
                     <input type="radio" name="gstMode" value="IN_SYSTEM" checked={mode === 'IN_SYSTEM'} onChange={() => setMode('IN_SYSTEM')} />
@@ -211,7 +278,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                         </div>
                     )}
                 </FormField>
-                
+
                 {mode === 'IN_SYSTEM' && (
                     <FormField label="GST Username" required>
                         <input
@@ -264,77 +331,100 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             <button type="button" onClick={handleCreateRequest} disabled={loading || !formData.gstin} className="btn btn-primary" style={{ marginBottom: 24 }}>
                 {loading ? 'Creating...' : isMsme ? 'Submit' : 'Submit (~1 Credit)'}
             </button>
+            </>
+            )}
 
-            {(() => {
-                const visible = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
-                if (visible.length === 0) return null;
-                // Only the most recent journey is shown — no journey list/history,
-                // no raw GSTIN/mode/status/timestamp/auth-link plumbing surfaced to the user.
-                const req = visible[0];
-                // `phase` is only present on realtime snapshots; the REST
-                // fallback shape has just the raw status, so derive from that
-                // when a push hasn't arrived yet.
-                const phase = req.phase
-                    || (['REPORT_READY', 'COMPLETED'].includes(req.status) ? 'COMPLETED'
-                        : ['FAILED', 'EXPIRED'].includes(req.status) ? 'FAILED' : 'PROCESSING');
-                const isSuccess = phase === 'COMPLETED';
-                const isDead = phase === 'FAILED';
-                return (
-                    <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
-                        {isDead ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
-                                <AlertCircle size={16} /> {req.label || (req.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
+            {latestRequest && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
+                    {isDead ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
+                            <AlertCircle size={16} /> {latestRequest.label || (latestRequest.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
+                        </div>
+                    ) : !isSuccess ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                <PullStatusTracker
+                                    variant="panel"
+                                    phase={phase}
+                                    label={latestRequest.label || 'Pulling GST data…'}
+                                    progress={latestRequest.progress ?? 45}
+                                />
                             </div>
-                        ) : !isSuccess ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                    <PullStatusTracker
-                                        variant="panel"
-                                        phase={phase}
-                                        label={req.label || 'Pulling GST data…'}
-                                        progress={req.progress ?? 45}
-                                    />
-                                </div>
-                                <button type="button" onClick={() => handleCancelRequest(req.id)} disabled={cancelling}
-                                    className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', border: '1px solid var(--error)' }}>
-                                    {cancelling ? 'Cancelling...' : 'Cancel Request'}
-                                </button>
-                            </div>
-                        ) : (
+                            <button type="button" onClick={() => handleCancelRequest(latestRequest.id)} disabled={cancelling}
+                                className="btn btn-ghost btn-sm" style={{ color: 'var(--error)', border: '1px solid var(--error)' }}>
+                                {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--success)', fontWeight: 600, fontSize: 14 }}>
                                     <CheckCircle2 size={16} /> GST data pulled successfully
                                 </div>
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                                     {/* PDF: prefer internal document, fallback to source URL for legacy records */}
-                                    {req.gst_pdf_document_id ? (
+                                    {latestRequest.gst_pdf_document_id ? (
                                         <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                            onClick={() => downloadDocument(req.gst_pdf_document_id, `gst_${req.gstin}.pdf`).catch(e => toast.error(e.message))}>
+                                            onClick={() => downloadDocument(latestRequest.gst_pdf_document_id, `gst_${latestRequest.gstin}.pdf`).catch(e => toast.error(e.message))}>
                                             <FileText size={14} /> PDF Report
                                         </button>
-                                    ) : req.report_pdf_url ? (
-                                        <a href={req.report_pdf_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    ) : latestRequest.report_pdf_url ? (
+                                        <a href={latestRequest.report_pdf_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <FileText size={14} /> PDF Report
                                         </a>
                                     ) : null}
 
                                     {/* Excel */}
-                                    {req.gst_excel_document_id ? (
+                                    {latestRequest.gst_excel_document_id ? (
                                         <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                            onClick={() => downloadDocument(req.gst_excel_document_id, `gst_${req.gstin}.xlsx`).catch(e => toast.error(e.message))}>
+                                            onClick={() => downloadDocument(latestRequest.gst_excel_document_id, `gst_${latestRequest.gstin}.xlsx`).catch(e => toast.error(e.message))}>
                                             <Download size={14} /> Excel Report
                                         </button>
-                                    ) : req.report_excel_url ? (
-                                        <a href={req.report_excel_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    ) : latestRequest.report_excel_url ? (
+                                        <a href={latestRequest.report_excel_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <Download size={14} /> Excel Report
                                         </a>
                                     ) : null}
+
+                                    <button type="button" onClick={() => handleDeleteRequest(latestRequest.id)} disabled={deleting}
+                                        className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}>
+                                        <Trash2 size={14} /> {deleting ? 'Removing...' : 'Remove'}
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                );
-            })()}
+
+                            {/* Turnover preview — the report/Excel downloads above have the
+                                full detail, but a quick last-12-months + last-year figure
+                                right here saves opening either just to see the headline number. */}
+                            {latestRequest.turnover_preview && (
+                                <div style={{
+                                    display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 14,
+                                    marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--success)',
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Turnover</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.turnover_latest_year)}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_latest || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Previous Year Turnover</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.turnover_previous_year)}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_previous || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Avg. Monthly Turnover</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.avg_monthly_turnover)}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Months Filed (12m)</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{latestRequest.turnover_preview.months_filed_12m ?? '—'}</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

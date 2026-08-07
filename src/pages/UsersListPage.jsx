@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, RefreshCw, UserPlus, Edit, Users, ShieldCheck } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, UserPlus, Edit, Users, ShieldCheck, Wallet } from 'lucide-react';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { getUsers } from '../api/userService';
 import { MOCK_USERS } from '../constants/mockData';
@@ -39,6 +39,10 @@ const UsersListPage = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterLevel, setFilterLevel] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  // Employees vs Sub-DSA partners — same underlying /users list (a Sub-DSA
+  // partner is just a User row with role.name === 'SUB_DSA'), split client-side
+  // so each tab gets its own focused view instead of one mixed table.
+  const [activeTab, setActiveTab] = useState('employees'); // 'employees' | 'subDsa'
 
   const fetchUsers = async () => {
     setLoading(true); setError('');
@@ -53,8 +57,22 @@ const UsersListPage = () => {
 
   useEffect(() => { fetchUsers(); }, []);
 
+  const employees = useMemo(() => users.filter((u) => u.role?.name !== 'SUB_DSA'), [users]);
+  const subDsaUsers = useMemo(() => users.filter((u) => u.role?.name === 'SUB_DSA'), [users]);
+  const tabUsers = activeTab === 'subDsa' ? subDsaUsers : employees;
+
+  // Role/Level filters are meaningless on the Sub-DSA tab (every row already
+  // is one role, and partners don't use the internal hierarchy) — reset them
+  // on switching tabs so a leftover filter from Employees doesn't silently
+  // empty out the Sub-DSA list.
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setFilterRole('');
+    setFilterLevel('');
+  };
+
   const filtered = useMemo(() => {
-    return users.filter((u) => {
+    return tabUsers.filter((u) => {
       const q = search.toLowerCase();
       const matchSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.mobile?.includes(q);
       const matchRole = !filterRole || u.role?.name === filterRole;
@@ -62,7 +80,7 @@ const UsersListPage = () => {
       const matchLevel = !filterLevel || u.hierarchy_level === filterLevel;
       return matchSearch && matchRole && matchStatus && matchLevel;
     });
-  }, [users, search, filterRole, filterStatus, filterLevel]);
+  }, [tabUsers, search, filterRole, filterStatus, filterLevel]);
 
   const hasFilters = search || filterRole || filterStatus || filterLevel;
   // Role/Status/Level (not Search) — what the mobile "Filters" toggle counts,
@@ -74,6 +92,7 @@ const UsersListPage = () => {
     if (n === 'MANAGER') return 'Manager';
     if (n === 'DSA_ADMIN') return 'Admin';
     if (n === 'DSA_MEMBER') return 'Member';
+    if (n === 'SUB_DSA') return 'Partner';
     return n || 'Executive';
   };
 
@@ -81,6 +100,7 @@ const UsersListPage = () => {
     if (n === 'SUPER_ADMIN') return { bg: isDark ? '#ffffff' : '#0a1628', color: isDark ? '#0a1628' : '#fff' };
     if (n === 'MANAGER') return { bg: isDark ? '#2d2159' : '#ede9fe', color: isDark ? '#c7d2fe' : '#4f46e5' };
     if (n === 'DSA_ADMIN' || n === 'Admin') return { bg: isDark ? '#1e2a5c' : '#e0e7ff', color: isDark ? '#a5b4fc' : '#4338ca' };
+    if (n === 'SUB_DSA') return { bg: 'var(--role-partner-bg)', color: 'var(--role-partner)' };
     return { bg: isDark ? '#064e3b' : '#dcfce7', color: isDark ? '#6ee7b7' : '#15803d' };
   };
 
@@ -109,22 +129,48 @@ const UsersListPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 10px' : '24px 24px 16px', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Team Management"
-          subtitle="Manage Your Employees Easily"
+          subtitle={activeTab === 'subDsa' ? 'Manage Your Sub-DSA Partners Easily' : 'Manage Your Employees Easily'}
           compact={isMobile}
           actions={
             <TravelingBorderButton
-              onClick={() => navigate('/users/create')}
+              onClick={() => navigate(activeTab === 'subDsa' ? '/users/create?role=SUB_DSA' : '/users/create')}
               size="sm"
               solid
               showIcon={false}
               className={isMobile ? 'px-4 py-2 text-xs' : ''}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-                <UserPlus size={isMobile ? 12 : 14} /> Add Employee
+                <UserPlus size={isMobile ? 12 : 14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
               </div>
             </TravelingBorderButton>
           }
         />
+
+        {/* Employees / Sub-DSA tab switcher */}
+        <div style={{ display: 'flex', gap: 8, marginTop: isMobile ? 12 : 16 }}>
+          {[
+            { key: 'employees', label: 'Employees', count: employees.length },
+            { key: 'subDsa', label: 'Sub-DSA', count: subDsaUsers.length },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 0,
+                border: `1px solid ${activeTab === tab.key ? 'var(--primary)' : 'var(--outline)'}`,
+                borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '1px solid var(--outline)',
+                background: activeTab === tab.key ? 'var(--primary)0f' : 'var(--surface)',
+                color: activeTab === tab.key ? 'var(--primary)' : 'var(--text-secondary)',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {tab.label} <span style={{ opacity: 0.7, fontWeight: 600 }}>({tab.count})</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ─── Info bar ─── */}
@@ -135,12 +181,12 @@ const UsersListPage = () => {
         <ShieldCheck size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
         {isMobile ? (
           <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> — add, edit or deactivate employees.
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> — add, edit or deactivate {activeTab === 'subDsa' ? 'Sub-DSA partners' : 'employees'}.
           </p>
         ) : (
           <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate employees.
-            Employees receive OTP to mobile and email on account creation to activate access.
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate {activeTab === 'subDsa' ? 'Sub-DSA partners' : 'employees'}.
+            {activeTab === 'subDsa' ? ' Partners receive OTP to mobile and email on account creation to activate access.' : ' Employees receive OTP to mobile and email on account creation to activate access.'}
           </p>
         )}
       </div>
@@ -197,15 +243,18 @@ const UsersListPage = () => {
 
         {(!isMobile || showFilters) && (
           <>
-            {/* Role */}
-            <div style={{ flex: 1, minWidth: isMobile ? '45%' : 130 }}>
-              <span style={labelSm}>Role</span>
-              <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-                style={{ ...underlineInput(!!filterRole), appearance: 'none', cursor: 'pointer', borderBottomColor: filterRole ? 'var(--primary)' : 'var(--outline)', color: filterRole ? 'var(--primary)' : 'var(--on-surface)' }}>
-                <option value="">All Roles</option>
-                {ROLE_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-              </select>
-            </div>
+            {/* Role — every row on the Sub-DSA tab is already the same role,
+                so this filter would just be a confusing no-op there. */}
+            {activeTab !== 'subDsa' && (
+              <div style={{ flex: 1, minWidth: isMobile ? '45%' : 130 }}>
+                <span style={labelSm}>Role</span>
+                <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+                  style={{ ...underlineInput(!!filterRole), appearance: 'none', cursor: 'pointer', borderBottomColor: filterRole ? 'var(--primary)' : 'var(--outline)', color: filterRole ? 'var(--primary)' : 'var(--on-surface)' }}>
+                  <option value="">All Roles</option>
+                  {ROLE_OPTIONS.filter(o => (o.value || o) !== 'SUB_DSA').map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
+                </select>
+              </div>
+            )}
 
             {/* Status */}
             <div style={{ flex: 1, minWidth: isMobile ? '45%' : 120 }}>
@@ -217,15 +266,17 @@ const UsersListPage = () => {
               </select>
             </div>
 
-            {/* Level */}
-            <div style={{ flex: 1, minWidth: isMobile ? '45%' : 110 }}>
-              <span style={labelSm}>Level</span>
-              <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
-                style={{ ...underlineInput(!!filterLevel), appearance: 'none', cursor: 'pointer', borderBottomColor: filterLevel ? 'var(--primary)' : 'var(--outline)', color: filterLevel ? 'var(--primary)' : 'var(--on-surface)' }}>
-                <option value="">All Levels</option>
-                {['L1', 'L2', 'L3', 'L4'].map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
+            {/* Level — Sub-DSA partners don't sit in the internal L1-L4 hierarchy. */}
+            {activeTab !== 'subDsa' && (
+              <div style={{ flex: 1, minWidth: isMobile ? '45%' : 110 }}>
+                <span style={labelSm}>Level</span>
+                <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
+                  style={{ ...underlineInput(!!filterLevel), appearance: 'none', cursor: 'pointer', borderBottomColor: filterLevel ? 'var(--primary)' : 'var(--outline)', color: filterLevel ? 'var(--primary)' : 'var(--on-surface)' }}>
+                  <option value="">All Levels</option>
+                  {['L1', 'L2', 'L3', 'L4'].map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            )}
 
             {hasFilters && (
               <button
@@ -249,16 +300,20 @@ const UsersListPage = () => {
       ) : filtered.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
           <Users size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No employees found</h3>
-          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>Try adjusting your filters or add a new employee.</p>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>
+            {activeTab === 'subDsa' ? 'No Sub-DSA partners found' : 'No employees found'}
+          </h3>
+          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>
+            {activeTab === 'subDsa' ? 'Try adjusting your filters or add a new Sub-DSA partner.' : 'Try adjusting your filters or add a new employee.'}
+          </p>
           <TravelingBorderButton
-            onClick={() => navigate('/users/create')}
+            onClick={() => navigate(activeTab === 'subDsa' ? '/users/create?role=SUB_DSA' : '/users/create')}
             size="sm"
             solid
             showIcon={false}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <UserPlus size={14} /> Add Employee
+              <UserPlus size={14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
             </div>
           </TravelingBorderButton>
         </div>
@@ -266,8 +321,8 @@ const UsersListPage = () => {
         <>
           {/* Sub-header */}
           <div style={{ padding: isMobile ? '8px 16px' : '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Team Information</span>
-            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {users.length} employees</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{activeTab === 'subDsa' ? 'Sub-DSA Partners' : 'Team Information'}</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tabUsers.length} {activeTab === 'subDsa' ? 'partners' : 'employees'}</span>
           </div>
 
           {/* Mobile: card list instead of a table — same reasoning as
@@ -276,7 +331,86 @@ const UsersListPage = () => {
               horizontally scrollable, hiding columns off-screen behind a
               second gesture. A card puts every field for one employee in a
               single vertical read. */}
-          {isMobile ? (
+          {activeTab === 'subDsa' ? (
+            // Sub-DSA gets one card layout at every breakpoint (not a
+            // separate mobile/desktop split) — Payout Setup opens its own
+            // full-screen route (SubDsaPayoutSetupPage) rather than
+            // expanding inline, so it has room for its multi-column tables
+            // on both desktop and mobile.
+            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+              {filtered.map((u) => {
+                const [avatarBg, avatarClr] = avatarColors(u.name);
+                const pill = getRolePill(u.role?.name);
+                const isActive = (u.status || 'ACTIVE') === 'ACTIVE';
+                return (
+                  <div key={u.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0 }}>
+                    <div style={{ padding: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                          <div style={{
+                            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                            background: avatarBg, color: avatarClr,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 12, fontWeight: 800,
+                          }}>
+                            {getInitials(u.name)}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {u.name || '—'}
+                            </div>
+                            <span style={{ display: 'inline-block', marginTop: 3, background: pill.bg, color: pill.color, padding: '2px 7px', borderRadius: 0, fontSize: 9, fontWeight: 800 }}>
+                              {getRoleLabel(u.role?.name)}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                          <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? 'var(--success)' : 'var(--error)' }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--success)' : 'var(--error)', whiteSpace: 'nowrap' }}>
+                            {u.status || 'ACTIVE'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 10, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Designation</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.designation || '—'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Mobile</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.mobile || '—'}</div>
+                        </div>
+                        <div style={{ gridColumn: isMobile ? 'span 2' : 'auto' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Email</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || '—'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Last Login</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{u.last_login_at ? formatDateTime(u.last_login_at) : '—'}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        <button
+                          onClick={() => navigate(`/users/${u.id}/edit`)}
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer' }}
+                        >
+                          <Edit size={12} /> Edit Details
+                        </button>
+                        <button
+                          onClick={() => navigate(`/users/${u.id}/payout-setup`)}
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer' }}
+                        >
+                          <Wallet size={12} /> Payout Setup
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : isMobile ? (
             <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
               {filtered.map((u) => {
                 const [avatarBg, avatarClr] = avatarColors(u.name);

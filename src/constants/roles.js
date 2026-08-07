@@ -24,6 +24,12 @@ export const ROLES = {
     bg: 'var(--role-dsa-member-bg)',
     description: 'Field employee within a DSA hierarchy',
   },
+  SUB_DSA: {
+    name: 'Sub-DSA Partner',
+    color: 'var(--role-partner)',
+    bg: 'var(--role-partner-bg)',
+    description: 'External referral partner working under a DSA',
+  },
 };
 
 // Role options for the Create User form (role_id mapped to internal name)
@@ -32,6 +38,7 @@ export const ROLE_OPTIONS = [
   { label: 'Cred2Tech Member', value: 'CRED2TECH_MEMBER' },
   { label: 'DSA Admin', value: 'DSA_ADMIN' },
   { label: 'DSA Member', value: 'DSA_MEMBER' },
+  { label: 'Sub-DSA Partner', value: 'SUB_DSA' },
 ];
 
 // Roles allowed on the main dashboard ("/"). Kept in sync with the "/" route's

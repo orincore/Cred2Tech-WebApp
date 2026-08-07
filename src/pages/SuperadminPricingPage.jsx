@@ -31,7 +31,7 @@ const useResponsive = () => {
 const StatCard = ({ icon: Icon, value, label, color, isMobile }) => (
   <div style={{
     background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
-    padding: isMobile ? '10px' : '14px 16px',
+    padding: isMobile ? '10px' : '8px 12px',
     display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
   }}>
     {/* Swatch background used to be `${color}10` — a Tailwind-style alpha
@@ -41,15 +41,65 @@ const StatCard = ({ icon: Icon, value, label, color, isMobile }) => (
         the icon glyph keeps each card visually distinct without relying on
         that. */}
     <div style={{
-      width: isMobile ? 28 : 38, height: isMobile ? 28 : 38, borderRadius: 0, flexShrink: 0,
+      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: 0, flexShrink: 0,
       background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
       justifyContent: 'center', color,
     }}>
-      <Icon size={isMobile ? 14 : 18} />
+      <Icon size={isMobile ? 14 : 16} />
     </div>
     <div style={{ minWidth: 0 }}>
       <p style={{ fontSize: isMobile ? 14 : 17, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>
       <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, color: 'var(--text-tertiary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{label}</p>
+    </div>
+  </div>
+);
+
+// Same footprint as StatCard (no extra header row added) but doubles as the
+// live editor for the Direct MSME eligibility fee — click the value to swap
+// it for a rupee input in place, so admins can update the real payment-gate
+// price without a separate section eating vertical space.
+const MsmeStatCard = ({ msmePricing, isMobile, isEditing, draft, setDraft, onStartEdit, onCancel, onSave, saving }) => (
+  <div
+    onClick={!isEditing ? onStartEdit : undefined}
+    style={{
+      background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
+      padding: isMobile ? '10px' : '8px 12px',
+      display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
+      cursor: isEditing ? 'default' : 'pointer',
+    }}
+  >
+    <div style={{
+      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: 0, flexShrink: 0,
+      background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', color: '#7C3AED',
+    }}>
+      <Building2 size={isMobile ? 14 : 16} />
+    </div>
+    <div style={{ minWidth: 0, flex: 1 }}>
+      {isEditing ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>₹</span>
+          <input
+            type="number"
+            min="1"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoFocus
+            style={{ width: 56, fontSize: 13, fontWeight: 800, border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)', color: 'var(--on-surface)', padding: '2px 4px', outline: 'none' }}
+          />
+          <button onClick={onSave} disabled={saving} style={{ background: 'var(--primary)', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 6px', cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '…' : 'Save'}</button>
+          <button onClick={onCancel} style={{ background: 'transparent', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 10, fontWeight: 700, padding: '3px 6px', cursor: 'pointer' }}>✕</button>
+        </div>
+      ) : (
+        <>
+          <p style={{ fontSize: isMobile ? 14 : 17, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {msmePricing ? `₹${(msmePricing.default_credit_cost / 100).toFixed(0)}` : '—'}
+          </p>
+          <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, color: 'var(--text-tertiary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+            Direct MSME · tap to edit
+          </p>
+        </>
+      )}
     </div>
   </div>
 );
@@ -71,6 +121,8 @@ const SuperadminPricingPage = () => {
   // always shows it expanded, unaffected by this state.
   const [showInfo, setShowInfo] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [msmeEditing, setMsmeEditing] = useState(false);
+  const [msmeDraft, setMsmeDraft] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -113,6 +165,46 @@ const SuperadminPricingPage = () => {
     }
   };
 
+  // The MSME self-service portal's payment gate (GET /msme/payment/config,
+  // called by MsmePaymentGate.jsx before an eligibility check) reads this
+  // exact row live on every request — no caching, no redeploy — so editing
+  // it here through the same PATCH the API rate card already uses is
+  // sufficient to change the real charged amount immediately. Its
+  // default_credit_cost is stored in paise (Razorpay order amount), unlike
+  // every other row here which stores rupees directly — pulling it into its
+  // own card with a rupee-denominated input avoids an admin seeing "99900"
+  // in a raw number field and misreading it as ₹99,900.
+  const startMsmeEdit = () => {
+    setMsmeDraft(msmePricing ? String(Math.round(msmePricing.default_credit_cost / 100)) : '');
+    setMsmeEditing(true);
+  };
+
+  const handleSaveMsmePrice = async () => {
+    if (!msmePricing) return;
+    const inr = parseFloat(msmeDraft);
+    if (!Number.isFinite(inr) || inr <= 0) {
+      toast.error('Enter a valid amount greater than 0');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/admin/wallet/api-pricing/${msmePricing.id}`, {
+        api_name: msmePricing.api_name,
+        description: msmePricing.description,
+        vendor_cost: msmePricing.vendor_cost,
+        credit_cost: Math.round(inr * 100),
+        is_active: msmePricing.is_active,
+      });
+      toast.success('Direct MSME eligibility price updated');
+      setMsmeEditing(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAddSlab = () => {
     const maxSlab = discounts.length > 0 ? Math.max(...discounts.map(d => d.min_topup_amount)) : 0;
     const newSlab = { id: Date.now(), min_topup_amount: maxSlab + 5000, bonus_percentage: 5, is_new: true };
@@ -140,19 +232,29 @@ const SuperadminPricingPage = () => {
     }
   };
 
+  // Split out the one-time Direct MSME eligibility fee — it's stored in
+  // paise (a Razorpay order amount) while every other row here is a small
+  // per-API-call rate stored directly in rupees. Averaging it in with the
+  // rest (as the "Avg. Rate / Call" stat used to) let one 99900 value
+  // dwarf a set of ~2-20 rupee values into a meaningless number, and it
+  // isn't a per-call rate to begin with. It gets its own dedicated,
+  // clearly-labeled card below instead of living inside the generic table.
+  const msmePricing = useMemo(() => pricing.find(p => p.api_code === 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
+  const apiPricingRows = useMemo(() => pricing.filter(p => p.api_code !== 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
+
   const stats = useMemo(() => {
-    const live = pricing.filter(p => p.is_active).length;
-    const avgRate = pricing.reduce((acc, curr) => acc + curr.default_credit_cost, 0) / (pricing.length || 1);
-    const avgMargin = pricing.reduce((acc, curr) => {
+    const live = apiPricingRows.filter(p => p.is_active).length;
+    const avgRate = apiPricingRows.reduce((acc, curr) => acc + curr.default_credit_cost, 0) / (apiPricingRows.length || 1);
+    const avgMargin = apiPricingRows.reduce((acc, curr) => {
         const margin = curr.default_credit_cost - curr.vendor_cost;
         return acc + (margin / (curr.default_credit_cost || 1));
-    }, 0) / (pricing.length || 1) * 100;
-    
+    }, 0) / (apiPricingRows.length || 1) * 100;
+
     return { live, avgRate, avgMargin };
-  }, [pricing]);
+  }, [apiPricingRows]);
 
   const filtered = useMemo(() => {
-    return pricing.filter((p) => {
+    return apiPricingRows.filter((p) => {
       const q = search.toLowerCase();
       const matchSearch = !q ||
         p.api_name?.toLowerCase().includes(q) ||
@@ -160,7 +262,7 @@ const SuperadminPricingPage = () => {
         p.description?.toLowerCase().includes(q);
       return matchSearch;
     });
-  }, [pricing, search]);
+  }, [apiPricingRows, search]);
 
   /* ---- label style shared across filters ---- */
   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
@@ -181,12 +283,12 @@ const SuperadminPricingPage = () => {
           clearance (verified against AppLayout's actual 60px fixed topbar,
           not the old blanket 80px every page used), smaller title/subtitle,
           tighter padding. Desktop untouched. */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '68px 16px 10px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '68px 16px 8px' : '14px 20px 10px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: isMobile ? 18 : 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 17 : 19, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
             API Pricing & Credit Rules
           </h1>
-          <p style={{ margin: isMobile ? '2px 0 0' : '4px 0 0', fontSize: isMobile ? 11 : 13, color: 'var(--on-muted)' }}>
+          <p style={{ margin: isMobile ? '2px 0 0' : '2px 0 0', fontSize: isMobile ? 11 : 12, color: 'var(--on-muted)' }}>
             DSA charges & discount tiers
           </p>
         </div>
@@ -202,7 +304,7 @@ const SuperadminPricingPage = () => {
           <button
             onClick={() => setShowInfo(v => !v)}
             style={{
-              width: '100%', padding: '8px 16px', background: 'transparent', border: 'none',
+              width: '100%', padding: '6px 16px', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left',
             }}
           >
@@ -223,16 +325,20 @@ const SuperadminPricingPage = () => {
                 <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" isMobile />
                 <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. Rate / Call" color="#059669" isMobile />
                 <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. Gross Margin" color="#D97706" isMobile />
-                <StatCard icon={Building2} value="₹1,150" label="Direct MSME Price" color="#7C3AED" isMobile />
+                <MsmeStatCard
+                  msmePricing={msmePricing} isMobile
+                  isEditing={msmeEditing} draft={msmeDraft} setDraft={setMsmeDraft}
+                  onStartEdit={startMsmeEdit} onCancel={() => setMsmeEditing(false)} onSave={handleSaveMsmePrice} saving={saving}
+                />
               </div>
             </div>
           )}
         </div>
       ) : (
         <>
-          <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <ShieldAlert size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
+          <div style={{ borderBottom: '1px solid var(--outline)', padding: '5px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <ShieldAlert size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
             </p>
           </div>
@@ -240,18 +346,22 @@ const SuperadminPricingPage = () => {
           {/* ─── Stats cards ─── */}
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 12, padding: '16px 20px', background: 'var(--bg)', flexShrink: 0,
+            gap: 8, padding: '8px 20px', background: 'var(--bg)', flexShrink: 0,
           }}>
             <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" />
             <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. Rate / Call" color="#059669" />
             <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. Gross Margin" color="#D97706" />
-            <StatCard icon={Building2} value="₹1,150" label="Direct MSME Price" color="#7C3AED" />
+            <MsmeStatCard
+              msmePricing={msmePricing}
+              isEditing={msmeEditing} draft={msmeDraft} setDraft={setMsmeDraft}
+              onStartEdit={startMsmeEdit} onCancel={() => setMsmeEditing(false)} onSave={handleSaveMsmePrice} saving={saving}
+            />
           </div>
         </>
       )}
 
       {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '10px 16px' : '20px 20px', display: 'flex', gap: isMobile ? 12 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '8px 16px' : '10px 20px', display: 'flex', gap: isMobile ? 12 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
         {/* Search */}
         <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
           <span style={labelSm}>Search</span>

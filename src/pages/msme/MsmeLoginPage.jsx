@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { msmeAuthApi } from '../../api/msmeService';
@@ -18,6 +18,14 @@ const stepVariants = {
 const MsmeLoginPage = () => {
   const { user, login } = useMsmeAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // MsmeProtectedRoute redirects a logged-out deep link here with
+  // state.from set to the page the user was trying to reach — send them
+  // back there after OTP verification instead of always to the dashboard.
+  const redirectTarget = location.state?.from
+    ? `${location.state.from.pathname}${location.state.from.search || ''}${location.state.from.hash || ''}`
+    : '/msme/dashboard';
 
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
@@ -35,7 +43,7 @@ const MsmeLoginPage = () => {
     if (step === 2) otpInputRef.current?.focus();
   }, [step]);
 
-  if (user) return <Navigate to="/msme/dashboard" replace />;
+  if (user) return <Navigate to={redirectTarget} replace />;
 
   const handleSendOtp = async (e) => {
     e?.preventDefault();
@@ -75,7 +83,7 @@ const MsmeLoginPage = () => {
       const res = await msmeAuthApi.verifyOtp(mobile, otp);
       login(res.data.user, res.data.token);
       toast.success('Logged in successfully');
-      navigate('/msme/dashboard');
+      navigate(redirectTarget, { replace: true });
     } catch (err) {
       const msg = getErrorMessage(err);
       setApiError(msg);
@@ -121,7 +129,7 @@ const MsmeLoginPage = () => {
 
           <div className="relative mt-auto w-full flex items-center justify-center flex-1">
             <lottie-player
-              src="/lottie/data_recolored.json"
+              src="/lottie/into.json"
               background="transparent"
               speed="1"
               loop
@@ -292,9 +300,16 @@ const MsmeLoginPage = () => {
           </AnimatePresence>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
+            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-medium mb-4">
               Platform acts as technology facilitator only. Not a lender or credit institution.
             </p>
+            <button
+              onClick={() => navigate('/login')}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[14px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[17px]">badge</span>
+              DSA Partner? Login here
+            </button>
           </div>
         </div>
       </div>

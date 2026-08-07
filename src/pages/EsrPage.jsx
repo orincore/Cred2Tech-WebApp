@@ -563,9 +563,14 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
         });
         result = result.proposal;
       } else {
+        // Prefer an eligible scheme's id; for a "Not Eligible" lender none
+        // will match, so fall back to whatever scheme was evaluated rather
+        // than leaving the proposal with no scheme reference at all.
         const r = await caseService.createProposal(caseId, {
           lender_id: lender.lender_id,
-          scheme_id: lender.scheme_evaluations?.find(s => s.is_eligible)?.scheme_id || null,
+          scheme_id: lender.scheme_evaluations?.find(s => s.is_eligible)?.scheme_id
+            || lender.scheme_evaluations?.[0]?.scheme_id
+            || null,
         });
         result = r.proposal;
       }
@@ -1067,25 +1072,28 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                     </div>
                   )}
 
-                  {eligible && (
-                    <div className="lender-actions-wrap" style={{
-                      display: 'flex', alignItems: 'center', flexShrink: 0,
-                      paddingLeft: 16, borderLeft: '1px solid var(--border)'
-                    }}>
-                      <LenderActions
-                        lender={lender}
-                        caseId={caseId}
-                        proposals={proposals}
-                        onProposalCreated={load}
-                        onSendToLender={setSendConfirmResult}
-                        onSendToOtherLender={() => setShowOtherLenderModal(true)}
-                        onOpenProposal={onOpenProposal}
-                        isMsme={isMsme}
-                        onApplyForLoan={handleApplyForLoan}
-                        compact
-                      />
-                    </div>
-                  )}
+                  {/* Preparing/sending a proposal is allowed for a "Not
+                      Eligible" lender too, same as an eligible one — the
+                      eligibility engine's verdict is a screening aid, not a
+                      hard block, and a DSA may still want to submit for the
+                      lender's own manual review/override. */}
+                  <div className="lender-actions-wrap" style={{
+                    display: 'flex', alignItems: 'center', flexShrink: 0,
+                    paddingLeft: 16, borderLeft: '1px solid var(--border)'
+                  }}>
+                    <LenderActions
+                      lender={lender}
+                      caseId={caseId}
+                      proposals={proposals}
+                      onProposalCreated={load}
+                      onSendToLender={setSendConfirmResult}
+                      onSendToOtherLender={() => setShowOtherLenderModal(true)}
+                      onOpenProposal={onOpenProposal}
+                      isMsme={isMsme}
+                      onApplyForLoan={handleApplyForLoan}
+                      compact
+                    />
+                  </div>
                 </div>
               </div>
               <div style={{ padding: '0 16px 8px 42px' }}>

@@ -20,6 +20,8 @@ import {
   Target,
   Landmark,
   HandCoins,
+  MessageSquare,
+  Receipt,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -29,6 +31,11 @@ export const MSME_NAV_ITEMS = [
   { id: 'msme-dashboard', label: 'My Dashboard', path: '/msme/dashboard', icon: LayoutDashboard },
   { id: 'msme-onboarding', label: 'Check Eligibility', path: '/msme/onboarding', icon: Sparkles },
   { id: 'msme-cases', label: 'My Cases', path: '/msme/cases', icon: FolderOpen },
+  // Deliberately NOT under /msme/* — shared with the DSA app's identical
+  // route so a link emailed to either audience (see ticket.email.js) always
+  // resolves, and AppLayout already renders this sidebar there too (same
+  // pattern as /cases/:id).
+  { id: 'msme-tickets', label: 'Feedback & Support', path: '/tickets', icon: MessageSquare },
   { id: 'msme-profile', label: 'My Profile', path: '/msme/profile', icon: UserCircle },
 ];
 
@@ -77,6 +84,13 @@ export const NAV_ITEMS = [
     roles: ['SUPER_ADMIN'],
   },
   {
+    id: 'admin-transactions',
+    label: 'Transactions',
+    path: '/admin/transactions',
+    icon: Receipt,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
     id: 'admin-api-logs',
     label: 'API Observability',
     path: '/admin/logs',
@@ -96,6 +110,15 @@ export const NAV_ITEMS = [
     path: '/admin/msme-cases',
     icon: Inbox,
     roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-tickets',
+    label: 'Feedback & Tickets',
+    path: '/admin/tickets',
+    icon: MessageSquare,
+    roles: ['SUPER_ADMIN', 'CRED2TECH_MEMBER'],
+    // Static fallback — Sidebar.jsx overrides this with the live unread
+    // count fetched from GET /tickets/unread-count before rendering.
   },
 
   // DSA_ADMIN Views
@@ -181,6 +204,13 @@ export const NAV_ITEMS = [
     label: 'Wallet',
     path: '/wallet',
     icon: Wallet,
+    roles: ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'],
+  },
+  {
+    id: 'my-tickets',
+    label: 'Feedback & Support',
+    path: '/tickets',
+    icon: MessageSquare,
     roles: ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'],
   },
 

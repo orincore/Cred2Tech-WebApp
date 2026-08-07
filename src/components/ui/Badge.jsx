@@ -20,6 +20,19 @@ const Badge = ({ type = 'role', value, className = '' }) => {
     }
   } else if (type === 'level') {
     color = 'var(--info)'; bg = 'var(--info-bg)'; label = formatStatusLabel(value);
+  } else if (type === 'ticketStatus') {
+    const map = {
+      OPEN: { color: 'var(--info)', bg: 'var(--info-bg)' },
+      IN_PROGRESS: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
+      RESOLVED: { color: 'var(--success)', bg: 'var(--success-bg)' },
+      CLOSED: { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' },
+    };
+    ({ color, bg } = map[value] || map.OPEN);
+    label = formatStatusLabel(value);
+  } else if (type === 'ticketType') {
+    color = value === 'ISSUE' ? 'var(--error)' : 'var(--primary)';
+    bg = value === 'ISSUE' ? 'var(--error-bg)' : 'var(--info-bg)';
+    label = value === 'ISSUE' ? 'Issue' : 'Feedback';
   } else {
     color = 'var(--text-secondary)'; bg = 'var(--bg-elevated)'; label = formatStatusLabel(value);
   }

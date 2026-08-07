@@ -3,7 +3,9 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { MsmeAuthProvider, useMsmeAuth } from '../context/MsmeAuthContext';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
+import FeedbackButton from '../components/feedback/FeedbackButton';
 import { getInitials } from '../utils/helpers';
+import { TOAST_OPTIONS } from '../constants/toastOptions';
 
 // Shell for the MSME direct portal. Mirrors AppLayout's responsive sidebar
 // behavior; the /msme/login route renders bare (no chrome).
@@ -170,6 +172,7 @@ const LayoutContent = () => {
           <Outlet />
         </main>
       </div>
+      <FeedbackButton />
     </div>
   );
 };
@@ -177,18 +180,7 @@ const LayoutContent = () => {
 const MsmeLayout = () => (
   <MsmeAuthProvider>
     <LayoutContent />
-    <Toaster
-      position="top-right"
-      toastOptions={{
-        duration: 4000,
-        style: {
-          fontFamily: 'Inter, sans-serif',
-          fontSize: 14,
-          borderRadius: 10,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-        },
-      }}
-    />
+    <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
   </MsmeAuthProvider>
 );
 

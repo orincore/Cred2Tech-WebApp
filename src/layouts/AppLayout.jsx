@@ -3,10 +3,17 @@ import { Outlet } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
+import FeedbackButton from '../components/feedback/FeedbackButton';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { getInitials } from '../utils/helpers';
+import { TOAST_OPTIONS } from '../constants/toastOptions';
+
+// The submit-feedback flow is for MSME/DSA submitters, not the Cred2Tech
+// admins who receive and manage those submissions (they get the full
+// ticket-management panel instead — see NAV_ITEMS' 'admin-tickets' entry).
+const FEEDBACK_SUBMITTER_ROLES = ['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 
 const AppLayout = () => {
   const { user } = useAuth();
@@ -213,18 +220,8 @@ const AppLayout = () => {
           <Outlet />
         </main>
       </div>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 14,
-            borderRadius: 10,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-          },
-        }}
-      />
+      {FEEDBACK_SUBMITTER_ROLES.includes(user?.role) && <FeedbackButton />}
+      <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
     </div>
   );
 };

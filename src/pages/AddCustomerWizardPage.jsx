@@ -5,7 +5,7 @@ import { caseService } from '../api/caseService';
 import { otpService } from '../api/otpService';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
@@ -269,8 +269,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
         ownership_type: caseData.property?.ownership_type || 'Sole Owner',
         market_value: caseData.property?.market_value || '',
-        gst_completed: panVerifiedNow && caseData.data_pull_status?.gst_status === 'COMPLETE',
-        gst_profile: panVerifiedNow ? (caseData.customer?.gst_profiles?.[0]?.raw_response || null) : null,
+        // Not gated on panVerifiedNow (unlike pan_profile above) — a
+        // completed GST pull stays valid data even if the PAN was reset
+        // afterwards, so it must keep showing as done rather than
+        // resurrecting the "empty state next to a completed pull"
+        // contradiction this was part of.
+        gst_completed: caseData.data_pull_status?.gst_status === 'COMPLETE',
         itr_completed: caseData.data_pull_status?.itr_status === 'COMPLETE',
         // NOTE: the backend strips `customer.itr_analytics` / `customer.bank_statements`
         // (see case.service.js getCaseById) and relocates the latest record to
@@ -372,16 +376,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     else { setPanVerifying(true); setPanVerifyFailed(false); }
 
     try {
-      let targetCaseId = caseId;
-      let targetCustomerId = formData.customer_id;
-      if (!targetCaseId) {
-        const draft = await ensureDraftSaved();
-        targetCaseId = draft.targetCaseId;
-        targetCustomerId = draft.targetCustomerId;
-      }
+      // Always persist the current PAN before verifying it — not just for a
+      // brand-new case/applicant. Verifying only *checks* the value passed
+      // in this request; for an already-verified record being corrected
+      // (the whole point of the Edit button), the freshly-typed PAN was
+      // still sitting in local state only. Without saving it first, a
+      // successful re-verification never actually reached the database —
+      // the old, wrong PAN stayed on file even though the UI showed
+      // "Verified" again.
+      const draft = await ensureDraftSaved();
+      const targetCaseId = draft.targetCaseId;
+      const targetCustomerId = draft.targetCustomerId;
 
       let applicantId = isCoapplicant ? formData.applicants[idx]?.id : null;
-      if (isCoapplicant && !applicantId) {
+      if (isCoapplicant) {
         const savedApp = await caseService.addApplicant(targetCaseId, formData.applicants[idx]);
         applicantId = savedApp.id;
         const list = [...formData.applicants];
@@ -813,7 +821,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             // Applicant row, which is what the bureau/credit check actually
             // reads. Without this, the bureau vendor gets a null DOB and
             // silently returns "no obligations found" for a real applicant.
-            app = { ...app, pincode: formData.pincode, dob: app.dob || formData.dob };
+            //
+            // formData.business_pan (Customer-level) and this applicant
+            // row's own pan_number are two independently-tracked fields
+            // that only start out in sync — copied once at case-creation
+            // time, never kept in lockstep afterwards. Reconciling them
+            // here on every submit is what actually makes editing the PAN
+            // field take effect on the primary applicant's identity (and
+            // not just the customer record) — addApplicant's own
+            // identity-changed check then resets pan_verified correctly.
+            app = { ...app, pincode: formData.pincode, dob: app.dob || formData.dob, pan_number: formData.business_pan || app.pan_number };
           }
           const savedApp = await caseService.addApplicant(targetCaseId, app);
           savedApps.push(savedApp);
@@ -840,7 +857,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       });
       const data = res.data;
       
-      setFormData(prev => ({...prev, gst_completed: true, gst_profile: data.gstProfile }));
+      setFormData(prev => ({...prev, gst_completed: true }));
       toast.success("GST Report Generated successfully!");
     } catch (err) {
       if (err.message.includes('Insufficient credits')) toast.error("Insufficient Credits - Top Up Required!", { duration: 5000 });
@@ -968,7 +985,35 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  if (loading) return <div style={{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><LoadingSpinner size={40} /></div>;
+  if (loading) {
+    return (
+      <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={160} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, marginBottom: 24 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i}>
+                  <Skeleton width={100} height={10} style={{ marginBottom: 8 }} />
+                  <Skeleton height={38} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={140} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <Skeleton height={90} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: (isMobile && !isMsme) ? '84px 16px 24px' : isMobile ? '24px 16px' : '24px 20px' }}>
@@ -1132,9 +1177,27 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       />
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         {formData.pan_verified ? (
-                          <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CheckCircle2 size={13} /> PAN Verified
-                          </span>
+                          <>
+                            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CheckCircle2 size={13} /> PAN Verified
+                            </span>
+                            {/* A mistyped PAN must be correctable, not permanently
+                                locked — same "Edit" affordance the mobile field
+                                already has just below. Unlocking here re-runs
+                                verification against whatever gets typed next
+                                (the backend resets pan_verified once the value
+                                actually changes), so this never leaves a stale
+                                "Verified" badge on a corrected PAN. */}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setFormData(prev => ({ ...prev, pan_verified: false }))}
+                              title="Edit PAN number"
+                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Pencil size={13} /> Edit
+                            </button>
+                          </>
                         ) : panVerifying ? (
                           <PullingIndicator label="Verifying PAN…" />
                         ) : panVerifyFailed ? (
@@ -1146,19 +1209,30 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         ) : null}
 
                         {formData.pan_verified && (
-                          formData.pan_profile ? (
+                          // `gst_completed` (the real, backend-confirmed GST pull
+                          // status — see GstAnalyticsForm / data_pull_status.gst_status)
+                          // always takes priority over `pan_profile` (just the
+                          // PAN→GSTIN lookup, a separate and much weaker signal
+                          // that can stay empty forever — e.g. a manually-entered
+                          // GSTIN never populates it — even after a real GST pull
+                          // has succeeded). Checking pan_profile first was exactly
+                          // why this badge got stuck on a permanent, misleading
+                          // "Queued…" once gst_completed was already true.
+                          formData.gst_completed ? (
                             <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CheckCircle2 size={13} /> GST Fetched
+                              <CheckCircle2 size={13} /> GST Pulled
+                            </span>
+                          ) : formData.pan_profile ? (
+                            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CheckCircle2 size={13} /> GSTIN Found
                             </span>
                           ) : gstFetching ? (
-                            <PullingIndicator label="Fetching GST…" />
+                            <PullingIndicator label="Looking up GSTIN…" />
                           ) : gstFetchFailed ? (
                             <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <AlertCircle size={13} /> No GST records found for this PAN
+                              <AlertCircle size={13} /> No GSTIN on file — enter manually below
                             </span>
-                          ) : (
-                            <PullingIndicator label="Queued…" />
-                          )
+                          ) : null
                         )}
                       </div>
                     </div>
@@ -1333,8 +1407,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             type="button"
                             className="btn btn-danger btn-sm"
                             onClick={() => removeApplicant(realIdx)}
-                            disabled={formData.is_locked}
-                            title={formData.is_locked ? 'Cannot remove — case is locked' : undefined}
                           >
                             Remove ×
                           </button>
@@ -1356,6 +1428,18 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                                     <CheckCircle2 size={16} /> Verified
                                   </span>
+                                  {/* Same correction affordance as the primary
+                                      applicant's PAN — a wrong co-applicant PAN
+                                      shouldn't be permanently stuck once verified. */}
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => updateApplicantRow(realIdx, 'pan_verified', false)}
+                                    title="Edit PAN number"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                  >
+                                    <Pencil size={12} /> Edit
+                                  </button>
                                 </div>
                               ) : coappPanVerifyingMap[realIdx] ? (
                                 <PullingIndicator label="Verifying PAN…" />
@@ -1372,6 +1456,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                   <CheckCircle2 size={16} /> Verified
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => updateApplicantRow(realIdx, 'otp_verified', false)}
+                                    title="Edit mobile number"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
+                                  >
+                                    <Pencil size={12} /> Edit
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -1470,7 +1563,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
                </div>
-                {(!formData.linked_gstins || formData.linked_gstins.length === 0) && (
+                {/* This strip is about the PAN→GSTIN lookup (linked_gstins) only —
+                    a separate, weaker signal than the real GST pull. It must not
+                    render once the real pull (gst_completed) has succeeded, or it
+                    contradicts the "GST data pulled successfully" panel rendered
+                    by GstAnalyticsForm right below it (the exact bug reported: an
+                    empty-state message and a success panel shown at the same time). */}
+                {!formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0) && (
                   <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
                     {gstFetching ? (
                       <PullingIndicator label="Fetching GST records for this PAN…" />
@@ -1494,7 +1593,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                      caseId={caseId}
                      customerId={formData.customer_id}
                      linkedGstins={formData.linked_gstins}
+                     gstCompleted={formData.gst_completed}
                      onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
+                     onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
                      onboardingMode={mode}
                   />
                 </div>
@@ -1529,6 +1630,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       itrCost={costs.ITR_ANALYTICS}
                       existingRecord={formData.customer_itr_profile}
                       onComplete={(data) => setFormData(prev => ({...prev, itr_completed: true, itr_analytics: data}))}
+                      onRemoved={() => setFormData(prev => ({...prev, itr_completed: false, itr_analytics: null}))}
                       mode={mode}
                   />
 
@@ -1586,7 +1688,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       mode={mode}
                   />
                   
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
+                  {/* Bank statement analysis is a business-income concept — a
+                      salaried co-applicant's income comes from the Salary Slip
+                      OCR section below instead, so it's excluded here the same
+                      way it already is from ITR Analytics above. */}
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
                       <BankStatementUpload
                           key={idx}
                           caseId={caseId}
@@ -1608,14 +1714,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             {formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED') && (
               <div className="card">
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Salary Slip OCR</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Upload the last 3 salary slips for salaried applicants — parsed automatically via OCR</p>
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Salary Slip OCR</h3>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 slips — auto-parsed via OCR</span>
                 </div>
-                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
-                    <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 16 : 0 }}>
-                      <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
+                    <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
+                      <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
                       <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={toTitleCase(app.name) || app.pan_number} />
                     </div>
                   ))}

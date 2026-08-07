@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import { PlusCircle, Trash2, ChevronRight, BarChart3, PenLine } from 'lucide-react';
 
@@ -109,7 +109,36 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
     }
   };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
+  if (loading) {
+    return (
+      <div className="income-summary-page">
+        <div className="card mb-24" style={{ marginBottom: 24 }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={200} height={15} />
+          </div>
+          <div style={{ padding: 0 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{ padding: '14px 16px', borderBottom: i < 2 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Skeleton width={140} height={13} />
+                <Skeleton width={90} height={13} style={{ marginLeft: 'auto' }} />
+                <Skeleton width={90} height={13} />
+                <Skeleton width={60} height={20} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={160} height={15} />
+          </div>
+          <div style={{ padding: 16 }}>
+            <Skeleton height={40} style={{ marginBottom: 10 }} />
+            <Skeleton height={40} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const api = data?.api_data || {};
   const manualTotal = data?.manual_total || 0;

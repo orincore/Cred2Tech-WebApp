@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { AlertCircle, UploadCloud, Plus, X, Download, Trash2 } from 'lucide-react';
 import PullStatusTracker from './ui/PullStatusTracker';
+import Skeleton from './ui/Skeleton';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
@@ -193,6 +194,21 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     };
 
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
+
+    // `existingStatus` is a synchronous prop (the parent wizard already
+    // awaited the case load before this ever mounts) — this is true on the
+    // very first render in the normal case, no artificial delay. Guards the
+    // rare tick where it genuinely hasn't arrived yet, showing a skeleton
+    // instead of a default "Upload PDF" state that would otherwise flash
+    // before snapping to the real one.
+    if (existingStatus === undefined) {
+        return (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
+                <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
+                <Skeleton width={90} height={11} />
+            </div>
+        );
+    }
 
     // RENDER HORIZONTAL ROW
     return (

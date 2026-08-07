@@ -456,8 +456,6 @@ export default function LenderCommissionPage() {
         /* Match CustomersListPage's table density for cross-page consistency */
         .lc-page th { padding: 10px 8px !important; font-size: 10px !important; font-weight: 800 !important; }
         .lc-page td { padding: 12px 8px !important; font-size: 12px !important; }
-        .lc-page .filter-bar .form-control { border-radius: 999px !important; }
-        .lc-page .filter-bar select.form-control { padding-left: 18px !important; padding-right: 18px !important; }
         /* Only the data-list tables (wrapped in .table-wrapper) stack on mobile —
            the printable tax-invoice preview keeps its real table layout since it's
            a document facsimile, not a browsing list. */
@@ -504,39 +502,39 @@ export default function LenderCommissionPage() {
         <div style={{ padding: 60, display: 'flex', justifyContent: 'center' }}><LoadingSpinner size={32} /></div>
       ) : (
         <>
-          <div className="card filter-bar" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', padding: '12px 16px', marginBottom: 20 }}>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-              <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.month || 'all'} onChange={(e) => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })} disabled={data.availableMonths.length === 0}>
-                {data.availableMonths.length === 0 && <option value="">No data available</option>}
-                {data.availableMonths.length > 0 && <option value="all">All Months</option>}
-                {data.availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Lender</label>
-              <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.lenderName || 'All Lenders'} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
-                <option value="All Lenders">All Lenders</option>
-                {data.availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: 1, minWidth: 130 }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
-              <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.product || 'All Products'} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
-                <option value="All Products">All Products</option>
-                <option value="LAP">LAP</option><option value="HL">Home Loan</option><option value="TL">Term Loan</option><option value="BL">Business Loan</option>
-              </select>
-            </div>
-            <div className="search-field" style={{ flex: 2, minWidth: 190 }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
-              <div style={{ position: 'relative' }}>
-                <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-                <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="form-control" style={{ padding: '6px 14px 6px 32px', fontSize: 12 }} />
+          <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
+            {/* Compact filter toolbar — merged into the same card as the summary table below */}
+            <div className="filter-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
+                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={(e) => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })} disabled={data.availableMonths.length === 0}>
+                  {data.availableMonths.length === 0 && <option value="">No data available</option>}
+                  {data.availableMonths.length > 0 && <option value="all">All Months</option>}
+                  {data.availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: 130 }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Lender</label>
+                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.lenderName || 'All Lenders'} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
+                  <option value="All Lenders">All Lenders</option>
+                  {data.availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: 120 }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
+                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.product || 'All Products'} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
+                  <option value="All Products">All Products</option>
+                  <option value="LAP">LAP</option><option value="HL">Home Loan</option><option value="TL">Term Loan</option><option value="BL">Business Loan</option>
+                </select>
+              </div>
+              <div className="search-field" style={{ flex: 2, minWidth: 170 }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                  <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} className="form-control" style={{ padding: '5px 10px 5px 28px', fontSize: 12 }} />
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
             <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
               <table>
                 <thead>

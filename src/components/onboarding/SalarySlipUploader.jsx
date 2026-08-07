@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
-import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Sparkles, Trash2 } from 'lucide-react';
+import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Upload, Trash2 } from 'lucide-react';
 
 const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -42,23 +42,36 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
     try {
       const res = await api.get(`/cases/${caseId}/salary-summary?applicantId=${applicantId}`);
       if (res.data?.success && res.data.data?.length > 0) {
-        // The API returns every result regardless of status (PENDING/FAILED
-        // rows included, e.g. an abandoned upload from a previous session) -
-        // only a genuinely COMPLETED row should ever render as "Processed".
-        // Trusting the array position alone here previously let a stale
-        // PENDING record masquerade as a finished slip showing Net: ₹0.
-        const completed = res.data.data.filter(r => r.ocr_status === 'COMPLETED');
+        const all = res.data.data;
+        // The analytics panel below (avg net take-home etc.) must only ever
+        // reflect genuinely finished slips.
+        const completed = all.filter(r => r.ocr_status === 'COMPLETED');
         setSummary(completed);
 
+        // Slot restoration, however, must reflect everything actually sitting
+        // in the database — not just COMPLETED. A PENDING/PROCESSING row (a
+        // document was uploaded but OCR was never run, or is still running)
+        // used to be silently dropped here on every revisit, which made an
+        // already-occupied slot look empty and invited uploading the SAME
+        // payslip again into it. Once OCR ran on that second copy, it
+        // correctly — but confusingly — got rejected as a duplicate of the
+        // FIRST upload sitting in a different, invisible slot. FAILED rows
+        // are deliberately left out: a failure here is almost always that
+        // same "duplicate period" rejection, which isn't useful to
+        // redisplay as if it were a real, distinct slip — a fresh upload is
+        // the right recovery path for those.
+        const restorable = [
+          ...completed,
+          ...all.filter(r => r.ocr_status === 'PENDING' || r.ocr_status === 'PROCESSING'),
+        ].slice(0, 3);
+
         const newMonths = [...months];
-        completed.forEach((r, idx) => {
-          if (idx < 3) {
-            newMonths[idx].ocrStatus = 'COMPLETED';
-            newMonths[idx].result = r;
-            newMonths[idx].isUploaded = true;
-            newMonths[idx].documentId = r.document_id;
-            newMonths[idx].fileName = r.document?.original_file_name || newMonths[idx].fileName;
-          }
+        restorable.forEach((r, idx) => {
+          newMonths[idx].ocrStatus = r.ocr_status;
+          newMonths[idx].result = r.ocr_status === 'COMPLETED' ? r : null;
+          newMonths[idx].isUploaded = true;
+          newMonths[idx].documentId = r.document_id;
+          newMonths[idx].fileName = r.document?.original_file_name || newMonths[idx].fileName;
         });
         setMonths(newMonths);
       }
@@ -297,9 +310,27 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   };
 
   const completedCount = months.filter(m => m.ocrStatus === 'COMPLETED').length;
-  const avgNet = summary?.length > 0
-    ? summary.reduce((sum, s) => sum + (s.net_salary || 0), 0) / summary.length
+  // Gross/Deductions/Net must all be averaged the same way — showing Gross
+  // and Deductions from only the single latest slip next to a Net figure
+  // averaged across all of them (the old behavior) made the three numbers
+  // internally inconsistent (Gross − Deductions ≠ the Net shown), and this
+  // average is what recalculateApplicantIncome() actually feeds into ESR/
+  // eligibility, so it's the economically meaningful figure here, not the
+  // latest month alone. Rounded to whole rupees — an unrounded average
+  // renders as ₹31,196.667, which isn't a real currency amount.
+  const avgOf = (key) => summary?.length > 0
+    ? Math.round(summary.reduce((sum, s) => sum + (s[key] || 0), 0) / summary.length)
     : 0;
+  const avgGross = avgOf('gross_salary');
+  const avgDeductions = avgOf('deductions');
+  const avgNet = avgOf('net_salary');
+  // The most recent slip's OCR doesn't always detect an employer name — some
+  // payslip templates never print it as a labelled line, so the vendor's
+  // extraction genuinely has nothing to return for that one slip. Reading
+  // only summary[0] showed a blank "-" even when an OLDER slip for the same
+  // employee did successfully capture it (same employer across periods, so
+  // this fallback is a safe, accurate substitute — not a guess).
+  const employerName = summary?.find(s => s.employer_name)?.employer_name || null;
 
   return (
     <div>
@@ -311,22 +342,28 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         accept="application/pdf,image/jpeg,image/png"
       />
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'inline-flex', gap: 4, marginBottom: 10, border: '1px solid var(--border)', padding: 2 }}>
         <button
           type="button"
           onClick={() => setMode('OCR')}
-          className="btn"
-          style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8, border: mode === 'OCR' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'OCR' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'OCR' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', border: 'none', borderRadius: 0,
+            background: mode === 'OCR' ? 'var(--primary)' : 'transparent', color: mode === 'OCR' ? '#fff' : 'var(--text-secondary)',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}
         >
-          <FileText size={15} /> Upload OCR
+          <FileText size={12} /> Upload OCR
         </button>
         <button
           type="button"
           onClick={() => setMode('MANUAL')}
-          className="btn"
-          style={{ flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8, border: mode === 'MANUAL' ? '2px solid var(--primary)' : '1px solid var(--border)', background: mode === 'MANUAL' ? 'var(--primary-subtle)' : 'var(--bg-surface)', fontWeight: 600, color: mode === 'MANUAL' ? 'var(--primary-dark)' : 'var(--text-secondary)' }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', border: 'none', borderRadius: 0,
+            background: mode === 'MANUAL' ? 'var(--primary)' : 'transparent', color: mode === 'MANUAL' ? '#fff' : 'var(--text-secondary)',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          }}
         >
-          <PenLine size={15} /> Manual Entry
+          <PenLine size={12} /> Manual Entry
         </button>
       </div>
 
@@ -388,134 +425,114 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
-        {months.map((m) => (
-          <div key={m.id} style={{ background: 'var(--bg-elevated)', border: '1.5px dashed var(--border)', borderRadius: 0, padding: 16, textAlign: 'center' }}>
-            {m.ocrStatus === 'COMPLETED' ? (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><CheckCircle2 size={24} color="var(--success)" /></div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 4 }}>{m.label} Processed</div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.fileName || 'Salary slip document'}>
-                  {m.fileName || 'Document attached'}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>Net: ₹{m.result?.net_salary?.toLocaleString('en-IN') || 0}</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
-                    disabled={loadingMonth !== null}
-                  >
-                    {mode === 'OCR' ? 'Re-upload' : 'Edit Details'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    title={`Remove ${m.label} salary slip`}
-                    aria-label={`Remove ${m.label} salary slip`}
-                    style={{ color: 'var(--error)', padding: '0 10px' }}
-                    onClick={() => handleDeleteSlip(m.id)}
-                    disabled={loadingMonth !== null}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </>
-            ) : m.isUploaded ? (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><FileCheck2 size={24} color="var(--info)" /></div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)', marginBottom: 4 }}>{m.label} Uploaded</div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={m.fileName || 'Salary slip document'}>
-                  {m.fileName || 'Document attached'}
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
-                    disabled={loadingMonth !== null || runningAllOcr}
-                  >
-                    {mode === 'OCR' ? 'Change File' : 'Enter Details'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    title={`Remove ${m.label} salary slip`}
-                    aria-label={`Remove ${m.label} salary slip`}
-                    style={{ color: 'var(--error)', padding: '0 10px' }}
-                    onClick={() => handleDeleteSlip(m.id)}
-                    disabled={loadingMonth !== null || runningAllOcr}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><ClipboardList size={24} color="var(--text-tertiary)" /></div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{m.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>{mode === 'OCR' ? 'Upload salary slip PDF / image' : 'Enter manual salary values'}</div>
+      {/* One compact row per slot instead of three large padded cards — same
+          three states (empty / uploaded-pending / completed), same actions,
+          a fraction of the height. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+        {months.map((m) => {
+          const isCompleted = m.ocrStatus === 'COMPLETED';
+          const isPending = !isCompleted && m.isUploaded;
+          const Icon = isCompleted ? CheckCircle2 : isPending ? FileCheck2 : ClipboardList;
+          const iconColor = isCompleted ? 'var(--success)' : isPending ? 'var(--info)' : 'var(--text-tertiary)';
+          const statusText = isCompleted
+            ? (m.fileName || 'Document attached')
+            : isPending
+              ? (m.fileName || 'Document attached')
+              : (mode === 'OCR' ? 'Not uploaded' : 'Not entered');
+          const primaryLabel = isCompleted
+            ? (mode === 'OCR' ? 'Re-upload' : 'Edit')
+            : isPending
+              ? (mode === 'OCR' ? 'Change' : 'Enter')
+              : (loadingMonth === m.id ? (mode === 'OCR' ? 'Uploading…' : 'Saving…') : (mode === 'OCR' ? 'Upload' : 'Enter'));
+
+          return (
+            <div
+              key={m.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                border: '1px solid var(--border)', borderRadius: 0,
+                background: isCompleted ? 'var(--success-bg)' : isPending ? 'var(--info-bg)' : 'var(--bg-elevated)',
+                flexWrap: isMobile ? 'wrap' : 'nowrap',
+              }}
+            >
+              <Icon size={15} color={iconColor} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0, minWidth: 52 }}>{m.label}</span>
+              <span
+                style={{ flex: '1 1 100px', minWidth: 0, fontSize: 11, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={m.fileName || undefined}
+              >
+                {statusText}
+              </span>
+              {isCompleted && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', flexShrink: 0 }}>
+                  ₹{m.result?.net_salary?.toLocaleString('en-IN') || 0}
+                </span>
+              )}
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: isMobile ? 'auto' : 0 }}>
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ width: '100%', justifyContent: 'center', opacity: loadingMonth === m.id ? 0.7 : 1 }}
+                  style={{ padding: '3px 9px', fontSize: 11, fontWeight: 700, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-secondary)', borderRadius: 0, cursor: 'pointer' }}
                   onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
                   disabled={loadingMonth !== null || runningAllOcr}
                 >
-                  {loadingMonth === m.id ? (mode === 'OCR' ? 'Uploading...' : 'Saving...') : (mode === 'OCR' ? 'Upload Slip' : 'Enter Details')}
+                  {primaryLabel}
                 </button>
-              </>
-            )}
-          </div>
-        ))}
+                {m.isUploaded && (
+                  <button
+                    type="button"
+                    title={`Remove ${m.label} salary slip`}
+                    aria-label={`Remove ${m.label} salary slip`}
+                    style={{ padding: '3px 7px', border: '1px solid var(--error)', background: 'var(--bg-surface)', color: 'var(--error)', borderRadius: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    onClick={() => handleDeleteSlip(m.id)}
+                    disabled={loadingMonth !== null || runningAllOcr}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {mode === 'OCR' && months.some(m => m.isUploaded && m.ocrStatus !== 'COMPLETED') && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-          <button
-            type="button"
-            className="btn btn-lg"
-            style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))', color: 'white', border: 'none', width: '100%', maxWidth: 300, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 8 }}
-            onClick={handleRunAllOcr}
-            disabled={runningAllOcr || loadingMonth !== null}
-          >
-            {runningAllOcr ? 'Processing OCR...' : <>Run OCR on Uploaded Slips <Sparkles size={16} /></>}
-          </button>
-        </div>
+        <button
+          type="button"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%',
+            padding: '6px 12px', marginBottom: 10, border: 'none', borderRadius: 0,
+            background: 'var(--primary)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+          onClick={handleRunAllOcr}
+          disabled={runningAllOcr || loadingMonth !== null}
+        >
+          {runningAllOcr ? 'Processing OCR…' : <>Run OCR on Uploaded Slips <Upload size={13} /></>}
+        </button>
       )}
 
+      {/* Single inline strip instead of a boxed 2x2 grid of sub-cards — same
+          four figures (employer, avg gross, avg deductions, net take-home),
+          read left-to-right in one line instead of a padded block. */}
       {completedCount > 0 && summary && summary.length > 0 && (
-        <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success)', borderRadius: 0, padding: 16, marginTop: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <CheckCircle2 size={16} color="var(--success)" />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>OCR Extraction Complete — {applicantName || summary[0]?.employee_name}</span>
-            <span style={{ marginLeft: 'auto', background: 'var(--bg-surface)', color: 'var(--success)', padding: '4px 8px', borderRadius: 0, fontSize: 11, fontWeight: 700 }}>
-              {completedCount} slip{completedCount > 1 ? 's' : ''} processed
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 10 }}>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Employer</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{summary[0]?.employer_name || '-'}</div>
-            </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Latest Gross Salary</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>₹{summary[0]?.gross_salary?.toLocaleString('en-IN') || 0}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month</div>
-            </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 3 }}>Deductions</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>₹{summary[0]?.deductions?.toLocaleString('en-IN') || 0}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month</div>
-            </div>
-            <div style={{ background: 'var(--bg-surface)', borderRadius: 0, padding: '10px 14px', border: '2px solid var(--success)', gridColumn: '1 / -1' }}>
-              <div style={{ fontSize: 10, color: 'var(--success)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>Net Take-Home</div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--success)' }}>₹{avgNet.toLocaleString('en-IN')}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>/ month (avg {completedCount} mo)</div>
-            </div>
-          </div>
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 14px',
+          padding: '6px 10px', background: 'var(--success-bg)', border: '1px solid var(--success)', fontSize: 11,
+        }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: 'var(--success)', flexShrink: 0 }}>
+            <CheckCircle2 size={12} /> {completedCount}/3 processed
+          </span>
+          <span style={{ color: 'var(--text-tertiary)' }}>
+            Employer: <strong style={{ color: 'var(--text-primary)' }}>{employerName || 'Not detected'}</strong>
+          </span>
+          <span style={{ color: 'var(--text-tertiary)' }}>
+            Avg Gross: <strong style={{ color: 'var(--text-primary)' }}>₹{avgGross.toLocaleString('en-IN')}</strong>
+          </span>
+          <span style={{ color: 'var(--text-tertiary)' }}>
+            Avg Deductions: <strong style={{ color: 'var(--text-primary)' }}>₹{avgDeductions.toLocaleString('en-IN')}</strong>
+          </span>
+          <span style={{ color: 'var(--success)', fontWeight: 700, marginLeft: 'auto' }}>
+            Net Take-Home: ₹{avgNet.toLocaleString('en-IN')}/mo
+          </span>
         </div>
       )}
     </div>

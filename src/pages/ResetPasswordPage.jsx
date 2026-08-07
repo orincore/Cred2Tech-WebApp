@@ -16,12 +16,23 @@ const PageShell = ({ children }) => (
       <div className="flex justify-center mb-8">
         <Logo size="large" />
       </div>
-      <div className="bg-white dark:bg-[#162048] rounded-2xl shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
+      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
         {children}
       </div>
     </div>
   </div>
 );
+
+// Backend (Cred2Tech/backend/src/utils/passwordPolicy.js) only requires
+// length + a letter + a number — the special-character rule below is a
+// stricter frontend-only bar for "strong", and never rejects anything the
+// backend would've accepted.
+const PASSWORD_RULES = [
+  { key: 'length', label: 'At least 8 characters', test: (v) => v.length >= 8 && v.length <= 128 },
+  { key: 'letter', label: 'Contains a letter', test: (v) => /[a-zA-Z]/.test(v) },
+  { key: 'number', label: 'Contains a number', test: (v) => /[0-9]/.test(v) },
+  { key: 'special', label: 'Contains a special character', test: (v) => /[^a-zA-Z0-9]/.test(v) },
+];
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -38,18 +49,14 @@ const ResetPasswordPage = () => {
     document.title = 'Cred2Tech | Reset Password';
   }, []);
 
+  const ruleStatus = PASSWORD_RULES.map(rule => ({ ...rule, met: rule.test(password) }));
+  const meetsPolicy = ruleStatus.every(rule => rule.met);
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const canSubmit = meetsPolicy && passwordsMatch;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!token) return;
-
-    if (password.length < 8) {
-      setApiError('Password must be at least 8 characters long.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setApiError('Passwords do not match.');
-      return;
-    }
+    if (!token || !canSubmit) return;
 
     setApiError('');
     setLoading(true);
@@ -124,6 +131,22 @@ const ResetPasswordPage = () => {
                 <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
               </button>
             </div>
+
+            {password.length > 0 && (
+              <ul className="mt-3 space-y-1">
+                {ruleStatus.map(rule => (
+                  <li
+                    key={rule.key}
+                    className={`flex items-center gap-1.5 text-[12px] font-medium ${
+                      rule.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#0a1628]/50 dark:text-[#e6edf7]/50'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">{rule.met ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    {rule.label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div>
@@ -137,10 +160,13 @@ const ResetPasswordPage = () => {
                 className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
               />
             </div>
+            {confirmPassword.length > 0 && !passwordsMatch && (
+              <p className="mt-1.5 text-[12px] font-medium text-red-600 dark:text-red-400">Passwords do not match</p>
+            )}
           </div>
         </div>
 
-        <TravelingBorderButton type="submit" disabled={loading} className="w-full py-3.5 text-[15px] rounded-[10px]">
+        <TravelingBorderButton type="submit" size="sm" disabled={loading || !canSubmit} className="w-full rounded-none">
           {loading ? (
             <div className="flex justify-center items-center w-full h-full">
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

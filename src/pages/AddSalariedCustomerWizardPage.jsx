@@ -58,6 +58,16 @@ const AddSalariedCustomerWizardPage = () => {
   });
 
   const [panVerifying, setPanVerifying] = useState(false);
+  // PAN here locks on `!!caseId || mobile_verified` — a compound condition
+  // (not just "PAN itself verified"), so a plain "reset pan_verified"
+  // toggle (like the main wizard uses) wouldn't actually unlock the input.
+  // This flag overrides that lock directly instead.
+  const [panEditUnlocked, setPanEditUnlocked] = useState(false);
+  // Per-co-applicant-row PAN unlock — co-applicant PAN's disabled state is
+  // tied to that row's own otp_verified (this file verifies mobile OTP
+  // before PAN, unlike the primary section), so a plain "reset pan_verified"
+  // toggle wouldn't unlock the input by itself. Keyed by applicant array index.
+  const [coappPanEditUnlockedMap, setCoappPanEditUnlockedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
@@ -334,12 +344,23 @@ const AddSalariedCustomerWizardPage = () => {
     setPanVerifying(true);
 
     try {
-      let targetCaseId = caseId;
-      let targetCustomerId = formData.customer_id;
-      if (!targetCaseId) {
-        const draft = await ensureDraftSaved();
-        targetCaseId = draft.targetCaseId;
-        targetCustomerId = draft.targetCustomerId;
+      // Always persist the current PAN before verifying it — not just for a
+      // brand-new case/applicant. Verifying only *checks* the value passed
+      // in this request; for an already-verified record being corrected
+      // (the whole point of the Edit button), the freshly-typed PAN was
+      // still sitting in local state only, and would never reach the
+      // database even after a successful re-verification.
+      const draft = await ensureDraftSaved();
+      const targetCaseId = draft.targetCaseId;
+      const targetCustomerId = draft.targetCustomerId;
+
+      let applicantId = isCoapplicant && idx !== null ? formData.applicants[idx]?.id : null;
+      if (isCoapplicant && idx !== null) {
+        const savedApp = await caseService.addApplicant(targetCaseId, formData.applicants[idx]);
+        applicantId = savedApp.id;
+        const list = [...formData.applicants];
+        list[idx] = savedApp;
+        setFormData(prev => ({ ...prev, applicants: list }));
       }
 
       const res = await api.post('/external/pan/verify', {
@@ -347,7 +368,7 @@ const AddSalariedCustomerWizardPage = () => {
         customer_id: targetCustomerId,
         case_id: targetCaseId,
         is_coapplicant: isCoapplicant,
-        applicant_id: isCoapplicant && idx !== null ? formData.applicants[idx].id : null
+        applicant_id: applicantId
       });
       const data = res.data;
 
@@ -700,7 +721,7 @@ const AddSalariedCustomerWizardPage = () => {
 
               <div style={{ padding: 24 }}>
                 <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="PAN Number" name="business_pan" required disabled={!!caseId || formData.mobile_verified}>
+                  <FormField label="PAN Number" name="business_pan" required disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -709,13 +730,27 @@ const AddSalariedCustomerWizardPage = () => {
                         onBlur={() => checkPanDuplicate(formData.business_pan)}
                         className="form-control"
                         placeholder="ABCDE1234F"
-                        disabled={!!caseId || formData.mobile_verified}
+                        disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}
                         style={{ textTransform: 'uppercase' }}
                       />
                       {formData.pan_verified ? (
-                        <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <CheckCircle2 size={13} /> Verified
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CheckCircle2 size={13} /> Verified
+                          </span>
+                          {/* A mistyped PAN must be correctable, not permanently
+                              locked once a case exists — same "Edit" affordance
+                              the mobile field already has. */}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => { setPanEditUnlocked(true); setFormData(prev => ({ ...prev, pan_verified: false })); }}
+                            title="Edit PAN number"
+                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Pencil size={13} /> Edit
+                          </button>
+                        </div>
                       ) : (
                         <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan} className="btn btn-secondary">
                           {panVerifying ? 'Wait...' : 'Verify PAN'}
@@ -844,11 +879,25 @@ const AddSalariedCustomerWizardPage = () => {
                           <div className="grid-2" style={{ marginBottom: 16 }}>
                             <FormField label="PAN Number" name={`copan_${realIdx}`}>
                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                                <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }} disabled={app.otp_verified} placeholder="ABCDE1234F" />
+                                <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }} disabled={app.otp_verified && !coappPanEditUnlockedMap[realIdx]} placeholder="ABCDE1234F" />
                                 {app.pan_verified ? (
-                                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                                    <CheckCircle2 size={16} /> Verified
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                      <CheckCircle2 size={16} /> Verified
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() => {
+                                        setCoappPanEditUnlockedMap(prev => ({ ...prev, [realIdx]: true }));
+                                        updateApplicantRow(realIdx, 'pan_verified', false);
+                                      }}
+                                      title="Edit PAN number"
+                                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                    >
+                                      <Pencil size={12} /> Edit
+                                    </button>
+                                  </div>
                                 ) : app.otp_verified ? (
                                   <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying} className="btn btn-secondary btn-sm">
                                     {panVerifying ? 'Wait...' : 'Verify PAN'}
@@ -867,6 +916,15 @@ const AddSalariedCustomerWizardPage = () => {
                                 ) : (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                     <CheckCircle2 size={16} /> Verified
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() => updateApplicantRow(realIdx, 'otp_verified', false)}
+                                      title="Edit mobile number"
+                                      style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
+                                    >
+                                      <Pencil size={12} /> Edit
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -952,23 +1010,19 @@ const AddSalariedCustomerWizardPage = () => {
 
             {/* Salary Slip Upload section */}
             <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={17} /> Salary Slip Upload <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-tertiary)' }}>(Last 3 months — OCR auto-extracts data)</span>
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <FileText size={15} /> Salary Slip Upload
                 </h3>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 months — OCR auto-extracts data</span>
               </div>
-              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 40 }}>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {formData.applicants.filter(a => a.id).map((app, idx) => (
-                  <div key={app.id} style={{ borderBottom: idx < formData.applicants.filter(a => a.id).length - 1 ? '1px solid var(--border)' : 'none', paddingBottom: idx < formData.applicants.filter(a => a.id).length - 1 ? 40 : 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 0, background: 'var(--success-bg)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
-                        {idx + 1}
-                      </div>
-                      <h4 style={{ fontSize: 16, fontWeight: 700 }}>
-                        {getApplicantDisplayName(app, idx)}
-                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 8 }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
-                      </h4>
-                    </div>
+                  <div key={app.id} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                      {getApplicantDisplayName(app, idx)}
+                      <span style={{ fontWeight: 500, marginLeft: 6, color: 'var(--text-tertiary)' }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
+                    </h4>
 
                     <SalarySlipUploader
                       caseId={caseId}

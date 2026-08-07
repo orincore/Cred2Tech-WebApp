@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, Search, ChevronUp, MoreHorizontal, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,6 +7,10 @@ import { NAV_ITEMS } from '../../constants/navItems';
 import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
+import { ticketService } from '../../api/ticketService';
+
+const TICKET_ADMIN_ROLES = ['SUPER_ADMIN', 'CRED2TECH_MEMBER'];
+const UNREAD_POLL_MS = 30000;
 
 const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
@@ -20,11 +24,27 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
-    if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
+  // Ticket unread badge — only ever updates when the admin explicitly marks
+  // a ticket as read (see AdminTicketsListPage/AdminTicketDetailPage), never
+  // just by opening a list/detail page. Polled rather than pushed, since
+  // this app has no generic notification stream to piggyback on.
+  const [unreadTicketCount, setUnreadTicketCount] = useState(0);
+  useEffect(() => {
+    if (!TICKET_ADMIN_ROLES.some((r) => hasRole(r))) return;
+    let cancelled = false;
+    const poll = () => ticketService.unreadCount().then((c) => { if (!cancelled) setUnreadTicketCount(c); }).catch(() => {});
+    poll();
+    const interval = setInterval(poll, UNREAD_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [hasRole]);
+
+  const visibleItems = NAV_ITEMS
+    .filter((item) => {
+      if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
+      if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    })
+    .map((item) => (item.id === 'admin-tickets' && unreadTicketCount > 0 ? { ...item, badge: String(unreadTicketCount) } : item));
 
   // Determine sidebar visibility
   const sidebarVisible = isMobile ? showMobile : isOpen;

@@ -301,7 +301,6 @@ export default function SalesIncentivePage() {
         /* Match CustomersListPage's table density for cross-page consistency */
         .si-page th { padding: 10px 8px !important; font-size: 10px !important; font-weight: 800 !important; }
         .si-page td { padding: 12px 8px !important; font-size: 12px !important; }
-        .si-page .filter-bar .form-control { border-radius: 999px !important; padding-left: 18px !important; padding-right: 18px !important; }
         @media (max-width: 768px) {
           .si-page > div { padding: 80px 24px 24px !important; }
           /* 2-per-row grid instead of each filter field stacking full-width —
@@ -342,43 +341,43 @@ export default function SalesIncentivePage() {
         </div>
       )}
 
-      <div className="card filter-bar" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', padding: '12px 16px', marginBottom: 20 }}>
-        <div style={{ flex: 1, minWidth: 150 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-          <select
-            value={filters.month || 'all'}
-            onChange={e => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })}
-            className="form-control"
-            style={{ padding: '6px 14px', fontSize: 12 }}
-            disabled={availableMonths.length === 0}
-          >
-            {availableMonths.length === 0 && <option value="">No data available</option>}
-            {availableMonths.length > 0 && <option value="all">All Months</option>}
-            {availableMonths.map(m => (
-              <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>
-            ))}
-          </select>
-        </div>
-        {isAdmin && (
-          <div style={{ flex: 1, minWidth: 150 }}>
-            <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Team Member</label>
-            <select value={filters.user_id} onChange={e => setFilters({ ...filters, user_id: e.target.value })} className="form-control" style={{ padding: '6px 14px', fontSize: 12 }}>
-              <option value="">All Members</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+      <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
+        {/* Compact filter toolbar — merged into the same card as the summary table below */}
+        <div className="filter-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
+            <select
+              value={filters.month || 'all'}
+              onChange={e => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })}
+              className="form-control"
+              style={{ padding: '5px 10px', fontSize: 12 }}
+              disabled={availableMonths.length === 0}
+            >
+              {availableMonths.length === 0 && <option value="">No data available</option>}
+              {availableMonths.length > 0 && <option value="all">All Months</option>}
+              {availableMonths.map(m => (
+                <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>
+              ))}
             </select>
           </div>
-        )}
-        <div style={{ flex: 1, minWidth: 130 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
-          <input type="text" placeholder="ALL, LAP, HL..." value={filters.product} onChange={e => setFilters({ ...filters, product: e.target.value })} className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} />
+          {isAdmin && (
+            <div style={{ flex: 1, minWidth: 140 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Team Member</label>
+              <select value={filters.user_id} onChange={e => setFilters({ ...filters, user_id: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }}>
+                <option value="">All Members</option>
+                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 120 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
+            <input type="text" placeholder="ALL, LAP, HL..." value={filters.product} onChange={e => setFilters({ ...filters, product: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} />
+          </div>
+          <div className="search-field" style={{ flex: 2, minWidth: 170 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
+            <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} />
+          </div>
         </div>
-        <div className="search-field" style={{ flex: 2, minWidth: 190 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
-          <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} />
-        </div>
-      </div>
-
-      <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
           <table>
             <thead>

@@ -1234,7 +1234,12 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const maxTenureYears = maxTenureMonths
     ? (maxTenureMonths % 12 === 0 ? String(maxTenureMonths / 12) : (maxTenureMonths / 12).toFixed(1))
     : null;
-  const isSubmitted = proposal.proposal_status === 'submitted';
+  // Was `proposal.proposal_status === 'submitted'` — a frontend-only lock the
+  // backend never actually enforced (updateProposalDraft has no status
+  // check, and submitProposal's own re-submission guard is commented out
+  // server-side already). This whole journey stays editable at every stage,
+  // including after a proposal has been submitted to the lender.
+  const isSubmitted = false;
   const allDocs = Object.values(documents_by_category || {}).flat();
   const pendingKyc = countKycPending(applicants, allDocs, isSalaried);
 

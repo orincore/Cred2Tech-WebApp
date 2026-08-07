@@ -45,7 +45,7 @@ const ForgotPasswordPage = () => {
           <Logo size="large" />
         </div>
 
-        <div className="bg-white dark:bg-[#162048] rounded-2xl shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
+        <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
           {sent ? (
             <div className="text-center">
               <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
@@ -87,7 +87,7 @@ const ForgotPasswordPage = () => {
                   </div>
                 </div>
 
-                <TravelingBorderButton type="submit" disabled={loading} className="w-full py-3.5 text-[15px] rounded-[10px]">
+                <TravelingBorderButton type="submit" size="sm" disabled={loading} className="w-full rounded-none">
                   {loading ? (
                     <div className="flex justify-center items-center w-full h-full">
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

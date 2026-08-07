@@ -13,6 +13,7 @@ import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
 
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -152,6 +153,11 @@ export default function CaseDetailPage() {
 
   const [showAllocateModal, setShowAllocateModal] = useState(false);
   const [allocateUserId, setAllocateUserId] = useState('');
+
+  // Case-journey feedback popup — only opens when a disbursement action just
+  // now crossed into PARTLY_DISBURSED/DISBURSED (see handleUpdateStage's use
+  // of recordDisbursement's `stage_changed` flag), never on every tranche.
+  const [caseFeedbackPrompt, setCaseFeedbackPrompt] = useState(null); // { type: 'PARTIAL' | 'FULL' } | null
   const [dsaUsers, setDsaUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -328,8 +334,14 @@ export default function CaseDetailPage() {
 
         const payload = { ...disbursementForm, pdd_tasks: disbursementForm.pdd_pending ? disbursementForm.pdd_documents : [] };
         const idempotencyKey = `manual_${id}_${Date.now()}`;
-        await caseService.recordDisbursement(id, payload, idempotencyKey);
+        const disbResult = await caseService.recordDisbursement(id, payload, idempotencyKey);
         toast.success(`Disbursement recorded: ${selectedStage === 'DISBURSED' ? 'Full' : 'Partial'}`);
+        // Backend-computed, not just "which option did the DSA pick" — a
+        // second partial tranche re-selects PARTLY_DISBURSED without the
+        // case actually changing stage again, and shouldn't re-prompt.
+        if (disbResult?.stage_changed && ['DISBURSED', 'PARTLY_DISBURSED'].includes(disbResult.stage)) {
+          setCaseFeedbackPrompt({ type: disbResult.stage === 'DISBURSED' ? 'FULL' : 'PARTIAL' });
+        }
       } else {
         await caseService.updateCaseStage(id, selectedStage);
         toast.success(`Stage updated to ${STAGE_LABELS[selectedStage]}`);
@@ -744,7 +756,6 @@ export default function CaseDetailPage() {
                         <select
                           className="form-control"
                           value={sanctionForm.tenant_lender_id || ''}
-                          disabled={disbursementSummary?.summary?.is_locked}
                           onChange={(e) => {
                             const selected = tenantLenders.find(l => String(l.id) === e.target.value);
                             setSanctionForm({ ...sanctionForm, tenant_lender_id: e.target.value, lender_name: selected ? selected.lender_name : '' });
@@ -766,28 +777,28 @@ export default function CaseDetailPage() {
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
-                        <input type="text" className="form-control" value={sanctionForm.product_type} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, product_type: e.target.value })} placeholder="e.g. LAP, HL, BL" />
+                        <input type="text" className="form-control" value={sanctionForm.product_type} onChange={(e) => setSanctionForm({ ...sanctionForm, product_type: e.target.value })} placeholder="e.g. LAP, HL, BL" />
                       )}
                     </div>
                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
                       <label className="form-label">Loan Account Number (Optional)</label>
-                      <input type="text" className="form-control" value={sanctionForm.loan_account_number} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, loan_account_number: e.target.value })} />
+                      <input type="text" className="form-control" value={sanctionForm.loan_account_number} onChange={(e) => setSanctionForm({ ...sanctionForm, loan_account_number: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Sanctioned Amount (₹)</label>
-                      <input type="number" className="form-control" value={sanctionForm.sanctioned_amount} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, sanctioned_amount: e.target.value })} />
+                      <input type="number" className="form-control" value={sanctionForm.sanctioned_amount} onChange={(e) => setSanctionForm({ ...sanctionForm, sanctioned_amount: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Sanction Date</label>
-                      <input type="date" className="form-control" value={sanctionForm.sanction_date} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, sanction_date: e.target.value })} />
+                      <input type="date" className="form-control" value={sanctionForm.sanction_date} onChange={(e) => setSanctionForm({ ...sanctionForm, sanction_date: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Confirmed ROI (%)</label>
-                      <input type="number" step="0.01" className="form-control" value={sanctionForm.confirmed_roi} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, confirmed_roi: e.target.value })} />
+                      <input type="number" step="0.01" className="form-control" value={sanctionForm.confirmed_roi} onChange={(e) => setSanctionForm({ ...sanctionForm, confirmed_roi: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Processing Fee (₹)</label>
-                      <input type="number" className="form-control" value={sanctionForm.processing_fee} disabled={disbursementSummary?.summary?.is_locked} onChange={(e) => setSanctionForm({ ...sanctionForm, processing_fee: e.target.value })} />
+                      <input type="number" className="form-control" value={sanctionForm.processing_fee} onChange={(e) => setSanctionForm({ ...sanctionForm, processing_fee: e.target.value })} />
                     </div>
                   </div>
                 </div>
@@ -986,6 +997,14 @@ export default function CaseDetailPage() {
           </form>
         </div>
       )}
+
+      <CaseFeedbackModal
+        isOpen={!!caseFeedbackPrompt}
+        onClose={() => setCaseFeedbackPrompt(null)}
+        caseId={id}
+        disbursementType={caseFeedbackPrompt?.type}
+        caseLabel={resolveEntityName(caseData?.customer)}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
+import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
 
 const formatCr = (val) => {
   const num = parseFloat(val) || 0;
@@ -25,6 +26,7 @@ export default function PartDisbursementPage() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedCase, setSelectedCase] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [caseFeedbackPrompt, setCaseFeedbackPrompt] = useState(null); // { caseId, type } | null
 
   const [trancheForm, setTrancheForm] = useState({
     amount: '',
@@ -87,9 +89,18 @@ export default function PartDisbursementPage() {
         pdd_tasks: trancheForm.pdd_pending ? validPddDocs : [],
       };
       const idempotencyKey = `webapp_${selectedCase.id}_${Date.now()}`;
-      await caseService.recordDisbursement(selectedCase.id, payload, idempotencyKey);
+      const disbResult = await caseService.recordDisbursement(selectedCase.id, payload, idempotencyKey);
       toast.success('Disbursement recorded successfully');
       setShowUpdateModal(false);
+      // Backend-computed — only prompt when this tranche actually crossed
+      // the case into PARTLY_DISBURSED/DISBURSED, not on every tranche.
+      if (disbResult?.stage_changed && ['DISBURSED', 'PARTLY_DISBURSED'].includes(disbResult.stage)) {
+        setCaseFeedbackPrompt({
+          caseId: selectedCase.id,
+          type: disbResult.stage === 'DISBURSED' ? 'FULL' : 'PARTIAL',
+          label: selectedCase.customer_name,
+        });
+      }
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to record disbursement');
@@ -423,6 +434,14 @@ export default function PartDisbursementPage() {
         </div>
       )}
       </div>
+
+      <CaseFeedbackModal
+        isOpen={!!caseFeedbackPrompt}
+        onClose={() => setCaseFeedbackPrompt(null)}
+        caseId={caseFeedbackPrompt?.caseId}
+        disbursementType={caseFeedbackPrompt?.type}
+        caseLabel={caseFeedbackPrompt?.label}
+      />
     </div>
   );
 }

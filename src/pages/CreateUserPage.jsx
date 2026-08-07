@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createUser, getUsers } from '../api/userService';
 import { getRoles } from '../api/roleService';
 import { useAuth } from '../context/AuthContext';
-import { HIERARCHY_LEVELS } from '../constants/roles';
+import { HIERARCHY_LEVELS, ROLES } from '../constants/roles';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
@@ -24,7 +24,12 @@ const initialForm = {
 };
 
 const INTERNAL_ROLE_NAMES = ['SUPER_ADMIN', 'CRED2TECH_MEMBER'];
-const DSA_ROLE_NAMES = ['DSA_ADMIN', 'DSA_MEMBER'];
+// SUB_DSA (external referral partner, not an internal employee) is created
+// the same way as any other DSA-tenant user — a DSA_ADMIN can assign it
+// (see backend user.service.js#assertRoleAssignable's DSA_ADMIN_ALLOWED_ROLES),
+// it was just missing from this allow-list, which silently hid it from the
+// role dropdown entirely.
+const DSA_ROLE_NAMES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 
 const countryOptions = countries.map(c => ({
   value: c.dialCode,
@@ -41,6 +46,7 @@ const countryOptions = countries.map(c => ({
 const CreateUserPage = () => {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
@@ -77,14 +83,23 @@ const CreateUserPage = () => {
     setIsLoadingRoles(true);
     getRoles()
       .then(data => {
-        setRoles(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setRoles(list);
         setRolesError('');
+        // Deep-link support — e.g. the Sub-DSA tab's "Add Partner" button
+        // links here with ?role=SUB_DSA so the role is already selected.
+        const preselect = searchParams.get('role');
+        if (preselect) {
+          const match = list.find((r) => r.name === preselect);
+          if (match) setForm((p) => ({ ...p, role_id: String(match.id) }));
+        }
       })
       .catch((err) => {
         console.error('Failed to load roles:', err?.response?.data || err.message);
         setRolesError('Could not load roles. Please restart the backend and refresh.');
       })
       .finally(() => setIsLoadingRoles(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChange = (e) => {
@@ -419,7 +434,7 @@ const CreateUserPage = () => {
                   </option>
                   {availableRoles.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name.replace(/_/g, ' ')}
+                      {ROLES[r.name]?.name || r.name.replace(/_/g, ' ')}
                     </option>
                   ))}
                 </select>
@@ -449,7 +464,7 @@ const CreateUserPage = () => {
                   <option value="">None (root level)</option>
                   {HIERARCHY_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
-                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Only for DSA_MEMBER role users (L1, L2, L3…)</div>
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>For internal employees (L1, L2, L3…) — not needed for a Sub-DSA Partner</div>
               </div>
               <div>
                 <label style={labelStyle}>Manager</label>

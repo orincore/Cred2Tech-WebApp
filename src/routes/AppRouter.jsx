@@ -19,6 +19,7 @@ const CreateUserPage = lazy(() => import('../pages/CreateUserPage'));
 const CreateTenantPage = lazy(() => import('../pages/CreateTenantPage'));
 const TenantsListPage = lazy(() => import('../pages/TenantsListPage'));
 const EditUserPage = lazy(() => import('../pages/EditUserPage'));
+const SubDsaPayoutSetupPage = lazy(() => import('../pages/SubDsaPayoutSetupPage'));
 const HierarchyPage = lazy(() => import('../pages/HierarchyPage'));
 const UnauthorizedPage = lazy(() => import('../pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
@@ -42,6 +43,12 @@ const SalesIncentivePage = lazy(() => import('../pages/SalesIncentivePage'));
 const LenderCommissionPage = lazy(() => import('../pages/LenderCommissionPage'));
 const SubDsaPayoutPage = lazy(() => import('../pages/SubDsaPayoutPage'));
 const MyWalletPage = lazy(() => import('../pages/MyWalletPage'));
+const MyTicketsPage = lazy(() => import('../pages/MyTicketsPage'));
+const MyTicketDetailPage = lazy(() => import('../pages/MyTicketDetailPage'));
+const AdminTicketsListPage = lazy(() => import('../pages/AdminTicketsListPage'));
+const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'));
+const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
+const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -131,6 +138,11 @@ const AppRouter = () => (
                 <EditUserPage />
               </ProtectedRoute>
             } />
+            <Route path="/users/:id/payout-setup" element={
+              <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                <SubDsaPayoutSetupPage />
+              </ProtectedRoute>
+            } />
             <Route
               path="/tenants"
               element={
@@ -166,6 +178,28 @@ const AppRouter = () => (
             } />
             <Route path="/admin/msme-cases" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminMsmeCasesPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/transactions" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminTransactionsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/tickets" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketsListPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/tickets/:id" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketDetailPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/ticket-recipients" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketRecipientsPage /></ProtectedRoute>
+            } />
+
+            {/* Feedback/support tickets — shared path for MSME + DSA/staff
+                submitters (see navItems.js#msme-tickets for why this isn't
+                under /msme/*); ownership is enforced server-side either way. */}
+            <Route path="/tickets" element={
+               <ProtectedRoute allowedRoles={['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}><MyTicketsPage /></ProtectedRoute>
+            } />
+            <Route path="/tickets/:id" element={
+               <ProtectedRoute allowedRoles={['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}><MyTicketDetailPage /></ProtectedRoute>
             } />
 
             {/* Customers Pipeline / Wizard */}

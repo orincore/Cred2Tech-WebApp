@@ -37,6 +37,7 @@ export const ROUTE_TITLES = [
   { path: '/profile', title: 'My Profile' },
   { path: '/users/create', title: 'Create User' },
   { path: '/users/:id/edit', title: 'Edit User' },
+  { path: '/users/:id/payout-setup', title: 'Sub-DSA Payout Setup' },
   { path: '/users/:id', title: 'User Details' },
   { path: '/users', title: 'Users' },
   { path: '/tenants/create', title: 'Create Tenant' },
@@ -51,6 +52,7 @@ export const ROUTE_TITLES = [
   { path: '/admin/logs', title: 'API Logs' },
   { path: '/admin/lenders', title: 'Lender Configuration' },
   { path: '/admin/msme-cases', title: 'MSME Cases' },
+  { path: '/admin/transactions', title: 'Transactions' },
 
   // Customers / Case journey
   { path: '/customers/add', title: 'New Customer' },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -11,6 +11,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 const LoginPage = () => {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, mounted } = useTheme();
 
   const [email, setEmail] = useState('');
@@ -23,7 +24,15 @@ const LoginPage = () => {
     document.title = 'Cred2Tech | Login';
   }, []);
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  // ProtectedRoute redirects unauthenticated visits to a deep link here with
+  // state.from set to the page they were trying to reach — send them back
+  // there instead of the dashboard so a shared/bookmarked URL still works
+  // after the login detour.
+  const redirectTarget = location.state?.from
+    ? `${location.state.from.pathname}${location.state.from.search || ''}${location.state.from.hash || ''}`
+    : '/';
+
+  if (isAuthenticated) return <Navigate to={redirectTarget} replace />;
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -40,7 +49,7 @@ const LoginPage = () => {
       const user = await login(email, password);
       setLoginState('success');
       toast.success(`Welcome back, ${user?.name || 'User'}!`);
-      setTimeout(() => navigate('/'), 900);
+      setTimeout(() => navigate(redirectTarget, { replace: true }), 900);
     } catch (err) {
       setLoginState('error');
       const msg = getErrorMessage(err);
@@ -75,7 +84,7 @@ const LoginPage = () => {
 
           <div className="relative mt-auto w-full flex items-center justify-center flex-1">
             <lottie-player
-              src="/lottie/data_recolored.json"
+              src="/lottie/into.json"
               background="transparent"
               speed="1"
               loop
@@ -188,12 +197,6 @@ const LoginPage = () => {
               </div>
             )}
           </TravelingBorderButton>
-
-          {/* Trust */}
-          <div className="flex items-center justify-center gap-1.5 mt-8 text-[11px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
-            <span className="material-symbols-outlined text-[13px] text-indigo-600">lock</span>
-            256-bit encryption · Trusted by 10,000+ businesses
-          </div>
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
             <p className="text-[13px] text-[#0a1628] dark:text-[#e6edf7] font-medium">

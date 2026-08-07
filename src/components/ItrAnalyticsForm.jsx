@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     AlertCircle,
-    FileText, Download
+    FileText, Download, Trash2
 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
+import Skeleton from './ui/Skeleton';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
+
+const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const ItrAnalyticsForm = ({
     caseId,
@@ -21,6 +24,7 @@ const ItrAnalyticsForm = ({
     itrCost,
     existingRecord,
     onComplete,
+    onRemoved,
     mode
 }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
@@ -95,6 +99,9 @@ const ItrAnalyticsForm = ({
     const [isOpen, setIsOpen] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [refetching, setRefetching] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    const incomePreview = livePull?.income_preview || null;
 
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
 
@@ -165,6 +172,44 @@ const ItrAnalyticsForm = ({
         }
     };
 
+    // Removes an already-completed ITR pull (old/wrong data, or a retry is
+    // needed under a different PAN). `cancel` above only works on in-flight
+    // requests — this clears a finished one, including its net-profit/gross-
+    // receipts figures (the backend nulls the raw payload too, not just the
+    // computed fields, so this doesn't just hide the number — it removes it).
+    const handleDelete = async () => {
+        if (!referenceId) return;
+        if (!window.confirm('Remove this ITR record permanently? You can pull ITR data again afterwards.')) return;
+        setDeleting(true);
+        try {
+            await api.post('/external/itr/delete', { reference_id: referenceId });
+            setLocalStatus('FAILED');
+            toast.success('ITR record removed');
+            onRemoved && onRemoved();
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to remove ITR record');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    // `existingRecord` is a synchronous prop (the parent wizard already
+    // awaited the case load before this component ever mounts), so this
+    // resolves to true on the very first render in the normal case — no
+    // artificial delay. It only stays false for the rare tick where the prop
+    // genuinely hasn't arrived yet, showing a skeleton instead of a
+    // default/empty "Fetch ITR" state that would otherwise flash before
+    // snapping to the real one.
+    if (existingRecord === undefined) {
+        return (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
+                <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
+                <Skeleton width={90} height={11} />
+            </div>
+        );
+    }
+
     return (
         <div style={{
             backgroundColor: 'var(--bg-base)',
@@ -234,6 +279,15 @@ const ItrAnalyticsForm = ({
                                     {refetching ? 'Fetching…' : 'Fetch Report'}
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                            >
+                                <Trash2 size={13} /> {deleting ? 'Removing...' : 'Remove'}
+                            </button>
                         </div>
                     ) : (
                         <button
@@ -246,6 +300,35 @@ const ItrAnalyticsForm = ({
                     )}
                 </div>
             </div>
+
+            {/* Income preview — quick net profit / gross receipts figures right
+                here, so seeing the headline numbers doesn't require opening the
+                Excel report. */}
+            {status === 'COMPLETED' && incomePreview && (
+                <div style={{
+                    display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 14,
+                    padding: isMobile ? '14px 16px' : '14px 24px', borderTop: '1px solid var(--success)', background: 'var(--success-bg)',
+                }}>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Net Profit (Latest Year)</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.net_profit_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{incomePreview.financial_year_latest || '—'}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Net Profit (Previous Year)</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.net_profit_previous_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{incomePreview.financial_year_previous || '—'}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gross Receipts (Latest Year)</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.gross_receipts_latest_year)}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gross Receipts (Previous Year)</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.gross_receipts_previous_year)}</div>
+                    </div>
+                </div>
+            )}
 
             {/* Expando: credential entry — only relevant pre-completion, since the
                 completed state's only action (Excel download) already lives in the

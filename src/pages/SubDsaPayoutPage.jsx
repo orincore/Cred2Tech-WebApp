@@ -379,7 +379,6 @@ export default function SubDsaPayoutPage() {
         /* Match CustomersListPage's table density for cross-page consistency */
         .sd-page th { padding: 10px 8px !important; font-size: 10px !important; font-weight: 800 !important; }
         .sd-page td { padding: 12px 8px !important; font-size: 12px !important; }
-        .sd-page .filter-bar .form-control { border-radius: 999px !important; padding-left: 18px !important; padding-right: 18px !important; }
         @media (max-width: 768px) {
           .sd-page > div { padding: 80px 24px 24px !important; }
           /* 2-per-row grid instead of each filter field stacking full-width —
@@ -412,47 +411,47 @@ export default function SubDsaPayoutPage() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
       <PageHeader title="Sub DSA Payout" subtitle="Commission payable to Sub-DSA partners — case-wise tracking & payout status" />
 
-      <div className="card filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-end', padding: '12px 16px', marginBottom: 20 }}>
-        <div style={{ minWidth: 140 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-          <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.month || 'all'} onChange={e => setFilters(p => ({ ...p, month: e.target.value === 'all' ? 'all' : e.target.value }))} disabled={availableMonths.length === 0}>
-            {availableMonths.length === 0 && <option value="">No data available</option>}
-            {availableMonths.length > 0 && <option value="all">All Months</option>}
-            {availableMonths.map(m => <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>)}
-          </select>
-        </div>
-        {isAdmin && (
-          <div style={{ minWidth: 150 }}>
-            <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Sub-DSA</label>
-            <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.sub_dsa_user_id} onChange={e => setFilters(p => ({ ...p, sub_dsa_user_id: e.target.value }))}>
-              <option value="">All Sub-DSAs</option>
-              {subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+      <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
+        {/* Compact filter toolbar — merged into the same card as the summary table below */}
+        <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ minWidth: 120 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
+            <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={e => setFilters(p => ({ ...p, month: e.target.value === 'all' ? 'all' : e.target.value }))} disabled={availableMonths.length === 0}>
+              {availableMonths.length === 0 && <option value="">No data available</option>}
+              {availableMonths.length > 0 && <option value="all">All Months</option>}
+              {availableMonths.map(m => <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>)}
             </select>
           </div>
-        )}
-        <div style={{ minWidth: 140 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Invoice Status</label>
-          <select className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}>
-            <option value="">All Statuses</option>
-            {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
+          {isAdmin && (
+            <div style={{ minWidth: 130 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Sub-DSA</label>
+              <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.sub_dsa_user_id} onChange={e => setFilters(p => ({ ...p, sub_dsa_user_id: e.target.value }))}>
+                <option value="">All Sub-DSAs</option>
+                {subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div style={{ minWidth: 120 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Invoice Status</label>
+            <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}>
+              <option value="">All Statuses</option>
+              {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div style={{ minWidth: 110 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
+            <input type="text" placeholder="ALL, LAP, HL..." value={filters.product} onChange={e => setFilters(p => ({ ...p, product: e.target.value }))} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} />
+          </div>
+          <div className="search-field" style={{ flex: 1, minWidth: 160 }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
+            <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} />
+          </div>
+          {isAdmin && selectedIds.length > 0 && (
+            <button className="btn btn-primary btn-sm search-field" onClick={() => setInvoiceModal(true)} style={{ justifyContent: 'center' }}>
+              <FileText size={14} /> Generate Invoice ({selectedIds.length})
+            </button>
+          )}
         </div>
-        <div style={{ minWidth: 120 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
-          <input type="text" placeholder="ALL, LAP, HL..." value={filters.product} onChange={e => setFilters(p => ({ ...p, product: e.target.value }))} className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} />
-        </div>
-        <div className="search-field" style={{ flex: 1, minWidth: 180 }}>
-          <label className="form-label" style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
-          <input type="text" placeholder="Customer name, case ID..." value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} className="form-control" style={{ padding: '6px 14px', fontSize: 12 }} />
-        </div>
-        {isAdmin && selectedIds.length > 0 && (
-          <button className="btn btn-primary btn-sm search-field" onClick={() => setInvoiceModal(true)} style={{ justifyContent: 'center' }}>
-            <FileText size={14} /> Generate Invoice ({selectedIds.length})
-          </button>
-        )}
-      </div>
-
-      <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
           <table>
             <thead>

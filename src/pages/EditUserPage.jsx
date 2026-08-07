@@ -3,27 +3,40 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getUserById, getUsers, updateUser } from '../api/userService';
+import { getRoles } from '../api/roleService';
+import { useAuth } from '../context/AuthContext';
 import { MOCK_USERS } from '../constants/mockData';
-import { ROLE_OPTIONS, HIERARCHY_LEVELS } from '../constants/roles';
+import { ROLES, HIERARCHY_LEVELS } from '../constants/roles';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 
-const ROLE_ID_NAME = { 1: 'SUPER_ADMIN', 2: 'DSA_ADMIN', 3: 'CRED2TECH_MEMBER', 4: 'DSA_MEMBER' };
+// Same DSA-tenant role set CreateUserPage offers — kept as a single list here
+// too (rather than importing it) since Internal-tenant users can't reach
+// this role set anyway and importing would suggest a shared meaning that
+// doesn't exist between the two pages' unrelated role-filtering needs.
+const DSA_ROLE_NAMES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+const INTERNAL_ROLE_NAMES = ['SUPER_ADMIN', 'CRED2TECH_MEMBER'];
 
 const EditUserPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', mobile: '', role: '', tenant_id: '', hierarchy_level: '', manager_id: '', designation: '', status: '' });
+  // role_id (not a role name) — matches CreateUserPage's convention, since
+  // the role <select>'s options are keyed by the live /roles response below.
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', role_id: '', tenant_id: '', hierarchy_level: '', manager_id: '', designation: '', status: '' });
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
   const [success, setSuccess] = useState(false);
   const [tenantUsers, setTenantUsers] = useState([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [roles, setRoles] = useState([]);
+  const [rolesError, setRolesError] = useState('');
+  const [originalRoleId, setOriginalRoleId] = useState('');
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -35,6 +48,16 @@ const EditUserPage = () => {
     getUsers()
       .then(data => setTenantUsers(Array.isArray(data) ? data : data.users || []))
       .catch(() => { });
+    // getUserById's response doesn't include the role relation (role_id
+    // only) — resolve the display name against the live /roles list instead
+    // of a hardcoded id→name table, which drifted out of sync with the
+    // backend's actual seed order and never had a SUB_DSA entry at all.
+    getRoles()
+      .then(data => setRoles(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Failed to load roles:', err?.response?.data || err.message);
+        setRolesError('Could not load roles — role field may be unavailable.');
+      });
   }, []);
 
   useEffect(() => {
@@ -43,11 +66,12 @@ const EditUserPage = () => {
         const data = await getUserById(id);
         const u = data.user || data;
         setUser(u);
+        setOriginalRoleId(u.role_id?.toString() || '');
         setForm({
           name: u.name || '',
           email: u.email || '',
           mobile: u.mobile || '',
-          role: ROLE_ID_NAME[u.role_id] || u.role?.name || u.role || '',
+          role_id: u.role_id?.toString() || '',
           tenant_id: u.tenant_id?.toString() || '',
           hierarchy_level: u.hierarchy_level || '',
           manager_id: u.manager_id?.toString() || '',
@@ -62,7 +86,7 @@ const EditUserPage = () => {
             name: mock.name || '',
             email: mock.email || '',
             mobile: mock.mobile || '',
-            role: mock.role?.name || '',
+            role_id: mock.role_id?.toString() || '',
             tenant_id: mock.tenant_id?.toString() || '',
             hierarchy_level: mock.hierarchy_level || '',
             manager_id: mock.manager_id?.toString() || '',
@@ -76,6 +100,15 @@ const EditUserPage = () => {
     };
     fetchUser();
   }, [id]);
+
+  // Same DSA-tenant vs internal-tenant role split CreateUserPage uses — a
+  // DSA_ADMIN editing one of their own users should only ever be able to
+  // reassign within DSA_ADMIN/DSA_MEMBER/SUB_DSA, never grant SUPER_ADMIN.
+  const availableRoles = roles.filter((r) => {
+    if (currentUser?.tenant_type === 'CRED2TECH') return INTERNAL_ROLE_NAMES.includes(r.name);
+    if (currentUser?.tenant_type === 'DSA') return DSA_ROLE_NAMES.includes(r.name);
+    return false;
+  });
 
   // Matches CreateUserPage's exact recipe — same page pair, same visual
   // language, so this is copied rather than re-derived.
@@ -146,6 +179,11 @@ const EditUserPage = () => {
         status: form.status,
         hierarchy_level: form.hierarchy_level || null,
         manager_id: form.manager_id ? Number(form.manager_id) : null,
+        // Only sent when actually changed — role_id is optional on the
+        // backend's PATCH /users/:id and re-runs the same RBAC/tenant checks
+        // as assigning it on create, so there's no reason to resend the
+        // unchanged value on every plain field edit.
+        ...(form.role_id && form.role_id !== originalRoleId ? { role_id: Number(form.role_id) } : {}),
       });
       setSuccess(true);
       toast.success('User updated successfully');
@@ -270,15 +308,23 @@ const EditUserPage = () => {
               <div>
                 <label style={labelStyle}>Platform Role</label>
                 <select
-                  name="role"
-                  value={form.role}
+                  name="role_id"
+                  value={form.role_id}
                   onChange={handleChange}
-                  disabled
-                  style={{ ...inputStyle, cursor: 'not-allowed', opacity: 0.6, appearance: 'none' }}
+                  disabled={availableRoles.length === 0}
+                  style={{ ...inputStyle, cursor: availableRoles.length === 0 ? 'not-allowed' : 'pointer', opacity: availableRoles.length === 0 ? 0.6 : 1, appearance: 'none' }}
+                  onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                  onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">Select role…</option>
-                  {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  {availableRoles.map((r) => (
+                    <option key={r.id} value={r.id}>{ROLES[r.name]?.name || r.name.replace(/_/g, ' ')}</option>
+                  ))}
                 </select>
+                {rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
+                {form.role_id && form.role_id !== originalRoleId && (
+                  <div style={{ color: 'var(--warning)', fontSize: 11, fontWeight: 600, marginTop: 4 }}>Role will change on save</div>
+                )}
               </div>
               <div>
                 <label style={labelStyle}>Status *</label>

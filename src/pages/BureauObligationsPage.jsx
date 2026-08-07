@@ -3,7 +3,7 @@ import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw, FileDown } from 'lucide-react';
@@ -250,7 +250,35 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
     }
   };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
+  if (loading) {
+    return (
+      <div className="bureau-obligations-page">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', padding: 14 }}>
+              <Skeleton width={70} height={10} style={{ marginBottom: 8 }} />
+              <Skeleton width={50} height={20} />
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={180} height={15} />
+          </div>
+          <div style={{ padding: 0 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{ padding: '14px 16px', borderBottom: i < 2 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Skeleton width={150} height={13} />
+                <Skeleton width={80} height={13} style={{ marginLeft: 'auto' }} />
+                <Skeleton width={80} height={13} />
+                <Skeleton width={70} height={20} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const { grouped = [], summary = {} } = data || {};
   const addLoanGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1fr 1fr auto';
