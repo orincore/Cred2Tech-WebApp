@@ -421,39 +421,44 @@ const HierarchyPage = () => {
 
       {/* ─── Top header ─── */}
       <div style={{ padding: isMobile ? '80px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
-        <PageHeader title="Hierarchy Management" />
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
-          {/* View toggle */}
-          <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', padding: 3, borderRadius: 8, border: '1px solid var(--outline)' }}>
-            <button
-              onClick={() => setViewMode('tree')}
-              style={{
-                padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
-                background: viewMode === 'tree' ? '#4f46e5' : 'transparent',
-                color: viewMode === 'tree' ? '#fff' : 'var(--on-muted)',
-              }}
-            >
-              Tree
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              style={{
-                padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
-                background: viewMode === 'list' ? '#4f46e5' : 'transparent',
-                color: viewMode === 'list' ? '#fff' : 'var(--on-muted)',
-              }}
-            >
-              List
-            </button>
-          </div>
-          <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>{users.length} members</span>
-          <button
-            onClick={() => navigate('/users/create')}
-            style={{ padding: '7px 16px', fontSize: 12, fontWeight: 700, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
-          >
-            + Add Member
-          </button>
-        </div>
+        <PageHeader
+          title="Hierarchy Management"
+          compact
+          actions={
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* View toggle */}
+              <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', padding: 3, borderRadius: 8, border: '1px solid var(--outline)' }}>
+                <button
+                  onClick={() => setViewMode('tree')}
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
+                    background: viewMode === 'tree' ? '#4f46e5' : 'transparent',
+                    color: viewMode === 'tree' ? '#fff' : 'var(--on-muted)',
+                  }}
+                >
+                  Tree
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  style={{
+                    padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
+                    background: viewMode === 'list' ? '#4f46e5' : 'transparent',
+                    color: viewMode === 'list' ? '#fff' : 'var(--on-muted)',
+                  }}
+                >
+                  List
+                </button>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>{users.length} members</span>
+              <button
+                onClick={() => navigate('/users/create')}
+                style={{ padding: '7px 16px', fontSize: 12, fontWeight: 700, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+              >
+                + Add Member
+              </button>
+            </div>
+          }
+        />
       </div>
 
       {/* ─── Content ─── */}
@@ -512,7 +517,7 @@ const HierarchyPage = () => {
           </div>
 
           {/* ── Zoom controls ── */}
-          <div style={{ position: 'absolute', bottom: 24, right: 24, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', bottom: 96, right: 24, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setZoom(z => Math.min(2, z + 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
             <div style={{ height: 1, background: 'var(--outline)' }} />
             <button onClick={() => setZoom(z => Math.max(0.3, z - 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 22, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>−</button>

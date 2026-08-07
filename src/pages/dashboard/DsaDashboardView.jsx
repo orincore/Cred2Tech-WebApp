@@ -13,6 +13,7 @@ import TableSkeleton from '../../components/ui/TableSkeleton';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import TrendBadge, { AnimatedNumber } from '../../components/ui/TrendBadge';
+import CustomerTypeModal from '../../components/customers/CustomerTypeModal';
 import { getDsaSummary, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
 import { formatCompactINR, getErrorMessage, formatStatusLabel, CASE_STAGE_LABELS } from '../../utils/helpers';
 
@@ -81,6 +82,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
   const [stageSummary, setStageSummary] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingCases, setLoadingCases] = useState(true);
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoadingSummary(true);
@@ -193,7 +195,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <SectionCard title="Quick Actions" delay={0.15}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 16 }}>
-              <QuickAction icon={Plus} label="Add New Customer" desc="Start a new case" color="var(--success)" onClick={() => navigate('/customers/add')} delay={0.05} />
+              <QuickAction icon={Plus} label="Add New Customer" desc="Start a new case" color="var(--success)" onClick={() => setIsTypeModalOpen(true)} delay={0.05} />
               <QuickAction icon={Users} label="Customer List" desc="Browse all customers" color="var(--primary)" onClick={() => navigate('/customers')} delay={0.1} />
               <QuickAction icon={UserCircle} label="My Profile" desc="View your session" color="var(--warning)" onClick={() => navigate('/profile')} delay={0.15} />
               <QuickAction icon={Network} label="View Hierarchy" desc="Explore the org chart" color="var(--info)" onClick={() => navigate('/hierarchy')} delay={0.2} />
@@ -213,6 +215,8 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
           </div>
         )}
       </SectionCard>
+
+      <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />
     </div>
   );
 };
