@@ -257,7 +257,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
         is_professional: caseData.customer?.is_professional || false,
         profession_type: caseData.customer?.profession_type || '',
-        mobile_verified: isMsme ? true : (caseData.customer?.mobile_verified || false),
+        // Trust the persisted flag for MSME too now — the backend seeds it
+        // true at customer creation from the login-verified mobile, and
+        // flips it true again via the same OTP flow DSA uses if the
+        // customer edits the number away from that default (see
+        // customer.service.js createOrAttachCustomer and otp.service.js
+        // verifyOtp). Forcing this to always read true regardless of the DB
+        // value used to be how MSME mobile edits were silently allowed to
+        // reach the backend unverified.
+        mobile_verified: caseData.customer?.mobile_verified || false,
         is_locked: !!caseData.is_locked,
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
@@ -764,7 +772,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   const goToCoApplicants = () => {
     if (!formData.business_pan) return toast.error("Business PAN is required.");
-    if (!formData.mobile_verified && !isMsme) return toast.error("Primary Business Mobile must be verified before proceeding.");
+    if (!formData.mobile_verified) return toast.error("Primary Business Mobile must be verified before proceeding.");
     setStep1SubPage('coapplicants');
   };
 
@@ -794,7 +802,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleStep1Submit = async (e) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error("Business PAN is required.");
-    if (!formData.mobile_verified && !isMsme) return toast.error("Primary Business Mobile must be verified before proceeding.");
+    if (!formData.mobile_verified) return toast.error("Primary Business Mobile must be verified before proceeding.");
     // Bureau/credit checks need PAN + DOB together for every applicant - PAN
     // alone isn't enough for the vendor to match a record, which otherwise
     // only surfaces later as a confusing "no obligations found" bureau error.
@@ -1240,25 +1248,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
                   <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified || isMsme} />
-                      {(!formData.mobile_verified && !isMsme) ? (
+                      <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
+                      {!formData.mobile_verified ? (
                         <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                             <CheckCircle2 size={18} /> Verified
                           </div>
-                          {!isMsme && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => setFormData(prev => ({ ...prev, mobile_verified: false }))}
-                              title="Edit mobile number"
-                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                            >
-                              <Pencil size={13} /> Edit
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setFormData(prev => ({ ...prev, mobile_verified: false }))}
+                            title="Edit mobile number"
+                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Pencil size={13} /> Edit
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1336,7 +1342,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 type="button"
                 className="btn btn-primary btn-lg"
                 onClick={goToCoApplicants}
-                disabled={!formData.mobile_verified && !isMsme}
+                disabled={!formData.mobile_verified}
               >
                 Next: Co-Applicants →
               </button>
@@ -1517,7 +1523,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Business Entity</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || (!formData.mobile_verified && !isMsme)}>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
                 {saving ? 'Processing...' : 'Continue to Financials →'}
               </button>
             </div>

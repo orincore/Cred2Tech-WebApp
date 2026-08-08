@@ -110,7 +110,12 @@ const MsmeDashboardPage = () => {
               toast.success('Payment successful!');
               setShowPaymentModal(false);
               setActionLoading(false);
-              goToOnboarding();
+              // Not goToOnboarding() — that reads dashboardData.activeCase,
+              // which is stale from before this payment and (once an old
+              // case exists) would resume editing the wrong, already
+              // finished case instead of starting the new one just paid
+              // for. A fresh payment always means no case is linked yet.
+              navigate('/msme/onboarding');
               return;
             } catch (err) {
               lastErr = err;
