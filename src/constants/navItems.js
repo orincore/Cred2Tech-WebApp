@@ -120,6 +120,15 @@ export const NAV_ITEMS = [
     // Static fallback — Sidebar.jsx overrides this with the live unread
     // count fetched from GET /tickets/unread-count before rendering.
   },
+  {
+    id: 'admin-contact-submissions',
+    label: 'Website Leads',
+    path: '/admin/contact-submissions',
+    icon: Mail,
+    roles: ['SUPER_ADMIN', 'CRED2TECH_MEMBER'],
+    // Static fallback — Sidebar.jsx overrides this with the combined
+    // Contact Requests + Demo Requests unread count before rendering.
+  },
 
   // DSA_ADMIN Views
   {

@@ -8,6 +8,8 @@ import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
 import { ticketService } from '../../api/ticketService';
+import { contactSubmissionService } from '../../api/contactSubmissionService';
+import { demoRequestService } from '../../api/demoRequestService';
 
 const TICKET_ADMIN_ROLES = ['SUPER_ADMIN', 'CRED2TECH_MEMBER'];
 const UNREAD_POLL_MS = 30000;
@@ -38,13 +40,36 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [hasRole]);
 
+  // Same polling pattern as the ticket badge above, for the Website Leads
+  // nav item — combines both tabs on AdminContactSubmissionsPage (Contact
+  // Requests + Demo Requests) into one badge count.
+  const [unreadContactCount, setUnreadContactCount] = useState(0);
+  const [unreadDemoCount, setUnreadDemoCount] = useState(0);
+  useEffect(() => {
+    if (!TICKET_ADMIN_ROLES.some((r) => hasRole(r))) return;
+    let cancelled = false;
+    const poll = () => {
+      contactSubmissionService.unreadCount().then((c) => { if (!cancelled) setUnreadContactCount(c); }).catch(() => {});
+      demoRequestService.unreadCount().then((c) => { if (!cancelled) setUnreadDemoCount(c); }).catch(() => {});
+    };
+    poll();
+    const interval = setInterval(poll, UNREAD_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [hasRole]);
+
   const visibleItems = NAV_ITEMS
     .filter((item) => {
       if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
       if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })
-    .map((item) => (item.id === 'admin-tickets' && unreadTicketCount > 0 ? { ...item, badge: String(unreadTicketCount) } : item));
+    .map((item) => {
+      if (item.id === 'admin-tickets' && unreadTicketCount > 0) return { ...item, badge: String(unreadTicketCount) };
+      if (item.id === 'admin-contact-submissions' && (unreadContactCount + unreadDemoCount) > 0) {
+        return { ...item, badge: String(unreadContactCount + unreadDemoCount) };
+      }
+      return item;
+    });
 
   // Determine sidebar visibility
   const sidebarVisible = isMobile ? showMobile : isOpen;

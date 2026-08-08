@@ -46,6 +46,7 @@ const MyWalletPage = lazy(() => import('../pages/MyWalletPage'));
 const MyTicketsPage = lazy(() => import('../pages/MyTicketsPage'));
 const MyTicketDetailPage = lazy(() => import('../pages/MyTicketDetailPage'));
 const AdminTicketsListPage = lazy(() => import('../pages/AdminTicketsListPage'));
+const AdminContactSubmissionsPage = lazy(() => import('../pages/AdminContactSubmissionsPage'));
 const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'));
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
@@ -184,6 +185,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/tickets" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketsListPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/contact-submissions" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminContactSubmissionsPage /></ProtectedRoute>
             } />
             <Route path="/admin/tickets/:id" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketDetailPage /></ProtectedRoute>
