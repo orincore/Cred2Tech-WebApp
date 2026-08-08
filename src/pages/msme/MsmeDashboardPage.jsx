@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Sparkles, FolderOpen, BarChart3, Star, UserCircle,
   ShieldCheck, Sun, CloudSun, Moon, ArrowRight, Archive,
+  Landmark, ExternalLink,
 } from 'lucide-react';
 import { msmeApi } from '../../api/msmeService';
 import { useMsmeAuth } from '../../context/MsmeAuthContext';
@@ -17,6 +18,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Badge from '../../components/ui/Badge';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
+
+// Govt Scheme portal is a separate app/domain (own auth) — link out rather
+// than route internally.
+const GOVT_SCHEME_CASES_URL = 'https://scheme.cred2tech.com/track-applications';
 
 const MsmeDashboardPage = () => {
   const { user } = useMsmeAuth();
@@ -252,7 +257,15 @@ const MsmeDashboardPage = () => {
           </h1>
         </div>
 
-        
+        <a
+          href={GOVT_SCHEME_CASES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary"
+          style={{ borderRadius: 0, textDecoration: 'none' }}
+        >
+          <Landmark size={15} /> View Govt Scheme Cases <ExternalLink size={13} />
+        </a>
       </div>
 
       {/* Body */}
