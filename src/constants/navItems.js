@@ -36,7 +36,9 @@ export const MSME_NAV_ITEMS = [
   // resolves, and AppLayout already renders this sidebar there too (same
   // pattern as /cases/:id).
   { id: 'msme-tickets', label: 'Feedback & Support', path: '/tickets', icon: MessageSquare },
-  { id: 'msme-profile', label: 'My Profile', path: '/msme/profile', icon: UserCircle },
+  // Govt Scheme portal is a separate app/domain (own auth) — link out rather
+  // than route internally.
+  { id: 'msme-govt-schemes', label: 'Govt Scheme Cases', href: 'https://scheme.cred2tech.com/track-applications', icon: Landmark, external: true },
 ];
 
 export const NAV_ITEMS = [

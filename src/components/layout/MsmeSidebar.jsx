@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, LogOut, ChevronUp, Sun, Moon } from 'lucide-react';
+import { Sparkles, LogOut, ChevronUp, Sun, Moon, ExternalLink } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { MSME_NAV_ITEMS } from '../../constants/navItems';
 import { getInitials } from '../../utils/helpers';
@@ -92,18 +92,32 @@ const MsmeSidebar = ({ isOpen, isMobile, showMobile, onClose, user, onLogout }) 
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.35, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
             >
-              <NavLink
-                to={item.path}
-                onClick={handleLinkClick}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon size={16} color={isActive ? 'var(--on-surface)' : 'var(--on-muted)'} style={{ flexShrink: 0 }} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                  </>
-                )}
-              </NavLink>
+              {item.external ? (
+                <a
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleLinkClick}
+                  className="nav-item"
+                >
+                  <Icon size={16} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <ExternalLink size={13} color="var(--on-muted)" style={{ flexShrink: 0, opacity: 0.6 }} />
+                </a>
+              ) : (
+                <NavLink
+                  to={item.path}
+                  onClick={handleLinkClick}
+                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={16} color={isActive ? 'var(--on-surface)' : 'var(--on-muted)'} style={{ flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )}
             </motion.div>
           );
         })}
