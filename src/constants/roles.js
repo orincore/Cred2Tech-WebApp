@@ -47,6 +47,13 @@ export const DASHBOARD_ROLES = ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA',
 
 export const TENANT_TYPES = ['CRED2TECH', 'DSA'];
 
+// The submit-feedback flow is for MSME/DSA submitters, not the Cred2Tech
+// admins who receive and manage those submissions (they get the full
+// ticket-management panel instead — see NAV_ITEMS' 'admin-tickets' entry).
+// Shared between AppLayout (floating button for MSME) and Sidebar (inline
+// trigger next to the logo for DSA roles) so the two stay in sync.
+export const FEEDBACK_SUBMITTER_ROLES = ['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+
 // Hierarchy levels used by employees
 export const HIERARCHY_LEVELS = ['L1', 'L2', 'L3', 'L4'];
 

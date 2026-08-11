@@ -9,11 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
-
-// The submit-feedback flow is for MSME/DSA submitters, not the Cred2Tech
-// admins who receive and manage those submissions (they get the full
-// ticket-management panel instead — see NAV_ITEMS' 'admin-tickets' entry).
-const FEEDBACK_SUBMITTER_ROLES = ['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+import { FEEDBACK_SUBMITTER_ROLES } from '../constants/roles';
 
 const AppLayout = () => {
   const { user } = useAuth();
@@ -220,7 +216,10 @@ const AppLayout = () => {
           <Outlet />
         </main>
       </div>
-      {FEEDBACK_SUBMITTER_ROLES.includes(user?.role) && <FeedbackButton />}
+      {/* DSA roles get the feedback trigger inline in Sidebar's header (next to
+          the logo) instead of this floating overlay — MsmeSidebar has no
+          equivalent slot yet, so MSME customers keep the floating button. */}
+      {isMsme && FEEDBACK_SUBMITTER_ROLES.includes(user?.role) && <FeedbackButton />}
       <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
     </div>
   );

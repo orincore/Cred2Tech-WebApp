@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Search, ChevronUp, MoreHorizontal, Sun, Moon } from 'lucide-react';
+import { LogOut, Search, ChevronUp, MoreHorizontal, MessageSquarePlus, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from '../../constants/navItems';
+import { FEEDBACK_SUBMITTER_ROLES } from '../../constants/roles';
 import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
+import FeedbackModal from '../feedback/FeedbackModal';
 import { ticketService } from '../../api/ticketService';
 import { contactSubmissionService } from '../../api/contactSubmissionService';
 import { demoRequestService } from '../../api/demoRequestService';
@@ -18,6 +20,8 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const canSubmitFeedback = FEEDBACK_SUBMITTER_ROLES.includes(user?.role);
 
   const handleLogout = () => {
     logout();
@@ -106,7 +110,28 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         justifyContent: 'space-between',
       }}>
         <Logo size="medium" />
-        <MoreHorizontal size={16} color="#94a3b8" />
+        {canSubmitFeedback && (
+          <button
+            onClick={() => setIsFeedbackOpen(true)}
+            title="Submit feedback or report an issue"
+            aria-label="Submit feedback or report an issue"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid var(--outline)',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <MessageSquarePlus size={16} />
+          </button>
+        )}
       </div>
 
       {/* Search Bar & Theme Toggle */}
@@ -284,6 +309,9 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         </div>
         <MoreHorizontal size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
       </div>
+      {canSubmitFeedback && (
+        <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
+      )}
     </aside>
   );
 };
