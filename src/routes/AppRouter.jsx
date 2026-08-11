@@ -50,6 +50,7 @@ const AdminContactSubmissionsPage = lazy(() => import('../pages/AdminContactSubm
 const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'));
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
+const AdminDataPurgePage = lazy(() => import('../pages/AdminDataPurgePage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -182,6 +183,11 @@ const AppRouter = () => (
             } />
             <Route path="/admin/transactions" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminTransactionsPage /></ProtectedRoute>
+            } />
+            {/* Manual data purge (CT-004-DPP right-to-erasure requests) —
+                Cred2Tech's own admin only, never DSA_ADMIN. */}
+            <Route path="/admin/purge" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminDataPurgePage /></ProtectedRoute>
             } />
             <Route path="/admin/tickets" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketsListPage /></ProtectedRoute>

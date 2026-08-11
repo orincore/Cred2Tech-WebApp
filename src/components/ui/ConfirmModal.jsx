@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -13,8 +13,22 @@ const ConfirmModal = ({
   isLoading = false,
   danger = true,
   notice, // optional notice text
+  // Optional extra friction for high-stakes irreversible actions: when set,
+  // the admin must type this exact value before Confirm becomes clickable.
+  // Every existing caller omits this and is unaffected.
+  confirmText,
 }) => {
+  const [typedValue, setTypedValue] = useState('');
+
+  // Reset the typed value each time the modal opens/closes so a stale match
+  // from a previous open can't silently pre-arm the confirm button.
+  useEffect(() => {
+    if (!isOpen) setTypedValue('');
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const confirmDisabled = isLoading || (confirmText != null && typedValue !== confirmText);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -48,6 +62,23 @@ const ConfirmModal = ({
           </div>
         )}
 
+        {confirmText != null && (
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label" htmlFor="confirm-modal-typed-value">
+              Type <strong>{confirmText}</strong> to confirm
+            </label>
+            <input
+              id="confirm-modal-typed-value"
+              className="form-control"
+              value={typedValue}
+              onChange={(e) => setTypedValue(e.target.value)}
+              autoComplete="off"
+              autoFocus
+              disabled={isLoading}
+            />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button className="btn btn-secondary" onClick={onClose} disabled={isLoading}>
             {cancelLabel}
@@ -55,7 +86,7 @@ const ConfirmModal = ({
           <button
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
-            disabled={isLoading}
+            disabled={confirmDisabled}
             style={{ minWidth: 100, justifyContent: 'center' }}
           >
             {isLoading ? <LoadingSpinner size={16} color="currentColor" /> : confirmLabel}

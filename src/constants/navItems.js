@@ -22,6 +22,7 @@ import {
   HandCoins,
   MessageSquare,
   Receipt,
+  Trash2,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -90,6 +91,13 @@ export const NAV_ITEMS = [
     label: 'Transactions',
     path: '/admin/transactions',
     icon: Receipt,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-data-purge',
+    label: 'Data Purge',
+    path: '/admin/purge',
+    icon: Trash2,
     roles: ['SUPER_ADMIN'],
   },
   {
