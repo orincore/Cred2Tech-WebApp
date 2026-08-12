@@ -21,6 +21,11 @@ const api = axios.create({
 // Request interceptor: attach Bearer token automatically
 api.interceptors.request.use(
   (config) => {
+    // Don't clobber an Authorization header a caller already set explicitly —
+    // the MFA setup/challenge flow (src/api/mfaService.js) authenticates with
+    // its own short-lived, non-session token instead of the stored one, since
+    // the user isn't fully logged in yet at that point.
+    if (config.headers.Authorization) return config;
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

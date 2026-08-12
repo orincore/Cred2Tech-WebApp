@@ -39,6 +39,18 @@ const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Mandatory MFA gate for staff/DSA/admin accounts. MSME_CUSTOMER is
+  // excluded — borrowers authenticate via a separate mobile-OTP-only flow
+  // (direct.customer.auth) that never sets mfa_email_enabled/mfa_totp_enabled,
+  // so this check would otherwise never resolve for them. This mainly
+  // catches accounts with a still-valid session token issued before MFA
+  // became mandatory (see AuthContext's normalizeUser) — every session
+  // token issued *after* this feature shipped already implies mfaEnabled by
+  // construction, since the backend never issues one without it.
+  if (location.pathname !== '/mfa-setup' && user?.role !== 'MSME_CUSTOMER' && !user?.mfaEnabled) {
+    return <Navigate to="/mfa-setup" state={{ from: location }} replace />;
+  }
+
   // MSME customers live in their own portal — send them home instead of
   // showing them the internal admin/DSA "Access Denied" page.
   if (user?.role === 'MSME_CUSTOMER' && allowedRoles && !hasRole(allowedRoles)) {

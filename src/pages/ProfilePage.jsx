@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { User, Shield, LogOut } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
 import { msmeApi } from '../api/msmeService';
+import * as mfaApi from '../api/mfaService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { formatDateTime, getInitials, formatHierarchyPath } from '../utils/helpers';
+import { formatDateTime, getInitials, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
@@ -48,6 +49,7 @@ const ProfilePage = () => {
     : [
         { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
         { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
+        { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'Manage your MFA methods' },
         { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
       ];
 
@@ -76,6 +78,38 @@ const ProfilePage = () => {
       });
     }
   }, [profile, authUser]);
+
+  // ─── Two-Factor Authentication ───────────────────────────────────────────
+  // Declared here (with the other hooks, before any early return below) so
+  // hook order/count stays identical across renders regardless of loading
+  // state — a hook defined after `if (loading) return ...` would only run on
+  // some renders and not others, which is exactly what React's Rules of
+  // Hooks forbid ("Rendered more hooks than during the previous render").
+  const [mfaStatus, setMfaStatus] = useState(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  // action: 'totp' | 'email' | 'totp-disable' | 'email-disable' | 'backup-codes'
+  const [stepUp, setStepUp] = useState({ open: false, action: null, password: '', error: '', loading: false });
+  const [totpSetup, setTotpSetup] = useState(null); // { secret, otpauthUrl, qrCodeDataUrl }
+  const [emailSetupPending, setEmailSetupPending] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [pendingBackupCodes, setPendingBackupCodes] = useState(null);
+
+  const loadMfaStatus = async () => {
+    setMfaLoading(true);
+    try {
+      const data = await mfaApi.manageStatus();
+      setMfaStatus(data);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'mfa' && !mfaStatus && !isMsmeUser) loadMfaStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
 
   if (loading) return <LoadingSpinner fullPage />;
 
@@ -131,8 +165,8 @@ const ProfilePage = () => {
       setPasswordError('New password is required');
       return;
     }
-    if (passwordData.newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters');
+    if (passwordData.newPassword.length < 12) {
+      setPasswordError('New password must be at least 12 characters');
       return;
     }
     if (passwordData.newPassword !== passwordData.confirmPassword) {
@@ -141,11 +175,82 @@ const ProfilePage = () => {
     }
 
     try {
-      // Add API call to change password here
-      setPasswordSuccess('Password changed successfully');
+      await mfaApi.changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      setPasswordSuccess('Password changed successfully. Other signed-in devices have been signed out.');
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error) {
-      setPasswordError('Failed to change password. Please try again.');
+      setPasswordError(getErrorMessage(error));
+    }
+  };
+
+  const openStepUp = (action) => setStepUp({ open: true, action, password: '', error: '', loading: false });
+  const closeStepUp = () => setStepUp({ open: false, action: null, password: '', error: '', loading: false });
+
+  const submitStepUp = async () => {
+    if (!stepUp.password) { setStepUp((s) => ({ ...s, error: 'Enter your password.' })); return; }
+    setStepUp((s) => ({ ...s, loading: true, error: '' }));
+    try {
+      if (stepUp.action === 'totp') {
+        const data = await mfaApi.manageTotpInit(stepUp.password);
+        setTotpSetup(data);
+        setMfaCode('');
+      } else if (stepUp.action === 'email') {
+        await mfaApi.manageEmailInit(stepUp.password, null);
+        setEmailSetupPending(true);
+        setMfaCode('');
+      } else if (stepUp.action === 'totp-disable') {
+        await mfaApi.manageTotpDisable(stepUp.password);
+        toast.success('Authenticator app disabled.');
+        await loadMfaStatus();
+      } else if (stepUp.action === 'email-disable') {
+        await mfaApi.manageEmailDisable(stepUp.password);
+        toast.success('Email verification disabled.');
+        await loadMfaStatus();
+      } else if (stepUp.action === 'backup-codes') {
+        const data = await mfaApi.manageRegenerateBackupCodes(stepUp.password);
+        setPendingBackupCodes(data.backupCodes);
+        await loadMfaStatus();
+      }
+      closeStepUp();
+    } catch (err) {
+      setStepUp((s) => ({ ...s, loading: false, error: getErrorMessage(err) }));
+    }
+  };
+
+  const confirmTotpSetup = async () => {
+    if (!mfaCode.trim()) return;
+    setMfaLoading(true);
+    try {
+      const data = await mfaApi.manageTotpConfirm({ secret: totpSetup.secret, code: mfaCode.trim() });
+      toast.success('Authenticator app enabled.');
+      if (data.backupCodes) setPendingBackupCodes(data.backupCodes);
+      setTotpSetup(null);
+      setMfaCode('');
+      await loadMfaStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const confirmEmailSetup = async () => {
+    if (!mfaCode.trim()) return;
+    setMfaLoading(true);
+    try {
+      const data = await mfaApi.manageEmailConfirm({ code: mfaCode.trim() });
+      toast.success('Email verification enabled.');
+      if (data.backupCodes) setPendingBackupCodes(data.backupCodes);
+      setEmailSetupPending(false);
+      setMfaCode('');
+      await loadMfaStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setMfaLoading(false);
     }
   };
 
@@ -373,6 +478,127 @@ const ProfilePage = () => {
                   </div>
                 </div>
               </>
+            ) : activeSection === 'mfa' ? (
+              <>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 8px' }}>Two-Factor Authentication</h2>
+                <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>
+                  Required for every account. At least one method must always stay enabled.
+                </p>
+
+                {pendingBackupCodes && (
+                  <div style={{ padding: 20, background: 'var(--surface)', border: '1px solid var(--outline)', marginBottom: 24 }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Save your new backup codes</p>
+                    <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 14px' }}>Each code works once. Your old codes no longer work.</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 14, background: 'var(--bg)', border: '1px solid var(--outline)', marginBottom: 12 }}>
+                      {pendingBackupCodes.map((c) => (
+                        <span key={c} style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, textAlign: 'center', color: 'var(--on-surface)' }}>{c}</span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <TravelingBorderButton size="sm" onClick={() => { navigator.clipboard?.writeText(pendingBackupCodes.join('\n')); toast.success('Copied.'); }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Copy size={14} /> Copy</div>
+                      </TravelingBorderButton>
+                      <TravelingBorderButton size="sm" onClick={() => setPendingBackupCodes(null)}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={14} /> Saved it</div>
+                      </TravelingBorderButton>
+                    </div>
+                  </div>
+                )}
+
+                {mfaLoading && !mfaStatus ? (
+                  <LoadingSpinner size={24} />
+                ) : mfaStatus && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Authenticator App */}
+                    <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: totpSetup ? 16 : 0 }}>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Authenticator App</p>
+                          <p style={{ fontSize: 12, color: mfaStatus.mfaTotpEnabled ? '#16a34a' : 'var(--on-muted)', margin: '2px 0 0', fontWeight: 600 }}>
+                            {mfaStatus.mfaTotpEnabled ? 'Enabled' : 'Not set up'}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <TravelingBorderButton size="sm" onClick={() => openStepUp('totp')}>
+                            {mfaStatus.mfaTotpEnabled ? 'Change device' : 'Set up'}
+                          </TravelingBorderButton>
+                          {mfaStatus.mfaTotpEnabled && (
+                            <TravelingBorderButton size="sm" color="red" onClick={() => openStepUp('totp-disable')}>Disable</TravelingBorderButton>
+                          )}
+                        </div>
+                      </div>
+                      {totpSetup && (
+                        <div>
+                          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap' }}>
+                            <img src={totpSetup.qrCodeDataUrl} alt="TOTP QR code" style={{ width: 140, height: 140, border: '1px solid var(--outline)' }} />
+                            <div style={{ flex: 1, minWidth: 180 }}>
+                              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 6px' }}>Scan with your authenticator app, or enter manually:</p>
+                              <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, wordBreak: 'break-all', color: 'var(--on-surface)' }}>{totpSetup.secret}</p>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
+                            <div style={{ width: 140, paddingBottom: 8, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
+                              <input
+                                type="text" inputMode="numeric" maxLength={6}
+                                value={mfaCode}
+                                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                                placeholder="6-digit code"
+                                style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 700, letterSpacing: 2, padding: 0 }}
+                              />
+                            </div>
+                            <TravelingBorderButton size="sm" onClick={confirmTotpSetup} disabled={mfaLoading}>Confirm</TravelingBorderButton>
+                            <button onClick={() => { setTotpSetup(null); setMfaCode(''); }} style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Email Code */}
+                    <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: emailSetupPending ? 16 : 0 }}>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Email Code</p>
+                          <p style={{ fontSize: 12, color: mfaStatus.mfaEmailEnabled ? '#16a34a' : 'var(--on-muted)', margin: '2px 0 0', fontWeight: 600 }}>
+                            {mfaStatus.mfaEmailEnabled ? `Enabled · ${mfaStatus.email}` : 'Not set up'}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <TravelingBorderButton size="sm" onClick={() => openStepUp('email')}>
+                            {mfaStatus.mfaEmailEnabled ? 'Re-verify' : 'Set up'}
+                          </TravelingBorderButton>
+                          {mfaStatus.mfaEmailEnabled && (
+                            <TravelingBorderButton size="sm" color="red" onClick={() => openStepUp('email-disable')}>Disable</TravelingBorderButton>
+                          )}
+                        </div>
+                      </div>
+                      {emailSetupPending && (
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
+                          <div style={{ width: 140, paddingBottom: 8, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
+                            <input
+                              type="text" inputMode="numeric" maxLength={6}
+                              value={mfaCode}
+                              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                              placeholder="6-digit code"
+                              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 700, letterSpacing: 2, padding: 0 }}
+                            />
+                          </div>
+                          <TravelingBorderButton size="sm" onClick={confirmEmailSetup} disabled={mfaLoading}>Confirm</TravelingBorderButton>
+                          <button onClick={() => { setEmailSetupPending(false); setMfaCode(''); }} style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Backup codes */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 18, border: '1px solid var(--outline)' }}>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Backup Codes</p>
+                        <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 0' }}>{mfaStatus.remainingBackupCodes} unused code(s) remaining</p>
+                      </div>
+                      <TravelingBorderButton size="sm" onClick={() => openStepUp('backup-codes')}>Regenerate</TravelingBorderButton>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : activeSection === 'additional' ? (
               <>
                 <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Additional Information</h2>
@@ -518,6 +744,60 @@ const ProfilePage = () => {
                   color="red"
                 >
                   Logout
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MFA Step-Up Password Confirmation */}
+      {stepUp.open && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff', borderRadius: 20, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32, maxWidth: 400, width: '90%', animation: 'slideUp 0.2s ease',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: isDark ? 'rgba(79, 70, 229, 0.15)' : 'rgba(79, 70, 229, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              }}>
+                <Shield size={32} color="#4f46e5" />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#e6edf7' : '#0a1628', marginBottom: 8 }}>
+                Confirm your password
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--on-muted)', marginBottom: 20 }}>
+                For your security, re-enter your password to continue.
+              </p>
+              {stepUp.error && (
+                <div style={{ padding: '10px 14px', background: '#fee2e2', color: '#dc2626', borderRadius: 8, fontSize: 13, marginBottom: 16, textAlign: 'left' }}>
+                  {stepUp.error}
+                </div>
+              )}
+              <input
+                type="password"
+                autoFocus
+                value={stepUp.password}
+                onChange={(e) => setStepUp((s) => ({ ...s, password: e.target.value, error: '' }))}
+                onKeyDown={(e) => e.key === 'Enter' && submitStepUp()}
+                placeholder="Current password"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '0 0 12px',
+                  borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                  borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', background: 'transparent',
+                  color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600, marginBottom: 24, outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton onClick={closeStepUp} size="sm" disabled={stepUp.loading}>Cancel</TravelingBorderButton>
+                <TravelingBorderButton onClick={submitStepUp} size="sm" disabled={stepUp.loading}>
+                  {stepUp.loading ? 'Confirming...' : 'Confirm'}
                 </TravelingBorderButton>
               </div>
             </div>

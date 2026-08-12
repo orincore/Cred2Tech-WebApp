@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, LogOut, ChevronUp, Sun, Moon, ExternalLink } from 'lucide-react';
+import { Sparkles, LogOut, ChevronUp, Sun, Moon, ExternalLink, MessageSquarePlus } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { MSME_NAV_ITEMS } from '../../constants/navItems';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
+import FeedbackModal from '../feedback/FeedbackModal';
 
 // `user` and `onLogout` come in as props (not from MsmeAuthContext) so this
 // same sidebar can render inside AppLayout on the shared /cases/* journey
@@ -14,6 +15,7 @@ import Logo from '../Logo';
 const MsmeSidebar = ({ isOpen, isMobile, showMobile, onClose, user, onLogout }) => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const sidebarVisible = isMobile ? showMobile : isOpen;
 
@@ -46,30 +48,59 @@ const MsmeSidebar = ({ isOpen, isMobile, showMobile, onClose, user, onLogout }) 
         justifyContent: 'space-between',
       }}>
         <Logo size="medium" />
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 8,
-            background: 'var(--surface)',
-            border: '1px solid var(--outline)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: 'var(--on-surface)',
-            transition: 'all 0.2s ease',
-            flexShrink: 0,
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
-          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Feedback — inline next to the logo (was a floating overlay
+              button, see FeedbackButton.jsx) so it matches the DSA/staff
+              sidebar's placement pattern. */}
+          <button
+            onClick={() => setIsFeedbackOpen(true)}
+            title="Submit feedback or report an issue"
+            aria-label="Submit feedback or report an issue"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              background: 'var(--surface)',
+              border: '1px solid var(--outline)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--on-surface)',
+              transition: 'all 0.2s ease',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+          >
+            <MessageSquarePlus size={15} />
+          </button>
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              background: 'var(--surface)',
+              border: '1px solid var(--outline)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--on-surface)',
+              transition: 'all 0.2s ease',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          >
+            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          </button>
+        </div>
       </div>
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
       
 

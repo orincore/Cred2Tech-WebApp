@@ -174,8 +174,8 @@ const CreateUserPage = () => {
       case 'password':
         if (!value) {
           errorMsg = 'Password is required';
-        } else if (value.length < 8) {
-          errorMsg = 'Password must be at least 8 characters';
+        } else if (value.length < 12) {
+          errorMsg = 'Password must be at least 12 characters';
         } else if (!/[A-Z]/.test(value)) {
           errorMsg = 'Password must contain at least one uppercase letter';
         } else if (!/[a-z]/.test(value)) {
@@ -230,8 +230,8 @@ const CreateUserPage = () => {
 
     if (!form.password) {
       e.password = 'Password is required';
-    } else if (form.password.length < 8) {
-      e.password = 'Password must be at least 8 characters';
+    } else if (form.password.length < 12) {
+      e.password = 'Password must be at least 12 characters';
     } else if (!/[A-Z]/.test(form.password)) {
       e.password = 'Password must contain at least one uppercase letter';
     } else if (!/[a-z]/.test(form.password)) {
@@ -399,7 +399,7 @@ const CreateUserPage = () => {
                   name="password"
                   value={form.password}
                   onChange={handleChange}
-                  placeholder="Min. 8 characters"
+                  placeholder="Min. 12 characters"
                   style={{ ...inputStyle, ...(errors.password ? inputFocusStyle : {}) }}
                   onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => {

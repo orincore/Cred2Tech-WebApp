@@ -11,7 +11,6 @@ import {
   Activity,
   Mail,
   Network,
-  Sparkles,
   FolderOpen,
   UserCircle,
   Inbox,
@@ -30,8 +29,11 @@ import {
 // (their role matches none of NAV_ITEMS, which would leave the nav blank).
 export const MSME_NAV_ITEMS = [
   { id: 'msme-dashboard', label: 'My Dashboard', path: '/msme/dashboard', icon: LayoutDashboard },
-  { id: 'msme-onboarding', label: 'Check Eligibility', path: '/msme/onboarding', icon: Sparkles },
+  // "Check Eligibility" removed from here — starting a new case now only
+  // happens via the payment-gated "New Case" button on /msme/cases (and the
+  // dashboard's own empty-state action), not a standing sidebar link.
   { id: 'msme-cases', label: 'My Cases', path: '/msme/cases', icon: FolderOpen },
+  { id: 'msme-transactions', label: 'Transactions', path: '/msme/transactions', icon: Receipt },
   // Deliberately NOT under /msme/* — shared with the DSA app's identical
   // route so a link emailed to either audience (see ticket.email.js) always
   // resolves, and AppLayout already renders this sidebar there too (same

@@ -12,6 +12,7 @@ import StageBar from '../../components/ui/StageBar';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
+import DataPurgedBadge from '../../components/case/DataPurgedBadge';
 import TrendBadge, { AnimatedNumber } from '../../components/ui/TrendBadge';
 import CustomerTypeModal from '../../components/customers/CustomerTypeModal';
 import { getDsaSummary, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
@@ -180,9 +181,12 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
                       <td style={{ padding: '12px 20px', fontSize: 12, color: 'var(--on-muted)' }}>{c.lender || '—'}</td>
                       <td style={{ padding: '12px 20px', fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{formatCompactINR(c.applied_amount)}</td>
                       <td style={{ padding: '12px 20px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 0, color: stageColor(c.stage), background: `${stageColor(c.stage)}18` }}>
-                          {c.stage ? (CASE_STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)) : '—'}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 0, color: stageColor(c.stage), background: `${stageColor(c.stage)}18` }}>
+                            {c.stage ? (CASE_STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)) : '—'}
+                          </span>
+                          {c.data_purged_at && <DataPurgedBadge />}
+                        </div>
                       </td>
                     </motion.tr>
                   ))}

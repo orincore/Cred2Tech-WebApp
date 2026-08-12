@@ -14,6 +14,7 @@ import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName }
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
+import DataPurgedBadge from '../components/case/DataPurgedBadge';
 
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -372,6 +373,14 @@ export default function CaseDetailPage() {
   const isBackward = selectedStage && STAGE_ORDER[selectedStage] < STAGE_ORDER[caseData.stage];
   const isFinancialRollback = isBackward && STAGE_ORDER[caseData.stage] >= STAGE_ORDER.APPROVED;
   const currentStepIndex = STAGE_STEPS.findIndex(s => s.id === caseData.stage);
+  // Once Case.data_purged_at is set (backend: dataRetentionPurge.service.js),
+  // the case is permanently read-only — every mutating action here is
+  // disabled. Wizard/journey navigation (Open Wizard, Income Summary, View &
+  // Edit Obligations, Generate ESR) is also blocked, not just hidden here:
+  // AddCustomerWizardPage's restoreSession() independently redirects away
+  // from a purged case, since a bookmarked/typed URL could otherwise bypass
+  // this button being disabled.
+  const isPurged = !!caseData.data_purged_at;
 
   return (
     <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
@@ -392,8 +401,9 @@ export default function CaseDetailPage() {
             <span>/</span>
             <span style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => navigate(isMsme ? '/msme/cases' : '/customers')}>{isMsme ? 'My Cases' : 'All Cases'}</span>
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             CASE-{caseData.id} — {toTitleCase(resolveEntityName(caseData.customer, isUsableEntityName(caseData.customer_name) ? caseData.customer_name : ''))}
+            {isPurged && <DataPurgedBadge />}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
             {caseData.lender_name || 'Unassigned'} · {caseData.product_type || 'N/A'} · {formatCurrency(caseData.loan_amount)}
@@ -402,19 +412,40 @@ export default function CaseDetailPage() {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {hasRole('DSA_ADMIN') && caseData?.lead_source === 'DIRECT_MSME' && (
-            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick}><Users size={13} /> Allocate to Employee</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick} disabled={isPurged}><Users size={13} /> Allocate to Employee</button>
           )}
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(wizardPath)}>Open Wizard</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowPropertyModal(true)}>Edit Property Details</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(5))}>View &amp; Edit Obligations</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(4))}>Income Summary</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(wizardPath)} disabled={isPurged}>Open Wizard</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowPropertyModal(true)} disabled={isPurged}>Edit Property Details</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(5))} disabled={isPurged}>View &amp; Edit Obligations</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(4))} disabled={isPurged}>Income Summary</button>
           <button className="btn btn-secondary btn-sm" onClick={handleDownloadLoanApplicationSummary} disabled={summaryDownloading}>
             <Download size={13} /> {summaryDownloading ? 'Preparing...' : 'Loan Application Summary'}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(6))}>Generate ESR</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowStageModal(true)}>Update Stage</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(journeyPath(6))} disabled={isPurged}>Generate ESR</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowStageModal(true)} disabled={isPurged}>Update Stage</button>
         </div>
       </div>
+
+      {isPurged && (
+        <div className="notice notice-error" style={{ marginBottom: 20 }}>
+          <AlertCircle size={16} style={{ marginTop: 1, flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>This case's data has been permanently purged</div>
+              <div style={{ marginTop: 2 }}>
+                Records were removed per data retention policy. This case is now read-only — start a new case for this customer instead.
+              </div>
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => navigate(isMsme ? '/msme/onboarding' : '/customers/add')}
+              style={{ flexShrink: 0 }}
+            >
+              Create New Case
+            </button>
+          </div>
+        </div>
+      )}
 
       {caseData.parent_case_id && (
         <div className="notice notice-info" style={{ marginBottom: 20 }}>

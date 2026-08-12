@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { msmeApi, msmeAuthApi } from '../api/msmeService';
+import { useAuth } from './AuthContext';
 
 const MsmeAuthContext = createContext(null);
 
@@ -11,11 +12,19 @@ export const MsmeAuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  // MsmeAuthProvider is mounted inside AuthProvider (see AppRouter.jsx), so
+  // this is available. Needed so the two auth contexts stay in sync — see
+  // the comment on syncFromStorage in AuthContext.jsx for why: without this,
+  // an MSME customer who navigates to a shared route like /tickets (served
+  // by AppLayout, which reads the *other* context) gets bounced to /login,
+  // looking exactly like an unexpected logout.
+  const { syncFromStorage, logout: syncMainLogout } = useAuth();
 
   const login = (userData, token) => {
     localStorage.setItem('token', token);
     localStorage.setItem('roleName', 'MSME_CUSTOMER');
     setUser(userData);
+    syncFromStorage();
   };
 
   const logout = useCallback(() => {
@@ -31,8 +40,9 @@ export const MsmeAuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('roleName');
     setUser(null);
+    syncMainLogout();
     navigate('/msme/login');
-  }, [navigate]);
+  }, [navigate, syncMainLogout]);
 
   useEffect(() => {
     const initAuth = async () => {

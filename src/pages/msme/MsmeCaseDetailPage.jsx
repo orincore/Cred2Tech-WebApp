@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, UploadCloud, FileText, Download, User2 } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileText, Download, User2, AlertCircle } from 'lucide-react';
 import { caseService } from '../../api/caseService';
 import { listDocuments, downloadDocument, uploadDocument } from '../../api/documentHelper';
 import { formatCompactINR, CASE_STAGE_LABELS } from '../../utils/helpers';
@@ -9,6 +9,7 @@ import SectionCard from '../../components/ui/SectionCard';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
+import DataPurgedBadge from '../../components/case/DataPurgedBadge';
 
 // Labels come from CASE_STAGE_LABELS (the exact same mapping the DSA side
 // uses) so a case never shows a different-looking status depending on who's
@@ -121,6 +122,10 @@ const MsmeCaseDetailPage = () => {
   const stageMeta = STAGE_INFO[caseData.stage] || { desc: '', color: 'var(--text-tertiary)' };
   const stage = { ...stageMeta, label: CASE_STAGE_LABELS[caseData.stage] || caseData.stage };
   const dsaName = caseData.assigned_dsa_user?.name;
+  // Once purged, this case is permanently read-only — only mutating action on
+  // this page is document upload. AddCustomerWizardPage's restoreSession()
+  // independently blocks resuming this case's data via /msme/onboarding too.
+  const isPurged = !!caseData.data_purged_at;
 
   return (
     <div className="msme-case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: isMobile ? 16 : 24 }}>
@@ -143,10 +148,28 @@ const MsmeCaseDetailPage = () => {
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
             MSME Portal
           </p>
-          <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em' }}>CASE-{caseData.id}</h1>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            CASE-{caseData.id}
+            {isPurged && <DataPurgedBadge />}
+          </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>{caseData.product_type || 'Product TBD'}</p>
         </div>
       </div>
+
+      {isPurged && (
+        <div className="notice notice-error" style={{ marginBottom: 20 }}>
+          <AlertCircle size={16} style={{ marginTop: 1, flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>This case's data has been permanently purged</div>
+              <div style={{ marginTop: 2 }}>Records were removed per data retention policy. This case is now read-only — start a new application instead.</div>
+            </div>
+            <TravelingBorderButton size="sm" onClick={() => navigate('/msme/onboarding')} className="rounded-none" style={{ flexShrink: 0 }}>
+              Create New Case
+            </TravelingBorderButton>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: 24, alignItems: 'start' }}>
 
@@ -177,23 +200,25 @@ const MsmeCaseDetailPage = () => {
 
           {/* Documents */}
           <SectionCard title="Documents" subtitle="Everything you've submitted, plus reports we've generated for your case" delay={0.1}>
-            <div style={{ padding: 16, borderBottom: '1px solid var(--outline)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select
-                className="form-control"
-                value={uploadType}
-                onChange={e => setUploadType(e.target.value)}
-                style={{ width: 'auto', minWidth: 160 }}
-              >
-                {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <input ref={fileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} />
-              <TravelingBorderButton size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="rounded-none">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <UploadCloud size={14} /> {uploading ? 'Uploading...' : 'Upload Document'}
-                </div>
-              </TravelingBorderButton>
-              <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Max 15MB · PDF, image, Excel or Word</span>
-            </div>
+            {!isPurged && (
+              <div style={{ padding: 16, borderBottom: '1px solid var(--outline)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select
+                  className="form-control"
+                  value={uploadType}
+                  onChange={e => setUploadType(e.target.value)}
+                  style={{ width: 'auto', minWidth: 160 }}
+                >
+                  {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <input ref={fileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} />
+                <TravelingBorderButton size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="rounded-none">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <UploadCloud size={14} /> {uploading ? 'Uploading...' : 'Upload Document'}
+                  </div>
+                </TravelingBorderButton>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Max 15MB · PDF, image, Excel or Word</span>
+              </div>
+            )}
 
             {documents.length === 0 ? (
               <EmptyState icon={FileText} title="No documents yet" description="Documents you upload, and reports we generate for your case, will appear here." />

@@ -79,6 +79,15 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const [addingFor, setAddingFor] = useState(null);        // applicant_id
   const [retryingFor, setRetryingFor] = useState(null);     // applicant_id currently re-pulling bureau data
   const [newObl, setNewObl]       = useState({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
+  // Every field in the "Add Loan Not in Bureau" form is mandatory — checked
+  // as a string/select emptiness test (not truthiness) so a genuine "0" in
+  // an amount field still counts as filled in.
+  const isNewOblValid =
+    newObl.lender_name.trim() !== '' &&
+    newObl.loan_type !== '' &&
+    newObl.loan_amount !== '' &&
+    newObl.outstanding_amount !== '' &&
+    newObl.emi_per_month !== '';
 
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
@@ -177,7 +186,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   };
 
   const handleAddObligation = async (applicant_id) => {
-    if (!newObl.emi_per_month && newObl.emi_per_month !== 0) return toast.error('EMI per month is required');
+    if (!isNewOblValid) return toast.error('All fields are required to add a loan not in bureau');
     try {
       setSaving(true);
       await caseService.addObligation(caseId, { ...newObl, applicant_id });
@@ -501,22 +510,22 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                 <div style={{ padding: '16px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: addLoanGridCols, gap: 10, alignItems: 'end' }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LENDER</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LENDER *</label>
                       <input className="form-control" placeholder="Bank / NBFC name" value={newObl.lender_name} onChange={e => setNewObl({ ...newObl, lender_name: e.target.value })} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN TYPE</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN TYPE *</label>
                       <select className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
                         <option value="">— Type —</option>
                         {LOAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN AMT (₹)</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN AMT (₹) *</label>
                       <input type="number" className="form-control" placeholder="0" value={newObl.loan_amount} onChange={e => setNewObl({ ...newObl, loan_amount: e.target.value })} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>OUTSTANDING</label>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>OUTSTANDING *</label>
                       <input type="number" className="form-control" placeholder="0" value={newObl.outstanding_amount} onChange={e => setNewObl({ ...newObl, outstanding_amount: e.target.value })} />
                     </div>
                     <div>
@@ -524,7 +533,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                       <input type="number" className="form-control" placeholder="0" value={newObl.emi_per_month} onChange={e => setNewObl({ ...newObl, emi_per_month: e.target.value })} />
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-primary btn-sm" onClick={() => handleAddObligation(applicant.id)} disabled={saving}>Add</button>
+                      <button className="btn btn-primary btn-sm" onClick={() => handleAddObligation(applicant.id)} disabled={saving || !isNewOblValid} title={!isNewOblValid ? 'Fill in every field to add this loan' : undefined}>Add</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => setAddingFor(null)}><X size={14} /></button>
                     </div>
                   </div>

@@ -219,16 +219,40 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
       const caseData = await caseService.getCaseById(targetCaseId);
 
-      // Authoritative source of truth for PAN verification is the primary
-      // applicant's own `pan_verified` flag — the backend correctly flips it
-      // false on /external/pan/reset and true on /external/pan/verify. A GST
-      // profile fetched under a PAN that was later reset is stale, not proof
-      // of current verification, so it must not be used to override this.
+      // A purged case's data must never be loaded into this fully-editable
+      // form — the backend already rejects the mutating calls this wizard
+      // makes (see Cred2Tech/backend's requireCaseAccess middleware /
+      // casePurgeGuard.js), but that alone would surface as a confusing
+      // mid-edit error on whichever step the user reaches first. Redirect
+      // to the case's own read-only detail page instead, which already
+      // shows the purge banner + "Create New Case" CTA.
+      if (caseData.data_purged_at) {
+        toast.error("This case's data has been permanently purged and can no longer be edited.");
+        navigate(isMsme ? `/msme/cases/${targetCaseId}` : `/cases/${targetCaseId}`, { replace: true });
+        setLoading(false);
+        return;
+      }
+
+      // Primary source of truth for PAN verification is the primary
+      // applicant's own `pan_verified` flag — but that flag is per-CASE
+      // (a fresh Applicant row per case), while a CustomerPanProfile is
+      // per-CUSTOMER. A customer with a second case for the same PAN (e.g.
+      // via "New Case") has a brand-new, never-verified applicant row even
+      // though the PAN/GST data is already known — without this, every
+      // reopen of that second case silently re-ran PAN verify + GST fetch
+      // (backend-cached, so no real re-cost/re-pull, but still two
+      // redundant "success" toasts and network round-trips every time).
+      // Exception: if THIS case has its own PAN_RESET activity log entry,
+      // an admin deliberately forced re-verification for it — a stale
+      // cached profile for the same PAN must not silently satisfy that
+      // until a fresh /external/pan/verify actually succeeds again (which
+      // flips primaryApp.pan_verified back to true directly, independent
+      // of this check).
       const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
-      const panVerifiedNow = !!primaryApp?.pan_verified;
-      const currentPanProfile = panVerifiedNow
-        ? (caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null)
-        : null;
+      const matchingPanProfile = caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null;
+      const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
+      const panVerifiedNow = !!primaryApp?.pan_verified || (!!matchingPanProfile && !wasResetOnThisCase);
+      const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
 
       setCaseId(caseData.id);
       setFormData({

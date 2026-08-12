@@ -46,10 +46,25 @@ const LoginPage = () => {
     setLoginState('loading');
     setApiError('');
     try {
-      const user = await login(email, password);
+      const result = await login(email, password);
       setLoginState('success');
-      toast.success(`Welcome back, ${user?.name || 'User'}!`);
-      setTimeout(() => navigate(redirectTarget, { replace: true }), 900);
+      // Every account now requires MFA — login() never returns a logged-in
+      // user directly. Branch to the setup wizard (first time) or the
+      // second-factor challenge (already configured), carrying the original
+      // deep-link target through so it still works after the detour.
+      if (result.mfaSetupRequired) {
+        navigate('/mfa-setup', { replace: true, state: { setupToken: result.setupToken, from: location.state?.from } });
+        return;
+      }
+      navigate('/mfa-challenge', {
+        replace: true,
+        state: {
+          challengeToken: result.challengeToken,
+          methods: result.methods,
+          recoveryOptions: result.recoveryOptions,
+          from: location.state?.from,
+        },
+      });
     } catch (err) {
       setLoginState('error');
       const msg = getErrorMessage(err);

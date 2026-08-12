@@ -3,13 +3,11 @@ import { Outlet } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
-import FeedbackButton from '../components/feedback/FeedbackButton';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
-import { FEEDBACK_SUBMITTER_ROLES } from '../constants/roles';
 
 const AppLayout = () => {
   const { user } = useAuth();
@@ -216,10 +214,9 @@ const AppLayout = () => {
           <Outlet />
         </main>
       </div>
-      {/* DSA roles get the feedback trigger inline in Sidebar's header (next to
-          the logo) instead of this floating overlay — MsmeSidebar has no
-          equivalent slot yet, so MSME customers keep the floating button. */}
-      {isMsme && FEEDBACK_SUBMITTER_ROLES.includes(user?.role) && <FeedbackButton />}
+      {/* Every feedback-eligible role now gets the trigger inline in its own
+          sidebar header (next to the logo) — DSA roles in Sidebar.jsx, MSME
+          customers in MsmeSidebar.jsx — so no floating overlay is needed here. */}
       <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
     </div>
   );

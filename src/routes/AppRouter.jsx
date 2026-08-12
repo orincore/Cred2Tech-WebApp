@@ -9,6 +9,8 @@ import { DASHBOARD_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
 const LoginPage = lazy(() => import('../pages/LoginPage'));
+const MfaSetupPage = lazy(() => import('../pages/MfaSetupPage'));
+const MfaChallengePage = lazy(() => import('../pages/MfaChallengePage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
@@ -37,6 +39,7 @@ const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
 const DSALenderContactsPage = lazy(() => import('../pages/DSALenderContactsPage'));
 const AdminMsmeCasesPage = lazy(() => import('../pages/AdminMsmeCasesPage'));
+const AdminMsmeCaseAllocatePage = lazy(() => import('../pages/AdminMsmeCaseAllocatePage'));
 const PartDisbursementPage = lazy(() => import('../pages/PartDisbursementPage'));
 const PddManagementPage = lazy(() => import('../pages/PddManagementPage'));
 const SalesIncentivePage = lazy(() => import('../pages/SalesIncentivePage'));
@@ -59,6 +62,7 @@ const MsmeLoginPage = lazy(() => import('../pages/msme/MsmeLoginPage'));
 const MsmeDashboardPage = lazy(() => import('../pages/msme/MsmeDashboardPage'));
 const MsmeCasesPage = lazy(() => import('../pages/msme/MsmeCasesPage'));
 const MsmeCaseDetailPage = lazy(() => import('../pages/msme/MsmeCaseDetailPage'));
+const MsmeTransactionsPage = lazy(() => import('../pages/msme/MsmeTransactionsPage'));
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
 const PageLoader = () => (
@@ -75,6 +79,12 @@ const AppRouter = () => (
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          {/* Not wrapped in ProtectedRoute — must render for the fresh-login,
+              not-yet-authenticated case (setupToken/challengeToken in router
+              state only). MfaSetupPage also handles the already-authenticated
+              "old session, MFA not set up yet" case internally. */}
+          <Route path="/mfa-setup" element={<MfaSetupPage />} />
+          <Route path="/mfa-challenge" element={<MfaChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
@@ -92,6 +102,7 @@ const AppRouter = () => (
               } />
               <Route path="cases" element={<MsmeCasesPage />} />
               <Route path="cases/:caseId" element={<MsmeCaseDetailPage />} />
+              <Route path="transactions" element={<MsmeTransactionsPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
@@ -180,6 +191,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/msme-cases" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminMsmeCasesPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/msme-cases/:caseId/allocate" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminMsmeCaseAllocatePage /></ProtectedRoute>
             } />
             <Route path="/admin/transactions" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminTransactionsPage /></ProtectedRoute>

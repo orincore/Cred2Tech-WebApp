@@ -296,8 +296,8 @@ const DSARegisterPage = () => {
       case 'admin_password':
         if (!value) {
           errorMsg = 'Password is required';
-        } else if (value.length < 8) {
-          errorMsg = 'Minimum 8 characters required';
+        } else if (value.length < 12) {
+          errorMsg = 'Minimum 12 characters required';
         } else if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[!@#$%^&*]/.test(value)) {
           errorMsg = 'Password must include uppercase, lowercase, number and special char';
         }
@@ -321,7 +321,7 @@ const DSARegisterPage = () => {
 
   const getPasswordRequirements = (pwd = '') => {
     return {
-      length: pwd.length >= 8,
+      length: pwd.length >= 12,
       upper: /[A-Z]/.test(pwd),
       lower: /[a-z]/.test(pwd),
       number: /[0-9]/.test(pwd),
@@ -736,7 +736,7 @@ const DSARegisterPage = () => {
                       {/* Password Requirements Checklist */}
                       <div className="mt-6 flex flex-col gap-2.5">
                         {Object.entries({
-                          length: 'At least 8 characters',
+                          length: 'At least 12 characters',
                           upper: 'One uppercase letter',
                           lower: 'One lowercase letter',
                           number: 'One number',

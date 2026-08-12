@@ -228,8 +228,8 @@ const CreateTenantPage = () => {
       case 'admin_password':
         if (!value) {
           errorMsg = 'Password is required';
-        } else if (value.length < 8) {
-          errorMsg = 'Minimum 8 characters required';
+        } else if (value.length < 12) {
+          errorMsg = 'Minimum 12 characters required';
         } else if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value) || !/[!@#$%^&*]/.test(value)) {
           errorMsg = 'Password must include uppercase, lowercase, number and special char';
         }
@@ -288,7 +288,7 @@ const CreateTenantPage = () => {
     }
 
     if (!form.admin_password) e.admin_password = 'Password is required';
-    else if (form.admin_password.length < 8) e.admin_password = 'Minimum 8 characters required';
+    else if (form.admin_password.length < 12) e.admin_password = 'Minimum 12 characters required';
     else if (!/[A-Z]/.test(form.admin_password) || !/[a-z]/.test(form.admin_password) || !/[0-9]/.test(form.admin_password) || !/[!@#$%^&*]/.test(form.admin_password)) {
       e.admin_password = 'Password must include uppercase, lowercase, number and special char';
     }
@@ -673,7 +673,7 @@ const CreateTenantPage = () => {
                     name="admin_password"
                     value={form.admin_password}
                     onChange={handleChange}
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 12 characters"
                     style={{ ...inputStyle, ...(errors.admin_password ? inputFocusStyle : {}) }}
                     onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => {

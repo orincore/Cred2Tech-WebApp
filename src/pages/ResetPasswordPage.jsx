@@ -28,7 +28,7 @@ const PageShell = ({ children }) => (
 // stricter frontend-only bar for "strong", and never rejects anything the
 // backend would've accepted.
 const PASSWORD_RULES = [
-  { key: 'length', label: 'At least 8 characters', test: (v) => v.length >= 8 && v.length <= 128 },
+  { key: 'length', label: 'At least 12 characters', test: (v) => v.length >= 12 && v.length <= 128 },
   { key: 'letter', label: 'Contains a letter', test: (v) => /[a-zA-Z]/.test(v) },
   { key: 'number', label: 'Contains a number', test: (v) => /[0-9]/.test(v) },
   { key: 'special', label: 'Contains a special character', test: (v) => /[^a-zA-Z0-9]/.test(v) },
@@ -119,7 +119,7 @@ const ResetPasswordPage = () => {
                 type={showPwd ? 'text' : 'password'}
                 value={password}
                 onChange={e => { setPassword(e.target.value); setApiError(''); }}
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
                 autoFocus
                 className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 pr-8 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
               />

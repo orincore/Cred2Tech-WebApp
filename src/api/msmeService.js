@@ -21,6 +21,7 @@ export const msmeAuthApi = {
 export const msmeApi = {
   getDashboard: () => api.get('/msme/dashboard'),
   getCases: () => api.get('/msme/cases'),
+  getPayments: () => api.get('/msme/payments'),
   updateProfile: (data) => api.put('/msme/profile', data),
 
   initiateEligibility: () => api.post('/msme/eligibility/initiate'),
@@ -30,7 +31,7 @@ export const msmeApi = {
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
   getPaymentConfig: () => api.get('/msme/payment/config'),
-  createPaymentOrder: () => api.post('/msme/payment/create-order'),
+  createPaymentOrder: (forceNew = false) => api.post('/msme/payment/create-order', { forceNew }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
   runEligibility: () => api.post('/msme/eligibility/run'),

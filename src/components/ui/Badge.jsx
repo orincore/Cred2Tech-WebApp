@@ -29,6 +29,14 @@ const Badge = ({ type = 'role', value, className = '' }) => {
     };
     ({ color, bg } = map[value] || map.OPEN);
     label = formatStatusLabel(value);
+  } else if (type === 'paymentStatus') {
+    const map = {
+      PAID: { color: 'var(--success)', bg: 'var(--success-bg)' },
+      FAILED: { color: 'var(--error)', bg: 'var(--error-bg)' },
+      INITIATED: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
+    };
+    ({ color, bg } = map[value] || map.INITIATED);
+    label = value === 'INITIATED' ? 'Pending' : formatStatusLabel(value);
   } else if (type === 'ticketType') {
     color = value === 'ISSUE' ? 'var(--error)' : 'var(--primary)';
     bg = value === 'ISSUE' ? 'var(--error-bg)' : 'var(--info-bg)';

@@ -3,7 +3,6 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { MsmeAuthProvider, useMsmeAuth } from '../context/MsmeAuthContext';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
-import FeedbackButton from '../components/feedback/FeedbackButton';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
 
@@ -172,7 +171,6 @@ const LayoutContent = () => {
           <Outlet />
         </main>
       </div>
-      <FeedbackButton />
     </div>
   );
 };

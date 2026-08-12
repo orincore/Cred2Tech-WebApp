@@ -7,6 +7,7 @@ import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel }
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
 import PageHeader from '../components/ui/PageHeader';
+import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
 
@@ -445,6 +446,9 @@ const CustomersListPage = () => {
                     <AlertTriangle size={12} /> PDD Pending
                   </div>
                 )}
+                {c.data_purged_at && (
+                  <div style={{ marginBottom: 10 }}><DataPurgedBadge /></div>
+                )}
 
                 <button
                   onClick={() => goToCase(c)}
@@ -533,6 +537,7 @@ const CustomersListPage = () => {
                             <AlertTriangle size={10} /> PDD
                           </div>
                         )}
+                        {c.data_purged_at && <DataPurgedBadge />}
                       </div>
                     </td>
                     <td style={cellStyle}>
