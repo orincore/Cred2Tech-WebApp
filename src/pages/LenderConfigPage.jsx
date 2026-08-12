@@ -5,8 +5,43 @@ import {
    updateSchemeParameter, updateScheme, deleteScheme
 } from '../api/lenderService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert } from 'lucide-react';
+import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert, Save } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+
+// Mirrors the backend's key-based type inference (Cred2Tech/backend's
+// src/utils/esrParsers.js normalizeParameter()) so the editor shown for a
+// cell always matches what the backend will actually accept for that
+// parameter — e.g. LTV/ROI/PF are validated server-side to *require* a
+// trailing "%" or the save is rejected outright, so those get a dedicated
+// number+% editor rather than a bare text box the admin has to remember the
+// format for. Order matters and matches the backend's own if/else chain.
+const classifyParamType = (parameterKey) => {
+   const k = (parameterKey || '').toLowerCase();
+   if (k.includes('foir')) return 'foir'; // percent/slab/conditional — too variable to force into a fixed widget
+   if (k.includes('ltv') || k.includes('roi') || k.includes('pf')) return 'percent';
+   if (k.includes('age') || k.includes('cutoff') || k.includes('tenure')) return 'integer';
+   if (k.includes('loan') || k.includes('income')) return 'money';
+   if (k.includes('elig_')) return 'boolean';
+   return 'string';
+};
+
+// Pulls the leading number out of values like "300 Months" or "7.60%" so a
+// <input type="number"> can hold it — the backend accepts a bare number back
+// for these (tenure/age default to months/no-unit when no suffix is given).
+const leadingNumber = (v) => {
+   if (v === null || v === undefined) return '';
+   const m = String(v).match(/-?\d+(\.\d+)?/);
+   return m ? m[0] : '';
+};
+
+// Stored boolean values arrive as loosely-cased free text ("Yes", "NO",
+// "true"...) — normalize to the exact option value the <select> uses.
+const boolDisplayValue = (v) => {
+   const s = String(v ?? '').trim().toLowerCase();
+   if (['yes', 'true', 'y', '1'].includes(s)) return 'Yes';
+   if (['no', 'false', 'n', '0'].includes(s)) return 'No';
+   return '';
+};
 
 // Responsive hook
 const useResponsive = () => {
@@ -157,8 +192,16 @@ const LenderConfigPage = () => {
    const [selectedProductId, setSelectedProductId] = useState('');
    const [schemes, setSchemes] = useState([]);
    const [parameters, setParameters] = useState([]);
-   const [matrixData, setMatrixData] = useState({}); // { [schemeId_parameterId]: value }
+   const [matrixData, setMatrixData] = useState({}); // { [schemeId_parameterId]: value } — last-saved values
    const [loading, setLoading] = useState(false);
+
+   // Edits the admin has made but not yet persisted — { [schemeId_parameterId]: { schemeId, parameterId, value } }.
+   // Cells write here on blur/apply instead of calling the API directly; only
+   // the Save button flushes this to the backend.
+   const [pendingChanges, setPendingChanges] = useState({});
+   const [savingAll, setSavingAll] = useState(false);
+   const pendingCount = Object.keys(pendingChanges).length;
+   const hasUnsavedChanges = pendingCount > 0;
 
    const [slabModalInfo, setSlabModalInfo] = useState(null); // { schemeId, parameterId, label, initialData }
 
@@ -181,11 +224,19 @@ const LenderConfigPage = () => {
       } catch (e) { console.error(e); }
    };
 
+   const confirmDiscardIfDirty = (message) => {
+      if (!hasUnsavedChanges) return true;
+      return window.confirm(message);
+   };
+
    const handleLenderChange = async (e) => {
+      if (!confirmDiscardIfDirty('You have unsaved matrix changes. Discard them and switch lender?')) return;
+
       const id = e.target.value;
       setSelectedLenderId(id);
       setSelectedProductId('');
       setSchemes([]);
+      setPendingChanges({});
       if (!id) { setProducts([]); return; }
 
       setLoading(true);
@@ -196,8 +247,11 @@ const LenderConfigPage = () => {
    };
 
    const handleProductChange = async (e) => {
+      if (!confirmDiscardIfDirty('You have unsaved matrix changes. Discard them and switch product?')) return;
+
       const id = e.target.value;
       setSelectedProductId(id);
+      setPendingChanges({});
       if (!id) { setSchemes([]); return; }
       loadMatrix(id);
    };
@@ -215,6 +269,7 @@ const LenderConfigPage = () => {
             });
          }
          setMatrixData(newMatrix);
+         setPendingChanges({});
       } catch (e) {
          console.error(e);
          toast.error("Failed to load matrix data.");
@@ -223,35 +278,92 @@ const LenderConfigPage = () => {
       }
    };
 
-   const handleCellBlur = async (schemeId, parameterId, newValue) => {
+   // Same "unwrap the normalized {raw, type, normalized} payload" logic the
+   // input's defaultValue uses — needed here too so a re-typed value that
+   // matches what's already saved doesn't get flagged as a pending change.
+   const displayValueOf = (rawStored) => {
+      if (!rawStored || typeof rawStored !== 'object' || Array.isArray(rawStored)) return rawStored;
+      if ('raw' in rawStored) return rawStored.raw;
+      if ('value' in rawStored) return rawStored.value;
+      // A never-set cell on a freshly-created scheme comes back as `{}`,
+      // not null/undefined — show it blank rather than literal "{}" text.
+      if (Object.keys(rawStored).length === 0) return '';
+      return JSON.stringify(rawStored); // unrecognized non-empty shape — surface it rather than hide it
+   };
+
+   // Stages an edit locally instead of saving it — the Save button is what
+   // actually calls the API now. Snapping back to the last-saved value drops
+   // the cell out of the pending set again, so the Save button and dirty
+   // highlight stay accurate to "is there really something to save".
+   const stageCellChange = (schemeId, parameterId, newValue) => {
       const key = `${schemeId}_${parameterId}`;
-      if (matrixData[key] === newValue) return; // No change
+      const savedValue = displayValueOf(matrixData[key]) ?? '';
+      setPendingChanges(prev => {
+         const next = { ...prev };
+         if (newValue === savedValue) {
+            delete next[key];
+         } else {
+            next[key] = { schemeId, parameterId, value: newValue };
+         }
+         return next;
+      });
+   };
 
-      // Optimistic UI mapping
-      setMatrixData(prev => ({ ...prev, [key]: newValue }));
+   const getCellValue = (schemeId, parameterId) => {
+      const key = `${schemeId}_${parameterId}`;
+      return key in pendingChanges ? pendingChanges[key].value : matrixData[key];
+   };
 
-      try {
-         await updateSchemeParameter(schemeId, parameterId, newValue);
-         toast.success("Saved");
-      } catch (e) {
-         toast.error("Failed to update cell.");
+   const handleSaveAll = async () => {
+      const changes = Object.values(pendingChanges);
+      if (changes.length === 0) return;
+
+      setSavingAll(true);
+      const results = await Promise.allSettled(
+         changes.map(c => updateSchemeParameter(c.schemeId, c.parameterId, c.value))
+      );
+
+      const succeeded = changes.filter((_, i) => results[i].status === 'fulfilled');
+      const failed = changes.filter((_, i) => results[i].status === 'rejected');
+
+      if (succeeded.length > 0) {
+         setMatrixData(prev => {
+            const next = { ...prev };
+            succeeded.forEach(c => { next[`${c.schemeId}_${c.parameterId}`] = c.value; });
+            return next;
+         });
+      }
+
+      setPendingChanges(() => {
+         const next = {};
+         failed.forEach(c => { next[`${c.schemeId}_${c.parameterId}`] = c; });
+         return next;
+      });
+
+      setSavingAll(false);
+
+      if (failed.length === 0) {
+         toast.success(`Saved ${succeeded.length} change${succeeded.length > 1 ? 's' : ''}`);
+      } else if (succeeded.length === 0) {
+         toast.error(`Failed to save ${failed.length} change${failed.length > 1 ? 's' : ''}. Please retry.`);
+      } else {
+         toast.error(`Saved ${succeeded.length}, but ${failed.length} failed. Please retry the rest.`);
       }
    };
 
    const openSlabEditor = (schemeId, paramId, label) => {
-      const key = `${schemeId}_${paramId}`;
       setSlabModalInfo({
          schemeId,
          parameterId: paramId,
          label: label,
-         initialData: matrixData[key] || []
+         initialData: getCellValue(schemeId, paramId) || []
       });
    };
 
-   const handleSlabSave = async (structuredData) => {
+   const handleSlabSave = (structuredData) => {
       const { schemeId, parameterId } = slabModalInfo;
       setSlabModalInfo(null);
-      await handleCellBlur(schemeId, parameterId, structuredData);
+      stageCellChange(schemeId, parameterId, structuredData);
    };
 
    const addScheme = async () => {
@@ -403,6 +515,19 @@ const LenderConfigPage = () => {
                   </button>
                </div>
             </div>
+
+            {/* Manual Save — sits to the right of the Target Lender / Target Product
+                Line selectors. Blurred/unclickable until a matrix cell is edited. */}
+            <button
+               className="btn btn-primary btn-sm"
+               onClick={handleSaveAll}
+               disabled={!hasUnsavedChanges || savingAll}
+               title={hasUnsavedChanges ? 'Save changes to the matrix' : 'No changes to save'}
+               style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+            >
+               <Save size={14} />
+               {savingAll ? 'Saving…' : hasUnsavedChanges ? `Save Changes (${pendingCount})` : 'Save Changes'}
+            </button>
          </div>
 
          {/* ─── Content ─── */}
@@ -430,7 +555,9 @@ const LenderConfigPage = () => {
                   marginBottom: 16
                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--warning)' }}>
-                     <span>✏️</span> <strong>Edit Mode Active</strong> — Tap any cell to modify it. Changed cells are auto-saved.
+                     <span>✏️</span> <strong>Edit Mode Active</strong> — {hasUnsavedChanges
+                        ? `${pendingCount} unsaved change${pendingCount > 1 ? 's' : ''} — click Save Changes to apply.`
+                        : 'Tap any cell to modify it, then click Save Changes to apply.'}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
                      <span>⚡</span> Saves affect all future eligibility calculations
@@ -523,7 +650,33 @@ const LenderConfigPage = () => {
                                     </td>
 
                                     {schemes.map(sch => {
-                                       const val = matrixData[`${sch.id}_${p.id}`] || '';
+                                       const cellKey = `${sch.id}_${p.id}`;
+                                       const isDirty = cellKey in pendingChanges;
+                                       // Unsaved edits are stored already-unwrapped (plain string/int/bool/array);
+                                       // untouched cells still hold the backend's normalized {raw,type,normalized}
+                                       // wrapper (see admin.lender.controller.js's normalizeParameter()) and need
+                                       // unwrapping to their human-readable `raw` field before display.
+                                       const val = isDirty ? pendingChanges[cellKey].value : (displayValueOf(matrixData[cellKey]) ?? '');
+                                       const dirtyBg = isDirty ? 'var(--warning-bg)' : 'transparent';
+                                       const paramType = classifyParamType(p.parameter_key);
+                                       // Free-text notes (e.g. "50%, can be considered 100% if ownership proof
+                                       // provided.") don't fit — or read — in a single-line box this narrow.
+                                       const isLongText = typeof val === 'string' && val.length > 18;
+
+                                       // Stages the edit and repaints the cell's dirty highlight in one go —
+                                       // shared across every editor variant below so they all behave identically.
+                                       const commitEdit = (el, transformedValue) => {
+                                          stageCellChange(sch.id, p.id, transformedValue);
+                                          const savedValue = displayValueOf(matrixData[cellKey]) ?? '';
+                                          el.style.background = (transformedValue !== savedValue) ? 'var(--warning-bg)' : 'transparent';
+                                       };
+
+                                       const baseInputStyle = {
+                                          width: '100%', height: '100%', padding: '8px', fontSize: 12,
+                                          background: dirtyBg, border: 'none', color: 'var(--on-surface)',
+                                          transition: 'all 0.15s'
+                                       };
+
                                        return (
                                           <td key={sch.id} style={{ padding: 4, borderRight: '1px solid var(--outline)', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>
                                              {p.data_type === 'json_slab' ? (
@@ -532,9 +685,9 @@ const LenderConfigPage = () => {
                                                       width: '100%',
                                                       fontSize: 11,
                                                       padding: '6px 8px',
-                                                      background: 'var(--info-bg)',
-                                                      color: 'var(--info)',
-                                                      border: '1px solid var(--info)',
+                                                      background: isDirty ? 'var(--warning-bg)' : 'var(--info-bg)',
+                                                      color: isDirty ? 'var(--warning)' : 'var(--info)',
+                                                      border: `1px solid ${isDirty ? 'var(--warning)' : 'var(--info)'}`,
                                                       borderRadius: 0,
                                                       fontWeight: 600,
                                                       cursor: 'pointer',
@@ -542,38 +695,82 @@ const LenderConfigPage = () => {
                                                    }}
                                                    onClick={() => openSlabEditor(sch.id, p.id, p.parameter_label)}
                                                 >
-                                                   {Array.isArray(val) && val.length > 0 ? `Slab Set (${val.length} rules)` : 'Configure Slabs'}
+                                                   {Array.isArray(val) && val.length > 0 ? `Slab Set (${val.length} rules)${isDirty ? ' •' : ''}` : 'Configure Slabs'}
                                                 </button>
-                                             ) : (
+                                             ) : paramType === 'boolean' ? (
+                                                <select
+                                                   style={{ ...baseInputStyle, textAlign: 'center', cursor: 'pointer' }}
+                                                   defaultValue={boolDisplayValue(val)}
+                                                   onChange={(e) => commitEdit(e.target, e.target.value)}
+                                                >
+                                                   <option value="">---</option>
+                                                   <option value="Yes">Yes</option>
+                                                   <option value="No">No</option>
+                                                </select>
+                                             ) : paramType === 'percent' ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: dirtyBg }}>
+                                                   <input
+                                                      type="number"
+                                                      step="0.01"
+                                                      style={{ ...baseInputStyle, textAlign: 'right', background: 'transparent', width: '70%' }}
+                                                      defaultValue={leadingNumber(val)}
+                                                      placeholder="0"
+                                                      title="Stored as a percentage — enter the number only, e.g. 75 for 75%."
+                                                      onFocus={e => e.target.parentElement.style.background = 'var(--bg-elevated)'}
+                                                      onBlur={(e) => {
+                                                         const raw = e.target.value.trim();
+                                                         commitEdit(e.target.parentElement, raw === '' ? '' : `${raw}%`);
+                                                      }}
+                                                   />
+                                                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', paddingRight: 8 }}>%</span>
+                                                </div>
+                                             ) : paramType === 'integer' ? (
                                                 <input
-                                                   type="text"
-                                                   style={{
-                                                      width: '100%',
-                                                      height: '100%',
-                                                      padding: '8px',
-                                                      fontSize: 12,
-                                                      textAlign: 'center',
-                                                      background: 'transparent',
-                                                      border: 'none',
-                                                      color: 'var(--on-surface)',
-                                                      transition: 'all 0.15s'
-                                                   }}
-                                                   // Every saved value comes back from the backend as the full
-                                                   // normalized wrapper it stores (e.g. {raw:"65%", type:"percent",
-                                                   // normalized:0.65} - see admin.lender.controller.js's
-                                                   // normalizeParameter()), not the bare display string. Show just
-                                                   // the human-readable `raw` field; only fall back to the raw JSON
-                                                   // for a shape we don't recognize, so nothing is silently hidden.
-                                                   defaultValue={
-                                                      val && typeof val === 'object' && !Array.isArray(val)
-                                                         ? (val.raw ?? val.value ?? JSON.stringify(val))
-                                                         : val
-                                                   }
-                                                   onBlur={(e) => handleCellBlur(sch.id, p.id, p.data_type === 'integer' ? parseInt(e.target.value) || 0 : p.data_type === 'boolean' ? e.target.value === 'true' : e.target.value)}
-                                                   placeholder="---"
+                                                   type="number"
+                                                   step="1"
+                                                   style={{ ...baseInputStyle, textAlign: 'center' }}
+                                                   defaultValue={leadingNumber(val)}
+                                                   placeholder="0"
                                                    onFocus={e => e.target.style.background = 'var(--bg-elevated)'}
-                                                   onBlurCapture={e => e.target.style.background = 'transparent'}
+                                                   onBlur={(e) => commitEdit(e.target, e.target.value.trim())}
                                                 />
+                                             ) : (
+                                                // money / foir / free-text fallback — formats are genuinely too varied
+                                                // (₹ amounts with L/Cr/K suffixes, "No Capping", FOIR slab shorthand,
+                                                // plain notes) to force into a fixed widget, so these stay text —
+                                                // just left-aligned and roomier so multi-word values are readable,
+                                                // with a format hint instead of a guessing game. Longer existing
+                                                // values (full-sentence notes) get a small resizable textarea
+                                                // instead of a single-line box they'd only ever see part of.
+                                                (() => {
+                                                   const placeholder = paramType === 'money' ? 'e.g. 500000, 50L, 2Cr, No Capping'
+                                                      : paramType === 'foir' ? 'e.g. 75%, <75k -60%,>75k -70%, No DBR'
+                                                      : '---';
+                                                   const hint = paramType === 'money' ? 'Accepts a plain amount, or with L/Cr/K suffix, or "No Capping".'
+                                                      : paramType === 'foir' ? 'Accepts a plain %, a slab like "<75k -60%, >75k -70%", or "No DBR".'
+                                                      : undefined;
+                                                   return isLongText ? (
+                                                      <textarea
+                                                         rows={2}
+                                                         style={{ ...baseInputStyle, textAlign: 'left', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.35 }}
+                                                         defaultValue={val}
+                                                         placeholder={placeholder}
+                                                         title={hint}
+                                                         onFocus={e => e.target.style.background = 'var(--bg-elevated)'}
+                                                         onBlur={(e) => commitEdit(e.target, e.target.value)}
+                                                      />
+                                                   ) : (
+                                                      <input
+                                                         type="text"
+                                                         style={{ ...baseInputStyle, textAlign: 'left' }}
+                                                         defaultValue={val}
+                                                         placeholder={placeholder}
+                                                         title={hint}
+                                                         onFocus={e => e.target.style.background = 'var(--bg-elevated)'}
+                                                         onBlur={(e) => commitEdit(e.target, e.target.value)}
+                                                      />
+                                                   );
+                                                })()
                                              )}
                                           </td>
                                        )

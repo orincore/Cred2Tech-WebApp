@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import ConfirmModal from '../components/ui/ConfirmModal';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, UploadCloud,
   X, Mail, Phone, IndianRupee, Users, BarChart3, MapPin, FolderOpen, MessageSquare,
   Contact, Landmark, Info, Home, Briefcase, Building2, FileText, ScrollText, Trash2
 } from 'lucide-react';
-import { getTenantLenders, sendCaseToOtherLender } from '../api/tenantLenderService';
+import { getTenantLenders } from '../api/tenantLenderService';
 import { uploadDocument, deleteDocument } from '../api/documentHelper';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtINR = (n, fallback = '—') => {
@@ -80,16 +81,36 @@ function Section({ icon: Icon, title, subtitle, children, rightSlot }) {
   );
 }
 
+const hintStyle = { fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 };
+
 // ─── EMI Calculator ───────────────────────────────────────────────────────────
-function EMICalculator({ loanAmount, roi, monthlyIncome, maxTenure, onChange }) {
-  const [amount, setAmount] = useState(loanAmount ? (loanAmount / 100000).toFixed(2) : '');
-  const [tenor, setTenor] = useState(() => maxTenure ? String(maxTenure) : '12');
+// `initialAmount`/`initialTenorYears` seed the editable fields and must come
+// from what's actually SAVED on the proposal (requested_amount/tenure_months)
+// — falling back to the ESR ceiling only when nothing has been saved yet.
+// `maxEligibleAmount`/`maxTenure` are a SEPARATE, fixed reference (the ESR
+// ceiling) shown only as the "Max eligible" hint below each field. These were
+// previously conflated into one prop each, which meant the fields silently
+// re-displayed the ESR ceiling instead of the DSA's saved edits on every
+// reload — a save always worked, it just never showed.
+function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, initialTenorYears, maxTenure, canOverrideRoi, onChange }) {
+  const [amount, setAmount] = useState(initialAmount ? (initialAmount / 100000).toFixed(2) : '');
+  const [tenor, setTenor] = useState(() => initialTenorYears ? String(initialTenorYears) : (maxTenure ? String(maxTenure) : '12'));
   const [rate, setRate] = useState(roi || '');
   const [showAmort, setShowAmort] = useState(false);
 
   useEffect(() => {
-    if (loanAmount) setAmount((loanAmount / 100000).toFixed(2));
-  }, [loanAmount]);
+    if (initialAmount) setAmount((initialAmount / 100000).toFixed(2));
+  }, [initialAmount]);
+
+  // Surface every amount/tenor/rate edit to the parent (previously only the
+  // amount field's onChange fired this, with a stale `tenor` closed over —
+  // and the parent ignored it anyway — so editing Loan Details here never
+  // actually reached the saved proposal; the "Loan Tenor Required" field in
+  // the sent-to-lender email stayed blank no matter what a DSA typed here).
+  useEffect(() => {
+    onChange?.({ amount_lakhs: amount, tenor_years: tenor, roi_percent: rate });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, tenor, rate]);
 
   const { emi, totalInterest, schedule } = useMemo(() => {
     const P = parseFloat(amount) * 100000 || 0;
@@ -111,38 +132,38 @@ function EMICalculator({ loanAmount, roi, monthlyIncome, maxTenure, onChange }) 
     return { emi, totalInterest, totalRepayment, emiFoirPct, schedule };
   }, [amount, tenor, rate, monthlyIncome]);
 
-  const TENOR_OPTIONS = useMemo(() => {
-    const presets = [1, 2, 3, 5, 7, 10, 12, 15, 20, 25, 30];
-    const max = parseFloat(maxTenure);
-    if (!max || !isFinite(max)) return presets;
-    const capped = presets.filter(t => t <= max);
-    if (!capped.includes(max)) capped.push(max);
-    return capped.sort((a, b) => a - b);
-  }, [maxTenure]);
-
   return (
     <div>
       {/* Inputs */}
       <div className="pp-grid-3" style={{ marginBottom: 20 }}>
         <div>
           <label style={labelStyle}>LOAN AMOUNT (₹ LAKHS) *</label>
-          <input value={amount} onChange={e => { setAmount(e.target.value); onChange?.({ amount_lakhs: e.target.value, tenor_years: tenor }); }}
+          <input value={amount} onChange={e => setAmount(e.target.value)}
             type="number" placeholder="e.g. 39"
             style={inputStyle} />
+          {maxEligibleAmount != null && (
+            <div style={hintStyle}>Max eligible: ₹{(maxEligibleAmount / 100000).toFixed(2)} Lakhs</div>
+          )}
         </div>
         <div>
           <label style={labelStyle}>TENOR (YEARS) *</label>
-          <select value={tenor} onChange={e => setTenor(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-            {TENOR_OPTIONS.map(t => <option key={t} value={t}>{t} Years</option>)}
-          </select>
+          <input value={tenor} onChange={e => setTenor(e.target.value)}
+            type="number" min="1" step="1" placeholder="e.g. 15"
+            style={inputStyle} />
           {maxTenure && (
-            <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>Max eligible: {maxTenure} years</div>
+            <div style={hintStyle}>Max eligible: {maxTenure} years</div>
           )}
         </div>
         <div>
           <label style={labelStyle}>INDICATIVE RATE (% P.A.)</label>
           <input value={rate} onChange={e => setRate(e.target.value)} type="number" step="0.01" placeholder="e.g. 10.50"
             style={inputStyle} />
+          {roi != null && (
+            <div style={hintStyle}>ESR indicative: {roi}% p.a.</div>
+          )}
+          {!canOverrideRoi && (
+            <div style={hintStyle}>Calculator preview only — admin permission required to save a rate change</div>
+          )}
         </div>
       </div>
 
@@ -628,6 +649,23 @@ const KYC_CATEGORIES = [
       { type: 'OTHER', label: 'Others', customLabel: true },
     ],
   },
+  // Kept separate from Income Documents (manual uploads) — these are the
+  // exact document_type values the automated pull pipeline saves
+  // (pullSync.service.js / document.service.js). A document only renders at
+  // all if its type matches one of a category's options
+  // (docBelongsToCategory below), so without these exact values these
+  // auto-pulled documents were invisible on this page entirely, not just
+  // miscategorized. JSON variants (GST_REPORT_JSON/BANK_JSON) are
+  // deliberately excluded — raw data files, not required in the proposal.
+  {
+    id: 'api_fetched_documents', label: 'Fetched from API', perApplicant: false, required: false,
+    options: [
+      { type: 'ITR_EXCEL', label: 'ITR (Excel)' },
+      { type: 'BANK_EXCEL', label: 'Bank Statement (Excel)' },
+      { type: 'GST_REPORT_PDF', label: 'GST Report (PDF)' },
+      { type: 'GST_REPORT_EXCEL', label: 'GST Report (Excel)' },
+    ],
+  },
   {
     id: 'property_documents', label: 'Property Documents', perApplicant: false, required: false,
     options: [
@@ -1091,6 +1129,13 @@ const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
 // reading useParams()/navigating itself.
 export default function ProposalPage({ caseId, proposalId, onBack, isMsme = false, isSalaried = false }) {
   const isMobile = useIsMobile();
+  const { hasRole } = useAuth();
+  // roi_min/roi_max are backend-enforced override fields (see
+  // updateProposalDraft's overrideFields check) — only DSA_ADMIN/SUPER_ADMIN
+  // may persist them. Sending roi_min as anyone else rejects the *entire*
+  // PATCH (amount/tenor included), so the Rate field must only be included
+  // in the save payload for users who actually have this permission.
+  const canOverrideRoi = hasRole(['DSA_ADMIN', 'SUPER_ADMIN']);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1101,6 +1146,10 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const [form, setForm] = useState({
     loan_purpose: '', remarks: '', preferred_banking_program: ''
   });
+  // Loan Details (EMICalculator amount/tenor) — kept separate from `form`
+  // since it's persisted as requested_amount (paise-equivalent rupees) /
+  // tenure_months, not the raw lakhs/years the calculator edits in.
+  const [loanTerms, setLoanTerms] = useState({ amount_lakhs: '', tenor_years: '', roi_percent: '' });
   const [addresses, setAddresses] = useState({ residential: '', office: '', property: '' });
   const emptyRef = () => ({ name: '', mobile: '', relationship: '', address: '' });
   const [references, setReferences] = useState([emptyRef(), emptyRef()]);
@@ -1171,11 +1220,29 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         __addresses: addresses,
         __references: references,
       });
+      // Loan Details (amount/tenor) only gets sent once the calculator has
+      // produced a real value — an empty/partial field must never overwrite
+      // a previously-saved requested_amount/tenure_months with 0.
+      const amountLakhsNum = parseFloat(loanTerms.amount_lakhs);
+      const tenorYearsNum = parseFloat(loanTerms.tenor_years);
+      const roiPercentNum = parseFloat(loanTerms.roi_percent);
+      const loanTermsPayload = {};
+      if (!isNaN(amountLakhsNum) && amountLakhsNum > 0) loanTermsPayload.requested_amount = Math.round(amountLakhsNum * 100000);
+      if (!isNaN(tenorYearsNum) && tenorYearsNum > 0) loanTermsPayload.tenure_months = Math.round(tenorYearsNum * 12);
+      // Only admins are allowed to persist ROI (see canOverrideRoi above) —
+      // everyone else can still play with the Rate field for their own EMI
+      // preview, it just never leaves the browser.
+      if (canOverrideRoi && !isNaN(roiPercentNum) && roiPercentNum > 0) {
+        loanTermsPayload.roi_min = roiPercentNum;
+        loanTermsPayload.roi_max = roiPercentNum;
+      }
+
       await caseService.updateProposal(caseId, proposalId, {
         loan_purpose: form.loan_purpose,
         remarks: form.remarks,
         additional_notes: additionalNotesPayload,
         preferred_banking_program: form.preferred_banking_program,
+        ...loanTermsPayload,
       });
       if (!silent) toast.success('Draft saved');
     } catch (e) {
@@ -1188,15 +1255,23 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const handleSubmit = () => setShowSubmitConfirm(true);
 
   const performSubmit = async () => {
+    // The dialog stays open through the whole send — its body swaps to
+    // <SendingStatus /> below (driven by `submitting`) instead of closing
+    // and handing off to a separate overlay.
     try {
       setSubmitting(true);
       await handleSave(true);
-      await caseService.submitProposal(caseId, proposalId);
-      toast.success('✅ Proposal submitted! Lead sent to lender.');
+      // sendProposal actually dispatches the email to the lender's contact
+      // (and marks the proposal submitted on success) — the old
+      // submitProposal call here only flipped status with no email ever
+      // sent, so clicking "Send to {lender}" silently did nothing.
+      const result = await caseService.sendProposal(caseId, proposalId);
+      setSendConfirmResult(result);
       setShowSubmitConfirm(false);
       await load();
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to submit');
+      toast.error(e.response?.data?.error || 'Failed to send proposal');
+      setShowSubmitConfirm(false);
     } finally {
       setSubmitting(false);
     }
@@ -1230,9 +1305,21 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const { proposal, prefill, applicants = [], co_applicants = [],
     financial_summary, documents_by_category, lender_eligibility } = data;
   const lenderName = proposal.lender_name || 'Lender';
+  // "Max eligible" reference (hint only) — the ESR ceiling, fixed regardless
+  // of what's actually been saved/edited on the proposal.
   const maxTenureMonths = lender_eligibility?.max_tenure_months ?? proposal.tenure_months ?? null;
   const maxTenureYears = maxTenureMonths
     ? (maxTenureMonths % 12 === 0 ? String(maxTenureMonths / 12) : (maxTenureMonths / 12).toFixed(1))
+    : null;
+  // Editable field's starting value — must prefer what's actually saved on
+  // the proposal (requested_amount/tenure_months) over the ESR ceiling,
+  // otherwise every reload re-shows the ceiling and any saved edit appears
+  // to have silently reverted even though it persisted correctly.
+  const initialLoanAmount = proposal.requested_amount || proposal.eligible_amount || null;
+  const maxEligibleAmount = proposal.eligible_amount || null;
+  const initialTenureMonths = proposal.tenure_months || lender_eligibility?.max_tenure_months || null;
+  const initialTenorYears = initialTenureMonths
+    ? (initialTenureMonths % 12 === 0 ? String(initialTenureMonths / 12) : (initialTenureMonths / 12).toFixed(1))
     : null;
   // Was `proposal.proposal_status === 'submitted'` — a frontend-only lock the
   // backend never actually enforced (updateProposalDraft has no status
@@ -1296,11 +1383,14 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
       <Section icon={IndianRupee} title="Loan Details"
         subtitle="Enter the Proposed loan amount and tenor for this application">
         <EMICalculator
-          loanAmount={proposal.eligible_amount || proposal.requested_amount}
+          initialAmount={initialLoanAmount}
+          maxEligibleAmount={maxEligibleAmount}
           roi={proposal.roi_min}
           monthlyIncome={prefill?.monthly_income}
+          initialTenorYears={initialTenorYears}
           maxTenure={maxTenureYears}
-          onChange={() => { }}
+          canOverrideRoi={canOverrideRoi}
+          onChange={v => setLoanTerms(lt => ({ ...lt, ...v }))}
         />
       </Section>
 
@@ -1594,6 +1684,8 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         isOpen={showOtherLenderModal}
         onClose={() => setShowOtherLenderModal(false)}
         caseId={caseId}
+        proposalId={proposalId}
+        beforeSend={() => handleSave(true)}
         onSuccess={r => { setShowOtherLenderModal(false); setSendConfirmResult(r); }}
       />
       <SendConfirmationModal
@@ -1601,22 +1693,20 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         onClose={() => setSendConfirmResult(null)}
         result={sendConfirmResult}
       />
-      <ConfirmModal
+      <SendConfirmDialog
         isOpen={showSubmitConfirm}
         onClose={() => setShowSubmitConfirm(false)}
         onConfirm={performSubmit}
-        title="Submit this proposal?"
-        message={`Submit proposal ${data?.proposal?.proposal_number || ''} to ${lenderName}? This will record the lead as sent to lender.`}
-        confirmLabel="Submit"
-        isLoading={submitting}
-        danger={false}
+        sending={submitting}
+        proposalNumber={data?.proposal?.proposal_number}
+        lenderName={lenderName}
       />
     </div>
   );
 }
 
 // ─── SendToOtherLenderModal (inline in ProposalPage) ──────────────────────────
-function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
+function SendToOtherLenderModal({ isOpen, onClose, caseId, proposalId, beforeSend, onSuccess }) {
   const [lenders, setLenders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedLender, setSelectedLender] = useState(null);
@@ -1637,14 +1727,18 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
 
   const handleSend = async () => {
     if (!selectedContact) { toast.error('Select a contact first'); return; }
+    const contactName = selectedContact.contact_name;
     setSending(true);
     try {
-      const result = await sendCaseToOtherLender(caseId, { contact_id: selectedContact.id });
-      toast.success(`Proposal sent to ${selectedContact.contact_name}!`);
+      await beforeSend?.();
+      const result = await caseService.sendProposal(caseId, proposalId, selectedContact.id);
+      toast.success(`Proposal sent to ${contactName}!`);
       onSuccess(result);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to send');
-    } finally { setSending(false); }
+    } finally {
+      setSending(false);
+    }
   };
 
   const contacts = selectedLender?.contacts || [];
@@ -1654,14 +1748,20 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
       <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 500, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Send to Another Lender</h3>
-            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>Choose a contact from your lender directory</p>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{sending ? 'Sending Proposal…' : 'Send to Another Lender'}</h3>
+            {!sending && (
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>Choose a contact from your lender directory</p>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}><X size={18} /></button>
+          {!sending && (
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}><X size={18} /></button>
+          )}
         </div>
 
         <div style={{ padding: '20px 24px', maxHeight: '60vh', overflowY: 'auto' }}>
-          {loading ? (
+          {sending ? (
+            <SendingStatus />
+          ) : loading ? (
             <div style={{ textAlign: 'center', padding: 30 }}><LoadingSpinner size={30} /></div>
           ) : lenders.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '30px 20px' }}>
@@ -1718,20 +1818,113 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
           )}
         </div>
 
-        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 0, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cancel</button>
-          <button onClick={handleSend} disabled={!selectedContact || sending}
-            style={{
-              padding: '10px 22px', borderRadius: 0, fontWeight: 700, fontSize: 13,
-              background: selectedContact ? 'var(--success)' : 'var(--border)',
-              color: '#fff', border: 'none',
-              cursor: selectedContact ? 'pointer' : 'not-allowed',
-              display: 'flex', alignItems: 'center', gap: 6,
-              opacity: sending ? 0.75 : 1
-            }}>
-            <Send size={14} /> {sending ? 'Sending…' : 'Send Proposal'}
-          </button>
+        {!sending && (
+          <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
+            <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 0, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cancel</button>
+            <button onClick={handleSend} disabled={!selectedContact}
+              style={{
+                padding: '10px 22px', borderRadius: 0, fontWeight: 700, fontSize: 13,
+                background: selectedContact ? 'var(--success)' : 'var(--border)',
+                color: '#fff', border: 'none',
+                cursor: selectedContact ? 'pointer' : 'not-allowed',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              <Send size={14} /> Send Proposal
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SendingStatus ──────────────────────────────────────────────────────────
+// Sending a proposal genuinely takes a few seconds (resolve lender contact,
+// pull documents from storage, dispatch email) — without feedback, the DSA
+// just sees a disabled button, which reads as a frozen screen. This renders
+// *inside* whichever confirm dialog triggered the send (swapped in for that
+// dialog's own body/footer) rather than popping a separate overlay on top of
+// it, and cycles through a fixed sequence of status lines on a timer — not
+// tied to real backend progress (the send is a single request/response), so
+// this is deliberately a "perceived progress" indicator. Loops rather than
+// stopping at the last line, so a slow send never looks stalled.
+const SEND_STAGES = [
+  'Preparing proposal…',
+  'Attaching documents…',
+  'Resolving lender contact…',
+  'Sending email…',
+  'Almost done…',
+  'Still working…',
+  'Hang tight, finishing up…',
+];
+
+function SendingStatus() {
+  const [stageIndex, setStageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStageIndex(i => (i + 1) % SEND_STAGES.length);
+    }, 1400);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{ textAlign: 'center', padding: '14px 0 6px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 18 }}>
+        {[0, 1, 2].map(i => (
+          <motion.span
+            key={i}
+            animate={{ y: [0, -9, 0] }}
+            transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
+            style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }}
+          />
+        ))}
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={stageIndex}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.25 }}
+          style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}
+        >
+          {SEND_STAGES[stageIndex]}
+        </motion.div>
+      </AnimatePresence>
+      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>
+        This might take a few seconds, please wait…
+      </div>
+    </div>
+  );
+}
+
+// ─── SendConfirmDialog ──────────────────────────────────────────────────────
+// Replaces the generic ConfirmModal for this one flow — that component has
+// no way to swap in custom body content, and the send needs to show
+// <SendingStatus /> in place of the confirmation question once confirmed,
+// within the same dialog, rather than closing it and opening something else.
+function SendConfirmDialog({ isOpen, onClose, onConfirm, sending, proposalNumber, lenderName }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 440, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{sending ? 'Sending Proposal…' : 'Send this proposal?'}</h3>
         </div>
+        <div style={{ padding: '20px 24px' }}>
+          {sending ? (
+            <SendingStatus />
+          ) : (
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              Email proposal {proposalNumber || ''} with its attached documents to {lenderName}'s configured contact?
+            </p>
+          )}
+        </div>
+        {!sending && (
+          <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
+            <button onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
+            <button onClick={onConfirm} className="btn btn-primary btn-sm">Send</button>
+          </div>
+        )}
       </div>
     </div>
   );

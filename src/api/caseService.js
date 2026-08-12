@@ -105,6 +105,13 @@ export const caseService = {
     const response = await axiosInstance.put(`/cases/${caseId}/bureau-obligations/${oblId}`, data);
     return response.data;
   },
+  // Soft-deletes — backend marks the obligation CLOSED and excludes it from
+  // FOIR instead of hard-deleting, so bureau-sourced rows keep their audit
+  // trail. Works the same for MANUAL and bureau-pulled obligations alike.
+  deleteObligation: async (caseId, oblId) => {
+    const response = await axiosInstance.delete(`/cases/${caseId}/bureau-obligations/${oblId}`);
+    return response.data;
+  },
 
   // Phase 1 —— ESR
   generateESR: async (caseId) => {
@@ -143,6 +150,16 @@ export const caseService = {
   },
   submitProposal: async (caseId, proposalId) => {
     const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/submit`);
+    return response.data;
+  },
+  // Actually dispatches the proposal email to the lender's configured
+  // contact (and marks it submitted on success) — unlike submitProposal
+  // above, which only flips status with no email sent. Pass contactId to
+  // override the auto-resolved contact (e.g. "Send to Another Lender" —
+  // this still sends the exact proposal open on screen, just to a
+  // different contact, rather than finding/creating a separate proposal).
+  sendProposal: async (caseId, proposalId, contactId) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/send`, contactId ? { contact_id: contactId } : {});
     return response.data;
   },
   cloneProposal: async (caseId, proposalId, payload) => {

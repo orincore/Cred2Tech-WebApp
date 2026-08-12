@@ -6,187 +6,13 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import MetricTile from '../components/ui/MetricTile';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
-  Send, Clock, CheckCircle2, AlertCircle, X, Mail, Phone,
-  BarChart3, Landmark, ClipboardList, Wallet, Percent, TrendingDown,
-  Home, Hash, ArrowUpRight, ChevronUp, ChevronDown, Zap,
+  Send, Clock, CheckCircle2, AlertCircle,
+  BarChart3, ClipboardList, Percent, TrendingDown, TrendingUp,
+  Home, ChevronUp, ChevronDown, Zap,
   ListFilter,
 } from 'lucide-react';
-import { sendCaseToLender, sendCaseToOtherLender, getTenantLenders } from '../api/tenantLenderService';
 
 const easeOut = [0.22, 1, 0.36, 1];
-
-// ─── Send Confirmation Modal ───────────────────────────────────────────────────
-function SendConfirmationModal({ isOpen, onClose, result }) {
-  return (
-    <AnimatePresence>
-      {isOpen && result && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.25, ease: easeOut }}
-            style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 520, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
-          >
-            <div style={{ background: 'linear-gradient(135deg,#F0FFF4,#EBF8FF)', padding: '24px', textAlign: 'center', borderBottom: '1px solid var(--border)' }}>
-              <motion.div
-                initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1, type: 'spring', stiffness: 260, damping: 18 }}
-                style={{ display: 'inline-flex', width: 52, height: 52, borderRadius: '50%', background: '#F0FFF4', border: '2px solid #9AE6B4', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}
-              >
-                <CheckCircle2 size={28} color="#276749" />
-              </motion.div>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#276749', margin: 0 }}>Lead Successfully Sent!</h3>
-              <p style={{ color: '#4A5568', fontSize: 13, marginTop: 6 }}>The proposal has been dispatched to the lender contact.</p>
-            </div>
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Email preview */}
-              <div style={{ border: '1px solid #BEE3F8', borderRadius: 0, overflow: 'hidden' }}>
-                <div style={{ background: '#EBF8FF', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Mail size={14} color='#2B6CB0' />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2B6CB0' }}>EMAIL SENT</span>
-                </div>
-                <div style={{ padding: '12px 16px', fontSize: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-tertiary)' }}>To:</span>
-                    <span style={{ fontWeight: 600 }}>{result.to}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: 'var(--text-tertiary)' }}>Contact:</span>
-                    <span style={{ fontWeight: 600 }}>{result.contact_name}</span>
-                  </div>
-                  <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    <strong style={{ display: 'block', marginBottom: 4 }}>Subject:</strong>
-                    {result.subject}
-                  </div>
-                  <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6, maxHeight: 80, overflow: 'hidden' }}>
-                    {(result.body_preview || '').slice(0, 200)}…
-                  </div>
-                </div>
-              </div>
-              {/* SMS preview */}
-              {result.sms?.smsSent && (
-                <div style={{ border: '1px solid #C6F6D5', borderRadius: 0, overflow: 'hidden' }}>
-                  <div style={{ background: '#F0FFF4', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Phone size={14} color='#276749' />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#276749' }}>SMS SENT</span>
-                  </div>
-                  <div style={{ padding: '12px 16px', fontSize: 12 }}>
-                    <div style={{ marginBottom: 4 }}>Sent to: <strong>{result.sms.to}</strong></div>
-                    <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 0, fontSize: 11, lineHeight: 1.6 }}>{result.sms.message}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={onClose} className="btn btn-primary btn-sm">Done</button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ─── Send to Other Lender Modal ───────────────────────────────────────────────
-function SendToOtherLenderModal({ isOpen, onClose, caseId, onSuccess }) {
-  const [lenders, setLenders] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedLender, setSelectedLender] = useState(null);
-  const [selectedContact, setSelectedContact] = useState(null);
-  const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      setSelectedLender(null); setSelectedContact(null);
-      getTenantLenders().then(d => setLenders(d.filter(l => l.is_active && l.contacts?.length > 0))).catch(() => toast.error('Failed to load lenders')).finally(() => setLoading(false));
-    }
-  }, [isOpen]);
-
-  const handleSend = async () => {
-    if (!selectedContact) { toast.error('Select a contact first'); return; }
-    setSending(true);
-    try {
-      const result = await sendCaseToOtherLender(caseId, { contact_id: selectedContact.id });
-      onSuccess(result);
-      onClose();
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to send');
-    } finally { setSending(false); }
-  };
-
-  const contacts = selectedLender?.contacts || [];
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.25, ease: easeOut }}
-            style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 480, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Send to Other Lender</h3>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}><X size={18} /></button>
-            </div>
-            <div style={{ padding: '20px 24px' }}>
-              {loading ? <div style={{ textAlign: 'center', padding: 30 }}><LoadingSpinner size={30} /></div> : lenders.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-tertiary)' }}>
-                  No configured lenders found. <a href='/settings/lender-contacts' style={{ color: 'var(--primary)' }}>Add contacts →</a>
-                </div>
-              ) : (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 8 }}>Select Lender</label>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {lenders.map(l => (
-                        <button key={l.id} onClick={() => { setSelectedLender(l); setSelectedContact(null); }}
-                          style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
-                            border: `2px solid ${selectedLender?.id === l.id ? 'var(--primary)' : 'var(--border)'}`,
-                            background: selectedLender?.id === l.id ? 'var(--primary-subtle)' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
-                          <Landmark size={15} color="var(--primary)" />
-                          {l.lender_name} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-tertiary)' }}>· {l.contacts.length} contact(s)</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {selectedLender && contacts.length > 0 && (
-                    <div>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 8 }}>Select Contact</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {contacts.map(c => (
-                          <button key={c.id} onClick={() => setSelectedContact(c)}
-                            style={{ padding: '10px 14px', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontSize: 13,
-                              border: `2px solid ${selectedContact?.id === c.id ? 'var(--success)' : 'var(--border)'}`,
-                              background: selectedContact?.id === c.id ? 'var(--success-bg)' : 'var(--bg-elevated)', color: 'var(--text-primary)' }}>
-                            <div style={{ fontWeight: 600 }}>{c.contact_name} <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 400 }}>({c.product_type})</span></div>
-                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{c.contact_email}{c.contact_mobile ? ` · ${c.contact_mobile}` : ''}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
-              <button onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
-              <button onClick={handleSend} disabled={!selectedContact || sending} className="btn btn-primary btn-sm"
-                style={{ opacity: selectedContact ? 1 : 0.5, cursor: selectedContact ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Send size={14} /> {sending ? 'Sending...' : 'Send Proposal'}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : null;
 
@@ -332,7 +158,7 @@ function ProposalBadge({ status }) {
 }
 
 // ─── Calculation Breakdown Panel ──────────────────────────────────────────────
-const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
+const CalcBreakdownPanel = ({ evaluations }) => {
   const [open, setOpen] = useState(false);
   const [activeScheme, setActiveScheme] = useState(0);
 
@@ -365,19 +191,28 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
 
   const ev = orderedEvaluations[activeScheme] || orderedEvaluations[0];
 
+  // Actuals only — the policy-allowed/cap variants (FOIR Allowed, LTV Applied
+  // key, intermediate EMI/loan-by-LTV steps) took up more space than they
+  // were worth here; the final eligible loan amount is already shown on the
+  // lender card itself (MetricTile row above), so it isn't repeated in this
+  // panel. DSCR-method schemes show their actual ratio in place of FOIR —
+  // the two are mutually exclusive per scheme (dscr_actual_ratio is only
+  // ever populated for DSCR-method schemes).
+  const isDscrMethod = ev.dscr_actual_ratio != null;
   const steps = [
-    { label: 'Monthly Income Used', value: formatDynamicCurrency(monthlyIncome), icon: Wallet, color: 'var(--info)', bg: 'var(--info-bg)', note: 'Selected income method monthly figure' },
-    { label: 'FOIR Allowed', value: fmtPct(ev.foir_allowed_percent), icon: Percent, color: 'var(--success)', bg: 'var(--success-bg)', note: 'Max permissible obligation %' },
-    { label: 'FOIR Actual', value: fmtPct(ev.foir_actual_percent), icon: TrendingDown,
-      color: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error)' : 'var(--success)',
-      bg: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error-bg)' : 'var(--success-bg)',
-      note: 'Current EMI ÷ income' },
-    { label: 'Max Eligible EMI', value: ev.max_eligible_emi != null ? formatDynamicCurrency(Math.max(0, ev.max_eligible_emi)) : '—', icon: Landmark, color: 'var(--warning)', bg: 'var(--warning-bg)', note: '(FOIR% × Income) − Existing EMI' },
-    { label: 'LTV Applied', value: ev.applicable_ltv_percent != null ? `${(ev.applicable_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: 'var(--role-admin)', bg: 'var(--role-admin-bg)', note: `Key: ${ev.applicable_ltv_key || '—'}` },
-    { label: 'Max Loan by LTV', value: ev.max_loan_by_ltv != null ? formatDynamicCurrency(ev.max_loan_by_ltv) : '—', icon: Hash, color: 'var(--role-cred2tech)', bg: 'var(--role-cred2tech-bg)', note: 'Property Value × LTV%' },
-    { label: 'Final Eligible Loan', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: CheckCircle2,
-      color: ev.is_eligible ? 'var(--success)' : 'var(--error)', bg: ev.is_eligible ? 'var(--success-bg)' : 'var(--error-bg)',
-      note: ev.is_eligible ? 'Min(requested, LTV cap)' : 'Failed eligibility', highlight: true },
+    { label: 'ROI', value: ev.underwriting_roi_used != null ? `${ev.underwriting_roi_used}%` : '—', icon: TrendingUp, color: 'var(--info)', bg: 'var(--info-bg)' },
+    { label: 'Tenure', value: ev.final_tenure_used != null ? formatDynamicTenure(ev.final_tenure_used) : '—', icon: Clock, color: 'var(--role-cred2tech)', bg: 'var(--role-cred2tech-bg)' },
+    isDscrMethod
+      ? { label: 'DSCR', value: `${Number(ev.dscr_actual_ratio).toFixed(2)}x`, icon: TrendingDown,
+          color: ev.dscr_min_ratio != null && ev.dscr_actual_ratio < ev.dscr_min_ratio ? 'var(--error)' : 'var(--success)',
+          bg: ev.dscr_min_ratio != null && ev.dscr_actual_ratio < ev.dscr_min_ratio ? 'var(--error-bg)' : 'var(--success-bg)' }
+      : { label: 'FOIR', value: fmtPct(ev.foir_actual_percent), icon: TrendingDown,
+          color: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error)' : 'var(--success)',
+          bg: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error-bg)' : 'var(--success-bg)' },
+    { label: 'LTV', value: ev.actual_final_ltv_percent != null ? `${(ev.actual_final_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: 'var(--role-admin)', bg: 'var(--role-admin-bg)' },
+    { label: 'PF', value: (ev.pf_min != null || ev.pf_max != null)
+        ? `${ev.pf_min != null ? (ev.pf_min * 100).toFixed(2) : '—'}%–${ev.pf_max != null ? (ev.pf_max * 100).toFixed(2) : '—'}%`
+        : '—', icon: Percent, color: 'var(--warning)', bg: 'var(--warning-bg)' },
   ];
 
   return (
@@ -428,22 +263,15 @@ const CalcBreakdownPanel = ({ evaluations, monthlyIncome }) => {
                 </div>
               )}
 
-              <div style={{ padding: '14px 14px 8px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ padding: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 6 }}>
                   {steps.map((step, i) => (
-                    <div key={i} style={{
-                      background: step.bg, borderRadius: 0, padding: '10px 12px',
-                      border: step.highlight ? `2px solid ${step.color}` : '1px solid transparent',
-                      gridColumn: step.highlight ? 'span 2' : 'span 1',
-                    }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <step.icon size={11} /> {step.label}
+                    <div key={i} style={{ background: step.bg, borderRadius: 0, padding: '7px 8px' }}>
+                      <div style={{ fontSize: 9, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        <step.icon size={10} /> {step.label}
                       </div>
-                      <div style={{ fontSize: step.highlight ? 18 : 15, fontWeight: 800, color: step.color }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: step.color }}>
                         {step.value}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, fontStyle: 'italic' }}>
-                        {step.note}
                       </div>
                     </div>
                   ))}
@@ -481,10 +309,9 @@ const LENDER_ACTION_BTN = {
   paddingBottom: 0,
 };
 
-function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToLender, onSendToOtherLender, onOpenProposal, compact = false, isMsme = false, onApplyForLoan }) {
+function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenProposal, compact = false, isMsme = false, onApplyForLoan }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
-  const [sending, setSending] = useState(false);
 
   // Find existing proposals for this lender
   const lenderProposals = proposals.filter(p => String(p.lender_id) === String(lender.lender_id));
@@ -515,24 +342,6 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
       </button>
     );
   }
-
-  const handleSendEmail = async () => {
-    setSending(true);
-    try {
-      const result = await sendCaseToLender(caseId, {
-        lender_name: lender.lender_name,
-        product_type: lender.product_type || 'LAP',
-      });
-      onSendToLender(result);
-    } catch (e) {
-      const msg = e.response?.data?.error || 'Failed to send';
-      if (e.response?.data?.redirect_hint) {
-        toast.error(msg, { duration: 5000 });
-      } else {
-        toast.error(msg);
-      }
-    } finally { setSending(false); }
-  };
 
   const handlePrepare = async () => {
     // If there are proposals from other lenders, ask to clone
@@ -593,16 +402,6 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
             <ClipboardList size={12} /> {creating ? '...' : 'Prepare'}
           </button>
         )}
-        <button onClick={handleSendEmail} disabled={sending} title="Send proposal email to this lender's configured contact"
-          className="btn btn-sm" style={{ ...LENDER_ACTION_BTN, background: 'var(--success-bg)', color: 'var(--success)',
-            border: '1px solid var(--success)' }}>
-          <Send size={12} /> {sending ? '...' : 'Send'}
-        </button>
-        <button onClick={onSendToOtherLender} title="Send to a different lender contact from your directory"
-          className="btn btn-sm" style={{ ...LENDER_ACTION_BTN, background: 'transparent', color: 'var(--role-admin)',
-            border: '1px solid var(--role-admin)' }}>
-          <ArrowUpRight size={12} />
-        </button>
 
         <AnimatePresence initial={false}>
           {showCloneDialog && (
@@ -730,29 +529,6 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
           </button>
         )}
       </div>
-
-      {/* Row 2: secondary actions — equal width, same row across every card regardless of width */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={handleSendEmail}
-          disabled={sending}
-          title="Send proposal email to this lender's configured contact"
-          style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 8px', fontWeight: 700, fontSize: 12, borderRadius: 0,
-                   background: sending ? '#718096' : '#276749', color: '#fff', border: 'none',
-                   cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-        >
-          <Send size={13} /> {sending ? '...' : 'Send'}
-        </button>
-        <button
-          onClick={onSendToOtherLender}
-          title="Send to a different lender contact from your directory"
-          style={{ flex: 1, height: LENDER_CARD_BTN_H, padding: '0 8px', fontWeight: 700, fontSize: 11, borderRadius: 0,
-                   background: 'transparent', color: 'var(--role-admin)', border: '1px solid var(--role-admin)',
-                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, whiteSpace: 'nowrap' }}
-        >
-          <ArrowUpRight size={13} /> Other Lender
-        </button>
-      </div>
     </div>
   );
 }
@@ -764,8 +540,6 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onSendToL
 // newly created (or existing) proposal hands off to step 7, since proposalId
 // only ever exists once one has actually been created here.
 export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onApplyForLoan }) {
-  const [sendConfirmResult, setSendConfirmResult] = useState(null);
-  const [showOtherLenderModal, setShowOtherLenderModal] = useState(false);
 
   const [loading, setLoading]       = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -827,8 +601,6 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const lenders = esr?.raw_payload?.lenders || [];
   const eligibleCount   = lenders.filter(l => l.is_eligible).length;
   const ineligibleCount = lenders.filter(l => !l.is_eligible).length;
-  const monthlyIncome = esr?.raw_payload?.selected_monthly_income
-    || (esr?.combined_income ? esr.combined_income / 12 : null);
 
   const lenderNames = [...new Set(lenders.map(l => l.lender_name))].sort();
   const filteredLenders = lenders.filter(l =>
@@ -1077,8 +849,6 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       caseId={caseId}
                       proposals={proposals}
                       onProposalCreated={load}
-                      onSendToLender={setSendConfirmResult}
-                      onSendToOtherLender={() => setShowOtherLenderModal(true)}
                       onOpenProposal={onOpenProposal}
                       isMsme={isMsme}
                       onApplyForLoan={handleApplyForLoan}
@@ -1088,7 +858,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                 </div>
               </div>
               <div style={{ padding: '0 16px 8px 42px' }}>
-                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} monthlyIncome={monthlyIncome} />
+                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} />
               </div>
             </motion.div>
           );
@@ -1138,18 +908,6 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         );
       })()}
 
-      {/* Modals */}
-      <SendConfirmationModal
-        isOpen={!!sendConfirmResult}
-        onClose={() => setSendConfirmResult(null)}
-        result={sendConfirmResult}
-      />
-      <SendToOtherLenderModal
-        isOpen={showOtherLenderModal}
-        onClose={() => setShowOtherLenderModal(false)}
-        caseId={caseId}
-        onSuccess={r => { setShowOtherLenderModal(false); setSendConfirmResult(r); }}
-      />
     </div>
   );
 }

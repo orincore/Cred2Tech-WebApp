@@ -14,6 +14,7 @@ import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import api from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
 import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
+import GstPullStatusBanner from '../components/case/GstPullStatusBanner';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
@@ -26,6 +27,22 @@ import ProposalStep from './ProposalPage';
 import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
 
+
+// Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
+// rest) — reading it back always yields a real Date, which Express's JSON
+// serialization turns into a full ISO datetime string like
+// "2003-06-29T00:00:00.000Z". A native <input type="date"> only accepts the
+// bare "YYYY-MM-DD" form and silently renders blank for anything else — so
+// without this, a DOB that was genuinely fetched and saved (verified against
+// the DB directly) still shows as empty in the form. Slicing the ISO string
+// is timezone-safe here since toISOString() always renders midnight UTC for
+// a date-only value, so the calendar date never shifts.
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+};
 
 const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // MSME self-service: the borrower fills the wizard themselves after OTP
@@ -141,34 +158,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
        .catch(console.error);
   }, [isMsme]);
 
-  // MSME self-service: prefill the borrower's own (already OTP-verified)
-  // mobile from their portal session, plus whatever else was synced in from
-  // scheme.cred2tech.com if they already gave it there (see ssoProfileSync
-  // on the backend) — PAN/DOB, business name, email and pincode — so a
-  // customer who already onboarded on the sibling app has as little as
-  // possible left to retype here. Only for a brand-new case (urlCaseId
-  // unset); an existing case's restoreSession() effect is authoritative and
-  // will unconditionally overwrite these from the real Case/Customer record
-  // regardless of which effect happens to run first.
-  useEffect(() => {
-    if (!isMsme) return;
-    msmeApi.getDashboard().then(res => {
-      const { mobile, name, synced_dob, synced_pan_number, synced_business_name, synced_email, synced_pincode } = res.data.user;
-      const isPlaceholderName = !name || name === `Customer_${mobile}`;
-      setFormData(prev => ({
-        ...prev,
-        business_mobile: prev.business_mobile || mobile,
-        mobile_verified: true,
-        ...(urlCaseId ? {} : {
-          business_pan: prev.business_pan || synced_pan_number || '',
-          dob: prev.dob || synced_dob || '',
-          business_name: prev.business_name || synced_business_name || (!isPlaceholderName ? name : '') || '',
-          business_email: prev.business_email || synced_email || '',
-          pincode: prev.pincode || synced_pincode || '',
-        }),
-      }));
-    }).catch(console.error);
-  }, [isMsme, urlCaseId]);
+  // A brand-new case (urlCaseId unset) must start completely blank — no
+  // prefill from the borrower's login mobile, and none of the synced_*
+  // fields pushed in from scheme.cred2tech.com (PAN/DOB/business
+  // name/email/pincode via ssoProfileSync). This used to prefill those as a
+  // convenience for a customer who'd already onboarded on the sibling app,
+  // but it meant a genuinely new case could silently pick up another case's
+  // (or the sibling app's) PAN/mobile before the customer had typed
+  // anything — every field, including Mobile Number, now requires the
+  // customer to type and verify it fresh for each new case. An existing
+  // case's restoreSession() below remains authoritative for resumed cases.
 
   const [panVerifying, setPanVerifying] = useState(false);
   const [panVerifyFailed, setPanVerifyFailed] = useState(false);
@@ -269,7 +268,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         // as the case header / MSME dashboard greeting already do.
         business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
         proprietor_name: caseData.customer?.proprietor_name || '',
-        dob: caseData.customer?.dob || '',
+        dob: toDateInputValue(caseData.customer?.dob),
         business_mobile: caseData.customer?.business_mobile || '',
         business_email: caseData.customer?.business_email || '',
         // Falls back to the verified PAN's own KYC pincode (principal_pincode)
@@ -294,7 +293,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
         linked_gstins: currentPanProfile?.gstin_records || [],
-        applicants: caseData.applicants || [],
+        applicants: (caseData.applicants || []).map(a => ({ ...a, dob: toDateInputValue(a.dob) })),
         product_type: caseData.product_type || '',
         dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
@@ -439,7 +438,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       const data = res.data;
 
       const entityName = data.name || '';
-      const entityDob = data.dob || '';
+      const entityDob = toDateInputValue(data.dob);
 
       if (isCoapplicant) {
         const list = [...formData.applicants];
@@ -469,6 +468,25 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     } finally {
       if (isCoapplicant) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: false }));
       else setPanVerifying(false);
+    }
+  };
+
+  // MSME self-service only — the business email in this form IS the logged-
+  // in customer's own contact email (unlike DSA mode, where this same field
+  // belongs to a customer the DSA is entering on someone else's behalf).
+  // Synced on blur, not every keystroke, so /msme/profile stops showing the
+  // OTP-registration placeholder ({mobile}@direct.cred2tech.local) forever
+  // once the customer actually types a real one here — the endpoint that
+  // used to do this (updateBusinessDetails) is dead code the wizard never
+  // calls, so nothing was ever syncing it back to the User record.
+  const handleBusinessEmailBlur = async () => {
+    if (!isMsme) return;
+    const email = formData.business_email?.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    try {
+      await msmeApi.updateProfile({ email });
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update your account email');
     }
   };
 
@@ -1127,6 +1145,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         onStepClick={(step) => goToStep(step)}
       />
 
+      {/* Case-wide, not step-scoped — stays visible while a GST pull kicked
+          off on step 2 keeps running in the background on any other step. */}
+      {!formData.is_salaried && <GstPullStatusBanner caseId={caseId} />}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {currentStep === 1 && (
           <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1297,7 +1319,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
                 <div className="grid-3" style={{ marginBottom: 24 }}>
                   <FormField label="Email Address" name="business_email" required>
-                    <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} className="form-control" placeholder="admin@company.in" />
+                    <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" />
                   </FormField>
 
                   <FormField label="Pincode" name="pincode" required>

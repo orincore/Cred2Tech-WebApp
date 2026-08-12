@@ -90,6 +90,10 @@ const AdminDataPurgePage = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [purging, setPurging] = useState(false);
 
+  const [hardDeleteReason, setHardDeleteReason] = useState('');
+  const [hardDeleteConfirmOpen, setHardDeleteConfirmOpen] = useState(false);
+  const [hardDeleting, setHardDeleting] = useState(false);
+
   const loadStatus = async (id) => {
     setLoading(true);
     try {
@@ -129,6 +133,27 @@ const AdminDataPurgePage = () => {
       toast.error(err.response?.data?.error || 'Failed to purge case data');
     } finally {
       setPurging(false);
+    }
+  };
+
+  const handleConfirmHardDelete = async () => {
+    setHardDeleting(true);
+    try {
+      const result = await adminPurgeService.hardDeleteCase(caseId, hardDeleteReason.trim());
+      toast.success(
+        `Case #${result.deletedCaseId}${result.childCaseIds.length > 0 ? ` and ${result.childCaseIds.length} child case(s)` : ''} permanently deleted — ${result.documentsDeleted} document(s), ${result.filesDeleted} file(s) removed from storage${result.filesFailed > 0 ? ` (${result.filesFailed} file(s) failed to delete)` : ''}.`,
+        { duration: 8000 }
+      );
+      setHardDeleteConfirmOpen(false);
+      setHardDeleteReason('');
+      // The case is gone — nothing left to look up.
+      setStatus(null);
+      setCaseId(null);
+      setCaseIdInput('');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to permanently delete case');
+    } finally {
+      setHardDeleting(false);
     }
   };
 
@@ -298,6 +323,52 @@ const AdminDataPurgePage = () => {
                 )}
               </SectionCard>
             </div>
+
+            <div style={{ marginBottom: 16, border: '2px solid var(--error)' }}>
+              <SectionCard title="Danger Zone">
+                <div style={{ padding: 20 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10 }}>
+                    Permanently and irreversibly deletes case <strong>#{status.caseId}</strong> — every applicant, document,
+                    income entry, obligation, bureau/GST/ITR/bank-statement record, proposal, sanction, disbursement, PDD
+                    task, and every other row tied to it, plus the actual files in storage. This is not the same as the
+                    retention purge above (which only nulls sensitive fields) — the case itself, and everything about it,
+                    ceases to exist.
+                  </p>
+                  {status.case.child_cases?.length > 0 && (
+                    <div className="notice notice-error" style={{ marginBottom: 14 }}>
+                      <ShieldAlert size={16} style={{ marginTop: 1, flexShrink: 0 }} />
+                      <span>
+                        This case has <strong>{status.case.child_cases.length} child case(s)</strong> (cloned for other
+                        lenders) — they will be permanently deleted too: {status.case.child_cases.map((c) => `#${c.id}`).join(', ')}.
+                      </span>
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="hardDeleteReason">
+                      Reason<span className="required">*</span>
+                    </label>
+                    <textarea
+                      id="hardDeleteReason"
+                      className="form-control"
+                      rows={3}
+                      value={hardDeleteReason}
+                      onChange={(e) => setHardDeleteReason(e.target.value)}
+                      placeholder="e.g. Duplicate test case created in error, never a real applicant"
+                    />
+                    <span className="form-hint">Required — recorded permanently in a standalone audit log that survives the case itself.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={!hardDeleteReason.trim()}
+                    onClick={() => setHardDeleteConfirmOpen(true)}
+                    style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Trash2 size={16} /> Permanently Delete Case
+                  </button>
+                </div>
+              </SectionCard>
+            </div>
           </>
         )}
       </div>
@@ -312,6 +383,19 @@ const AdminDataPurgePage = () => {
         confirmLabel="Purge Now"
         isLoading={purging}
         confirmText={caseId != null ? String(caseId) : undefined}
+        danger
+      />
+
+      <ConfirmModal
+        isOpen={hardDeleteConfirmOpen}
+        onClose={() => !hardDeleting && setHardDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmHardDelete}
+        title="Permanently delete this case?"
+        message={`This permanently deletes case #${caseId}${status?.case?.child_cases?.length > 0 ? ` and its ${status.case.child_cases.length} child case(s)` : ''} — every related record and every file in storage. There is no undo, no soft-delete, and no way to recover this data afterward.`}
+        notice={`Reason on record: "${hardDeleteReason.trim()}"`}
+        confirmLabel="Delete Permanently"
+        isLoading={hardDeleting}
+        confirmText={caseId != null ? `DELETE ${caseId}` : undefined}
         danger
       />
     </div>

@@ -100,7 +100,8 @@ export default function DSALenderContactsPage() {
   const [lenderModal, setLenderModal] = useState({ open: false });
 
   // For inline editing states
-  const [contactEdits, setContactEdits] = useState({}); // { lenderId: { ...contact } }
+  const [contactEdits, setContactEdits] = useState({}); // { contactId: { ...fields being edited } } — a lender can have multiple contacts (one per product type), so edits are keyed per-contact, not per-lender
+  const [newContactDrafts, setNewContactDrafts] = useState({}); // { lenderId: { product_type, contact_name, contact_mobile, contact_email, is_primary } } — presence of a key means the "add contact" form is open for that lender
   const [ruleEdits, setRuleEdits] = useState({}); // { `${lenderId}_${product}`: ruleConfig }
   const [activeProductTabs, setActiveProductTabs] = useState({}); // { lenderId: 'LAP' }
 
@@ -144,40 +145,72 @@ export default function DSALenderContactsPage() {
   };
 
   // ── Contact actions ──
-  const handleSaveContact = async (lenderId) => {
-    const edit = contactEdits[lenderId];
-    if (!edit || !edit.contact_name) {
-       toast.error('Contact Name is required');
-       return;
-    }
-    
-    // Find if the lender already has a primary contact
-    const lender = lenders.find(l => l.id === lenderId);
-    const primaryContact = lender.contacts?.find(c => c.is_primary);
+  // A lender can have multiple contacts — one per product type (LAP/HL/WC/...)
+  // or a single 'ALL' contact covering every product — so editing/adding/
+  // deleting all operate per-contact rather than assuming one contact/lender.
+  const startEditContact = (contact) => {
+    setContactEdits(prev => ({ ...prev, [contact.id]: {
+      product_type: contact.product_type,
+      contact_name: contact.contact_name || '',
+      contact_mobile: contact.contact_mobile || '',
+      contact_email: contact.contact_email || '',
+      is_primary: !!contact.is_primary,
+    }}));
+  };
 
+  const cancelEditContact = (contactId) => {
+    setContactEdits(prev => { const n = { ...prev }; delete n[contactId]; return n; });
+  };
+
+  const updateEditField = (contactId, field, value) => {
+    setContactEdits(prev => ({ ...prev, [contactId]: { ...prev[contactId], [field]: value } }));
+  };
+
+  const saveEditContact = async (contactId) => {
+    const edit = contactEdits[contactId];
+    if (!edit?.contact_name) { toast.error('Contact Name is required'); return; }
+    if (!edit?.contact_email) { toast.error('Contact Email is required'); return; }
     try {
-      if (primaryContact) {
-        await updateTenantLenderContact(primaryContact.id, {
-          ...primaryContact,
-          contact_name: edit.contact_name,
-          contact_mobile: edit.contact_mobile,
-          contact_email: edit.contact_email
-        });
-        toast.success('Contact details updated');
-      } else {
-        await createTenantLenderContact({
-          tenant_lender_id: lenderId,
-          product_type: 'ALL', // Global contact for prototype sake
-          is_primary: true,
-          contact_name: edit.contact_name,
-          contact_mobile: edit.contact_mobile,
-          contact_email: edit.contact_email
-        });
-        toast.success('Contact added');
-      }
-      setContactEdits(prev => { const n = {...prev}; delete n[lenderId]; return n; });
+      await updateTenantLenderContact(contactId, edit);
+      toast.success('Contact updated');
+      cancelEditContact(contactId);
       await load();
-    } catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
+    } catch (e) { toast.error(e.response?.data?.error || 'Failed to update contact'); }
+  };
+
+  const handleDeleteContact = async (contact) => {
+    if (!window.confirm(`Remove ${contact.contact_name} (${contact.product_type}) as a contact for this lender?`)) return;
+    try {
+      await deleteTenantLenderContact(contact.id);
+      toast.success('Contact removed');
+      await load();
+    } catch (e) { toast.error(e.response?.data?.error || 'Failed to remove contact'); }
+  };
+
+  const startAddContact = (lenderId) => {
+    setNewContactDrafts(prev => ({ ...prev, [lenderId]: {
+      product_type: 'LAP', contact_name: '', contact_mobile: '', contact_email: '', is_primary: true,
+    }}));
+  };
+
+  const cancelAddContact = (lenderId) => {
+    setNewContactDrafts(prev => { const n = { ...prev }; delete n[lenderId]; return n; });
+  };
+
+  const updateNewContactField = (lenderId, field, value) => {
+    setNewContactDrafts(prev => ({ ...prev, [lenderId]: { ...prev[lenderId], [field]: value } }));
+  };
+
+  const handleCreateContact = async (lenderId) => {
+    const draft = newContactDrafts[lenderId];
+    if (!draft?.contact_name) { toast.error('Contact Name is required'); return; }
+    if (!draft?.contact_email) { toast.error('Contact Email is required'); return; }
+    try {
+      await createTenantLenderContact({ tenant_lender_id: lenderId, ...draft });
+      toast.success('Contact added');
+      cancelAddContact(lenderId);
+      await load();
+    } catch (e) { toast.error(e.response?.data?.error || 'Failed to add contact'); }
   };
 
   // ── Rule actions ──
@@ -295,9 +328,9 @@ export default function DSALenderContactsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {lenders.map(lender => {
             const isExpanded = expanded[lender.id];
-            const primaryContact = lender.contacts?.find(c => c.is_primary) || {};
-            const isEditingContact = !!contactEdits[lender.id];
-            
+            const lenderContacts = lender.contacts || [];
+            const isAddingContact = !!newContactDrafts[lender.id];
+
             const activeProduct = activeProductTabs[lender.id] || PRODUCT_TYPES[0];
             const ruleState = getActiveRuleState(lender.id, activeProduct);
             const isEditingRule = !!ruleEdits[`${lender.id}_${activeProduct}`];
@@ -333,29 +366,7 @@ export default function DSALenderContactsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)' }}>Active</span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{configuredProductsCount} products configured</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isExpanded) toggleExpand(lender.id);
-                        if (!isEditingContact) {
-                          setContactEdits({ ...contactEdits, [lender.id]: {
-                            contact_name: primaryContact.contact_name || '',
-                            contact_mobile: primaryContact.contact_mobile || '',
-                            contact_email: primaryContact.contact_email || ''
-                          }});
-                        } else {
-                          handleSaveContact(lender.id);
-                        }
-                      }}
-                      style={{
-                        background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 0,
-                        padding: '6px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 6
-                      }}
-                    >
-                      {isEditingContact ? <Check size={14} /> : <div style={{width: 14, height: 2, background: 'white'}}/>}
-                      {isEditingContact ? 'Save Contact' : 'Edit Contact'}
-                    </button>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{lenderContacts.length} contact{lenderContacts.length === 1 ? '' : 's'}</span>
                     {isExpanded ? <ChevronUp size={20} color="var(--text-tertiary)" /> : <ChevronDown size={20} color="var(--text-tertiary)" />}
                   </div>
                 </div>
@@ -363,40 +374,132 @@ export default function DSALenderContactsPage() {
                 {/* Expanded Content */}
                 {isExpanded && (
                   <div style={{ borderTop: '1px solid var(--border)' }}>
-                    {/* Contact Details Section */}
+                    {/* Contact Details Section — a lender can have multiple
+                        contacts, one per product type (or a single 'ALL'
+                        contact), so each is its own editable/deletable row
+                        rather than a single fixed set of fields. */}
                     <div style={{ padding: '24px' }}>
-                      <div style={sectionTitle}>CONTACT DETAILS</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 24, marginTop: 12 }}>
-                        <div>
-                          <label style={inputLabel}>CONTACT PERSON</label>
-                          <input 
-                            value={isEditingContact ? contactEdits[lender.id].contact_name : primaryContact.contact_name || ''}
-                            onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_name: e.target.value}})}
-                            disabled={!isEditingContact}
-                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
-                            placeholder="Suresh Nair"
-                          />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        <div style={sectionTitle}>CONTACT DETAILS</div>
+                        {!isAddingContact && (
+                          <button onClick={() => startAddContact(lender.id)} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none',
+                            border: '1px solid var(--primary)', color: 'var(--primary)', borderRadius: 0,
+                            padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                          }}>
+                            <Plus size={13} /> Add Contact
+                          </button>
+                        )}
+                      </div>
+
+                      {lenderContacts.length === 0 && !isAddingContact && (
+                        <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '8px 0 4px' }}>
+                          No contacts configured yet.
                         </div>
-                        <div>
-                          <label style={inputLabel}>MOBILE</label>
-                          <input 
-                            value={isEditingContact ? contactEdits[lender.id].contact_mobile : primaryContact.contact_mobile || ''}
-                            onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_mobile: e.target.value}})}
-                            disabled={!isEditingContact}
-                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
-                            placeholder="9820001122"
-                          />
-                        </div>
-                        <div>
-                          <label style={inputLabel}>EMAIL</label>
-                          <input 
-                            value={isEditingContact ? contactEdits[lender.id].contact_email : primaryContact.contact_email || ''}
-                            onChange={e => setContactEdits({...contactEdits, [lender.id]: {...contactEdits[lender.id], contact_email: e.target.value}})}
-                            disabled={!isEditingContact}
-                            style={{...inputStyle, opacity: isEditingContact ? 1 : 0.6}}
-                            placeholder="suresh.nair@hdfc.com"
-                          />
-                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {lenderContacts.map(contact => {
+                          const isEditingThis = !!contactEdits[contact.id];
+                          const editState = contactEdits[contact.id];
+                          return (
+                            <div key={contact.id} style={{ border: '1px solid var(--border)', background: 'var(--bg-elevated)', padding: '14px 16px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {PRODUCT_TYPES.includes(contact.product_type)
+                                    ? <ProductBadge type={contact.product_type} />
+                                    : <span style={{ padding: '2px 10px', borderRadius: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.5px', background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border-strong)' }}>{contact.product_type}</span>}
+                                  {contact.is_primary && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', letterSpacing: '0.5px' }}>PRIMARY</span>}
+                                </div>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {isEditingThis ? (
+                                    <>
+                                      <button onClick={() => saveEditContact(contact.id)} title="Save" style={iconBtn}><Check size={15} color="var(--success)" /></button>
+                                      <button onClick={() => cancelEditContact(contact.id)} title="Cancel" style={iconBtn}><X size={15} /></button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => startEditContact(contact)} title="Edit contact" style={iconBtn}><Edit2 size={14} /></button>
+                                      <button onClick={() => handleDeleteContact(contact)} title="Delete contact" style={iconBtn}><Trash2 size={14} color="var(--error)" /></button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {isEditingThis ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 12 }}>
+                                  <div>
+                                    <label style={inputLabel}>PRODUCT</label>
+                                    <select value={editState.product_type} onChange={e => updateEditField(contact.id, 'product_type', e.target.value)} style={inputStyle}>
+                                      <option value="ALL">ALL</option>
+                                      {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>CONTACT PERSON</label>
+                                    <input value={editState.contact_name} onChange={e => updateEditField(contact.id, 'contact_name', e.target.value)} style={inputStyle} placeholder="Suresh Nair" />
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>MOBILE</label>
+                                    <input value={editState.contact_mobile} onChange={e => updateEditField(contact.id, 'contact_mobile', e.target.value)} style={inputStyle} placeholder="9820001122" />
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>EMAIL</label>
+                                    <input value={editState.contact_email} onChange={e => updateEditField(contact.id, 'contact_email', e.target.value)} style={inputStyle} placeholder="suresh.nair@hdfc.com" />
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                      <input type="checkbox" checked={!!editState.is_primary} onChange={e => updateEditField(contact.id, 'is_primary', e.target.checked)} />
+                                      Primary for this product
+                                    </label>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 10, fontSize: 13 }}>
+                                  <div><span style={{ color: 'var(--text-tertiary)' }}>Contact: </span><strong>{contact.contact_name}</strong></div>
+                                  <div><span style={{ color: 'var(--text-tertiary)' }}>Mobile: </span>{contact.contact_mobile || '—'}</div>
+                                  <div><span style={{ color: 'var(--text-tertiary)' }}>Email: </span>{contact.contact_email}</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {isAddingContact && (
+                          <div style={{ border: '1px dashed var(--primary)', background: 'var(--primary-subtle)', padding: '14px 16px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                              <div>
+                                <label style={inputLabel}>PRODUCT *</label>
+                                <select value={newContactDrafts[lender.id].product_type} onChange={e => updateNewContactField(lender.id, 'product_type', e.target.value)} style={inputStyle}>
+                                  <option value="ALL">ALL</option>
+                                  {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={inputLabel}>CONTACT PERSON *</label>
+                                <input value={newContactDrafts[lender.id].contact_name} onChange={e => updateNewContactField(lender.id, 'contact_name', e.target.value)} style={inputStyle} placeholder="Suresh Nair" />
+                              </div>
+                              <div>
+                                <label style={inputLabel}>MOBILE</label>
+                                <input value={newContactDrafts[lender.id].contact_mobile} onChange={e => updateNewContactField(lender.id, 'contact_mobile', e.target.value)} style={inputStyle} placeholder="9820001122" />
+                              </div>
+                              <div>
+                                <label style={inputLabel}>EMAIL *</label>
+                                <input value={newContactDrafts[lender.id].contact_email} onChange={e => updateNewContactField(lender.id, 'contact_email', e.target.value)} style={inputStyle} placeholder="suresh.nair@hdfc.com" />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                  <input type="checkbox" checked={!!newContactDrafts[lender.id].is_primary} onChange={e => updateNewContactField(lender.id, 'is_primary', e.target.checked)} />
+                                  Primary for this product
+                                </label>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+                              <button onClick={() => cancelAddContact(lender.id)} style={btnOutline}>Cancel</button>
+                              <button onClick={() => handleCreateContact(lender.id)} style={btnPrimary}>Add Contact</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 

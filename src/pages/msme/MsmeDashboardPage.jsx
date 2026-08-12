@@ -85,11 +85,6 @@ const MsmeDashboardPage = () => {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const primaryApplicant = activeCase?.applicants?.find(a => a.type === 'PRIMARY');
   const cibilScore = primaryApplicant?.cibil_score || null;
-  const caseClosed = activeCase && (activeCase.stage === 'CLOSED' || activeCase.stage === 'REJECTED');
-  // Purge is time-based, independent of stage — a purged case can still be
-  // non-terminal/unallocated, so it must be excluded from the "Continue"
-  // (resume wizard) branch explicitly rather than relying on caseClosed alone.
-  const casePurged = !!activeCase?.data_purged_at;
 
   const quickActions = [
     { label: 'My Cases', icon: FolderOpen, path: '/msme/cases' },
@@ -156,7 +151,7 @@ const MsmeDashboardPage = () => {
               {/* Summary cards */}
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 16 }}>
                 {[
-                  { title: 'Active Cases', value: activeCase ? '1' : '0', subtitle: 'This month', icon: FolderOpen, color: 'var(--info)' },
+                  { title: 'Active Cases', value: String(cases.filter(c => c.stage !== 'CLOSED' && c.stage !== 'REJECTED').length), subtitle: 'This month', icon: FolderOpen, color: 'var(--info)' },
                   { title: 'Loan Applied', value: activeCase.loan_amount ? formatCompactINR(activeCase.loan_amount) : '—', subtitle: activeCase.product_type || 'Product TBD', icon: BarChart3, color: 'var(--success)' },
                   { title: 'Bureau Score', value: cibilScore || '—', subtitle: cibilScore ? (cibilScore >= 700 ? 'Good' : 'Fair') : 'Available after bureau pull', icon: Star, color: 'var(--warning)' },
                   { title: 'All Time Cases', value: totalCasesCount ?? '—', subtitle: 'Since you joined', icon: Archive, color: 'var(--role-admin)' },
@@ -172,8 +167,10 @@ const MsmeDashboardPage = () => {
                 ))}
               </div>
 
-              {/* Cases table */}
-              <SectionCard title="My Loan Cases" subtitle="Your active loan application" delay={0.2}>
+              {/* Cases table — every case this customer has (see fetchDashboard's
+                  note on why msmeApi.getCases() is fetched separately from
+                  getDashboard()'s single activeCase), not just the latest one. */}
+              <SectionCard title="My Loan Cases" subtitle={`${cases.length} loan application${cases.length === 1 ? '' : 's'}`} delay={0.2}>
                 <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
                   <table>
                     <thead>
@@ -186,41 +183,51 @@ const MsmeDashboardPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td style={{ fontWeight: 700 }}>CASE-{activeCase.id}</td>
-                        <td>{activeCase.product_type || 'TBD'}</td>
-                        <td>{activeCase.loan_amount ? formatCompactINR(activeCase.loan_amount) : '—'}</td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-                            <Badge type="level" value={CASE_STAGE_LABELS[activeCase.stage] || activeCase.stage} />
-                            {casePurged && <DataPurgedBadge />}
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {caseClosed ? (
-                            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${activeCase.id}`)}>
-                              Track
-                            </button>
-                          ) : casePurged || activeCase.assigned_dsa_user ? (
-                            // Once a DSA is allocated, the case has moved past the
-                            // self-service application wizard — the wizard's draft-
-                            // restore logic doesn't cover that stage and just errors.
-                            // Send them to the case status page instead. Purged
-                            // cases are also always "View" — never resumable.
-                            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${activeCase.id}`)}>
-                              View
-                            </button>
-                          ) : (
-                            <button
-                              className="btn btn-primary btn-sm"
-                              style={{ borderRadius: 0 }}
-                              onClick={() => navigate(`/msme/onboarding?caseId=${activeCase.id}`)}
-                            >
-                              Continue <ArrowRight size={13} />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                      {cases.map(c => {
+                        const closed = c.stage === 'CLOSED' || c.stage === 'REJECTED';
+                        // Purge is time-based, independent of stage — a purged case
+                        // can still be non-terminal/unallocated, so it must be
+                        // excluded from the "Continue" (resume wizard) branch
+                        // explicitly rather than relying on `closed` alone.
+                        const purged = !!c.data_purged_at;
+                        return (
+                          <tr key={c.id}>
+                            <td style={{ fontWeight: 700 }}>CASE-{c.id}</td>
+                            <td>{c.product_type || 'TBD'}</td>
+                            <td>{c.loan_amount ? formatCompactINR(c.loan_amount) : '—'}</td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                                <Badge type="level" value={CASE_STAGE_LABELS[c.stage] || c.stage} />
+                                {purged && <DataPurgedBadge />}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {closed ? (
+                                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${c.id}`)}>
+                                  Track
+                                </button>
+                              ) : purged || c.assigned_dsa_user ? (
+                                // Once a DSA is allocated, the case has moved past the
+                                // self-service application wizard — the wizard's draft-
+                                // restore logic doesn't cover that stage and just errors.
+                                // Send them to the case status page instead. Purged
+                                // cases are also always "View" — never resumable.
+                                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate(`/msme/cases/${c.id}`)}>
+                                  View
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  style={{ borderRadius: 0 }}
+                                  onClick={() => navigate(`/msme/onboarding?caseId=${c.id}`)}
+                                >
+                                  Continue <ArrowRight size={13} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

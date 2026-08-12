@@ -18,6 +18,22 @@ import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
+// Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
+// rest) — reading it back always yields a real Date, which Express's JSON
+// serialization turns into a full ISO datetime string like
+// "2003-06-29T00:00:00.000Z". A native <input type="date"> only accepts the
+// bare "YYYY-MM-DD" form and silently renders blank for anything else — so
+// without this, a DOB that was genuinely fetched and saved still shows as
+// empty in the form. Slicing the ISO string is timezone-safe here since
+// toISOString() always renders midnight UTC for a date-only value, so the
+// calendar date never shifts.
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+};
+
 const AddSalariedCustomerWizardPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -204,11 +220,12 @@ const AddSalariedCustomerWizardPage = () => {
         business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
         business_email: caseData.customer?.business_email || '',
         pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
-        dob: caseData.customer?.dob || '',
+        dob: toDateInputValue(caseData.customer?.dob),
         mobile_verified: caseData.customer?.mobile_verified || false,
         applicants: restoredApplicants.map(app => ({
           ...app,
-          mobile: (app.mobile || '').replace(/\D/g, '')
+          mobile: (app.mobile || '').replace(/\D/g, ''),
+          dob: toDateInputValue(app.dob)
         })),
         product_type: caseData.product_type || '',
         property_type: caseData.property?.property_type || '',
@@ -373,7 +390,7 @@ const AddSalariedCustomerWizardPage = () => {
       const data = res.data;
 
       const entityName = data.name || '';
-      const entityDob = data.dob || '';
+      const entityDob = toDateInputValue(data.dob);
 
       if (isCoapplicant && idx !== null) {
         const list = [...formData.applicants];

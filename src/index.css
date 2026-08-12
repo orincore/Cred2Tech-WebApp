@@ -66,6 +66,14 @@ html, body {
 }
 
 :root {
+  /* Tells the browser which palette to use for OS-native widgets (select
+     dropdown popups, checkboxes, scrollbars, date pickers). Without this,
+     Windows renders the <select> popup list using the OS/browser default
+     theme regardless of our .dark class — so in dark mode the popup came out
+     light-background with our light-on-dark text color inherited onto it,
+     making every option unreadable. */
+  color-scheme: light;
+
   /* Brand Colors */
   --primary: #4F46E5;
   --primary-dark: #3730A3;
@@ -149,6 +157,8 @@ html, body {
    ThemeContext only syncs the newer --bg/--surface/--on-surface set onto <html>; pages still on
    the legacy set (e.g. AddCustomerWizardPage) rendered light-only without this block. */
 :root.dark {
+  color-scheme: dark;
+
   --primary: #6366F1;
   --primary-dark: #818CF8;
   --primary-light: #A5B4FC;

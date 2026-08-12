@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
 import { msmeApi } from '../api/msmeService';
@@ -32,6 +32,7 @@ const ProfilePage = () => {
   const [activeSection, setActiveSection] = useState('profile');
   const [formData, setFormData] = useState({ name: '', email: '', mobile: '' });
   const [saving, setSaving] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -43,7 +44,11 @@ const ProfilePage = () => {
 
   // MSME customers authenticate via mobile OTP (no password), and "Additional
   // Info" is DSA staff hierarchy/role/session detail that doesn't apply to them.
-  const isMsmeUser = authUser?.role?.name === 'MSME_CUSTOMER';
+  // AuthContext's normalizeUser() collapses authUser.role to a plain string
+  // (see AuthContext.jsx), unlike the raw getMe() shape (`profile.role.name`)
+  // used elsewhere on this page — comparing against `.role?.name` here always
+  // read undefined, so every MSME customer was silently treated as staff.
+  const isMsmeUser = authUser?.role === 'MSME_CUSTOMER';
   const sidebarItems = isMsmeUser
     ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' }]
     : [
@@ -319,36 +324,52 @@ const ProfilePage = () => {
               {/* Full Name */}
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Full Name</label>
-                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
+                  borderBottom: focusedField === 'name' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
+                  transition: 'border-color 0.15s'
+                }}>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={e => handleChange('name', e.target.value)}
+                    onFocus={() => setFocusedField('name')}
+                    onBlur={() => setFocusedField(null)}
                     placeholder="Enter your full name"
+                    title="Click to edit your full name"
                     style={{
                       width: '100%', background: 'transparent', border: 'none', outline: 'none',
                       color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                      padding: 0, focusRing: 0
+                      padding: 0, cursor: 'text'
                     }}
                   />
+                  <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
                 </div>
               </div>
 
               {/* Email */}
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Email Address</label>
-                <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
+                  borderBottom: focusedField === 'email' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
+                  transition: 'border-color 0.15s'
+                }}>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={e => handleChange('email', e.target.value)}
+                    onFocus={() => setFocusedField('email')}
+                    onBlur={() => setFocusedField(null)}
                     placeholder="name@company.com"
+                    title="Click to edit your email address"
                     style={{
                       width: '100%', background: 'transparent', border: 'none', outline: 'none',
                       color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                      padding: 0, focusRing: 0
+                      padding: 0, cursor: 'text'
                     }}
                   />
+                  <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
                 </div>
               </div>
 
@@ -367,6 +388,7 @@ const ProfilePage = () => {
                       padding: 0, cursor: 'not-allowed'
                     }}
                   />
+                  <Lock size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
                 </div>
               </div>
 

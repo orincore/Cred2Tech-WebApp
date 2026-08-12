@@ -6,9 +6,12 @@ import { listDocuments, downloadDocument } from '../api/documentHelper';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw, FileDown } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw, FileDown, Trash2 } from 'lucide-react';
+import { useCasePullStatus } from '../hooks/useCasePullStatus';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+
+const GST_LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATING_REPORT', 'FINALIZING'];
 
 const getCibilColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
@@ -31,6 +34,13 @@ const MONTH_MS = 1000 * 60 * 60 * 24 * 30.44; // average month length
 // (no loan_start_date, or EMI unverified/zero so remaining tenure can't be
 // estimated at all).
 const getObligationDetails = (obl) => {
+  // Manual entries never have a loan_start_date — the "Add Loan Not in
+  // Bureau" form doesn't collect one — so only the O/s-remaining half of
+  // this heuristic could ever fire for them, showing a lopsided badge
+  // instead of the "recency + remaining tenure" pair this column means to
+  // convey. Show the plain "—" fallback for these instead.
+  if (obl.source === 'MANUAL') return [];
+
   const details = [];
 
   if (obl.loan_start_date) {
@@ -71,6 +81,14 @@ const LOAN_TYPES = [
 export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const isMobile = useIsMobile();
 
+  // GST can still be pulling in the background (kicked off on step 2, and
+  // the case-wide GstPullStatusBanner keeps it visible on this step too) —
+  // generating the ESR against an incomplete GST picture would bake a wrong
+  // eligibility number in, so block it until that pull settles one way or
+  // the other (finishes or fails).
+  const { snapshot: pullSnapshot } = useCasePullStatus(caseId);
+  const gstPending = GST_LIVE_PHASES.includes(pullSnapshot?.gst?.overall?.phase);
+
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -89,6 +107,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
     newObl.outstanding_amount !== '' &&
     newObl.emi_per_month !== '';
 
+  const [deletingId, setDeletingId] = useState(null);       // obligation id currently being removed
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
@@ -201,6 +220,22 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
     }
   };
 
+  // Soft-deletes (backend marks the row CLOSED + excludes it from FOIR
+  // rather than hard-deleting) — safe for both bureau-pulled and manually
+  // added obligations alike, no source-based restriction on either end.
+  const handleDeleteObligation = async (oblId) => {
+    setDeletingId(oblId);
+    try {
+      await caseService.deleteObligation(caseId, oblId);
+      toast.success('Obligation removed');
+      await refreshObligations();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to remove obligation');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // The backend marks an applicant's bureau data as "fetched" as soon as the
   // credit-score check succeeds, even if the separate obligations pull came
   // back empty — so the page's automatic retry (which only fires while
@@ -211,10 +246,15 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
     const before = (data?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
     setRetryingFor(applicantId);
     try {
-      await caseService.runBureauVerification(caseId, applicantId);
+      const result = await caseService.runBureauVerification(caseId, applicantId);
       await caseService.syncObligations(caseId);
       const fresh = await load();
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
+      // Score and obligations are two independent vendor calls now (see
+      // bureau.controller.js) — a failure in one no longer means the other
+      // never ran, so check specifically what actually failed instead of
+      // guessing at a PAN/DOB problem whenever the count comes back flat.
+      const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
       if (after > before) {
         toast.success(`Bureau data re-fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
@@ -223,8 +263,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
         // applicant's obligations are already on file, not that the pull
         // failed. Only an actual zero total means the vendor found nothing.
         toast.success(`Bureau data re-fetched — ${after} obligation(s) already on file, no new ones since last pull`);
+      } else if (obligationsError) {
+        toast.error(`Obligations check failed: ${obligationsError.error}. This is a vendor/connectivity issue, not a problem with the applicant's data — try again shortly.`, { duration: 8000 });
       } else {
-        toast.error('Bureau pull ran again but still found no obligations for this applicant — the vendor may be missing valid PAN/DOB data for them.', { duration: 6000 });
+        toast.error("Bureau pull ran again but the vendor genuinely has no obligations on file for this applicant — this can be a legitimate 'no credit history' result, not necessarily missing data.", { duration: 6000 });
       }
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to re-fetch bureau data');
@@ -234,6 +276,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   };
 
   const handleGenerateESR = async () => {
+    if (gstPending) return toast.error('GST data is still being pulled — please wait for it to finish before generating the ESR.');
     try {
       setGenerating(true);
       await caseService.generateESR(caseId);
@@ -422,6 +465,17 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                         <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
                       </div>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <button
+                        onClick={() => handleDeleteObligation(obl.id)}
+                        disabled={deletingId === obl.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
+                        title="Remove obligation"
+                      >
+                        <Trash2 size={14} />
+                        {deletingId === obl.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -430,7 +484,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['Lender', 'Type of Loan', 'Loan Amount', 'Outstanding', 'Obligation Details', 'EMI / Month', 'Status'].map(h => (
+                    {['Lender', 'Type of Loan', 'Loan Amount', 'Outstanding', 'Obligation Details', 'EMI / Month', 'Status', ''].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
                     ))}
                   </tr>
@@ -472,6 +526,16 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                           {obl.needs_verification ? <AlertTriangle size={11} /> : obl.source === 'MANUAL' ? <PenLine size={11} /> : <CheckCircle2 size={11} />}
                           {obl.needs_verification ? 'Verify' : (obl.source === 'MANUAL' ? 'Manual' : 'Active')}
                         </span>
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <button
+                          onClick={() => handleDeleteObligation(obl.id)}
+                          disabled={deletingId === obl.id}
+                          style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }}
+                          title="Remove obligation"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -570,12 +634,25 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
       </Panel>
 
       {/* Bottom nav */}
-      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', gap: 12 }}>
         <button className="btn btn-ghost" onClick={onBack} style={{ justifyContent: 'center', width: isMobile ? '100%' : undefined }}><ChevronLeft size={16} /> Back</button>
-        <button className="btn btn-primary btn-lg" onClick={handleGenerateESR} disabled={generating} style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}>
-          <Zap size={18} />
-          {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'stretch' : 'flex-end', gap: 6 }}>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={handleGenerateESR}
+            disabled={generating || gstPending}
+            title={gstPending ? 'GST data is still being pulled — this becomes available once that finishes.' : undefined}
+            style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
+          >
+            <Zap size={18} />
+            {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
+          </button>
+          {gstPending && (
+            <span style={{ fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={12} /> Waiting for GST pull to finish
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
