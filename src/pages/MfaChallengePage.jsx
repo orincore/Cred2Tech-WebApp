@@ -20,20 +20,21 @@ const MfaChallengePage = () => {
   useTheme();
 
   const { challengeToken, methods = [], recoveryOptions = {}, from } = location.state || {};
-  // Two independent checks — see the identical guard on MfaSetupPage.jsx for
-  // the full reasoning: import.meta.env.DEV keeps this off any production
-  // build regardless of the backend, and backendDevBypassAvailable makes the
-  // button additionally reflect the backend's live NODE_ENV so a dev-build
-  // frontend pointed at a production backend doesn't show a button that
-  // would just 403. The backend endpoint re-checks NODE_ENV itself either way.
+  // Visibility is driven purely by the backend's live NODE_ENV (see the
+  // identical pattern on MfaSetupPage.jsx) — deliberately not additionally
+  // gated by import.meta.env.DEV, so this build-independent and reflects
+  // whatever the deployed backend's NODE_ENV actually is. The backend's own
+  // bypass endpoints (devBypassChallenge/devBypassMfa) independently
+  // re-check NODE_ENV themselves regardless of this flag, so this only ever
+  // controls whether the button is *shown*, never whether the bypass itself
+  // is honored server-side.
   const [backendDevBypassAvailable, setBackendDevBypassAvailable] = useState(false);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
     mfaApi.getDevBypassStatus()
       .then((data) => setBackendDevBypassAvailable(!!data.available))
       .catch(() => setBackendDevBypassAvailable(false));
   }, []);
-  const devBypassAvailable = import.meta.env.DEV && backendDevBypassAvailable;
+  const devBypassAvailable = backendDevBypassAvailable;
 
   const [mode, setMode] = useState(() => (methods.includes('TOTP') ? 'TOTP' : methods[0] || 'EMAIL_OTP'));
   const [showRecovery, setShowRecovery] = useState(false);

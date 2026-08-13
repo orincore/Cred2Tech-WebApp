@@ -29,23 +29,21 @@ const MfaSetupPage = () => {
 
   const { setupToken, from } = location.state || {};
   const mode = setupToken ? 'fresh' : 'existing';
-  // Two independent checks, both required: import.meta.env.DEV is Vite's own
-  // build-mode flag (false in any `vite build` production bundle, true for
-  // `vite dev` — the frontend and backend are deployed separately, so this
-  // alone can't reflect the backend's actual NODE_ENV) and
-  // backendDevBypassAvailable mirrors the backend's live setting (see
-  // mfa.controller.js#devBypassStatus) — the endpoints themselves
+  // Visibility is driven purely by the backend's live NODE_ENV setting (see
+  // mfa.controller.js#devBypassStatus) — deliberately not additionally gated
+  // by import.meta.env.DEV, so this shows on any build (including a
+  // production bundle) whenever the deployed backend itself isn't running
+  // with NODE_ENV=production. The bypass endpoints themselves
   // (setupDevBypass/challengeDevBypass) independently re-check the same
   // NODE_ENV server-side regardless, so this is purely a UI-visibility
-  // decision, not a security boundary.
+  // decision, not a security boundary — that boundary lives in the backend.
   const [backendDevBypassAvailable, setBackendDevBypassAvailable] = useState(false);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
     mfaApi.getDevBypassStatus()
       .then((data) => setBackendDevBypassAvailable(!!data.available))
       .catch(() => setBackendDevBypassAvailable(false));
   }, []);
-  const devBypassAvailable = import.meta.env.DEV && backendDevBypassAvailable;
+  const devBypassAvailable = backendDevBypassAvailable;
 
   const [step, setStep] = useState('choose'); // choose | totp | totp-confirm | email | email-confirm | backup-codes
   const [password, setPassword] = useState('');
