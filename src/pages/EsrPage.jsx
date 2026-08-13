@@ -203,7 +203,11 @@ const CalcBreakdownPanel = ({ evaluations }) => {
   const isDscrMethod = ev.dscr_actual_ratio != null;
   const steps = [
     { label: 'Loan Amount', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: IndianRupee, color: 'var(--success)', bg: 'var(--success-bg)' },
-    { label: 'ROI', value: ev.underwriting_roi_used != null ? `${ev.underwriting_roi_used}%` : '—', icon: TrendingUp, color: 'var(--info)', bg: 'var(--info-bg)' },
+    // Range per this specific method/scheme (roi_min/roi_max), not just the
+    // single underwriting value used for its own EMI calc — same min–max
+    // display pattern already used on the lender card's top ROI tile, just
+    // scoped to the currently selected scheme instead of the lender overall.
+    { label: 'ROI', value: ev.roi_min != null ? `${ev.roi_min}%${ev.roi_max != null && ev.roi_max !== ev.roi_min ? `–${ev.roi_max}%` : ''}` : '—', icon: TrendingUp, color: 'var(--info)', bg: 'var(--info-bg)' },
     { label: 'Tenure', value: ev.final_tenure_used != null ? formatDynamicTenure(ev.final_tenure_used) : '—', icon: Clock, color: 'var(--role-cred2tech)', bg: 'var(--role-cred2tech-bg)' },
     isDscrMethod
       ? { label: 'DSCR', value: `${Number(ev.dscr_actual_ratio).toFixed(2)}x`, icon: TrendingDown,
