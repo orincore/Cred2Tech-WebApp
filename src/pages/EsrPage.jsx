@@ -8,7 +8,7 @@ import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
   BarChart3, ClipboardList, Percent, TrendingDown, TrendingUp,
-  Home, ChevronUp, ChevronDown, Zap,
+  Home, ChevronUp, ChevronDown, Zap, IndianRupee,
   ListFilter,
 } from 'lucide-react';
 
@@ -193,13 +193,16 @@ const CalcBreakdownPanel = ({ evaluations }) => {
 
   // Actuals only — the policy-allowed/cap variants (FOIR Allowed, LTV Applied
   // key, intermediate EMI/loan-by-LTV steps) took up more space than they
-  // were worth here; the final eligible loan amount is already shown on the
-  // lender card itself (MetricTile row above), so it isn't repeated in this
-  // panel. DSCR-method schemes show their actual ratio in place of FOIR —
-  // the two are mutually exclusive per scheme (dscr_actual_ratio is only
-  // ever populated for DSCR-method schemes).
+  // were worth here. Loan Amount is back per the lender card's top MetricTile
+  // only ever shows the *best* scheme's amount (orderedEvaluations is sorted
+  // best-first) — switching to a different scheme tab here has no other way
+  // to see that specific method's own eligible amount. DSCR-method schemes
+  // show their actual ratio in place of FOIR — the two are mutually
+  // exclusive per scheme (dscr_actual_ratio is only ever populated for
+  // DSCR-method schemes).
   const isDscrMethod = ev.dscr_actual_ratio != null;
   const steps = [
+    { label: 'Loan Amount', value: ev.final_eligible_loan_amount != null ? formatDynamicCurrency(ev.final_eligible_loan_amount) : '—', icon: IndianRupee, color: 'var(--success)', bg: 'var(--success-bg)' },
     { label: 'ROI', value: ev.underwriting_roi_used != null ? `${ev.underwriting_roi_used}%` : '—', icon: TrendingUp, color: 'var(--info)', bg: 'var(--info-bg)' },
     { label: 'Tenure', value: ev.final_tenure_used != null ? formatDynamicTenure(ev.final_tenure_used) : '—', icon: Clock, color: 'var(--role-cred2tech)', bg: 'var(--role-cred2tech-bg)' },
     isDscrMethod
