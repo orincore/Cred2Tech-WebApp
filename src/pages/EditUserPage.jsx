@@ -38,6 +38,13 @@ const EditUserPage = () => {
   const [rolesError, setRolesError] = useState('');
   const [originalRoleId, setOriginalRoleId] = useState('');
 
+  // Reached either from Users → Edit (editing someone else) or from Profile →
+  // Edit Profile (editing yourself) — this is the single edit screen for
+  // both, not two separate forms. Self-edit disables the role field because
+  // the backend rejects PATCH /users/:id with a changed role_id when
+  // id === currentUser.id ("You cannot change your own role").
+  const isSelfEdit = !!currentUser && Number(id) === Number(currentUser.id);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
@@ -182,12 +189,15 @@ const EditUserPage = () => {
         // Only sent when actually changed — role_id is optional on the
         // backend's PATCH /users/:id and re-runs the same RBAC/tenant checks
         // as assigning it on create, so there's no reason to resend the
-        // unchanged value on every plain field edit.
-        ...(form.role_id && form.role_id !== originalRoleId ? { role_id: Number(form.role_id) } : {}),
+        // unchanged value on every plain field edit. Never sent on self-edit
+        // — the backend 403s a self role_id change outright, and the field
+        // is disabled below so form.role_id can't drift from originalRoleId
+        // anyway, but this keeps the guarantee explicit at the call site too.
+        ...(!isSelfEdit && form.role_id && form.role_id !== originalRoleId ? { role_id: Number(form.role_id) } : {}),
       });
       setSuccess(true);
       toast.success('User updated successfully');
-      setTimeout(() => navigate('/users'), 1500);
+      setTimeout(() => navigate(isSelfEdit ? '/profile' : '/users'), 1500);
     } catch (err) {
       const msg = getErrorMessage(err);
       setApiError(msg);
@@ -207,7 +217,10 @@ const EditUserPage = () => {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-        <PageHeader title="Edit User" subtitle={`Modify user information for ${user?.name || 'this user'}`} />
+        <PageHeader
+          title={isSelfEdit ? 'Edit My Profile' : 'Edit User'}
+          subtitle={isSelfEdit ? 'Update your own account information' : `Modify user information for ${user?.name || 'this user'}`}
+        />
 
         {/* Success banner */}
         {success && (
@@ -311,8 +324,8 @@ const EditUserPage = () => {
                   name="role_id"
                   value={form.role_id}
                   onChange={handleChange}
-                  disabled={availableRoles.length === 0}
-                  style={{ ...inputStyle, cursor: availableRoles.length === 0 ? 'not-allowed' : 'pointer', opacity: availableRoles.length === 0 ? 0.6 : 1, appearance: 'none' }}
+                  disabled={isSelfEdit || availableRoles.length === 0}
+                  style={{ ...inputStyle, cursor: (isSelfEdit || availableRoles.length === 0) ? 'not-allowed' : 'pointer', opacity: (isSelfEdit || availableRoles.length === 0) ? 0.6 : 1, appearance: 'none' }}
                   onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
@@ -321,8 +334,10 @@ const EditUserPage = () => {
                     <option key={r.id} value={r.id}>{ROLES[r.name]?.name || r.name.replace(/_/g, ' ')}</option>
                   ))}
                 </select>
-                {rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
-                {form.role_id && form.role_id !== originalRoleId && (
+                {isSelfEdit ? (
+                  <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 4 }}>You cannot change your own role — ask another admin.</div>
+                ) : rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
+                {!isSelfEdit && form.role_id && form.role_id !== originalRoleId && (
                   <div style={{ color: 'var(--warning)', fontSize: 11, fontWeight: 600, marginTop: 4 }}>Role will change on save</div>
                 )}
               </div>
@@ -332,7 +347,8 @@ const EditUserPage = () => {
                   name="status"
                   value={form.status}
                   onChange={handleChange}
-                  style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}
+                  disabled={isSelfEdit}
+                  style={{ ...inputStyle, cursor: isSelfEdit ? 'not-allowed' : 'pointer', opacity: isSelfEdit ? 0.6 : 1, appearance: 'none' }}
                   onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
@@ -340,6 +356,7 @@ const EditUserPage = () => {
                   <option value="INACTIVE">Inactive</option>
                   <option value="SUSPENDED">Suspended</option>
                 </select>
+                {isSelfEdit && <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 4 }}>You cannot change your own status.</div>}
               </div>
               <div>
                 <label style={labelStyle}>DSA ID</label>
@@ -387,7 +404,7 @@ const EditUserPage = () => {
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', marginTop: 32 }}>
             <button
               type="button"
-              onClick={() => navigate('/users')}
+              onClick={() => navigate(isSelfEdit ? '/profile' : '/users')}
               disabled={saving}
               style={{
                 padding: '6px 14px', background: 'transparent', border: '2px solid var(--outline)',

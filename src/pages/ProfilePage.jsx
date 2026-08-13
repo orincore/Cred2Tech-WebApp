@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock } from 'lucide-react';
+import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
 import { msmeApi } from '../api/msmeService';
 import * as mfaApi from '../api/mfaService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { formatDateTime, getInitials, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
+import { formatDateTime, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import OtpInput from '../components/OtpInput';
 import PageHeader from '../components/ui/PageHeader';
 
 // Responsive hook
@@ -22,8 +25,39 @@ const useResponsive = () => {
   return { isMobile };
 };
 
+// Read-only "key: value" summary card for Additional Information — replaces
+// the old underlined-input-look-alike rows (which visually implied these
+// fields were editable, when they never were) with a plain label/value row
+// layout, grouped under a titled card matching the style already used for
+// the MFA method cards elsewhere on this page.
+const InfoCard = ({ icon: Icon, title, children }) => (
+  <div style={{ border: '1px solid var(--outline)', overflow: 'hidden' }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px',
+      background: 'var(--surface)', borderBottom: '1px solid var(--outline)',
+    }}>
+      <Icon size={15} color="var(--on-muted)" />
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{title}</span>
+    </div>
+    <div>{children}</div>
+  </div>
+);
+
+const InfoRow = ({ label, value, mono = false, last = false }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+    padding: '12px 16px', borderBottom: last ? 'none' : '1px solid var(--outline)',
+  }}>
+    <span style={{ fontSize: 13, color: 'var(--on-muted)' }}>{label}</span>
+    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--on-surface)', fontFamily: mono ? 'monospace' : 'inherit', textAlign: 'right' }}>
+      {value}
+    </span>
+  </div>
+);
+
 const ProfilePage = () => {
   const { user: authUser, token, logout } = useAuth();
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { isMobile } = useResponsive();
@@ -99,6 +133,14 @@ const ProfilePage = () => {
   const [mfaCode, setMfaCode] = useState('');
   const [pendingBackupCodes, setPendingBackupCodes] = useState(null);
 
+  // "Trust this device" — devices that skip the MFA challenge on login for
+  // 30 days. See src/pages/MfaChallengePage.jsx for where the grant is
+  // created (a checkbox at MFA-verification time).
+  const [trustedDevices, setTrustedDevices] = useState(null);
+  const [trustedDevicesLoading, setTrustedDevicesLoading] = useState(false);
+  const [revokeDeviceTarget, setRevokeDeviceTarget] = useState(null); // { id, device_label } | null
+  const [revokingDevice, setRevokingDevice] = useState(false);
+
   const loadMfaStatus = async () => {
     setMfaLoading(true);
     try {
@@ -111,10 +153,48 @@ const ProfilePage = () => {
     }
   };
 
+  const loadTrustedDevices = async () => {
+    setTrustedDevicesLoading(true);
+    try {
+      const data = await mfaApi.listTrustedDevices();
+      setTrustedDevices(data);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setTrustedDevicesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (activeSection === 'mfa' && !mfaStatus && !isMsmeUser) loadMfaStatus();
+    if (activeSection === 'mfa' && !isMsmeUser) {
+      if (!mfaStatus) loadMfaStatus();
+      if (!trustedDevices) loadTrustedDevices();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
+
+  const openRevokeDevice = (device) => setRevokeDeviceTarget(device);
+  const closeRevokeDevice = () => setRevokeDeviceTarget(null);
+
+  const confirmRevokeDevice = async () => {
+    if (!revokeDeviceTarget) return;
+    setRevokingDevice(true);
+    try {
+      await mfaApi.revokeTrustedDevice(revokeDeviceTarget.id);
+      toast.success('Device trust revoked.');
+      setRevokeDeviceTarget(null);
+      await loadTrustedDevices();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setRevokingDevice(false);
+    }
+  };
+
+  // "Expires in N days" — computed client-side from the API's expires_at,
+  // not stored precomputed (so it stays accurate no matter how long the
+  // list has been sitting on screen).
+  const daysUntil = (isoDate) => Math.max(0, Math.ceil((new Date(isoDate) - new Date()) / (24 * 60 * 60 * 1000)));
 
   if (loading) return <LoadingSpinner fullPage />;
 
@@ -122,6 +202,15 @@ const ProfilePage = () => {
   if (!u) return null;
 
   const isActive = u.status?.toUpperCase() === 'ACTIVE';
+  // Matches the backend's PATCH /users/:id role gate exactly (SUPER_ADMIN,
+  // DSA_ADMIN, CRED2TECH_MEMBER) — the only roles that can reach EditUserPage
+  // for themselves. u.role can be either the raw getMe() shape ({name}) or
+  // the flattened string AuthContext produces, so check both.
+  const roleName = u.role?.name || u.role;
+  const canSelfEdit = ['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER'].includes(roleName);
+  // Narrower than canSelfEdit — matches PUT /tenants/:id's role gate, which
+  // (unlike PATCH /users/:id) doesn't include CRED2TECH_MEMBER.
+  const canEditOrg = ['SUPER_ADMIN', 'DSA_ADMIN'].includes(roleName);
 
   const toTitleCase = (str) => {
     if (!str) return '';
@@ -306,113 +395,146 @@ const ProfilePage = () => {
               <>
                 <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Personal Information</h2>
 
-                {/* Avatar Section */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 28, fontWeight: 800, color: '#fff',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                  }}>
-                    {getInitials(u.name)}
-                  </div>
-                </div>
-
                 {/* Form Fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {/* Full Name */}
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Full Name</label>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
-                  borderBottom: focusedField === 'name' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
-                  transition: 'border-color 0.15s'
-                }}>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => handleChange('name', e.target.value)}
-                    onFocus={() => setFocusedField('name')}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="Enter your full name"
-                    title="Click to edit your full name"
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                      padding: 0, cursor: 'text'
-                    }}
-                  />
-                  <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
-                </div>
-              </div>
+                  {isMsmeUser ? (
+                    <>
+                      {/* Full Name */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Full Name</label>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
+                          borderBottom: focusedField === 'name' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
+                          transition: 'border-color 0.15s'
+                        }}>
+                          <input
+                            type="text"
+                            value={formData.name}
+                            onChange={e => handleChange('name', e.target.value)}
+                            onFocus={() => setFocusedField('name')}
+                            onBlur={() => setFocusedField(null)}
+                            placeholder="Enter your full name"
+                            title="Click to edit your full name"
+                            style={{
+                              width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                              color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                              padding: 0, cursor: 'text'
+                            }}
+                          />
+                          <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                        </div>
+                      </div>
 
-              {/* Email */}
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Email Address</label>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
-                  borderBottom: focusedField === 'email' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
-                  transition: 'border-color 0.15s'
-                }}>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={e => handleChange('email', e.target.value)}
-                    onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder="name@company.com"
-                    title="Click to edit your email address"
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
-                      padding: 0, cursor: 'text'
-                    }}
-                  />
-                  <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
-                </div>
-              </div>
+                      {/* Email */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Email Address</label>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12,
+                          borderBottom: focusedField === 'email' ? '1px solid var(--primary)' : (isDark ? '1px solid #374151' : '1px solid #e5e7eb'),
+                          transition: 'border-color 0.15s'
+                        }}>
+                          <input
+                            type="email"
+                            value={formData.email}
+                            onChange={e => handleChange('email', e.target.value)}
+                            onFocus={() => setFocusedField('email')}
+                            onBlur={() => setFocusedField(null)}
+                            placeholder="name@company.com"
+                            title="Click to edit your email address"
+                            style={{
+                              width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                              color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 600,
+                              padding: 0, cursor: 'text'
+                            }}
+                          />
+                          <Pencil size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                        </div>
+                      </div>
 
-              {/* Mobile */}
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Mobile Number</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
-                  <input
-                    type="tel"
-                    value={formData.mobile}
-                    disabled
-                    title="Your mobile number is your verified login identity and can't be changed here."
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                      color: 'var(--on-muted)', fontSize: 15, fontWeight: 600,
-                      padding: 0, cursor: 'not-allowed'
-                    }}
-                  />
-                  <Lock size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
-                </div>
-              </div>
+                      {/* Mobile */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Mobile Number</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
+                          <input
+                            type="tel"
+                            value={formData.mobile}
+                            disabled
+                            title="Your mobile number is your verified login identity and can't be changed here."
+                            style={{
+                              width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                              color: 'var(--on-muted)', fontSize: 15, fontWeight: 600,
+                              padding: 0, cursor: 'not-allowed'
+                            }}
+                          />
+                          <Lock size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                        </div>
+                      </div>
 
-              {/* Update Button */}
-              <div style={{ display: 'flex', gap: 12 }}>
-                <TravelingBorderButton
-                  onClick={handleProfileSave}
-                  size="sm"
-                  disabled={saving}
-                >
-                  {saving ? 'Saving...' : 'Update'}
-                </TravelingBorderButton>
-                <TravelingBorderButton
-                  onClick={() => setShowLogoutConfirm(true)}
-                  size="sm"
-                  color="red"
-                  showIcon={false}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <LogOut size={16} />
-                    Logout
-                  </div>
-                </TravelingBorderButton>
-              </div>
+                      {/* Update Button */}
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <TravelingBorderButton
+                          onClick={handleProfileSave}
+                          size="sm"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Update'}
+                        </TravelingBorderButton>
+                        <TravelingBorderButton
+                          onClick={() => setShowLogoutConfirm(true)}
+                          size="sm"
+                          color="red"
+                          showIcon={false}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            <LogOut size={16} />
+                            Logout
+                          </div>
+                        </TravelingBorderButton>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Staff accounts are managed through the single Edit User
+                          screen (/users/:id/edit) — these fields are read-only
+                          display here, not a second, separately-wired edit form. */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Full Name</label>
+                        <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>{u.name || '—'}</p>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Email Address</label>
+                        <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>{u.email || '—'}</p>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Mobile Number</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
+                          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-muted)', margin: 0, flex: 1 }}>{u.mobile || '—'}</p>
+                          <Lock size={14} color="var(--on-muted)" style={{ flexShrink: 0 }} title="Your mobile number is your verified login identity and can't be changed here." />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {canSelfEdit ? (
+                          <TravelingBorderButton onClick={() => navigate(`/users/${u.id}/edit`)} size="sm" solid showIcon={false}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Pencil size={14} /> Edit Profile</div>
+                          </TravelingBorderButton>
+                        ) : (
+                          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Contact your administrator to update your account information.</p>
+                        )}
+                        <TravelingBorderButton
+                          onClick={() => setShowLogoutConfirm(true)}
+                          size="sm"
+                          color="red"
+                          showIcon={false}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            <LogOut size={16} />
+                            Logout
+                          </div>
+                        </TravelingBorderButton>
+                      </div>
+                    </>
+                  )}
                 </div>
               </>
             ) : activeSection === 'password' ? (
@@ -432,13 +554,23 @@ const ProfilePage = () => {
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* Decoy field: Chrome's password manager scans the whole
+                      page (not just this section) for a "username" input to
+                      pair with the nearby password fields below, and — with
+                      nothing else to grab — was reaching for the sidebar's
+                      search box (always mounted, regardless of which
+                      Profile tab is open) and silently filling it with the
+                      saved email. This absorbs that targeting instead. */}
+                  <input type="text" name="username" autoComplete="username" value={u.email || ''} readOnly
+                    style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}
+                    aria-hidden="true" tabIndex={-1} />
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Current Password</label>
                     <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
                       <input
                         type="password"
                         name="current-password"
-                        autoComplete="current-password"
+                        autoComplete="off"
                         value={passwordData.currentPassword}
                         onChange={e => handlePasswordChange('currentPassword', e.target.value)}
                         placeholder="Enter current password"
@@ -448,6 +580,15 @@ const ProfilePage = () => {
                           padding: 0, focusRing: 0
                         }}
                       />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/forgot-password', { state: { email: u.email } })}
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--primary)' }}
+                      >
+                        Forgot your password?
+                      </button>
                     </div>
                   </div>
 
@@ -558,16 +699,10 @@ const ProfilePage = () => {
                               <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, wordBreak: 'break-all', color: 'var(--on-surface)' }}>{totpSetup.secret}</p>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
-                            <div style={{ width: 140, paddingBottom: 8, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
-                              <input
-                                type="text" inputMode="numeric" maxLength={6}
-                                value={mfaCode}
-                                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
-                                placeholder="6-digit code"
-                                style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 700, letterSpacing: 2, padding: 0 }}
-                              />
-                            </div>
+                          <div style={{ marginBottom: 14 }}>
+                            <OtpInput length={6} value={mfaCode} onChange={setMfaCode} onEnter={confirmTotpSetup} />
+                          </div>
+                          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                             <TravelingBorderButton size="sm" onClick={confirmTotpSetup} disabled={mfaLoading}>Confirm</TravelingBorderButton>
                             <button onClick={() => { setTotpSetup(null); setMfaCode(''); }} style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
                           </div>
@@ -594,19 +729,15 @@ const ProfilePage = () => {
                         </div>
                       </div>
                       {emailSetupPending && (
-                        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
-                          <div style={{ width: 140, paddingBottom: 8, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb' }}>
-                            <input
-                              type="text" inputMode="numeric" maxLength={6}
-                              value={mfaCode}
-                              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
-                              placeholder="6-digit code"
-                              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: isDark ? '#e6edf7' : '#0a1628', fontSize: 15, fontWeight: 700, letterSpacing: 2, padding: 0 }}
-                            />
+                        <>
+                          <div style={{ marginBottom: 14 }}>
+                            <OtpInput length={6} value={mfaCode} onChange={setMfaCode} onEnter={confirmEmailSetup} />
                           </div>
-                          <TravelingBorderButton size="sm" onClick={confirmEmailSetup} disabled={mfaLoading}>Confirm</TravelingBorderButton>
-                          <button onClick={() => { setEmailSetupPending(false); setMfaCode(''); }} style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-                        </div>
+                          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                            <TravelingBorderButton size="sm" onClick={confirmEmailSetup} disabled={mfaLoading}>Confirm</TravelingBorderButton>
+                            <button onClick={() => { setEmailSetupPending(false); setMfaCode(''); }} style={{ background: 'none', border: 'none', color: 'var(--on-muted)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </>
                       )}
                     </div>
 
@@ -618,74 +749,98 @@ const ProfilePage = () => {
                       </div>
                       <TravelingBorderButton size="sm" onClick={() => openStepUp('backup-codes')}>Regenerate</TravelingBorderButton>
                     </div>
+
+                    {/* Trusted Devices */}
+                    <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 2px' }}>Trusted Devices</p>
+                      <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 14px' }}>
+                        Devices you've chosen to trust skip the MFA challenge on login for 30 days.
+                      </p>
+                      {trustedDevicesLoading && !trustedDevices ? (
+                        <LoadingSpinner size={20} />
+                      ) : !trustedDevices || trustedDevices.length === 0 ? (
+                        <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>No trusted devices yet.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {trustedDevices.map((d) => (
+                            <div key={d.id} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 12, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--outline)',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                <OsIcon userAgent={d.user_agent} size={20} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {d.device_label || 'Unknown device'}
+                                    {d.isCurrentDevice && (
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.12)', padding: '2px 8px', borderRadius: 4 }}>
+                                        This device
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '3px 0 0' }}>
+                                    Last used {formatDateTime(d.last_used_at)} · Added {formatDateTime(d.created_at)} · Expires in {daysUntil(d.expires_at)} day{daysUntil(d.expires_at) === 1 ? '' : 's'}
+                                    {d.ip_address ? ` · ${d.ip_address}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => openRevokeDevice(d)}
+                                title="Revoke trust for this device"
+                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 6, flexShrink: 0, display: 'flex' }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </>
             ) : activeSection === 'additional' ? (
               <>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 24px' }}>Additional Information</h2>
-
-                {/* Role & Access */}
-                <div style={{ marginBottom: 32 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Role & Access</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Platform Role</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{toTitleCase(u.role?.name) || '—'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Role ID</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.role_id || '—'}</span>
-                      </div>
-                    </div>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: 0 }}>Additional Information</h2>
+                  {canSelfEdit && (
+                    <TravelingBorderButton onClick={() => navigate(`/users/${u.id}/edit`)} size="sm" solid showIcon={false}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Pencil size={13} /> Edit</div>
+                    </TravelingBorderButton>
+                  )}
                 </div>
+                <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>
+                  {canSelfEdit ? 'Account, role, and hierarchy details — edit via the button above.' : 'Read-only account, role, and hierarchy details. Contact your administrator to make changes.'}
+                </p>
 
-                {/* Hierarchy & Organization */}
-                <div style={{ marginBottom: 32 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Hierarchy & Organization</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>DSA Organization</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.dsa?.name || '—'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Hierarchy Level</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.hierarchy_level || '—'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Hierarchy Path</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatHierarchyPath(u.hierarchy_path) || 'Root'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Manager ID</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{u.manager_id ? `#${u.manager_id}` : '—'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <InfoCard icon={Briefcase} title="Role & Access">
+                    <InfoRow label="Platform Role" value={toTitleCase(u.role?.name) || '—'} />
+                    <InfoRow label="Role ID" value={u.role_id ?? '—'} mono last />
+                  </InfoCard>
 
-                {/* Session Information */}
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 16px' }}>Session Information</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--on-muted)', marginBottom: 6 }}>Account Created</label>
-                      <div style={{ display: 'flex', alignItems: 'center', paddingBottom: 12, borderBottom: isDark ? '1px solid #374151' : '1px solid #e5e7eb', transition: 'border-color 0.15s' }}>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)' }}>{formatDateTime(u.created_at)}</span>
+                  <InfoCard icon={Network} title="Hierarchy & Organization">
+                    <InfoRow label="Organization" value={u.tenant?.name || '—'} />
+                    <InfoRow label="Hierarchy Level" value={u.hierarchy_level ?? '—'} />
+                    <InfoRow label="Hierarchy Path" value={formatHierarchyPath(u.hierarchy_path) || 'Root'} />
+                    <InfoRow label="Manager ID" value={u.manager_id ? `#${u.manager_id}` : '—'} mono last />
+                  </InfoCard>
+
+                  {canEditOrg && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', border: '1px solid var(--outline)' }}>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Organization compliance details</p>
+                        <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 0' }}>GST, PAN, company type, and registered address</p>
                       </div>
+                      <TravelingBorderButton onClick={() => navigate('/organization')} size="sm" solid showIcon={false}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Pencil size={13} /> Edit</div>
+                      </TravelingBorderButton>
                     </div>
-                  </div>
+                  )}
+
+                  <InfoCard icon={Clock} title="Session Information">
+                    <InfoRow label="Account Created" value={formatDateTime(u.created_at)} last />
+                  </InfoCard>
                 </div>
               </>
             ) : null}
@@ -820,6 +975,44 @@ const ProfilePage = () => {
                 <TravelingBorderButton onClick={closeStepUp} size="sm" disabled={stepUp.loading}>Cancel</TravelingBorderButton>
                 <TravelingBorderButton onClick={submitStepUp} size="sm" disabled={stepUp.loading}>
                   {stepUp.loading ? 'Confirming...' : 'Confirm'}
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Trusted Device Confirmation — plain confirm, not step-up
+          gated, since revoking only ever increases security going forward
+          (forces MFA back on for that device) rather than removing a
+          control, unlike disabling TOTP/email above. */}
+      {revokeDeviceTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff', borderRadius: 20, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32, maxWidth: 400, width: '90%', animation: 'slideUp 0.2s ease',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              }}>
+                <Trash2 size={32} color="#dc2626" />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#e6edf7' : '#0a1628', marginBottom: 8 }}>
+                Revoke this device?
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--on-muted)', marginBottom: 24 }}>
+                {revokeDeviceTarget.device_label || 'This device'} will need to verify MFA again on its next login.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton onClick={closeRevokeDevice} size="sm" disabled={revokingDevice}>Cancel</TravelingBorderButton>
+                <TravelingBorderButton onClick={confirmRevokeDevice} size="sm" color="red" disabled={revokingDevice}>
+                  {revokingDevice ? 'Revoking...' : 'Revoke'}
                 </TravelingBorderButton>
               </div>
             </div>

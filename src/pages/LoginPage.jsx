@@ -9,7 +9,7 @@ import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 
 const LoginPage = () => {
-  const { login, isAuthenticated } = useAuth();
+  const { login, applyTrustedDeviceLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, mounted } = useTheme();
@@ -49,9 +49,17 @@ const LoginPage = () => {
       const result = await login(email, password);
       setLoginState('success');
       // Every account now requires MFA — login() never returns a logged-in
-      // user directly. Branch to the setup wizard (first time) or the
+      // user directly, UNLESS this exact browser presented a still-valid
+      // "trust this device" cookie for this exact account (result.loginComplete),
+      // in which case the backend already skipped straight to a real
+      // session. Otherwise branch to the setup wizard (first time) or the
       // second-factor challenge (already configured), carrying the original
       // deep-link target through so it still works after the detour.
+      if (result.loginComplete) {
+        applyTrustedDeviceLogin(result);
+        navigate(redirectTarget, { replace: true });
+        return;
+      }
       if (result.mfaSetupRequired) {
         navigate('/mfa-setup', { replace: true, state: { setupToken: result.setupToken, from: location.state?.from } });
         return;

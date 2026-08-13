@@ -7,6 +7,7 @@ import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import OtpInput from '../components/OtpInput';
 import * as mfaApi from '../api/mfaService';
 
 const METHOD_LABEL = { TOTP: 'Authenticator App', EMAIL_OTP: 'Email Code', MOBILE_OTP: 'Text Message' };
@@ -19,19 +20,30 @@ const MfaChallengePage = () => {
   useTheme();
 
   const { challengeToken, methods = [], recoveryOptions = {}, from } = location.state || {};
-  // Vite statically strips this branch out of production builds — see the
-  // identical guard on MfaSetupPage.jsx for the full reasoning. The backend
-  // endpoint is the real gate; this just keeps the button off the
-  // production bundle entirely as a second layer.
-  const devBypassAvailable = import.meta.env.DEV;
+  // Two independent checks — see the identical guard on MfaSetupPage.jsx for
+  // the full reasoning: import.meta.env.DEV keeps this off any production
+  // build regardless of the backend, and backendDevBypassAvailable makes the
+  // button additionally reflect the backend's live NODE_ENV so a dev-build
+  // frontend pointed at a production backend doesn't show a button that
+  // would just 403. The backend endpoint re-checks NODE_ENV itself either way.
+  const [backendDevBypassAvailable, setBackendDevBypassAvailable] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    mfaApi.getDevBypassStatus()
+      .then((data) => setBackendDevBypassAvailable(!!data.available))
+      .catch(() => setBackendDevBypassAvailable(false));
+  }, []);
+  const devBypassAvailable = import.meta.env.DEV && backendDevBypassAvailable;
 
   const [mode, setMode] = useState(() => (methods.includes('TOTP') ? 'TOTP' : methods[0] || 'EMAIL_OTP'));
   const [showRecovery, setShowRecovery] = useState(false);
   const [code, setCode] = useState('');
+  const [trustDevice, setTrustDevice] = useState(false);
   const [status, setStatus] = useState('idle'); // idle | sending | verifying | error
   const [error, setError] = useState('');
   const [maskedDestination, setMaskedDestination] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const [otpSent, setOtpSent] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => { document.title = 'Cred2Tech | Verify it\'s you'; }, []);
@@ -52,6 +64,7 @@ const MfaChallengePage = () => {
         : await mfaApi.challengeSendEmailOtp(challengeToken);
       setMaskedDestination(data.maskedEmail || data.maskedMobile || '');
       setCooldown(RESEND_COOLDOWN_S);
+      setOtpSent(true);
       setStatus('idle');
     } catch (err) {
       setStatus('error');
@@ -59,11 +72,17 @@ const MfaChallengePage = () => {
     }
   }, [challengeToken]);
 
-  // Auto-send on entering an OTP-based mode (not needed for TOTP or backup code).
+  // No longer auto-sends on entering an OTP-based mode — switching between
+  // methods (e.g. checking what Email Code looks like, then going back to
+  // the authenticator app) used to fire off a real OTP every single time,
+  // which is unnecessary noise/cost. Sending is now an explicit user action
+  // (the "Send OTP" button below) — this effect just resets state for the
+  // newly-selected mode.
   useEffect(() => {
-    if (mode === 'EMAIL_OTP' || mode === 'MOBILE_OTP') sendCode(mode);
     setCode('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setOtpSent(false);
+    setMaskedDestination('');
+    setCooldown(0);
   }, [mode]);
 
   if (!challengeToken) return <Navigate to="/login" replace />;
@@ -72,11 +91,12 @@ const MfaChallengePage = () => {
   const redirectTarget = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/';
 
   const handleVerify = async () => {
+    if (isOtpMode && !otpSent) { setError('Send a code first.'); return; }
     if (!code.trim()) { setError('Enter the code to continue.'); return; }
     setStatus('verifying');
     setError('');
     try {
-      await verifyMfaChallenge({ challengeToken, method: mode, code: code.trim() });
+      await verifyMfaChallenge({ challengeToken, method: mode, code: code.trim(), trustDevice });
       toast.success('Signed in successfully.');
       navigate(redirectTarget, { replace: true });
     } catch (err) {
@@ -125,7 +145,9 @@ const MfaChallengePage = () => {
               ? 'Enter one of your saved backup codes.'
               : mode === 'TOTP'
                 ? 'Enter the 6-digit code from your authenticator app.'
-                : `Enter the code sent to ${maskedDestination || (mode === 'MOBILE_OTP' ? 'your phone' : 'your email')}.`}
+                : otpSent
+                  ? `Enter the code sent to ${maskedDestination || (mode === 'MOBILE_OTP' ? 'your phone' : 'your email')}.`
+                  : `Click "Send OTP" to get a code by ${mode === 'MOBILE_OTP' ? 'text message' : 'email'}.`}
           </p>
         </div>
 
@@ -156,26 +178,49 @@ const MfaChallengePage = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-center pb-3 mb-2 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-          <input
-            ref={inputRef}
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={isBackupMode ? 11 : 6}
-            value={code}
-            onChange={(e) => {
-              const raw = e.target.value;
-              setCode(isBackupMode ? raw.toUpperCase().replace(/[^A-Z0-9-]/g, '') : raw.replace(/\D/g, ''));
-              setError('');
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={isBackupMode ? 'XXXXX-XXXXX' : '••••••'}
-            className="w-full bg-transparent border-0 outline-none text-center text-[#0a1628] dark:text-[#e6edf7] text-[22px] font-bold tracking-[0.4em] p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-          />
-        </div>
+        {isBackupMode ? (
+          <div className="flex items-center justify-center pb-3 mb-2 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
+            <input
+              ref={inputRef}
+              type="text"
+              autoComplete="one-time-code"
+              maxLength={11}
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''));
+                setError('');
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="XXXXX-XXXXX"
+              className="w-full bg-transparent border-0 outline-none text-center text-[#0a1628] dark:text-[#e6edf7] text-[22px] font-bold tracking-[0.4em] p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
+            />
+          </div>
+        ) : (
+          <div className="mb-2">
+            <OtpInput
+              key={`${mode}-${otpSent}`}
+              length={6}
+              value={code}
+              disabled={isOtpMode && !otpSent}
+              onChange={(v) => { setCode(v); setError(''); }}
+              onEnter={handleVerify}
+            />
+          </div>
+        )}
 
-        {isOtpMode && (
+        {isOtpMode && !otpSent && (
+          <div className="mb-6">
+            <button
+              type="button"
+              disabled={status === 'sending'}
+              onClick={() => sendCode(mode)}
+              className="w-full py-2.5 text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 disabled:opacity-50 cursor-pointer"
+            >
+              {status === 'sending' ? 'Sending…' : `Send OTP by ${mode === 'MOBILE_OTP' ? 'text message' : 'email'}`}
+            </button>
+          </div>
+        )}
+        {isOtpMode && otpSent && (
           <div className="flex justify-between items-center text-[12px] mb-6 px-1">
             <span className="text-[#0a1628]/50 dark:text-[#e6edf7]/50">Code valid for 10 minutes</span>
             <button
@@ -189,6 +234,18 @@ const MfaChallengePage = () => {
           </div>
         )}
         {!isOtpMode && <div className="mb-6" />}
+
+        <label className="flex items-center gap-2 mb-5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={trustDevice}
+            onChange={(e) => setTrustDevice(e.target.checked)}
+            className="w-4 h-4 accent-indigo-600 cursor-pointer"
+          />
+          <span className="text-[13px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
+            Trust this device for 30 days
+          </span>
+        </label>
 
         <TravelingBorderButton onClick={handleVerify} disabled={status === 'verifying'} className="w-full py-3.5 text-[15px] rounded-[10px]">
           {status === 'verifying' ? (

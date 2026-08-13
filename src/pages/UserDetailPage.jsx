@@ -1,134 +1,182 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Edit, Trash2, Mail, Phone, Shield, Building2, Layers, GitBranch, Calendar, User, Hash } from 'lucide-react';
+import { ChevronLeft, Edit, Trash2, Mail, Phone, Shield, Building2, Layers, GitBranch, Calendar, User, Hash, Briefcase, Clock } from 'lucide-react';
 import { getUserById } from '../api/userService';
 import { MOCK_USERS } from '../constants/mockData';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
+import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { formatDateTime, formatHierarchyPath, getInitials } from '../utils/helpers';
+import { formatDateTime, formatHierarchyPath, getInitials, toTitleCase } from '../utils/helpers';
 
-const Detail = ({ icon: Icon, label, value, children }) => (
-  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-    <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <Icon size={15} color="var(--text-tertiary)" />
-    </div>
-    <div>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{label}</p>
-      {children || <p style={{ fontSize: 14, fontWeight: 500, color: value ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{value || '—'}</p>}
-    </div>
-  </div>
-);
+// `borderRadius: 0` override — matches the sharp-corner language used by the
+// list page one hop away (UsersListPage) and its sibling detail page
+// (AdminTicketDetailPage), rather than the softer rounded `.card` default.
+const sharpCard = { borderRadius: 0 };
 
-const Section = ({ title, children }) => (
-  <div className="card" style={{ marginBottom: 20 }}>
-    <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{title}</p>
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 900);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return { isMobile };
+};
+
+// Same avatar palette as UsersListPage so a user's avatar color stays
+// consistent between the list and this detail page.
+const avatarPalette = [
+  ['#ede9fe', '#4f46e5'], ['#dbeafe', '#1d4ed8'],
+  ['#fce7f3', '#be185d'], ['#d1fae5', '#065f46'], ['#fef3c7', '#92400e'],
+];
+const avatarColors = (name = '') => avatarPalette[(name.charCodeAt(0) || 0) % avatarPalette.length];
+
+const sectionTitleStyle = { fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 };
+
+const Detail = ({ icon: Icon, label, value, children, mono = false, last = false }) => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '11px 0', borderBottom: last ? 'none' : '1px solid var(--outline)' }}>
+    <div style={{ width: 30, height: 30, borderRadius: 0, background: 'var(--bg)', border: '1px solid var(--outline)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Icon size={14} color="var(--on-muted)" />
     </div>
-    <div style={{ padding: '4px 20px' }}>{children}</div>
+    <div style={{ minWidth: 0, flex: 1 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</p>
+      {children || (
+        <p style={{
+          fontSize: 13, fontWeight: 600, color: value ? 'var(--on-surface)' : 'var(--on-muted)',
+          fontFamily: mono ? "'JetBrains Mono', monospace" : 'inherit', wordBreak: 'break-word',
+        }}>
+          {value || '—'}
+        </p>
+      )}
+    </div>
   </div>
 );
 
 const UserDetailPage = () => {
+  const { isMobile } = useResponsive();
   const { id } = useParams();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     const fetchUser = async () => {
       try {
         const data = await getUserById(id);
-        setUser(data.user || data);
+        if (!cancelled) setUser(data.user || data);
       } catch {
-        // Fallback: find in mock data
-        const mock = MOCK_USERS.find((u) => u.id === Number(id));
-        setUser(mock || null);
+        if (!cancelled) {
+          const mock = MOCK_USERS.find((u) => u.id === Number(id));
+          setUser(mock || null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchUser();
+    return () => { cancelled = true; };
   }, [id]);
 
-  if (loading) return <LoadingSpinner fullPage />;
+  if (loading) return <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>;
   if (!user) return (
     <div style={{ textAlign: 'center', padding: 60 }}>
-      <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>User not found.</p>
-      <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => navigate('/users')}>Back to Users</button>
+      <p style={{ fontSize: 15, color: 'var(--on-muted)' }}>User not found.</p>
+      <button className="btn btn-secondary" style={{ ...sharpCard, marginTop: 16 }} onClick={() => navigate('/users')}>Back to Users</button>
     </div>
   );
 
-  return (
-    <div>
-      <PageHeader
-        title={user.name}
-        subtitle={user.email}
-        breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Users', path: '/users' }, { label: user.name }]}
-        actions={
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/users')}>
-              <ChevronLeft size={15} /> Back
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/users/${id}/edit`)} style={{ opacity: 0.6 }} title="Coming soon">
-              <Edit size={14} /> Edit
-            </button>
-            <button className="btn btn-danger btn-sm" style={{ opacity: 0.6 }} title="Coming soon">
-              <Trash2 size={14} /> Delete
-            </button>
-          </>
-        }
-      />
+  const [avatarBg, avatarClr] = avatarColors(user.name);
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24, alignItems: 'start' }}>
-        {/* Avatar card */}
-        <div className="card card-padded" style={{ textAlign: 'center' }}>
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader
+          title={user.name}
+          subtitle={user.email}
+          breadcrumbs={[{ label: 'Dashboard', path: '/' }, { label: 'Team Management', path: '/users' }, { label: user.name }]}
+          compact={isMobile}
+          actions={
+            <>
+              <button className="btn btn-secondary btn-sm" style={sharpCard} onClick={() => navigate('/users')}>
+                <ChevronLeft size={14} /> Back
+              </button>
+              <button className="btn btn-secondary btn-sm" style={sharpCard} onClick={() => navigate(`/users/${id}/edit`)}>
+                <Edit size={13} /> Edit
+              </button>
+              <button className="btn btn-danger btn-sm" style={{ ...sharpCard, opacity: 0.6, cursor: 'not-allowed' }} title="Coming soon" disabled>
+                <Trash2 size={13} /> Delete
+              </button>
+            </>
+          }
+        />
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
+        {/* Identity card */}
+        <div className="card card-padded" style={{ ...sharpCard, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
           <div style={{
-            width: 72, height: 72, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+            width: 56, height: 56, borderRadius: '50%', flexShrink: 0,
+            background: avatarBg, color: avatarClr,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24, fontWeight: 800, color: 'white',
-            margin: '0 auto 14px',
+            fontSize: 20, fontWeight: 800,
           }}>
             {getInitials(user.name)}
           </div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{user.name}</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 14 }}>#{user.id}</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6 }}>
-            <Badge type="role" value={user.role?.name} />
-            <Badge type="status" value={user.status} />
-            {user.hierarchy_level && <Badge type="level" value={user.hierarchy_level} />}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</h2>
+            <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 2 }}>#{user.id} · {user.designation || 'No designation set'}</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              <Badge type="role" value={user.role?.name} />
+              <Badge type="status" value={user.status} />
+              {user.hierarchy_level && <Badge type="level" value={user.hierarchy_level} />}
+            </div>
           </div>
         </div>
 
-        {/* Details sections */}
-        <div>
-          <Section title="Basic Information">
-            <Detail icon={User} label="Full Name" value={user.name} />
-            <Detail icon={Mail} label="Email" value={user.email} />
-            <Detail icon={Phone} label="Mobile" value={user.mobile} />
-          </Section>
+        {/* Stat row */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+          <StatCard title="Hierarchy Level" value={user.hierarchy_level || '—'} icon={Layers} color="var(--primary)" />
+          <StatCard title="Designation" value={user.designation || '—'} icon={Briefcase} color="var(--info)" />
+          <StatCard title="Last Login" value={user.last_login_at ? formatDateTime(user.last_login_at) : 'Never'} icon={Clock} color="var(--success)" />
+          <StatCard title="Member Since" value={user.created_at ? formatDateTime(user.created_at) : '—'} icon={Calendar} color="var(--warning)" />
+        </div>
 
-          <Section title="Role & Access">
-            <Detail icon={Shield} label="Role" value={user.role?.name} />
-            <Detail icon={Hash} label="Role ID" value={user.role_id?.toString()} />
-          </Section>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 320px', gap: 16, alignItems: 'start' }}>
+          {/* Main column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+            <div className="card card-padded" style={sharpCard}>
+              <h3 style={sectionTitleStyle}>Basic Information</h3>
+              <Detail icon={User} label="Full Name" value={user.name} />
+              <Detail icon={Mail} label="Email" value={user.email} />
+              <Detail icon={Phone} label="Mobile" value={user.mobile} last />
+            </div>
 
-          <Section title="Hierarchy Information">
-            <Detail icon={Layers} label="Hierarchy Level" value={user.hierarchy_level} />
-            <Detail icon={GitBranch} label="Hierarchy Path" value={formatHierarchyPath(user.hierarchy_path)} />
-            <Detail icon={User} label="Manager ID" value={user.manager_id?.toString()} />
-          </Section>
+            <div className="card card-padded" style={sharpCard}>
+              <h3 style={sectionTitleStyle}>Role & Hierarchy</h3>
+              <Detail icon={Shield} label="Role"><Badge type="role" value={user.role?.name} /></Detail>
+              <Detail icon={GitBranch} label="Hierarchy Path" value={formatHierarchyPath(user.hierarchy_path)} />
+              <Detail icon={User} label="Manager ID" value={user.manager_id?.toString()} last />
+            </div>
+          </div>
 
-          <Section title="DSA Information">
-            <Detail icon={Building2} label="DSA Organization" value={user.dsa?.name} />
-            <Detail icon={Hash} label="DSA ID" value={user.dsa_id?.toString()} />
-          </Section>
+          {/* Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="card card-padded" style={sharpCard}>
+              <h3 style={sectionTitleStyle}>Organization</h3>
+              <Detail icon={Building2} label="Tenant" value={user.tenant?.name} />
+              <Detail icon={Layers} label="Tenant Type" value={user.tenant?.type ? toTitleCase(user.tenant.type) : null} last />
+            </div>
 
-          <Section title="Meta">
-            <Detail icon={Calendar} label="Created At" value={formatDateTime(user.created_at)} />
-            <Detail icon={User} label="Status" value={user.status} />
-          </Section>
+            <div className="card card-padded" style={sharpCard}>
+              <h3 style={sectionTitleStyle}>Meta</h3>
+              <Detail icon={Hash} label="User ID" value={`#${user.id}`} mono />
+              <Detail icon={Hash} label="Role ID" value={user.role_id?.toString()} mono />
+              <Detail icon={Calendar} label="Created At" value={formatDateTime(user.created_at)} last />
+            </div>
+          </div>
         </div>
       </div>
     </div>

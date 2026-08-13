@@ -172,6 +172,13 @@ export const NAV_ITEMS = [
     roles: ['DSA_ADMIN'],
   },
   {
+    id: 'organization-profile',
+    label: 'Organization Profile',
+    path: '/organization',
+    icon: Building,
+    roles: ['DSA_ADMIN'],
+  },
+  {
     id: 'dsa-pipeline',
     label: 'Pipeline & Customers',
     path: '/customers',

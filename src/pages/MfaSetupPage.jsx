@@ -7,6 +7,7 @@ import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import OtpInput from '../components/OtpInput';
 import * as mfaApi from '../api/mfaService';
 
 /**
@@ -28,14 +29,23 @@ const MfaSetupPage = () => {
 
   const { setupToken, from } = location.state || {};
   const mode = setupToken ? 'fresh' : 'existing';
-  // Vite statically strips this branch out of production builds (`npm run
-  // build`) — the bypass button/handler ship in the bundle only when this
-  // app itself was built in dev mode (`npm run dev`), independent of the
-  // backend's NODE_ENV. The backend endpoints are the real gate (they
-  // hard-refuse with 403 once NODE_ENV === 'production'); this just keeps
-  // the button from ever being visible on a production build as a second
-  // layer, since the two apps are deployed/built separately.
-  const devBypassAvailable = import.meta.env.DEV;
+  // Two independent checks, both required: import.meta.env.DEV is Vite's own
+  // build-mode flag (false in any `vite build` production bundle, true for
+  // `vite dev` — the frontend and backend are deployed separately, so this
+  // alone can't reflect the backend's actual NODE_ENV) and
+  // backendDevBypassAvailable mirrors the backend's live setting (see
+  // mfa.controller.js#devBypassStatus) — the endpoints themselves
+  // (setupDevBypass/challengeDevBypass) independently re-check the same
+  // NODE_ENV server-side regardless, so this is purely a UI-visibility
+  // decision, not a security boundary.
+  const [backendDevBypassAvailable, setBackendDevBypassAvailable] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    mfaApi.getDevBypassStatus()
+      .then((data) => setBackendDevBypassAvailable(!!data.available))
+      .catch(() => setBackendDevBypassAvailable(false));
+  }, []);
+  const devBypassAvailable = import.meta.env.DEV && backendDevBypassAvailable;
 
   const [step, setStep] = useState('choose'); // choose | totp | totp-confirm | email | email-confirm | backup-codes
   const [password, setPassword] = useState('');
@@ -303,18 +313,8 @@ const MfaSetupPage = () => {
             Can't scan? Enter manually: <span className="font-mono font-bold">{totpData.secret}</span>
           </p>
         )}
-        <div className="flex items-center justify-center pb-3 mb-6 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={code}
-            onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setError(''); }}
-            onKeyDown={(e) => e.key === 'Enter' && confirmTotp()}
-            placeholder="••••••"
-            autoFocus
-            className="w-full bg-transparent border-0 outline-none text-center text-[#0a1628] dark:text-[#e6edf7] text-[22px] font-bold tracking-[0.4em] p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-          />
+        <div className="mb-6">
+          <OtpInput length={6} value={code} onChange={(v) => { setCode(v); setError(''); }} onEnter={confirmTotp} />
         </div>
         <TravelingBorderButton onClick={confirmTotp} disabled={status === 'loading'} className="w-full py-3.5 text-[15px] rounded-[10px]">
           {status === 'loading' ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Confirm & Enable'}
@@ -333,18 +333,8 @@ const MfaSetupPage = () => {
           </p>
         </div>
         {errorBanner}
-        <div className="flex items-center justify-center pb-3 mb-6 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={code}
-            onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setError(''); }}
-            onKeyDown={(e) => e.key === 'Enter' && confirmEmail()}
-            placeholder="••••••"
-            autoFocus
-            className="w-full bg-transparent border-0 outline-none text-center text-[#0a1628] dark:text-[#e6edf7] text-[22px] font-bold tracking-[0.4em] p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-          />
+        <div className="mb-6">
+          <OtpInput length={6} value={code} onChange={(v) => { setCode(v); setError(''); }} onEnter={confirmEmail} />
         </div>
         <TravelingBorderButton onClick={confirmEmail} disabled={status === 'loading'} className="w-full py-3.5 text-[15px] rounded-[10px]">
           {status === 'loading' ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Confirm & Enable'}

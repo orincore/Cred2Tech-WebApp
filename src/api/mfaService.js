@@ -5,6 +5,12 @@ import api from './axiosInstance';
 // stored session token — the user isn't fully logged in yet at this point.
 const withToken = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
 
+// Public, unauthenticated — whether the backend's own NODE_ENV currently
+// allows the dev-bypass endpoints to work at all. No token needed since this
+// is checked before a setup/challenge token even exists.
+export const getDevBypassStatus = () =>
+  api.get('/auth/mfa/dev-bypass-status').then((r) => r.data);
+
 // ---- First-time forced setup ----
 export const setupStatus = (setupToken) =>
   api.get('/auth/mfa/setup/status', withToken(setupToken)).then((r) => r.data);
@@ -29,20 +35,24 @@ export const setupDevBypass = (setupToken) =>
 export const challengeSendEmailOtp = (challengeToken) =>
   api.post('/auth/mfa/challenge/send-email-otp', {}, withToken(challengeToken)).then((r) => r.data);
 
-export const challengeVerifyTotp = (challengeToken, code) =>
-  api.post('/auth/mfa/challenge/verify-totp', { code }, withToken(challengeToken)).then((r) => r.data);
+// trustDevice: when true, the backend mints a 30-day "skip MFA on this
+// device" cookie on success (see trustedDevice.service.js) — the cookie
+// itself is httpOnly, so the frontend never sees or stores it directly,
+// the browser just sends it back automatically on the next /auth/login.
+export const challengeVerifyTotp = (challengeToken, code, trustDevice = false) =>
+  api.post('/auth/mfa/challenge/verify-totp', { code, trustDevice }, withToken(challengeToken)).then((r) => r.data);
 
-export const challengeVerifyEmailOtp = (challengeToken, code) =>
-  api.post('/auth/mfa/challenge/verify-email-otp', { code }, withToken(challengeToken)).then((r) => r.data);
+export const challengeVerifyEmailOtp = (challengeToken, code, trustDevice = false) =>
+  api.post('/auth/mfa/challenge/verify-email-otp', { code, trustDevice }, withToken(challengeToken)).then((r) => r.data);
 
 export const challengeSendMobileOtp = (challengeToken) =>
   api.post('/auth/mfa/challenge/send-mobile-otp', {}, withToken(challengeToken)).then((r) => r.data);
 
-export const challengeVerifyMobileOtp = (challengeToken, code) =>
-  api.post('/auth/mfa/challenge/verify-mobile-otp', { code }, withToken(challengeToken)).then((r) => r.data);
+export const challengeVerifyMobileOtp = (challengeToken, code, trustDevice = false) =>
+  api.post('/auth/mfa/challenge/verify-mobile-otp', { code, trustDevice }, withToken(challengeToken)).then((r) => r.data);
 
-export const challengeVerifyBackupCode = (challengeToken, code) =>
-  api.post('/auth/mfa/challenge/verify-backup-code', { code }, withToken(challengeToken)).then((r) => r.data);
+export const challengeVerifyBackupCode = (challengeToken, code, trustDevice = false) =>
+  api.post('/auth/mfa/challenge/verify-backup-code', { code, trustDevice }, withToken(challengeToken)).then((r) => r.data);
 
 // Local-dev only — backend hard-refuses with 403 when NODE_ENV === 'production'.
 export const challengeDevBypass = (challengeToken) =>
@@ -81,3 +91,9 @@ export const changePassword = ({ currentPassword, newPassword }) =>
 // ---- Admin-forced reset ----
 export const adminResetMfa = (userId) =>
   api.post(`/auth/mfa/admin/users/${userId}/reset`).then((r) => r.data);
+
+// ---- Trusted devices (Profile page) ----
+export const listTrustedDevices = () => api.get('/auth/trusted-devices').then((r) => r.data);
+
+export const revokeTrustedDevice = (deviceId) =>
+  api.post(`/auth/trusted-devices/${deviceId}/revoke`).then((r) => r.data);

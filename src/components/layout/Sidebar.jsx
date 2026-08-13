@@ -149,8 +149,15 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         }}>
           <Search size={14} color="var(--on-muted)" />
           <input
-            type="text"
-            name="nav-search"
+            // type="search" (not "text") is what actually stops Chrome's
+            // saved-profile autofill (name/email/address) here — Chrome
+            // routinely ignores autocomplete="off" on plain text inputs for
+            // its profile-data heuristic, but doesn't apply that heuristic
+            // to type="search" fields. WebkitAppearance neutralizes the
+            // native search-field styling (rounded corners, built-in clear
+            // button) so it still matches this custom look.
+            type="search"
+            name="nav-search-query"
             id="nav-search"
             placeholder="Search"
             value={searchQuery}
@@ -166,6 +173,8 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
               color: 'var(--on-surface)',
               flex: 1,
               width: '100%',
+              WebkitAppearance: 'none',
+              appearance: 'none',
             }}
           />
         </div>

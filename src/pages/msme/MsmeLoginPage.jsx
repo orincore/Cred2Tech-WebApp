@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -8,6 +8,7 @@ import { getErrorMessage } from '../../utils/helpers';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import Logo from '../../components/Logo';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
+import OtpInput from '../../components/OtpInput';
 
 const stepVariants = {
   enter: (dir) => ({ opacity: 0, x: dir > 0 ? 48 : -48 }),
@@ -33,15 +34,10 @@ const MsmeLoginPage = () => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const otpInputRef = useRef(null);
 
   useEffect(() => {
     document.title = 'Cred2Tech | MSME Portal';
   }, []);
-
-  useEffect(() => {
-    if (step === 2) otpInputRef.current?.focus();
-  }, [step]);
 
   if (user) return <Navigate to={redirectTarget} replace />;
 
@@ -255,19 +251,7 @@ const MsmeLoginPage = () => {
                       Change Number
                     </button>
                   </div>
-                  <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-                    <input
-                      ref={otpInputRef}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={6}
-                      value={otp}
-                      onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setApiError(''); }}
-                      onKeyDown={e => { if (e.key === 'Enter') handleVerifyOtp(e); }}
-                      placeholder="• • • • • •"
-                      className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[22px] font-bold tracking-[0.5em] text-center p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-                    />
-                  </div>
+                  <OtpInput length={6} value={otp} onChange={(v) => { setOtp(v); setApiError(''); }} onEnter={() => handleVerifyOtp()} />
                 </div>
 
                 <p className="text-[11px] text-[#0a1628] dark:text-[#e6edf7] font-medium text-center mb-8">

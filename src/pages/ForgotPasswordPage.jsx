@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
@@ -7,7 +7,8 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 
 const ForgotPasswordPage = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.email || '');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [apiError, setApiError] = useState('');

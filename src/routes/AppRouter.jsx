@@ -20,6 +20,7 @@ const UserDetailPage = lazy(() => import('../pages/UserDetailPage'));
 const CreateUserPage = lazy(() => import('../pages/CreateUserPage'));
 const CreateTenantPage = lazy(() => import('../pages/CreateTenantPage'));
 const TenantsListPage = lazy(() => import('../pages/TenantsListPage'));
+const OrganizationProfilePage = lazy(() => import('../pages/OrganizationProfilePage'));
 const EditUserPage = lazy(() => import('../pages/EditUserPage'));
 const SubDsaPayoutSetupPage = lazy(() => import('../pages/SubDsaPayoutSetupPage'));
 const HierarchyPage = lazy(() => import('../pages/HierarchyPage'));
@@ -161,6 +162,14 @@ const AppRouter = () => (
               element={
                 <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
                   <TenantsListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/organization"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN']}>
+                  <OrganizationProfilePage />
                 </ProtectedRoute>
               }
             />

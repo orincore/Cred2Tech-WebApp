@@ -35,6 +35,7 @@ export const ROUTE_TITLES = [
   // DSA / Admin shell
   { path: '/', title: 'Dashboard' },
   { path: '/profile', title: 'My Profile' },
+  { path: '/organization', title: 'Organization Profile' },
   { path: '/users/create', title: 'Create User' },
   { path: '/users/:id/edit', title: 'Edit User' },
   { path: '/users/:id/payout-setup', title: 'Sub-DSA Payout Setup' },

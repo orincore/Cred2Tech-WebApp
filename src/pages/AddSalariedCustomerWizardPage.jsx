@@ -4,6 +4,7 @@ import { caseService } from '../api/caseService';
 import { customerService } from '../api/customerService';
 import { otpService } from '../api/otpService';
 import FormField from '../components/ui/FormField';
+import OtpInput from '../components/OtpInput';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb } from 'lucide-react';
@@ -1142,16 +1143,11 @@ const AddSalariedCustomerWizardPage = () => {
                We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
              </p>
              <FormField label="Enter 6-Digit OTP" name="otpInput">
-               <input
-                 autoFocus
-                 type="text"
-                 pattern="\d*"
-                 maxLength={6}
-                 className="form-control"
-                 placeholder="000000"
+               <OtpInput
+                 length={6}
                  value={otpModal.otpInput}
-                 onChange={e => setOtpModal(prev => ({ ...prev, otpInput: e.target.value.replace(/\D/g, '') }))}
-                 style={{ fontSize: 24, letterSpacing: '0.5em', textAlign: 'center', padding: '16px 0', fontFamily: 'monospace' }}
+                 onChange={(v) => setOtpModal(prev => ({ ...prev, otpInput: v }))}
+                 onEnter={handleVerifyOtpSubmit}
                />
              </FormField>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28 }}>

@@ -1,8 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { login as loginApi, getMe } from '../api/authService';
 import * as mfaApi from '../api/mfaService';
 
 const AuthContext = createContext(null);
+
+// Auto-logout after this long with no user activity anywhere on the page.
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
 
 // Cookie helper functions
 const setCookie = (name, value, days) => {
@@ -123,12 +128,12 @@ export const AuthProvider = ({ children }) => {
     return await loginApi(email, password);
   }, []);
 
-  const verifyMfaChallenge = useCallback(async ({ challengeToken, method, code }) => {
+  const verifyMfaChallenge = useCallback(async ({ challengeToken, method, code, trustDevice = false }) => {
     let data;
-    if (method === 'TOTP') data = await mfaApi.challengeVerifyTotp(challengeToken, code);
-    else if (method === 'EMAIL_OTP') data = await mfaApi.challengeVerifyEmailOtp(challengeToken, code);
-    else if (method === 'MOBILE_OTP') data = await mfaApi.challengeVerifyMobileOtp(challengeToken, code);
-    else if (method === 'BACKUP_CODE') data = await mfaApi.challengeVerifyBackupCode(challengeToken, code);
+    if (method === 'TOTP') data = await mfaApi.challengeVerifyTotp(challengeToken, code, trustDevice);
+    else if (method === 'EMAIL_OTP') data = await mfaApi.challengeVerifyEmailOtp(challengeToken, code, trustDevice);
+    else if (method === 'MOBILE_OTP') data = await mfaApi.challengeVerifyMobileOtp(challengeToken, code, trustDevice);
+    else if (method === 'BACKUP_CODE') data = await mfaApi.challengeVerifyBackupCode(challengeToken, code, trustDevice);
     else throw new Error('Unknown verification method');
     return persistSession(data.token, data.user);
   }, [persistSession]);
@@ -146,6 +151,17 @@ export const AuthProvider = ({ children }) => {
   // return the same {token, user} shape a completed challenge does.
   const completeMfaSetup = useCallback((data) => {
     if (!data.setupComplete) return null;
+    return persistSession(data.token, data.user);
+  }, [persistSession]);
+
+  // Called when /auth/login itself returns loginComplete: true — this
+  // browser presented a still-valid "trust this device" cookie for this
+  // exact account, so the backend skipped the MFA challenge entirely and
+  // already issued a real session (auth.service.js loginUser +
+  // mfa.service.js finalizeTrustedDeviceLogin). Same {token, user} shape as
+  // a completed challenge/setup.
+  const applyTrustedDeviceLogin = useCallback((data) => {
+    if (!data.loginComplete) return null;
     return persistSession(data.token, data.user);
   }, [persistSession]);
 
@@ -169,6 +185,35 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  // Auto-logout after IDLE_TIMEOUT_MS with zero activity anywhere on the
+  // page — a single setTimeout that gets cleared and restarted on every
+  // activity event, rather than a polling interval, so it costs nothing
+  // between events regardless of how bursty mousemove/scroll get. Only
+  // armed while actually signed in — no point running it on /login itself,
+  // and it must disarm immediately on logout (this session's own action or
+  // a previous idle-timeout) so it can't loop.
+  useEffect(() => {
+    if (!token) return undefined;
+
+    let timeoutId;
+    const handleIdle = () => {
+      logout();
+      toast.error("You've been signed out due to inactivity.");
+    };
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleIdle, IDLE_TIMEOUT_MS);
+    };
+
+    resetTimer();
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+
+    return () => {
+      clearTimeout(timeoutId);
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimer));
+    };
+  }, [token, logout]);
+
   const value = {
     user,
     token,
@@ -178,6 +223,7 @@ export const AuthProvider = ({ children }) => {
     verifyMfaChallenge,
     devBypassMfaChallenge,
     completeMfaSetup,
+    applyTrustedDeviceLogin,
     refreshUser,
     syncFromStorage,
     logout,

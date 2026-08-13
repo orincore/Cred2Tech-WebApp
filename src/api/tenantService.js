@@ -16,6 +16,16 @@ export const updateTenantStatus = async (id, status) => {
   return response.data;
 };
 
+export const getTenantById = async (id) => {
+  const response = await api.get(`/tenants/${id}`);
+  return response.data;
+};
+
+export const updateTenant = async (id, tenantData) => {
+  const response = await api.put(`/tenants/${id}`, tenantData);
+  return response.data;
+};
+
 // Public — no auth token required
 export const publicRegisterDSA = async (data) => {
   // We use the base axios instance without the interceptor to avoid injecting tokens on public routes
