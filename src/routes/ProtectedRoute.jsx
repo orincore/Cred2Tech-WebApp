@@ -29,7 +29,7 @@ const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
 
   if (isLoading || isValidating) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <LoadingSpinner size={40} fullPage />
       </div>
     );

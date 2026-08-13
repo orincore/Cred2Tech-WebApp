@@ -32,7 +32,7 @@ const UnauthorizedPage = () => {
 
   if (isLoading || hasLegitHome) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <LoadingSpinner size={40} fullPage />
       </div>
     );
@@ -40,7 +40,7 @@ const UnauthorizedPage = () => {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

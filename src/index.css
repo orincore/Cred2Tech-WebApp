@@ -206,6 +206,7 @@ html, body {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ---- Sidebar Nav ---- */
@@ -267,9 +268,16 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 }
 
 /* ---- App Layout ---- */
+/* 100vh on iOS Safari is sized as if the address bar/toolbar were always
+   hidden, so a fixed 100vh shell with overflow:hidden gets clipped by that
+   chrome whenever it's visible — the app's bottom section (sidebar
+   profile/logout, page content) renders underneath it. 100dvh tracks the
+   actual visible viewport instead; the 100vh line stays first as a fallback
+   for the handful of older browsers that don't support dvh yet. */
 .app-shell {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -277,6 +285,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
   flex: 1;
   margin-left: var(--sidebar-width);
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -285,6 +294,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .page-content {
   flex: 1;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;

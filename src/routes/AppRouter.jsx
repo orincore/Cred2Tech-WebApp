@@ -67,7 +67,7 @@ const MsmeTransactionsPage = lazy(() => import('../pages/msme/MsmeTransactionsPa
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
 const PageLoader = () => (
-  <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <LoadingSpinner size={40} fullPage />
   </div>
 );

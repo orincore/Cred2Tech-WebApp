@@ -89,8 +89,8 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     <aside style={{
       width: 'var(--sidebar-width)',
       background: 'var(--sidebar-bg)',
-      minHeight: '100vh',
-      height: '100vh',
+      minHeight: '100dvh',
+      height: '100dvh',
       position: 'fixed',
       top: 0,
       left: sidebarVisible ? 0 : 'calc(-1 * var(--sidebar-width))',
