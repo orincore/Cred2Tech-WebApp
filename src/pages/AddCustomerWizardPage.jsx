@@ -536,15 +536,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // hasn't landed yet on this render.
     if (currentStep > 3 || formData.is_salaried) return;
     const pan = formData.business_pan;
-    // Mobile must be a genuine 10-digit number, not just non-empty — this
-    // gate fires ensureDraftSaved()/createCase(), which snapshots
-    // formData.business_mobile onto the new Applicant row right then. A
-    // truthy-only check let this fire on the very first digit typed (e.g.
-    // mobile "8"), permanently baking a 1-digit mobile onto the applicant —
-    // later edits to the field only ever update Customer.business_mobile,
-    // never that already-created Applicant row, so bureau/obligation pulls
-    // silently kept failing against an invalid mobile number forever after.
-    const ready = pan && pan.length === 10 && formData.business_mobile.length === 10;
+    // Gated on mobile_verified (OTP actually confirmed), not just a
+    // 10-digit mobile being typed. This was firing /external/pan/verify —
+    // which pulls the PAN holder's real name/DOB from the bureau — the
+    // moment a 10-digit number was entered, before the applicant had ever
+    // proven they own that number. GST auto-fetch below is gated on
+    // pan_verified, so fixing the OTP gate here fixes that pull too,
+    // transitively.
+    const ready = pan && pan.length === 10 && formData.mobile_verified;
     if (
       ready &&
       !formData.pan_verified &&
@@ -557,7 +556,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       panAutoVerifyAttempted.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.business_pan, formData.business_mobile, formData.pan_verified, panVerifying, formData.is_salaried]);
+  }, [currentStep, formData.business_pan, formData.business_mobile, formData.mobile_verified, formData.pan_verified, panVerifying, formData.is_salaried]);
 
   // Auto-fetch GST records right after PAN verification succeeds — no manual
   // "Fetch GST" click needed. Same guard pattern as above.
@@ -601,8 +600,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     formData.applicants.forEach((app, idx) => {
       if (app.type !== 'CO_APPLICANT') return;
       const pan = app.pan_number;
+      // Same OTP gate as the primary applicant above — this had no gate at
+      // all, auto-verifying a co-applicant's PAN (pulling their real
+      // name/DOB from the bureau) the instant 10 digits were typed, with no
+      // proof they own the mobile number on file for them yet.
       if (
         pan && pan.length === 10 &&
+        app.otp_verified &&
         !app.pan_verified &&
         !coappPanVerifyingMap[idx] &&
         coappPanAutoVerifyAttempted.current[idx] !== pan
@@ -1274,7 +1278,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             <AlertCircle size={13} /> PAN verification failed — fix and re-enter
                           </span>
                         ) : formData.business_pan?.length === 10 ? (
-                          <PullingIndicator label={formData.business_mobile ? 'Queued…' : 'Add mobile number to continue…'} />
+                          <PullingIndicator label={formData.mobile_verified ? 'Queued…' : 'Verify mobile via OTP to continue…'} />
                         ) : null}
 
                         {formData.pan_verified && (
