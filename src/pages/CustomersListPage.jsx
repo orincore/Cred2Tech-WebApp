@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
+import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
+import BulkUploadModal from '../components/customers/BulkUploadModal';
 import PageHeader from '../components/ui/PageHeader';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import { useTheme } from '../context/ThemeContext';
@@ -208,6 +209,7 @@ const CustomersListPage = () => {
   const [page, setPage] = useState(1);
 
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
   // Only search + sort go to the backend — stage/lender/entity/alert are
   // faceted client-side below, since the pipeline endpoint only accepts one
@@ -288,16 +290,30 @@ const CustomersListPage = () => {
           title="Pipeline & Customers"
           subtitle={`${stats.totalCases} active cases · ${stats.totalCustomers} customers`}
           actions={
-            <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <UserPlus size={13} /> Add New Customer
-              </div>
-            </TravelingBorderButton>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsBulkUploadModalOpen(true)}
+              >
+                <Upload size={13} /> Bulk Upload
+              </button>
+              <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <UserPlus size={13} /> Add New Customer
+                </div>
+              </TravelingBorderButton>
+            </div>
           }
         />
       </div>
 
       <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />
+      <BulkUploadModal
+        isOpen={isBulkUploadModalOpen}
+        onClose={() => setIsBulkUploadModalOpen(false)}
+        onSuccess={() => fetchPipeline()}
+      />
 
       {/* ─── Filter row ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
