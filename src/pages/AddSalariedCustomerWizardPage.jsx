@@ -793,11 +793,18 @@ const AddSalariedCustomerWizardPage = () => {
                             <Pencil size={13} /> Edit
                           </button>
                         </div>
-                      ) : (
+                      ) : formData.mobile_verified ? (
+                        // Only reachable once mobile OTP is verified — matches the
+                        // co-applicant section just below, which already hides its
+                        // own Verify PAN button behind app.otp_verified. This button
+                        // previously had no such gate: nothing stopped Verify PAN
+                        // (a real bureau pull of the applicant's name/DOB) from being
+                        // clicked before the applicant had proven they own the
+                        // mobile number on file.
                         <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan} className="btn btn-secondary">
                           {panVerifying ? 'Wait...' : 'Verify PAN'}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </FormField>
 
