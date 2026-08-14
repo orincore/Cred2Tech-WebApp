@@ -953,17 +953,31 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         return;
       }
 
+      // PARTIAL_SUCCESS can mean the independent obligations pull succeeded
+      // while THIS applicant's credit score call failed — that's not a
+      // completed CIBIL check for them, so bureau_fetched must reflect
+      // whether a score actually came back, not just that the request as a
+      // whole didn't throw. The toast above already warns on
+      // PARTIAL_SUCCESS; this keeps the status badge consistent with it.
+      const targetApp = formData.applicants.find(a => a.id === applicantId);
+      const newScore = targetApp?.type === 'PRIMARY'
+        ? data.applicantScore
+        : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
+
       if (data.status === 'PARTIAL_SUCCESS') {
         toast.error(`Partial failure: ${data.errors?.[0]?.error || 'Some applicants failed'}`);
-      } else {
+      } else if (newScore) {
         toast.success("Bureau pull success!");
+      } else {
+        toast.error('Bureau score not returned — CIBIL check incomplete for this applicant.');
       }
+
+      if (!newScore) return;
 
       // Update local state to reflect bureau_fetched and the new score
       const updatedApps = formData.applicants.map(a => {
         if (a.id === applicantId) {
-          const newScore = a.type === 'PRIMARY' ? data.applicantScore : data.coApplicantScores?.find(cs => cs.applicantId === a.id)?.score;
-          return { ...a, bureau_fetched: true, cibil_score: newScore || a.cibil_score };
+          return { ...a, bureau_fetched: true, cibil_score: newScore };
         }
         return a;
       });

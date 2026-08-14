@@ -225,4 +225,30 @@ export const caseService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+
+  downloadBulkUploadTemplate: async () => {
+    const response = await axiosInstance.get('/cases/bulk-upload/template', {
+      responseType: 'blob'
+    });
+    const blob = new Blob([response.data], {
+      type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Cred2Tech_Case_Bulk_Upload_Template.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  uploadBulkCases: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await axiosInstance.post('/cases/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
 };

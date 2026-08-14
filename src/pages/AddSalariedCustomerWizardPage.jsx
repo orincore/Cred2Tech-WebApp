@@ -203,9 +203,14 @@ const AddSalariedCustomerWizardPage = () => {
 
       const restoredApplicants = applicants.map(app => ({
         ...app,
-        bureau_fetched: app.bureau_fetched ||
-          (app.bureau_checks?.length > 0) ||
-          (app.obligations?.length > 0),
+        // `bureau_checks.length > 0` is true even for a FAILED pull attempt
+        // (it's just "a row exists in bureau_verifications"), and
+        // `obligations.length > 0` reflects the independent Experian pull,
+        // not the credit score check — neither means the CIBIL score was
+        // actually retrieved. The server's own `bureau_fetched` is only set
+        // true on a successful score fetch; `cibil_score` presence is kept
+        // as a defensive fallback for older records.
+        bureau_fetched: app.bureau_fetched === true || !!app.cibil_score,
         has_ocr: app.salary_ocr_results?.length > 0
       }));
 
@@ -538,12 +543,30 @@ const AddSalariedCustomerWizardPage = () => {
         toast.error(data.errors?.[0]?.error || 'Bureau fetch failed');
         return;
       }
+
+      // status can be SUCCESS, PARTIAL_SUCCESS, or FAILED — PARTIAL_SUCCESS
+      // covers "the independent obligations pull succeeded but the credit
+      // score call itself failed" (e.g. a vendor-side error for this
+      // applicant). That's not a completed CIBIL check, even though the
+      // request as a whole didn't throw, so success must be judged by
+      // whether THIS applicant's score actually came back — not by the
+      // overall status string alone.
+      const targetApp = formData.applicants.find(a => a.id === applicantId);
+      const newScore = targetApp?.type === 'PRIMARY'
+        ? data.applicantScore
+        : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
+
+      if (!newScore) {
+        const scoreError = data.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
+        toast.error(scoreError?.error || 'Bureau score not returned — CIBIL check incomplete for this applicant.');
+        return;
+      }
+
       toast.success('Bureau pull success!');
 
       const updatedApps = formData.applicants.map(a => {
         if (a.id !== applicantId) return a;
-        const newScore = a.type === 'PRIMARY' ? data.applicantScore : data.coApplicantScores?.find(cs => cs.applicantId === a.id)?.score;
-        return { ...a, bureau_fetched: true, cibil_score: newScore || a.cibil_score };
+        return { ...a, bureau_fetched: true, cibil_score: newScore };
       });
       setFormData(prev => ({ ...prev, applicants: updatedApps }));
     } catch (err) {
@@ -555,9 +578,10 @@ const AddSalariedCustomerWizardPage = () => {
 
   const handleStep2Submit = async (e) => {
     e.preventDefault();
-    const anyBureauReady = formData.applicants.some(a =>
-      a.bureau_fetched || (a.bureau_checks?.length > 0) || (a.obligations?.length > 0)
-    );
+    // a.bureau_fetched is now sourced correctly (see restoredApplicants /
+    // handleRunBureau above) — it only reflects an actual successful score
+    // fetch, not merely an attempted or partially-failed one.
+    const anyBureauReady = formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score);
 
     if (!anyBureauReady) {
       return toast.error('Bureau pull must be completed for at least one applicant before proceeding.');
