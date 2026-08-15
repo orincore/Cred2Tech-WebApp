@@ -165,6 +165,168 @@ function ProposalBadge({ status }) {
   );
 }
 
+// ─── Income Sources Panel (dev-only) ──────────────────────────────────────────
+// Case-level (not per-lender) — shows every raw income input the ESR engine
+// had available: the case_esr_financials snapshot, the data-pull status for
+// each vendor source (GST/ITR/Bank/Bureau), and any manual income entries.
+// This is the *input* side; FullCalculationTrace below (per lender/scheme)
+// is the *output* side of the same calculation.
+const PULL_STATUS_COLOR = {
+  COMPLETED: 'var(--success)', REPORT_READY: 'var(--success)', CALLBACK_RECEIVED: 'var(--success)',
+  PENDING: 'var(--text-tertiary)', IN_PROGRESS: 'var(--info)', FAILED: 'var(--error)',
+};
+function PullStatusBadge({ label, status }) {
+  const color = PULL_STATUS_COLOR[status] || 'var(--text-tertiary)';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', border: `1px solid ${color}`, color }}>
+      {label}: {status || 'PENDING'}
+    </span>
+  );
+}
+function IncomeRow({ label, value }) {
+  if (value === null || value === undefined || value === '') return null;
+  return <div style={TRACE_ROW_STYLE}><span>{label}</span><span style={{ fontWeight: 700 }}>{value}</span></div>;
+}
+
+function IncomeSourcesPanel({ caseDetail }) {
+  if (!caseDetail) return null;
+  const esr = caseDetail.esr_financials;
+  const pull = caseDetail.data_pull_status;
+  const primaryApplicant = (caseDetail.applicants || []).find(a => a.type === 'PRIMARY') || caseDetail.applicants?.[0];
+  const allIncomeEntries = (caseDetail.applicants || []).flatMap(a =>
+    (a.income_entries || []).map(e => ({ ...e, applicantName: a.name || a.type }))
+  );
+  const allSalarySlips = (caseDetail.applicants || []).flatMap(a => a.salary_ocr_results || []);
+
+  if (!esr) {
+    return (
+      <div style={{ ...TRACE_SECTION_STYLE, marginBottom: 20, background: 'var(--bg-elevated)' }}>
+        <div style={{ ...TRACE_TITLE_STYLE, color: 'var(--warning)' }}>Income Sources (dev build only)</div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>No case_esr_financials snapshot yet — run ESR extraction first.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 20, border: '1px solid var(--warning)' }}>
+      <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Zap size={13} color="var(--warning)" />
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Income Sources — what was captured for this calculation (dev build only)
+        </span>
+      </div>
+
+      <div style={{ padding: 12 }}>
+        {/* Data pull status strip */}
+        {pull && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <PullStatusBadge label="GST" status={pull.gst_status} />
+            <PullStatusBadge label="ITR" status={pull.itr_status} />
+            <PullStatusBadge label="Bank" status={pull.bank_status} />
+            <PullStatusBadge label="Bureau" status={pull.bureau_status} />
+            <PullStatusBadge label="PAN" status={pull.pan_status} />
+          </div>
+        )}
+
+        {/* Primary selection */}
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>Primary Income Selected</div>
+          <IncomeRow label="Method" value={esr.selected_income_method} />
+          <IncomeRow label="Monthly income used" value={fmt(esr.selected_monthly_income)} />
+          <IncomeRow label="Employment type" value={esr.employment_type} />
+          <IncomeRow label="Constitution" value={esr.constitution_type} />
+          <IncomeRow label="Business vintage" value={esr.business_vintage_months != null ? `${esr.business_vintage_months} months` : null} />
+        </div>
+
+        {/* Salaried */}
+        {(esr.salaried_gross_monthly || esr.salaried_net_monthly || esr.salaried_income) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Salaried Income</div>
+            <IncomeRow label="Source" value={esr.salaried_income_source} />
+            <IncomeRow label="Salary slips used" value={esr.salaried_slip_count} />
+            <IncomeRow label="Gross monthly" value={fmt(esr.salaried_gross_monthly)} />
+            <IncomeRow label="Net monthly" value={fmt(esr.salaried_net_monthly)} />
+            <IncomeRow label="Bank-verified net salary" value={fmt(esr.bank_net_salary_monthly)} />
+            <IncomeRow label="Incentive income (3mo avg)" value={fmt(esr.salaried_incentive_income)} />
+            <IncomeRow label="Annual bonus" value={fmt(esr.salaried_annual_bonus)} />
+            <IncomeRow label="Other income" value={fmt(esr.salaried_other_income)} />
+            {allSalarySlips.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                {allSalarySlips.length} salary slip OCR result(s) on file
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ITR / Net Profit */}
+        {(esr.itr_pat || esr.itr_gross_receipts) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>ITR / Net Profit</div>
+            <IncomeRow label="PAT (latest year)" value={fmt(esr.itr_pat)} />
+            <IncomeRow label="PAT (previous year)" value={fmt(esr.itr_pat_previous_year)} />
+            <IncomeRow label="Gross receipts (latest year)" value={fmt(esr.itr_gross_receipts)} />
+            <IncomeRow label="Gross receipts (previous year)" value={fmt(esr.itr_gross_receipts_previous_year)} />
+            <IncomeRow label="Depreciation addback" value={fmt(esr.itr_depreciation)} />
+            <IncomeRow label="Finance cost (interest) addback" value={fmt(esr.itr_finance_cost)} />
+            <IncomeRow label="Director remuneration addback" value={fmt(esr.itr_remuneration)} />
+            <IncomeRow label="Computed net profit income" value={fmt(esr.net_profit_income)} />
+          </div>
+        )}
+
+        {/* GST */}
+        {esr.gst_avg_monthly_sales != null && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>GST</div>
+            <IncomeRow label="Average monthly sales" value={fmt(esr.gst_avg_monthly_sales)} />
+            <IncomeRow label="Industry type" value={esr.gst_industry_type} />
+            <IncomeRow label="Industry margin (stored)" value={fmtPct(esr.gst_industry_margin)} />
+            <IncomeRow label="Computed GST income" value={fmt(esr.gst_income)} />
+          </div>
+        )}
+
+        {/* Banking */}
+        {(esr.bank_avg_balance || esr.bank_avg_monthly_credit) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Bank Statement Analysis</div>
+            <IncomeRow label="Average balance (ABB)" value={fmt(esr.bank_avg_balance)} />
+            <IncomeRow label="Average monthly credit" value={fmt(esr.bank_avg_monthly_credit)} />
+            <IncomeRow label="Total credits" value={fmt(esr.bank_total_credits)} />
+            <IncomeRow label="Computed monthly income" value={fmt(esr.bank_monthly_income)} />
+            <IncomeRow label="Computed banking income" value={fmt(esr.banking_income)} />
+          </div>
+        )}
+
+        {/* Net worth */}
+        {esr.net_worth != null && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Net Worth</div>
+            <IncomeRow label="Net worth" value={fmt(esr.net_worth)} />
+          </div>
+        )}
+
+        {/* Manual / other income entries */}
+        {allIncomeEntries.length > 0 && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Manual / Other Income Entries</div>
+            {allIncomeEntries.map((e, i) => (
+              <div key={i} style={TRACE_ROW_STYLE}>
+                <span>{e.income_type || e.description || 'Entry'} ({e.applicantName})</span>
+                <span style={{ fontWeight: 700 }}>{fmt(e.annual_amount)}/yr</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Existing obligations */}
+        <div style={{ ...TRACE_SECTION_STYLE, borderBottom: 'none' }}>
+          <div style={TRACE_TITLE_STYLE}>Obligations</div>
+          <IncomeRow label="Existing obligations (monthly EMI)" value={fmt(esr.existing_obligations)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Full Calculation Trace (dev-only) ────────────────────────────────────────
 // Surfaces the complete scheme_evaluations object the engine actually
 // computed — income composition, FOIR/DSCR resolution, LTV resolution,
@@ -728,6 +890,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [generating, setGenerating] = useState(false);
   const [esr, setEsr]               = useState(null);
   const [proposals, setProposals]   = useState([]);
+  const [caseDetail, setCaseDetail] = useState(null); // dev-build only — raw income-source data (GST/ITR/Bank/Salaried)
   const [lenderFilter, setLenderFilter]         = useState('all');
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [showIneligible, setShowIneligible] = useState(true);
@@ -748,13 +911,18 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [esrResult, proposalsResult] = await Promise.allSettled([
+      // getCaseById is a fairly heavy call (full applicant/customer income
+      // sub-records) only needed to render IncomeSourcesPanel below — skip
+      // it entirely outside dev builds rather than fetch data that never renders.
+      const [esrResult, proposalsResult, caseResult] = await Promise.allSettled([
         caseService.getESR(caseId),
         caseService.listProposals(caseId),
+        IS_DEV_BUILD ? caseService.getCaseById(caseId) : Promise.resolve(null),
       ]);
       if (esrResult.status === 'fulfilled') setEsr(esrResult.value);
       else if (esrResult.reason?.response?.status !== 404) toast.error('Failed to load ESR');
       if (proposalsResult.status === 'fulfilled') setProposals(proposalsResult.value.proposals || []);
+      if (caseResult.status === 'fulfilled') setCaseDetail(caseResult.value);
     } finally {
       setLoading(false);
     }
@@ -901,6 +1069,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           </button>
         </motion.div>
       )}
+
+      {IS_DEV_BUILD && esr && <IncomeSourcesPanel caseDetail={caseDetail} />}
 
       {/* Filter bar */}
       {esr && lenders.length > 0 && (
