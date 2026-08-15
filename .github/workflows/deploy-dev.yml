@@ -1,0 +1,90 @@
+name: Deploy Dev
+
+# Automatic — any push to any branch except main builds and deploys to
+# dev.app.cred2tech.com (VPS-hosted, static nginx). Production (main) stays
+# on Vercel untouched; this workflow never touches it and never runs for it.
+on:
+  push:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: deploy-webapp-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: npm run build
+
+      - name: Set release metadata
+        id: meta
+        run: |
+          echo "release_ts=$(date +%Y%m%d_%H%M%S)" >> "$GITHUB_OUTPUT"
+          echo "branch=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host key (same VPS as the backend repo's workflows) — see
+          # Cred2Tech/.github/workflows/deploy-prod.yml for why this is
+          # pinned instead of scanned at runtime (connection-rate flake).
+          printf '%s\n' "187.127.150.119 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC2gEbMhQjLqh1Y3CC6oy5rmZvhG6n85Mkw+ftXxA9RU51NNZFQHFYuu9dl4hrkt07v6hC9lanNR/NPPxSstFUzgLDdU8gEZjCaq0JX1WCfJLoWpBCPVmRBR7rUqqWu3KXy628BmRGu3TEJ1dmvH309jIid0dGLnig7a+utOn8zhgxNpkMNor945P4mgHrXRN+Og0ljg1DbqVtrPJ7G26dGer4vDdpm1LTdsYfCI/CChdG9/c5TUtlJITYgm7kDj8FLblA+mpFIX071qO+DAIEWald7KqEbbUb1RIvDENkE8et+5iMklAIk09rsXAqx1NZYlWW3hD7AKVLK1t4duJCtaPhFbmKleQGJ+oaxu/7N7OTzMo2mRdSUY3qdI2d+80iOYdou26UE/L7jJ8pe/1f7xh5tZ/MipB8JLWk2JX72OzUWqdvlYxOOyqvD+rS0pVoZGUK+9t3FH8JxbDOYArgXFoE+qS7Q17D6UXMXw8pntmHKKU2OQOZ9/gDBGCfODtE=" >> ~/.ssh/known_hosts
+          printf '%s\n' "187.127.150.119 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXYdZ7LNWwSouKUAO7rWhT8YyAvU2a86Yt8o9fEvjkmt+8dvXoiIcHHgAWKteWQiiZ8XErhO8uOaDAfEFnWEv8=" >> ~/.ssh/known_hosts
+          printf '%s\n' "187.127.150.119 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAgCzT99SI9ryEH9PuMh1tCkSDOGMaYjFKmVqgApHAbZ" >> ~/.ssh/known_hosts
+
+      - name: Create remote release directory
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "mkdir -p /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }}"
+
+      - name: Rsync build output
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            dist/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }}/"
+
+      - name: Switch symlink + cleanup old releases
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s <<EOF
+            set -e
+            ln -sfn /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }} /opt/cred2tech/webapp-dev/current
+            echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ github.sha }}"
+            cd /opt/cred2tech/webapp-dev/releases
+            ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf
+            echo "Cleanup done. Retained last 5 releases."
+          EOF
+
+      - name: Smoke test
+        run: |
+          # Runs on the VPS itself, not the GH runner — public DNS for
+          # dev.app.cred2tech.com may not point here yet, so this checks
+          # nginx's own vhost routing directly via Host header instead.
+          CODE=$(ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "curl -s -o /dev/null -w '%{http_code}' -H 'Host: dev.app.cred2tech.com' http://localhost/")
+          echo "HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "::error::Smoke test failed: expected 200, got $CODE"; exit 1; }
+
+      - name: Clean up local key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
