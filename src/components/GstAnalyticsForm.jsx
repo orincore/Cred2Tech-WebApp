@@ -22,7 +22,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode }) => {
+const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -328,7 +328,14 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                  </div>
             )}
 
-            <button type="button" onClick={handleCreateRequest} disabled={loading || !formData.gstin} className="btn btn-primary" style={{ marginBottom: 24 }}>
+            <button
+                type="button"
+                onClick={handleCreateRequest}
+                disabled={disabled || loading || !formData.gstin}
+                className="btn btn-primary"
+                style={{ marginBottom: 24 }}
+                title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
+            >
                 {loading ? 'Creating...' : isMsme ? 'Submit' : 'Submit (~1 Credit)'}
             </button>
             </>
