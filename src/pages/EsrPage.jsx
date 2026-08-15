@@ -369,7 +369,7 @@ const TRACE_HANDLED_KEYS = new Set([
   'final_tenure_used', 'lender_max_tenure_months', 'max_tenure_months', 'age_based_tenure_limit_months',
   'underwriting_roi_used', 'roi_min', 'roi_max', 'pf_min', 'pf_max',
   'hdfc_pos_deduction_entries', 'obligation_exclusion_notes', 'hdfc_unsecured_pos_deduction',
-  'surrogate_program_notes',
+  'surrogate_program_notes', 'raw_trace_text',
 ]);
 
 function FullCalculationTrace({ ev }) {
@@ -379,6 +379,7 @@ function FullCalculationTrace({ ev }) {
   const legacyWarnings = (ev.warnings || []).filter((w) => w.startsWith('Parser warning'));
   const realWarnings = (ev.warnings || []).filter((w) => !w.startsWith('Parser warning'));
   const [showLegacy, setShowLegacy] = useState(false);
+  const [showRawTrace, setShowRawTrace] = useState(false);
 
   const otherFields = Object.entries(ev)
     .filter(([k, v]) => !TRACE_HANDLED_KEYS.has(k) && v !== null && v !== undefined && v !== '' && formatTraceValue(v) !== null)
@@ -491,6 +492,31 @@ function FullCalculationTrace({ ev }) {
             {showLegacy ? 'Hide' : 'Show'} {legacyWarnings.length} legacy parameter-parsing notes
           </button>
           {showLegacy && legacyWarnings.map((w, i) => <div key={i} style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>• {w}</div>)}
+        </div>
+      )}
+
+      {ev.raw_trace_text && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => setShowRawTrace(!showRawTrace)} style={{ fontSize: 10, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            {showRawTrace ? 'Hide' : 'Show'} complete raw calculation log for this method
+          </button>
+          {showRawTrace && (
+            <pre style={{
+              marginTop: 6,
+              padding: 10,
+              fontSize: 10.5,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 480,
+              overflowY: 'auto',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-secondary)'
+            }}>
+              {ev.raw_trace_text}
+            </pre>
+          )}
         </div>
       )}
     </div>
