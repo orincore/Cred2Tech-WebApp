@@ -418,6 +418,9 @@ function FullCalculationTrace({ ev }) {
           <div style={TRACE_ROW_STYLE}><span>Composed income</span><span>{fmt(foir.composed_income)}</span></div>
           <div style={TRACE_ROW_STYLE}><span>Net obligations</span><span>{fmt(foir.net_obligations)}</span></div>
           <div style={TRACE_ROW_STYLE}><span>FOIR allowed / actual</span><span>{fmtPct(foir.foir_allowed_percent)} / {fmtPct(foir.foir_actual_percent)}</span></div>
+          {foir.foir_rule && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '2px 0 6px' }}>{foir.foir_rule}</div>
+          )}
           <div style={TRACE_ROW_STYLE}><span>Maximum eligible EMI</span><span>{fmt(foir.maximum_eligible_emi)}</span></div>
           <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none' }}><span>Proposed EMI</span><span>{fmt(foir.proposed_emi)}</span></div>
         </div>
