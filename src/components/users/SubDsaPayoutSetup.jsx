@@ -55,6 +55,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
   const [overrides, setOverrides] = useState([]);
   const [slabs, setSlabs] = useState([]);
   const [schemes, setSchemes] = useState([]);
+  const [effectiveFrom, setEffectiveFrom] = useState('');
   const [mtd, setMtd] = useState({ cases: 0, dsa_earned: 0 });
 
   useEffect(() => {
@@ -70,6 +71,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           setTdsApplicable(cfg.tds_applicable !== false);
           setOverrides((cfg.overrides || []).map((o) => ({ ...o, products: o.products || '' })));
           setSlabs(cfg.case_count_slabs || []);
+          setEffectiveFrom(cfg.effective_from ? cfg.effective_from.split('T')[0] : '');
           setSchemes((cfg.special_schemes || []).map((s) => ({
             ...s,
             valid_from: s.valid_from ? s.valid_from.split('T')[0] : '',
@@ -95,6 +97,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
         calculation_base: calculationBase,
         payout_trigger: payoutTrigger,
         tds_applicable: tdsApplicable,
+        effective_from: effectiveFrom,
         overrides,
         slabs,
         schemes,
@@ -163,6 +166,11 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
             <option value="no">No — gross payout</option>
           </select>
           <div style={sectionHint}>TDS at applicable rate (Sec 194H)</div>
+        </div>
+        <div>
+          <label style={labelStyle}>Effective From *</label>
+          <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} style={fieldStyle} />
+          <div style={sectionHint}>Start date for this overall configuration</div>
         </div>
       </div>
 
