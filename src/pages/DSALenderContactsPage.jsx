@@ -228,6 +228,7 @@ export default function DSALenderContactsPage() {
     return {
       payout_basis: 'NET_DISBURSED',
       commission_type: 'HYBRID',
+      effective_from: '',
       volume_slabs: [],
       case_count_slabs: [],
       special_schemes: []
@@ -253,6 +254,7 @@ export default function DSALenderContactsPage() {
         payout_basis: stateToSave.payout_basis,
         commission_type: stateToSave.commission_type || 'HYBRID',
         is_active: true,
+        effective_from: stateToSave.effective_from || '',
         volume_slabs: stateToSave.volume_slabs || [],
         case_count_slabs: stateToSave.case_count_slabs || [],
         special_schemes: stateToSave.special_schemes || []
@@ -525,6 +527,10 @@ export default function DSALenderContactsPage() {
                               onChange={() => updateRuleEdit(lender.id, activeProduct, { payout_basis: 'GROSS_SANCTIONED' })}/>
                             Gross Sanctioned
                           </label>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, flexWrap: 'wrap' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Effective From:</span>
+                          <input type="date" value={ruleState.effective_from ? ruleState.effective_from.split('T')[0] : ''} onChange={e => updateRuleEdit(lender.id, activeProduct, { effective_from: e.target.value })} style={{ ...inputStyle, width: 140, padding: '4px 0', borderBottom: '1px solid var(--border)' }} />
                         </div>
                       </div>
 

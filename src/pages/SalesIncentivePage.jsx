@@ -209,7 +209,7 @@ export default function SalesIncentivePage() {
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [ruleForm, setRuleForm] = useState({
     hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '',
-    calculation_base: 'DISBURSED_AMOUNT', volume_slabs: [], case_count_slabs: [],
+    calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [],
   });
 
   const fetchData = useCallback(async () => {
@@ -260,7 +260,7 @@ export default function SalesIncentivePage() {
         await salesIncentiveService.createRule(ruleForm);
         toast.success('Rule created');
       }
-      setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', volume_slabs: [], case_count_slabs: [] });
+      setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [] });
       setEditingRuleId(null);
       fetchData();
     } catch (err) {
@@ -269,7 +269,7 @@ export default function SalesIncentivePage() {
   };
 
   const handleCancelEdit = () => {
-    setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', volume_slabs: [], case_count_slabs: [] });
+    setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [] });
     setEditingRuleId(null);
   };
 
@@ -452,6 +452,10 @@ export default function SalesIncentivePage() {
                     <option value="FIXED_PER_CASE">Fixed Per Case</option>
                   </select>
                 </div>
+                <div style={{ flex: '1 1 140px' }}>
+                  <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Effective From</label>
+                  <input type="date" value={ruleForm.effective_from ? ruleForm.effective_from.split('T')[0] : ''} onChange={e => setRuleForm({ ...ruleForm, effective_from: e.target.value })} className="form-control" />
+                </div>
                 <div style={{ flexBasis: '100%', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                   {editingRuleId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">Cancel</button>}
                   <button type="submit" className="btn btn-primary">{editingRuleId ? 'Update' : 'Add'}</button>
@@ -484,6 +488,7 @@ export default function SalesIncentivePage() {
                                   commission_type: r.commission_type,
                                   commission_value: r.commission_value,
                                   calculation_base: r.calculation_base,
+                                  effective_from: r.effective_from || '',
                                   volume_slabs: r.volume_slabs || [],
                                   case_count_slabs: r.case_count_slabs || [],
                                 });
