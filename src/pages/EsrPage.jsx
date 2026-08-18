@@ -38,8 +38,12 @@ const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 // customer-facing view yet. Gated on the build-time API target rather than
 // NODE_ENV, since a Vite production build (which is what even the dev
 // server runs) always bakes NODE_ENV as 'production' regardless of which
-// backend it points at.
-const IS_DEV_BUILD = String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
+// backend it points at. `import.meta.env.DEV` covers the other case this
+// misses — running `vite dev` locally against localhost, which is a real
+// build-time dev flag (unlike NODE_ENV) but doesn't match the dev-server URL
+// check since local dev usually points at a local backend, not
+// dev.api.cred2tech.com.
+const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
 // ─── Ineligibility reason humanizer ───────────────────────────────────────────
 // The eligibility engine (dynamicEligibility.service.js) emits a mix of plain
@@ -176,7 +180,7 @@ function ProposalBadge({ status }) {
 // This is the *input* side; FullCalculationTrace below (per lender/scheme)
 // is the *output* side of the same calculation.
 const PULL_STATUS_COLOR = {
-  COMPLETED: 'var(--success)', REPORT_READY: 'var(--success)', CALLBACK_RECEIVED: 'var(--success)',
+  COMPLETE: 'var(--success)', COMPLETED: 'var(--success)', REPORT_READY: 'var(--success)', CALLBACK_RECEIVED: 'var(--success)',
   PENDING: 'var(--text-tertiary)', IN_PROGRESS: 'var(--info)', FAILED: 'var(--error)',
 };
 function PullStatusBadge({ label, status }) {
@@ -211,6 +215,21 @@ function IncomeSourcesPanel({ caseDetail }) {
     );
   }
 
+  // The status strip is meant to describe the SAME snapshot rendered below it
+  // ("what was captured for this calculation"). `data_pull_status` is a live,
+  // separately-mutable table though — re-triggering a source's pull resets its
+  // status back to PENDING immediately, even while the ESR snapshot below is
+  // still (correctly) using an earlier COMPLETED pull's data. Left as a raw
+  // passthrough, that produces exactly the confusing state a user reported:
+  // "ITR: PENDING" next to a fully-populated, in-use ITR/Net Profit section.
+  // So: a source reads as COMPLETE here whenever the snapshot actually has
+  // data for it, regardless of whether a newer re-pull is mid-flight; the raw
+  // live status is only shown when the snapshot has nothing for that source.
+  const effectiveStatus = (raw, hasSnapshotData) => (hasSnapshotData ? 'COMPLETE' : raw);
+  const gstEffective = effectiveStatus(pull?.gst_status, esr.gst_avg_monthly_sales != null);
+  const itrEffective = effectiveStatus(pull?.itr_status, esr.itr_pat != null || esr.itr_gross_receipts != null);
+  const bankEffective = effectiveStatus(pull?.bank_status, esr.bank_avg_balance != null || esr.bank_avg_monthly_credit != null);
+
   return (
     <div style={{ marginBottom: 20, border: '1px solid var(--warning)' }}>
       <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -224,9 +243,9 @@ function IncomeSourcesPanel({ caseDetail }) {
         {/* Data pull status strip */}
         {pull && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            <PullStatusBadge label="GST" status={pull.gst_status} />
-            <PullStatusBadge label="ITR" status={pull.itr_status} />
-            <PullStatusBadge label="Bank" status={pull.bank_status} />
+            <PullStatusBadge label="GST" status={gstEffective} />
+            <PullStatusBadge label="ITR" status={itrEffective} />
+            <PullStatusBadge label="Bank" status={bankEffective} />
             <PullStatusBadge label="Bureau" status={pull.bureau_status} />
             <PullStatusBadge label="PAN" status={pull.pan_status} />
           </div>
