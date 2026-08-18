@@ -7,7 +7,7 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
-const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode }) => {
+const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -262,7 +262,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             </button>
                         </div>
                     ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? null : (
-                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setIsUploadOpen(!isUploadOpen)}>
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => setIsUploadOpen(!isUploadOpen)}
+                            disabled={disabled}
+                            title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
+                        >
                             Upload PDF
                         </button>
                     )}

@@ -141,6 +141,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0 });
   const [walletBalance, setWalletBalance] = useState(0);
 
+  // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
+  // same marker the backend's _isBulkUploadSnapshot() already recognizes)
+  // carry fake PAN/GST numbers. Live vendor pulls for these would waste
+  // quota and fail/misbehave against real GST/ITR/Bank/Bureau APIs, so every
+  // live-fetch trigger on this page is disabled for them.
+  const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
+
   useEffect(() => {
      if (isMsme) return; // wallet/credits are DSA-only
 
@@ -543,7 +550,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // proven they own that number. GST auto-fetch below is gated on
     // pan_verified, so fixing the OTP gate here fixes that pull too,
     // transitively.
-    const ready = pan && pan.length === 10 && formData.mobile_verified;
+    const ready = pan && pan.length === 10 && formData.mobile_verified && !isBulkInjectedCase;
     if (
       ready &&
       !formData.pan_verified &&
@@ -597,6 +604,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const coappPanAutoVerifyAttempted = useRef({});
   useEffect(() => {
     if (currentStep > 3) return;
+    if (isBulkInjectedCase) return;
     formData.applicants.forEach((app, idx) => {
       if (app.type !== 'CO_APPLICANT') return;
       const pan = app.pan_number;
@@ -998,6 +1006,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // failed pull doesn't retry forever on every re-render.
   const bureauAutoAttempted = useRef(new Set());
   useEffect(() => {
+    if (isBulkInjectedCase) return;
     formData.applicants.forEach((app) => {
       const eligible = app.otp_verified || (app.type === 'PRIMARY' && formData.mobile_verified);
       if (
@@ -1649,12 +1658,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
                         </span>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst}>Retry GST Fetch</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
                       </>
                     ) : (
                       <>
                         <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={!formData.pan_verified}>Fetch GST Records</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={!formData.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
                       </>
                     )}
                   </div>
@@ -1668,6 +1677,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                      onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
                      onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
                      onboardingMode={mode}
+                     disabled={isBulkInjectedCase}
                   />
                 </div>
             </div>
@@ -1703,6 +1713,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       onComplete={(data) => setFormData(prev => ({...prev, itr_completed: true, itr_analytics: data}))}
                       onRemoved={() => setFormData(prev => ({...prev, itr_completed: false, itr_analytics: null}))}
                       mode={mode}
+                      disabled={isBulkInjectedCase}
                   />
 
                   {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
@@ -1719,6 +1730,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           existingRecord={coApp.itr_analytics?.[0] || null}
                           onComplete={(data) => console.log(`Co-App ${idx} ITR complete`)}
                           mode={mode}
+                          disabled={isBulkInjectedCase}
                       />
                   ))}
 
@@ -1757,6 +1769,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       existingStatus={formData.customer_bank_profile}
                       onComplete={(status, payload) => console.log('Primary bank complete')}
                       mode={mode}
+                      disabled={isBulkInjectedCase}
                   />
                   
                   {/* Bank statement analysis is a business-income concept — a
@@ -1776,6 +1789,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           existingStatus={coApp.bank_statements?.[0] || null}
                           onComplete={(status, payload) => console.log(`Co-App ${idx} bank complete`)}
                           mode={mode}
+                          disabled={isBulkInjectedCase}
                       />
                   ))}
                   

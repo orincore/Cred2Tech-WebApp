@@ -68,11 +68,19 @@ const AddSalariedCustomerWizardPage = () => {
     mobile_verified: false,
     applicants: [],
     product_type: '',
+    dsa_notes: '',
     property_type: '',
     occupancy_status: 'Self Occupied',
     ownership_type: 'Sole Owner',
     market_value: ''
   });
+
+  // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
+  // same marker the backend's _isBulkUploadSnapshot() already recognizes)
+  // carry fake PAN/mobile data. Live vendor pulls (bureau) for these would
+  // waste quota and fail/misbehave against the real bureau API, so the pull
+  // trigger on this page is disabled for them.
+  const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
 
   const [panVerifying, setPanVerifying] = useState(false);
   // PAN here locks on `!!caseId || mobile_verified` — a compound condition
@@ -234,6 +242,7 @@ const AddSalariedCustomerWizardPage = () => {
           dob: toDateInputValue(app.dob)
         })),
         product_type: caseData.product_type || '',
+        dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
         occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
         ownership_type: caseData.property?.ownership_type || 'Sole Owner',
@@ -801,7 +810,7 @@ const AddSalariedCustomerWizardPage = () => {
                         // (a real bureau pull of the applicant's name/DOB) from being
                         // clicked before the applicant had proven they own the
                         // mobile number on file.
-                        <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan} className="btn btn-secondary">
+                        <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
                           {panVerifying ? 'Wait...' : 'Verify PAN'}
                         </button>
                       ) : null}
@@ -948,7 +957,7 @@ const AddSalariedCustomerWizardPage = () => {
                                     </button>
                                   </div>
                                 ) : app.otp_verified ? (
-                                  <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying} className="btn btn-secondary btn-sm">
+                                  <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying || isBulkInjectedCase} className="btn btn-secondary btn-sm" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
                                     {panVerifying ? 'Wait...' : 'Verify PAN'}
                                   </button>
                                 ) : null}
@@ -1051,6 +1060,7 @@ const AddSalariedCustomerWizardPage = () => {
                       downloading={downloadingFor === app.id}
                       onStart={() => handleRunBureau(app.id)}
                       loading={saving}
+                      disabled={isBulkInjectedCase}
                     />
                   ))}
                 </div>

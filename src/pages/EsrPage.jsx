@@ -33,6 +33,14 @@ const formatDynamicTenure = (months) => {
 
 const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 
+// Full step-by-step calculation trace is dev-only for now — it surfaces
+// internal field names and legacy-parser warnings not meant for a DSA/
+// customer-facing view yet. Gated on the build-time API target rather than
+// NODE_ENV, since a Vite production build (which is what even the dev
+// server runs) always bakes NODE_ENV as 'production' regardless of which
+// backend it points at.
+const IS_DEV_BUILD = String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
+
 // ─── Ineligibility reason humanizer ───────────────────────────────────────────
 // The eligibility engine (dynamicEligibility.service.js) emits a mix of plain
 // sentences and internal SCREAMING_SNAKE_CASE codes (e.g. LIP_REQUIRES_MANUAL_REVIEW,
@@ -71,6 +79,10 @@ const REASON_PATTERNS = [
   [/^TATA_LIP_CURRENT_YEAR_NET_PROFIT_REQUIRED$/i,
     () => 'Current year net profit details are required for this scheme.'],
   [/^CA_ASSESSED_ELIGIBLE_AMOUNT_REQUIRED_FOR_TATA_LIP$/i,
+    () => 'A CA-assessed eligible loan amount is required for this scheme.'],
+  [/^PIRAMAL_LIP_LATEST_YEAR_NET_PROFIT_REQUIRED$/i,
+    () => 'Latest year net profit details are required for this scheme.'],
+  [/^CA_ASSESSED_ELIGIBLE_AMOUNT_REQUIRED_FOR_PIRAMAL_LIP$/i,
     () => 'A CA-assessed eligible loan amount is required for this scheme.'],
   [/^Bureau score missing\.?$/i,
     () => 'Your bureau score is missing, so this lender could not be evaluated.'],
@@ -154,6 +166,364 @@ function ProposalBadge({ status }) {
     }}>
       <Icon size={10} /> {cfg.label}
     </span>
+  );
+}
+
+// ─── Income Sources Panel (dev-only) ──────────────────────────────────────────
+// Case-level (not per-lender) — shows every raw income input the ESR engine
+// had available: the case_esr_financials snapshot, the data-pull status for
+// each vendor source (GST/ITR/Bank/Bureau), and any manual income entries.
+// This is the *input* side; FullCalculationTrace below (per lender/scheme)
+// is the *output* side of the same calculation.
+const PULL_STATUS_COLOR = {
+  COMPLETED: 'var(--success)', REPORT_READY: 'var(--success)', CALLBACK_RECEIVED: 'var(--success)',
+  PENDING: 'var(--text-tertiary)', IN_PROGRESS: 'var(--info)', FAILED: 'var(--error)',
+};
+function PullStatusBadge({ label, status }) {
+  const color = PULL_STATUS_COLOR[status] || 'var(--text-tertiary)';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, padding: '2px 8px', border: `1px solid ${color}`, color }}>
+      {label}: {status || 'PENDING'}
+    </span>
+  );
+}
+function IncomeRow({ label, value }) {
+  if (value === null || value === undefined || value === '') return null;
+  return <div style={TRACE_ROW_STYLE}><span>{label}</span><span style={{ fontWeight: 700 }}>{value}</span></div>;
+}
+
+function IncomeSourcesPanel({ caseDetail }) {
+  if (!caseDetail) return null;
+  const esr = caseDetail.esr_financials;
+  const pull = caseDetail.data_pull_status;
+  const primaryApplicant = (caseDetail.applicants || []).find(a => a.type === 'PRIMARY') || caseDetail.applicants?.[0];
+  const allIncomeEntries = (caseDetail.applicants || []).flatMap(a =>
+    (a.income_entries || []).map(e => ({ ...e, applicantName: a.name || a.type }))
+  );
+  const allSalarySlips = (caseDetail.applicants || []).flatMap(a => a.salary_ocr_results || []);
+
+  if (!esr) {
+    return (
+      <div style={{ ...TRACE_SECTION_STYLE, marginBottom: 20, background: 'var(--bg-elevated)' }}>
+        <div style={{ ...TRACE_TITLE_STYLE, color: 'var(--warning)' }}>Income Sources (dev build only)</div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>No case_esr_financials snapshot yet — run ESR extraction first.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 20, border: '1px solid var(--warning)' }}>
+      <div style={{ padding: '8px 12px', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Zap size={13} color="var(--warning)" />
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Income Sources — what was captured for this calculation (dev build only)
+        </span>
+      </div>
+
+      <div style={{ padding: 12 }}>
+        {/* Data pull status strip */}
+        {pull && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <PullStatusBadge label="GST" status={pull.gst_status} />
+            <PullStatusBadge label="ITR" status={pull.itr_status} />
+            <PullStatusBadge label="Bank" status={pull.bank_status} />
+            <PullStatusBadge label="Bureau" status={pull.bureau_status} />
+            <PullStatusBadge label="PAN" status={pull.pan_status} />
+          </div>
+        )}
+
+        {/* Primary selection */}
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>Primary Income Selected</div>
+          <IncomeRow label="Method" value={esr.selected_income_method} />
+          <IncomeRow label="Monthly income used" value={fmt(esr.selected_monthly_income)} />
+          <IncomeRow label="Employment type" value={esr.employment_type} />
+          <IncomeRow label="Constitution" value={esr.constitution_type} />
+          <IncomeRow label="Business vintage" value={esr.business_vintage_months != null ? `${esr.business_vintage_months} months` : null} />
+        </div>
+
+        {/* Salaried */}
+        {(esr.salaried_gross_monthly || esr.salaried_net_monthly || esr.salaried_income) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Salaried Income</div>
+            <IncomeRow label="Source" value={esr.salaried_income_source} />
+            <IncomeRow label="Salary slips used" value={esr.salaried_slip_count} />
+            <IncomeRow label="Gross monthly" value={fmt(esr.salaried_gross_monthly)} />
+            <IncomeRow label="Net monthly" value={fmt(esr.salaried_net_monthly)} />
+            <IncomeRow label="Bank-verified net salary" value={fmt(esr.bank_net_salary_monthly)} />
+            <IncomeRow label="Incentive income (3mo avg)" value={fmt(esr.salaried_incentive_income)} />
+            <IncomeRow label="Annual bonus" value={fmt(esr.salaried_annual_bonus)} />
+            <IncomeRow label="Other income" value={fmt(esr.salaried_other_income)} />
+            {allSalarySlips.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                {allSalarySlips.length} salary slip OCR result(s) on file
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ITR / Net Profit */}
+        {(esr.itr_pat || esr.itr_gross_receipts) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>ITR / Net Profit</div>
+            <IncomeRow label="PAT (latest year)" value={fmt(esr.itr_pat)} />
+            <IncomeRow label="PAT (previous year)" value={fmt(esr.itr_pat_previous_year)} />
+            <IncomeRow label="Gross receipts (latest year)" value={fmt(esr.itr_gross_receipts)} />
+            <IncomeRow label="Gross receipts (previous year)" value={fmt(esr.itr_gross_receipts_previous_year)} />
+            <IncomeRow label="Depreciation addback" value={fmt(esr.itr_depreciation)} />
+            <IncomeRow label="Finance cost (interest) addback" value={fmt(esr.itr_finance_cost)} />
+            <IncomeRow label="Director remuneration addback" value={fmt(esr.itr_remuneration)} />
+            <IncomeRow label="Computed net profit income" value={fmt(esr.net_profit_income)} />
+          </div>
+        )}
+
+        {/* GST */}
+        {esr.gst_avg_monthly_sales != null && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>GST</div>
+            <IncomeRow label="Average monthly sales" value={fmt(esr.gst_avg_monthly_sales)} />
+            <IncomeRow label="Industry type" value={esr.gst_industry_type} />
+            <IncomeRow label="Industry margin (stored)" value={fmtPct(esr.gst_industry_margin)} />
+            <IncomeRow label="Computed GST income" value={fmt(esr.gst_income)} />
+          </div>
+        )}
+
+        {/* Banking */}
+        {(esr.bank_avg_balance || esr.bank_avg_monthly_credit) && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Bank Statement Analysis</div>
+            <IncomeRow label="Average balance (ABB)" value={fmt(esr.bank_avg_balance)} />
+            <IncomeRow label="Average monthly credit" value={fmt(esr.bank_avg_monthly_credit)} />
+            <IncomeRow label="Total credits" value={fmt(esr.bank_total_credits)} />
+            <IncomeRow label="Computed monthly income" value={fmt(esr.bank_monthly_income)} />
+            <IncomeRow label="Computed banking income" value={fmt(esr.banking_income)} />
+          </div>
+        )}
+
+        {/* Net worth */}
+        {esr.net_worth != null && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Net Worth</div>
+            <IncomeRow label="Net worth" value={fmt(esr.net_worth)} />
+          </div>
+        )}
+
+        {/* Manual / other income entries */}
+        {allIncomeEntries.length > 0 && (
+          <div style={TRACE_SECTION_STYLE}>
+            <div style={TRACE_TITLE_STYLE}>Manual / Other Income Entries</div>
+            {allIncomeEntries.map((e, i) => (
+              <div key={i} style={TRACE_ROW_STYLE}>
+                <span>{e.income_type || e.description || 'Entry'} ({e.applicantName})</span>
+                <span style={{ fontWeight: 700 }}>{fmt(e.annual_amount)}/yr</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Existing obligations */}
+        <div style={{ ...TRACE_SECTION_STYLE, borderBottom: 'none' }}>
+          <div style={TRACE_TITLE_STYLE}>Obligations</div>
+          <IncomeRow label="Existing obligations (monthly EMI)" value={fmt(esr.existing_obligations)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full Calculation Trace (dev-only) ────────────────────────────────────────
+// Surfaces the complete scheme_evaluations object the engine actually
+// computed — income composition, FOIR/DSCR resolution, LTV resolution,
+// obligation handling, and every other field the backend populated — not
+// just the six summary tiles CalcBreakdownPanel shows above it. A catch-all
+// section at the end renders any remaining populated field generically, so
+// a lender-specific field (GRP multiplier, double-whammy breakdown, DSCR
+// ratio, etc.) is never silently hidden just because this component didn't
+// special-case it by name.
+const TRACE_SECTION_STYLE = { border: '1px solid var(--border)', padding: 10, marginTop: 8 };
+const TRACE_TITLE_STYLE = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)', marginBottom: 6 };
+const TRACE_ROW_STYLE = { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, padding: '2px 0', borderBottom: '1px dotted var(--border)' };
+
+function humanizeFieldName(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function formatTraceValue(value) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return Number.isInteger(value) ? value.toLocaleString('en-IN') : value.toFixed(4);
+  if (Array.isArray(value)) return value.length === 0 ? '—' : `${value.length} entries`;
+  if (typeof value === 'object') return null; // rendered separately, not inline
+  return String(value);
+}
+
+// Fields already shown elsewhere (top summary tiles, or rendered as their
+// own dedicated section below) — excluded from the generic catch-all so
+// nothing appears twice.
+const TRACE_HANDLED_KEYS = new Set([
+  'scheme_id', 'scheme_name', 'lender_policy_key', 'lender_policy_name', 'product_id', 'product_type',
+  'product_display_name', 'is_eligible', 'status', 'configuration_status', 'income_method_matched',
+  'manual_review_required', 'reason_code', 'ineligibility_reason', 'failure_reasons', 'warnings', 'policy_warnings',
+  'eligible_income_breakdown', 'foir_breakdown', 'dscr_breakdown',
+  'final_eligible_loan_amount', 'eligible_loan_amount', 'foir_based_eligible_loan_amount', 'ltv_based_eligible_loan_amount',
+  'requested_loan_cap', 'product_cap', 'max_loan_by_ltv',
+  'applicable_ltv_key', 'applicable_ltv_percent', 'actual_final_ltv_percent', 'property_value',
+  'monthly_income_used', 'primary_monthly_income_used', 'monthly_income_note',
+  'maximum_eligible_emi', 'max_eligible_emi', 'proposed_emi', 'foir_allowed_percent', 'foir_actual_percent',
+  'dscr_min_ratio', 'dscr_actual_ratio', 'dscr_eligible_loan_amount', 'dscr_status',
+  'final_tenure_used', 'lender_max_tenure_months', 'max_tenure_months', 'age_based_tenure_limit_months',
+  'underwriting_roi_used', 'roi_min', 'roi_max', 'pf_min', 'pf_max',
+  'hdfc_pos_deduction_entries', 'obligation_exclusion_notes', 'hdfc_unsecured_pos_deduction',
+  'surrogate_program_notes', 'raw_trace_text',
+]);
+
+function FullCalculationTrace({ ev }) {
+  const income = ev.eligible_income_breakdown || [];
+  const foir = ev.foir_breakdown;
+  const dscr = ev.dscr_breakdown;
+  const legacyWarnings = (ev.warnings || []).filter((w) => w.startsWith('Parser warning'));
+  const realWarnings = (ev.warnings || []).filter((w) => !w.startsWith('Parser warning'));
+  const [showLegacy, setShowLegacy] = useState(false);
+  const [showRawTrace, setShowRawTrace] = useState(false);
+
+  const otherFields = Object.entries(ev)
+    .filter(([k, v]) => !TRACE_HANDLED_KEYS.has(k) && v !== null && v !== undefined && v !== '' && formatTraceValue(v) !== null)
+    .filter(([, v]) => !(Array.isArray(v) && v.length === 0));
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--warning)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Zap size={11} /> FULL CALCULATION TRACE (dev build only)
+      </div>
+
+      {ev.failure_reasons?.length > 0 && (
+        <div style={{ ...TRACE_SECTION_STYLE, background: 'var(--error-bg)', borderColor: 'var(--error)' }}>
+          <div style={{ ...TRACE_TITLE_STYLE, color: 'var(--error)' }}>Why this scheme is not eligible</div>
+          {ev.failure_reasons.map((r, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• {r}</div>)}
+        </div>
+      )}
+
+      {income.length > 0 && (
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>Income Composition</div>
+          {income.map((row, i) => (
+            <div key={i} style={TRACE_ROW_STYLE}>
+              <span>{row.type}{row.source ? ` (${row.source})` : ''}{row.rule ? <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)' }}>{row.rule}</div> : null}</span>
+              <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(row.eligible_monthly)}{row.raw_monthly != null && row.raw_monthly !== row.eligible_monthly ? <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> (raw {fmt(row.raw_monthly)})</span> : null}</span>
+            </div>
+          ))}
+          <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none', fontWeight: 700, marginTop: 4 }}>
+            <span>Total monthly income used</span><span>{fmt(ev.monthly_income_used)}</span>
+          </div>
+        </div>
+      )}
+
+      {foir && (
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>FOIR Resolution</div>
+          <div style={TRACE_ROW_STYLE}><span>Composed income</span><span>{fmt(foir.composed_income)}</span></div>
+          <div style={TRACE_ROW_STYLE}><span>Net obligations</span><span>{fmt(foir.net_obligations)}</span></div>
+          <div style={TRACE_ROW_STYLE}><span>FOIR allowed / actual</span><span>{fmtPct(foir.foir_allowed_percent)} / {fmtPct(foir.foir_actual_percent)}</span></div>
+          {foir.foir_rule && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '2px 0 6px' }}>{foir.foir_rule}</div>
+          )}
+          <div style={TRACE_ROW_STYLE}><span>Maximum eligible EMI</span><span>{fmt(foir.maximum_eligible_emi)}</span></div>
+          <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none' }}><span>Proposed EMI</span><span>{fmt(foir.proposed_emi)}</span></div>
+        </div>
+      )}
+
+      {dscr && (
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>DSCR Resolution</div>
+          {Object.entries(dscr).map(([k, v]) => (
+            <div key={k} style={TRACE_ROW_STYLE}><span>{humanizeFieldName(k)}</span><span>{formatTraceValue(v) ?? JSON.stringify(v)}</span></div>
+          ))}
+        </div>
+      )}
+
+      <div style={TRACE_SECTION_STYLE}>
+        <div style={TRACE_TITLE_STYLE}>LTV Resolution</div>
+        <div style={TRACE_ROW_STYLE}><span>Applicable LTV ({ev.applicable_ltv_key || '—'})</span><span>{fmtPct(ev.applicable_ltv_percent)}</span></div>
+        <div style={TRACE_ROW_STYLE}><span>Property value</span><span>{fmt(ev.property_value)}</span></div>
+        <div style={TRACE_ROW_STYLE}><span>Max loan by LTV</span><span>{fmt(ev.max_loan_by_ltv)}</span></div>
+        <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none' }}><span>Actual final LTV%</span><span>{fmtPct(ev.actual_final_ltv_percent)}</span></div>
+      </div>
+
+      <div style={TRACE_SECTION_STYLE}>
+        <div style={TRACE_TITLE_STYLE}>Tenure / ROI / PF</div>
+        <div style={TRACE_ROW_STYLE}><span>Tenure used (age-capped / lender max)</span><span>{ev.final_tenure_used} mo ({ev.age_based_tenure_limit_months} / {ev.lender_max_tenure_months})</span></div>
+        <div style={TRACE_ROW_STYLE}><span>Underwriting ROI used</span><span>{ev.underwriting_roi_used}%</span></div>
+        <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none' }}><span>PF range</span><span>{fmtPct(ev.pf_min)}–{fmtPct(ev.pf_max)}</span></div>
+      </div>
+
+      {(ev.hdfc_pos_deduction_entries?.length > 0 || ev.obligation_exclusion_notes?.length > 0) && (
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>Obligation Handling</div>
+          {(ev.obligation_exclusion_notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• {n}</div>)}
+          {ev.hdfc_unsecured_pos_deduction ? (
+            <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none' }}><span>POS deducted from final amount</span><span>{fmt(ev.hdfc_unsecured_pos_deduction)}</span></div>
+          ) : null}
+        </div>
+      )}
+
+      <div style={TRACE_SECTION_STYLE}>
+        <div style={TRACE_TITLE_STYLE}>Final Amount Resolution</div>
+        <div style={TRACE_ROW_STYLE}><span>FOIR-based eligible amount</span><span>{fmt(ev.foir_based_eligible_loan_amount)}</span></div>
+        <div style={TRACE_ROW_STYLE}><span>LTV-based eligible amount</span><span>{fmt(ev.ltv_based_eligible_loan_amount)}</span></div>
+        {ev.requested_loan_cap != null && <div style={TRACE_ROW_STYLE}><span>Requested loan cap</span><span>{fmt(ev.requested_loan_cap)}</span></div>}
+        {ev.product_cap != null && <div style={TRACE_ROW_STYLE}><span>Product cap</span><span>{fmt(ev.product_cap)}</span></div>}
+        <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none', fontWeight: 800 }}><span>Final eligible amount (min of the above)</span><span>{fmt(ev.final_eligible_loan_amount)}</span></div>
+      </div>
+
+      {otherFields.length > 0 && (
+        <div style={TRACE_SECTION_STYLE}>
+          <div style={TRACE_TITLE_STYLE}>Other Fields</div>
+          {otherFields.map(([k, v]) => (
+            <div key={k} style={TRACE_ROW_STYLE}><span>{humanizeFieldName(k)}</span><span>{formatTraceValue(v)}</span></div>
+          ))}
+        </div>
+      )}
+
+      {realWarnings.length > 0 && (
+        <div style={{ ...TRACE_SECTION_STYLE, background: 'var(--warning-bg)', borderColor: 'var(--warning)' }}>
+          <div style={{ ...TRACE_TITLE_STYLE, color: 'var(--warning)' }}>Warnings</div>
+          {realWarnings.map((w, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• {w}</div>)}
+        </div>
+      )}
+
+      {legacyWarnings.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <button onClick={() => setShowLegacy(!showLegacy)} style={{ fontSize: 10, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            {showLegacy ? 'Hide' : 'Show'} {legacyWarnings.length} legacy parameter-parsing notes
+          </button>
+          {showLegacy && legacyWarnings.map((w, i) => <div key={i} style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>• {w}</div>)}
+        </div>
+      )}
+
+      {ev.raw_trace_text && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => setShowRawTrace(!showRawTrace)} style={{ fontSize: 10, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+            {showRawTrace ? 'Hide' : 'Show'} complete raw calculation log for this method
+          </button>
+          {showRawTrace && (
+            <pre style={{
+              marginTop: 6,
+              padding: 10,
+              fontSize: 10.5,
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 480,
+              overflowY: 'auto',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-secondary)'
+            }}>
+              {ev.raw_trace_text}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -283,6 +653,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                     </div>
                   ))}
                 </div>
+                {IS_DEV_BUILD && <FullCalculationTrace ev={ev} />}
               </div>
             </div>
           </motion.div>
@@ -552,6 +923,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [generating, setGenerating] = useState(false);
   const [esr, setEsr]               = useState(null);
   const [proposals, setProposals]   = useState([]);
+  const [caseDetail, setCaseDetail] = useState(null); // dev-build only — raw income-source data (GST/ITR/Bank/Salaried)
   const [lenderFilter, setLenderFilter]         = useState('all');
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [showIneligible, setShowIneligible] = useState(true);
@@ -572,13 +944,18 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [esrResult, proposalsResult] = await Promise.allSettled([
+      // getCaseById is a fairly heavy call (full applicant/customer income
+      // sub-records) only needed to render IncomeSourcesPanel below — skip
+      // it entirely outside dev builds rather than fetch data that never renders.
+      const [esrResult, proposalsResult, caseResult] = await Promise.allSettled([
         caseService.getESR(caseId),
         caseService.listProposals(caseId),
+        IS_DEV_BUILD ? caseService.getCaseById(caseId) : Promise.resolve(null),
       ]);
       if (esrResult.status === 'fulfilled') setEsr(esrResult.value);
       else if (esrResult.reason?.response?.status !== 404) toast.error('Failed to load ESR');
       if (proposalsResult.status === 'fulfilled') setProposals(proposalsResult.value.proposals || []);
+      if (caseResult.status === 'fulfilled') setCaseDetail(caseResult.value);
     } finally {
       setLoading(false);
     }
@@ -725,6 +1102,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           </button>
         </motion.div>
       )}
+
+      {IS_DEV_BUILD && esr && <IncomeSourcesPanel caseDetail={caseDetail} />}
 
       {/* Filter bar */}
       {esr && lenders.length > 0 && (

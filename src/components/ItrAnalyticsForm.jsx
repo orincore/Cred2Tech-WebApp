@@ -25,7 +25,8 @@ const ItrAnalyticsForm = ({
     existingRecord,
     onComplete,
     onRemoved,
-    mode
+    mode,
+    disabled = false
 }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
@@ -294,6 +295,8 @@ const ItrAnalyticsForm = ({
                             type="button"
                             className="btn btn-primary btn-sm"
                             onClick={() => setIsOpen(!isOpen)}
+                            disabled={disabled}
+                            title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
                         >
                             {status === 'FAILED' ? 'Retry' : 'Fetch ITR'}
                         </button>
