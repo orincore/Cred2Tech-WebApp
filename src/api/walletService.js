@@ -47,6 +47,27 @@ export const walletService = {
     });
     downloadBlob(response, 'Wallet_Transactions.xlsx');
   },
+
+  // ── Recharge (Razorpay top-up) ─────────────────────────────────────────
+  createTopupOrder: async (amountInr) => {
+    const response = await api.post('/wallet/topups/create-order', { amount_inr: amountInr });
+    return response.data;
+  },
+
+  verifyTopupCheckout: async (payload) => {
+    const response = await api.post('/wallet/topups/verify-checkout', payload);
+    return response.data;
+  },
+
+  getTopups: async (filters = {}) => {
+    const response = await api.get('/wallet/topups', { params: buildParams(filters) });
+    return response.data;
+  },
+
+  downloadInvoice: async (topupId, invoiceNumber) => {
+    const response = await api.get(`/wallet/topups/${topupId}/invoice`, { responseType: 'blob' });
+    downloadBlob(response, `${invoiceNumber || `invoice-${topupId}`}.pdf`);
+  },
 };
 
 export default walletService;

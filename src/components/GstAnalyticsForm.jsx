@@ -22,7 +22,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode, disabled = false }) => {
+const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -328,15 +328,21 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
                  </div>
             )}
 
+            {!isMsme && gstCost != null && walletBalance < gstCost && (
+                <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
+                    <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
+                </div>
+            )}
+
             <button
                 type="button"
                 onClick={handleCreateRequest}
-                disabled={disabled || loading || !formData.gstin}
+                disabled={disabled || loading || !formData.gstin || (!isMsme && gstCost != null && walletBalance < gstCost)}
                 className="btn btn-primary"
                 style={{ marginBottom: 24 }}
                 title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
             >
-                {loading ? 'Creating...' : isMsme ? 'Submit' : 'Submit (~1 Credit)'}
+                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
             </button>
             </>
             )}

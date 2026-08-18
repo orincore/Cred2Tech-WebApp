@@ -269,7 +269,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             disabled={disabled}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
-                            Upload PDF
+                            {isMsme ? 'Upload PDF' : `Upload PDF (~${analyzeCost} Cr)`}
                         </button>
                     )}
                 </div>

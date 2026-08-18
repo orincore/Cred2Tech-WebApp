@@ -138,7 +138,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     market_value: ''
   });
 
-  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0 });
+  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0 });
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
@@ -157,7 +157,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
           const itr = data.find(d => d.api_code === 'ITR_ANALYTICS')?.tenant_cost || 0;
           const bank = data.find(d => d.api_code === 'BANK_ANALYSIS')?.tenant_cost || 0;
-          setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank });
+          const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
+          const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
+          const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
+          setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
        })
        .catch(err => console.error(err));
 
@@ -182,7 +185,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [gstFetching, setGstFetching] = useState(false);
   const [gstFetchFailed, setGstFetchFailed] = useState(false);
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
-  const [bureauLoadingMap, setBureauLoadingMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
 
@@ -951,77 +953,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  const handleRunBureau = async (applicantId) => {
-    if (!caseId) return toast.error("Case ID missing");
-    if (bureauLoadingMap[applicantId]) return; // prevent double-click race
-    try {
-      setBureauLoadingMap(prev => ({ ...prev, [applicantId]: true }));
-      const res = await api.post(`/verification/bureau/run/${caseId}`, { applicantId });
-      const data = res.data;
-
-      if (data.status === 'FAILED') {
-        const errMsg = data.errors?.[0]?.error || 'Bureau fetch failed';
-        toast.error(errMsg);
-        return;
-      }
-
-      // PARTIAL_SUCCESS can mean the independent obligations pull succeeded
-      // while THIS applicant's credit score call failed — that's not a
-      // completed CIBIL check for them, so bureau_fetched must reflect
-      // whether a score actually came back, not just that the request as a
-      // whole didn't throw. The toast above already warns on
-      // PARTIAL_SUCCESS; this keeps the status badge consistent with it.
-      const targetApp = formData.applicants.find(a => a.id === applicantId);
-      const newScore = targetApp?.type === 'PRIMARY'
-        ? data.applicantScore
-        : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
-
-      if (data.status === 'PARTIAL_SUCCESS') {
-        toast.error(`Partial failure: ${data.errors?.[0]?.error || 'Some applicants failed'}`);
-      } else if (newScore) {
-        toast.success("Bureau pull success!");
-      } else {
-        toast.error('Bureau score not returned — CIBIL check incomplete for this applicant.');
-      }
-
-      if (!newScore) return;
-
-      // Update local state to reflect bureau_fetched and the new score
-      const updatedApps = formData.applicants.map(a => {
-        if (a.id === applicantId) {
-          return { ...a, bureau_fetched: true, cibil_score: newScore };
-        }
-        return a;
-      });
-      setFormData(prev => ({ ...prev, applicants: updatedApps }));
-    } catch(err) {
-      toast.error(err.response?.data?.error || "Bureau fetch failed");
-    } finally {
-      setBureauLoadingMap(prev => ({ ...prev, [applicantId]: false }));
-    }
-  };
-
-  // Auto-fetch bureau for any eligible applicant not already fetched — no manual
-  // "Run Bureau" click needed. Guarded by a per-applicant "attempted" ref so a
-  // failed pull doesn't retry forever on every re-render.
-  const bureauAutoAttempted = useRef(new Set());
-  useEffect(() => {
-    if (isBulkInjectedCase) return;
-    formData.applicants.forEach((app) => {
-      const eligible = app.otp_verified || (app.type === 'PRIMARY' && formData.mobile_verified);
-      if (
-        app.id &&
-        eligible &&
-        !app.bureau_fetched &&
-        !bureauLoadingMap[app.id] &&
-        !bureauAutoAttempted.current.has(app.id)
-      ) {
-        bureauAutoAttempted.current.add(app.id);
-        handleRunBureau(app.id);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.applicants, formData.mobile_verified]);
+  // Bureau (score + obligations) is a manual pull now — the button lives in
+  // BureauObligationsStep (step 5) and bills BUREAU_PULL/BUREAU_OBLIGATIONS
+  // there; no more auto-fetch here the instant an applicant is verified.
 
   const handleStep2Submit = async (e) => { e.preventDefault(); goToStep(3); };
 
@@ -1324,7 +1258,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
                       {!formData.mobile_verified ? (
-                        <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
+                        <button
+                          type="button"
+                          onClick={handleSendPrimaryOtp}
+                          disabled={saving || !formData.business_mobile || !formData.business_pan || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                          className="btn btn-primary"
+                          style={{ padding: '0 20px' }}
+                          title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                        >
+                          {isMsme ? 'Send OTP' : `Send OTP (~${costs.PAN_FETCH} Cr)`}
+                        </button>
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
@@ -1532,7 +1475,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
                               {!app.otp_verified ? (
-                                <button type="button" className="btn btn-primary" onClick={() => handleSendCoapplicantOtp(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Send OTP</button>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  onClick={() => handleSendCoapplicantOtp(realIdx)}
+                                  style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
+                                  disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                                  title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                >
+                                  {isMsme ? 'Send OTP' : `Send OTP (~${costs.PAN_FETCH} Cr)`}
+                                </button>
                               ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                   <CheckCircle2 size={16} /> Verified
@@ -1677,6 +1629,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                      onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
                      onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
                      onboardingMode={mode}
+                     walletBalance={walletBalance}
+                     gstCost={costs.GST_FETCH}
                      disabled={isBulkInjectedCase}
                   />
                 </div>
@@ -1904,7 +1858,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} isSalaried={formData.is_salaried} />
         )}
         {currentStep === 5 && (
-          <BureauObligationsStep caseId={caseId} onNext={() => goToStep(6)} onBack={() => goToStep(4)} />
+          <BureauObligationsStep
+            caseId={caseId}
+            onNext={() => goToStep(6)}
+            onBack={() => goToStep(4)}
+            mode={mode}
+            walletBalance={walletBalance}
+            bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+          />
         )}
         {currentStep === 6 && (
           <EsrStep

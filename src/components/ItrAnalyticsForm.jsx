@@ -298,7 +298,9 @@ const ItrAnalyticsForm = ({
                             disabled={disabled}
                             title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
                         >
-                            {status === 'FAILED' ? 'Retry' : 'Fetch ITR'}
+                            {isMsme
+                                ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
+                                : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
                         </button>
                     )}
                 </div>
