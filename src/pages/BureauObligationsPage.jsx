@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,7 +6,7 @@ import { listDocuments, downloadDocument } from '../api/documentHelper';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, RefreshCw, FileDown, Trash2 } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint } from 'lucide-react';
 import { useCasePullStatus } from '../hooks/useCasePullStatus';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -78,8 +78,11 @@ const LOAN_TYPES = [
 // Step 5 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function BureauObligationsPage({ caseId, onNext, onBack }) {
+export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost }) {
   const isMobile = useIsMobile();
+  // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
+  // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
+  const isMsme = mode === 'MSME_SELF_SERVICE';
 
   // GST can still be pulling in the background (kicked off on step 2, and
   // the case-wide GstPullStatusBanner keeps it visible on this step too) —
@@ -111,40 +114,22 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
-
-  // syncObligations() only re-parses obligations from a bureau report that
-  // must already exist for this case_id — it never triggers the actual CIBIL
-  // pull. Normally that pull happens automatically during onboarding
-  // (AddCustomerWizardPage), but if that was missed, this page would
-  // otherwise render permanently blank with no way to recover. Guard by a
-  // per-applicant "attempted" ref so a genuine failure doesn't retry forever.
-  const bureauAutoAttempted = useRef(new Set());
+  // Applicant ids whose most recent manual pull attempt failed — switches
+  // that applicant's button from the initial "Pull Bureau Details" label to
+  // a "Retry" label. Cleared again on a successful pull.
+  const [bureauFailedFor, setBureauFailedFor] = useState(new Set());
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      // syncObligations() only re-parses obligations from a bureau report
+      // that already exists for this case_id — it never triggers a fresh
+      // (billed) CIBIL pull, so it's safe to run unconditionally here.
       await caseService.syncObligations(caseId);
-      let [result, caseData] = await Promise.all([
+      const [result, caseData] = await Promise.all([
         caseService.getObligations(caseId),
         caseService.getCaseById(caseId)
       ]);
-
-      const unfetched = (result.grouped || [])
-        .map(g => g.applicant)
-        .filter(a => a.id && !a.bureau_fetched && !bureauAutoAttempted.current.has(a.id));
-
-      if (unfetched.length > 0) {
-        unfetched.forEach(a => bureauAutoAttempted.current.add(a.id));
-        const runs = await Promise.allSettled(
-          unfetched.map(a => caseService.runBureauVerification(caseId, a.id))
-        );
-        if (runs.some(r => r.status === 'fulfilled')) {
-          await caseService.syncObligations(caseId);
-          result = await caseService.getObligations(caseId);
-        } else {
-          toast.error('Bureau report could not be fetched for one or more applicants.');
-        }
-      }
 
       setData(result);
       // Obligations only return a display name that already falls back to a
@@ -238,38 +223,55 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
 
   // The backend marks an applicant's bureau data as "fetched" as soon as the
   // credit-score check succeeds, even if the separate obligations pull came
-  // back empty — so the page's automatic retry (which only fires while
-  // bureau_fetched is falsy) never runs again for that applicant. This gives
-  // a manual way to re-pull obligations for one applicant without reloading
-  // the whole page or waiting on the (nonexistent) automatic retry.
-  const handleRetryBureau = async (applicantId) => {
+  // back empty. Used both for the very first pull (button only shows once,
+  // manually triggered — no more auto-fetch on mount) and for retrying a
+  // failed/incomplete one; same vendor call either way.
+  const handlePullBureau = async (applicantId) => {
     const before = (data?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
     setRetryingFor(applicantId);
     try {
       const result = await caseService.runBureauVerification(caseId, applicantId);
       await caseService.syncObligations(caseId);
       const fresh = await load();
+      const freshApplicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
+
+      // bureau_fetched only flips true once the credit-score call itself
+      // succeeds — that's what decides whether the pull button disappears
+      // (per applicant) or switches to a "Retry" label.
+      setBureauFailedFor(prev => {
+        const next = new Set(prev);
+        if (freshApplicant?.bureau_fetched) next.delete(applicantId);
+        else next.add(applicantId);
+        return next;
+      });
+
       // Score and obligations are two independent vendor calls now (see
       // bureau.controller.js) — a failure in one no longer means the other
       // never ran, so check specifically what actually failed instead of
       // guessing at a PAN/DOB problem whenever the count comes back flat.
+      const scoreError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
       const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (after > before) {
-        toast.success(`Bureau data re-fetched — ${after - before} new obligation(s) found`);
+      if (scoreError) {
+        toast.error(`Bureau score check failed: ${scoreError.error}`, { duration: 8000 });
+      } else if (after > before) {
+        toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
         // the same tradelines every time - a flat count here means the
         // applicant's obligations are already on file, not that the pull
         // failed. Only an actual zero total means the vendor found nothing.
-        toast.success(`Bureau data re-fetched — ${after} obligation(s) already on file, no new ones since last pull`);
+        toast.success(`Bureau data fetched — ${after} obligation(s) already on file, no new ones since last pull`);
       } else if (obligationsError) {
         toast.error(`Obligations check failed: ${obligationsError.error}. This is a vendor/connectivity issue, not a problem with the applicant's data — try again shortly.`, { duration: 8000 });
+      } else if (freshApplicant?.bureau_fetched) {
+        toast.success('Bureau data fetched successfully.');
       } else {
-        toast.error("Bureau pull ran again but the vendor genuinely has no obligations on file for this applicant — this can be a legitimate 'no credit history' result, not necessarily missing data.", { duration: 6000 });
+        toast.error("Bureau pull ran but the vendor genuinely has no obligations on file for this applicant — this can be a legitimate 'no credit history' result, not necessarily missing data.", { duration: 6000 });
       }
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to re-fetch bureau data');
+      setBureauFailedFor(prev => new Set(prev).add(applicantId));
+      toast.error(e.response?.data?.error || 'Failed to fetch bureau data');
     } finally {
       setRetryingFor(null);
     }
@@ -405,6 +407,26 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
                 >
                   <FileDown size={13} />
                   {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
+                </button>
+              )}
+              {/* No auto-fetch on mount anymore — this is the only trigger for
+                  pulling bureau score + obligations. It disappears entirely
+                  once the pull succeeds (bureau_fetched flips true); a failed
+                  attempt keeps it visible with a "Retry" label instead. */}
+              {!applicant.bureau_fetched && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handlePullBureau(applicant.id)}
+                  disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
+                  title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                  {retryingFor === applicant.id
+                    ? 'Pulling…'
+                    : isMsme
+                      ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
+                      : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
                 </button>
               )}
               <div style={{ textAlign: 'right' }}>
@@ -544,19 +566,12 @@ export default function BureauObligationsPage({ caseId, onNext, onBack }) {
             </div>
             )
           ) : (
-            <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ padding: '20px 24px' }}>
               <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-                No bureau obligations found for this applicant.
+                {applicant.bureau_fetched
+                  ? 'No bureau obligations found for this applicant.'
+                  : 'Bureau data not pulled yet for this applicant — use the button above.'}
               </span>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => handleRetryBureau(applicant.id)}
-                disabled={retryingFor === applicant.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <RefreshCw size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
-                {retryingFor === applicant.id ? 'Re-fetching…' : 'Retry Bureau Pull'}
-              </button>
             </div>
           )}
 

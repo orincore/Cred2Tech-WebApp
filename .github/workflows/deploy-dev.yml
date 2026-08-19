@@ -77,11 +77,13 @@ jobs:
 
       - name: Smoke test
         run: |
-          # Runs on the VPS itself, not the GH runner — public DNS for
-          # dev.app.cred2tech.com may not point here yet, so this checks
-          # nginx's own vhost routing directly via Host header instead.
+          # Runs on the VPS itself, not the GH runner. --resolve pins the
+          # real hostname to localhost for both the TCP connection and TLS
+          # SNI (nginx picks the vhost/cert off SNI, not the Host header, so
+          # a Host-header-only override on an IP/localhost URL would hit the
+          # wrong cert's default vhost).
           CODE=$(ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "curl -s -o /dev/null -w '%{http_code}' -H 'Host: dev.app.cred2tech.com' http://localhost/")
+            "curl -s -o /dev/null -w '%{http_code}' --resolve dev.app.cred2tech.com:443:127.0.0.1 https://dev.app.cred2tech.com/")
           echo "HTTP $CODE"
           [ "$CODE" = "200" ] || { echo "::error::Smoke test failed: expected 200, got $CODE"; exit 1; }
 

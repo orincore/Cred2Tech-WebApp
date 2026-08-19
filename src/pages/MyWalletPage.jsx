@@ -1,102 +1,663 @@
-import React, { useEffect, useState } from 'react';
-import { Wallet, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
-import api from '../api/axiosInstance';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-hot-toast';
+import {
+  Wallet, ArrowUpCircle, ArrowDownCircle, Search, SlidersHorizontal,
+  FileSpreadsheet, RefreshCw, TrendingUp, TrendingDown, Plus, X,
+  Download, CheckCircle2, Clock, XCircle,
+} from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import StatCard from '../components/ui/StatCard';
 import EmptyState from '../components/ui/EmptyState';
+import DataTable from '../components/DataTable';
+import { formatDateTime } from '../utils/helpers';
+import { getErrorMessage } from '../utils/helpers';
+import { walletService } from '../api/walletService';
+import { loadRazorpay } from '../utils/razorpay';
+import { useAuth } from '../context/AuthContext';
 
-const formatDateTime = (d) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-const MyWalletPage = () => {
-  const [balance, setBalance] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
+const useResponsive = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      api.get('/wallet/balance').then(res => setBalance(res.data.balance)).catch(() => setBalance(null)),
-      api.get('/wallet/transactions').then(res => setTransactions(Array.isArray(res.data) ? res.data : [])).catch(() => setTransactions([])),
-    ]).finally(() => setLoading(false));
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
   }, []);
+  return { isMobile };
+};
+
+const PAGE_SIZE = 25;
+const GST_RATE = 0.18;
+
+const TYPE_OPTIONS = [
+  { value: 'CREDIT', label: 'Credits (added)' },
+  { value: 'DEBIT', label: 'Debits (used)' },
+];
+
+const compactField = {
+  border: '1px solid var(--outline)',
+  borderRadius: 0,
+  background: 'var(--surface)',
+  color: 'var(--on-surface)',
+  fontSize: 12,
+  fontWeight: 600,
+  padding: '6px 10px',
+  outline: 'none',
+};
+
+const toDateInput = (d) => d.toISOString().slice(0, 10);
+
+// "Weekly" -> last 7 days, "Yearly" -> 1 Jan of this year through today —
+// both computed client-side into a plain date_from/date_to pair, same
+// contract the custom range picker below already sends.
+const PRESETS = [
+  {
+    key: 'week',
+    label: 'Last 7 Days',
+    range: () => {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 6);
+      return [toDateInput(from), toDateInput(to)];
+    },
+  },
+  {
+    key: 'year',
+    label: 'This Year',
+    range: () => {
+      const to = new Date();
+      const from = new Date(to.getFullYear(), 0, 1);
+      return [toDateInput(from), toDateInput(to)];
+    },
+  },
+];
+
+const REFERENCE_TYPE_LABEL = { RAZORPAY_TOPUP: 'Credits Recharge' };
+const referenceTypeLabel = (type) => REFERENCE_TYPE_LABEL[type] || type;
+
+const formatCredits = (n) => `${Number(n || 0).toLocaleString('en-IN')}`;
+const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const TOPUP_STATUS_STYLE = {
+  CREDITED: { color: 'var(--success)', bg: 'var(--success-bg)', icon: CheckCircle2, label: 'Credited' },
+  FAILED: { color: 'var(--error)', bg: 'var(--error-bg)', icon: XCircle, label: 'Failed' },
+  CANCELLED: { color: 'var(--error)', bg: 'var(--error-bg)', icon: XCircle, label: 'Cancelled' },
+};
+const topupStatusStyle = (status) => TOPUP_STATUS_STYLE[status] || { color: 'var(--warning)', bg: 'var(--warning-bg)', icon: Clock, label: status === 'INITIATED' || status === 'CREATED' ? 'Pending' : (status === 'VERIFIED' ? 'Processing' : status) };
+
+// ─── Recharge modal ─────────────────────────────────────────────────────────
+const RechargeModal = ({ onClose, onSuccess }) => {
+  const { user } = useAuth();
+  const [amount, setAmount] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const base = Number(amount) || 0;
+  const gst = Math.round(base * GST_RATE * 100) / 100;
+  const total = base + gst;
+
+  const handleRecharge = async () => {
+    if (!base || base <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const order = await walletService.createTopupOrder(base);
+      const Razorpay = await loadRazorpay();
+
+      const options = {
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Cred2Tech',
+        description: `Wallet Recharge — ${base.toLocaleString('en-IN')} credits`,
+        order_id: order.order_id,
+        handler: async (response) => {
+          const verifyData = {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            topup_id: order.topup_id,
+          };
+          let lastErr;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const result = await walletService.verifyTopupCheckout(verifyData);
+              if (result.status === 'CREDITED' || result.status === 'ALREADY_CREDITED' || result.status === 'ALREADY_CREDITED_IN_LEDGER') {
+                toast.success(`Wallet recharged with ${base.toLocaleString('en-IN')} credits!`);
+                setSubmitting(false);
+                onSuccess();
+                return;
+              }
+              toast(result.message || 'Payment received — credits will reflect shortly.', { icon: '⏳' });
+              setSubmitting(false);
+              onSuccess();
+              return;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+            }
+          }
+          toast.error(
+            `${getErrorMessage(lastErr)} If the amount was deducted, refresh in a moment — if it still doesn't reflect, contact support with payment ID ${response.razorpay_payment_id}.`,
+            { duration: 8000 }
+          );
+          setSubmitting(false);
+        },
+        modal: {
+          ondismiss: () => setSubmitting(false),
+        },
+        prefill: {
+          name: user?.name,
+          email: user?.email,
+          contact: user?.mobile,
+        },
+        theme: { color: '#4F46E5' },
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.on('payment.failed', (response) => {
+        toast.error(`Payment Failed: ${response.error.description}`);
+        setSubmitting(false);
+      });
+      rzp.open();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to initiate recharge');
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="mw-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
-      <style>{`
-        .mw-page .card, .mw-page .table-wrapper, .mw-page table { border-radius: 0 !important; }
-        @media (max-width: 768px) {
-          .mw-page > div { padding: 80px 24px 24px !important; }
-          .mw-page table, .mw-page thead, .mw-page tbody, .mw-page tr, .mw-page td { display: block; width: 100%; }
-          .mw-page thead { display: none; }
-          .mw-page tbody { display: flex !important; flex-direction: column; gap: 10px; }
-          .mw-page tbody tr { border: none !important; padding: 4px 14px; }
-          .mw-page tbody tr + tr { border-top: 1px solid var(--outline) !important; margin-top: 4px; }
-          .mw-page tbody td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0 !important; border-bottom: 1px solid var(--outline); text-align: right; white-space: normal; }
-          .mw-page tbody td:last-child { border-bottom: none; }
-          .mw-page tbody td::before { content: attr(data-label); font-weight: 700; color: var(--on-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; text-align: left; flex-shrink: 0; }
-        }
-      `}</style>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-        <PageHeader title="My Wallet" subtitle="Your credit balance and transaction history" />
-
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 24, marginBottom: 24 }}>
-          <div style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', border: '1px solid var(--outline)', flexShrink: 0 }}>
-            <Wallet size={22} color="var(--primary)" />
-          </div>
-          <div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--on-surface)', lineHeight: 1 }}>
-              {loading ? '—' : (balance !== null ? balance.toLocaleString('en-IN') : '—')} Credits
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--on-muted)', marginTop: 6 }}>Current balance</div>
-          </div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: '100%', maxWidth: 420, borderRadius: 0, padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Recharge Wallet</h3>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--on-muted)', padding: 4 }}><X size={18} /></button>
         </div>
 
-        <div className="card" style={{ padding: 0 }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Transaction History</h3>
-          </div>
+        <div style={{ padding: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', marginBottom: 6, display: 'block' }}>Credits to purchase (₹1 = 1 credit)</label>
+          <input
+            type="number"
+            min="1"
+            placeholder="e.g. 1000"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{ ...compactField, width: '100%', boxSizing: 'border-box', fontSize: 16, padding: '10px 12px' }}
+            autoFocus
+          />
 
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
-          ) : transactions.length === 0 ? (
-            <EmptyState icon={Wallet} title="No transactions yet" description="Your wallet credit and debit history will appear here." />
-          ) : (
-            <div className="table-wrapper" style={{ border: 'none' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Type</th>
-                    <th>Impact</th>
-                    <th>Reference</th>
-                    <th>Balance After</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((t) => (
-                    <tr key={t.id}>
-                      <td data-label="Timestamp">{formatDateTime(t.created_at)}</td>
-                      <td data-label="Type">
-                        <span className="badge" style={{
-                          color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)',
-                          background: t.transaction_type === 'CREDIT' ? 'var(--success-bg)' : 'var(--error-bg)',
-                        }}>
-                          {t.transaction_type === 'CREDIT' ? <ArrowUpCircle size={12} /> : <ArrowDownCircle size={12} />}
-                          {t.reference_type}
-                        </span>
-                      </td>
-                      <td data-label="Impact" style={{ fontWeight: 700, color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)' }}>
-                        {t.transaction_type === 'CREDIT' ? '+' : '-'}{t.amount.toLocaleString('en-IN')}
-                      </td>
-                      <td data-label="Reference">{t.remarks || t.api_code || '—'}</td>
-                      <td data-label="Balance After" style={{ fontWeight: 600 }}>{t.balance_after.toLocaleString('en-IN')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {base > 0 && (
+            <div style={{ marginTop: 16, background: 'var(--bg)', border: '1px solid var(--outline)', padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
+                <span>Credits value</span><span>{formatINR(base)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
+                <span>GST (18%)</span><span>{formatINR(gst)}</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>
+                <span>Amount payable</span><span>{formatINR(total)}</span>
+              </div>
             </div>
           )}
+
+          <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 12, marginBottom: 0 }}>
+            A GST tax invoice will be emailed to you and available for download from Recharge History once payment is confirmed.
+          </p>
+
+          <button
+            onClick={handleRecharge}
+            disabled={submitting || !base}
+            style={{
+              width: '100%', marginTop: 16, padding: '12px', background: 'var(--primary)', color: '#fff',
+              border: 'none', fontSize: 14, fontWeight: 700, cursor: submitting || !base ? 'not-allowed' : 'pointer',
+              opacity: submitting || !base ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+            {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(total) : ''}`}
+          </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+const MyWalletPage = () => {
+  const { isMobile } = useResponsive();
+  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'recharges'
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+
+  const [balance, setBalance] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [type, setType] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [activePreset, setActivePreset] = useState(null);
+
+  // Recharge History tab state
+  const [topups, setTopups] = useState([]);
+  const [topupsTotal, setTopupsTotal] = useState(0);
+  const [topupsPage, setTopupsPage] = useState(1);
+  const [topupsLoading, setTopupsLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const filters = useMemo(() => ({
+    search, type, date_from: dateFrom, date_to: dateTo,
+  }), [search, type, dateFrom, dateTo]);
+
+  // Any filter change invalidates the current page — jumping back to page 1
+  // avoids landing on a now out-of-range page.
+  useEffect(() => { setPage(1); }, [filters]);
+
+  const fetchBalance = useCallback(async () => {
+    setBalanceLoading(true);
+    try {
+      const result = await walletService.getBalance();
+      setBalance(result.balance);
+    } catch (err) {
+      setBalance(null);
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await walletService.getTransactions({ ...filters, page, limit: PAGE_SIZE });
+      setRows(result.transactions || []);
+      setTotal(result.total || 0);
+      setSummary(result.summary || null);
+    } catch (err) {
+      toast.error('Failed to load transaction history');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, page]);
+
+  const fetchTopups = useCallback(async () => {
+    setTopupsLoading(true);
+    try {
+      const result = await walletService.getTopups({ page: topupsPage, limit: PAGE_SIZE });
+      setTopups(result.topups || []);
+      setTopupsTotal(result.total || 0);
+    } catch (err) {
+      toast.error('Failed to load recharge history');
+    } finally {
+      setTopupsLoading(false);
+    }
+  }, [topupsPage]);
+
+  useEffect(() => { fetchBalance(); }, [fetchBalance]);
+  useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+  useEffect(() => { if (activeTab === 'recharges') fetchTopups(); }, [activeTab, fetchTopups]);
+
+  const applyPreset = (preset) => {
+    const [from, to] = preset.range();
+    setDateFrom(from);
+    setDateTo(to);
+    setActivePreset(preset.key);
+  };
+
+  const activeFilterCount = [type, dateFrom, dateTo].filter(Boolean).length;
+  const clearFilters = () => {
+    setSearchInput(''); setSearch(''); setType('');
+    setDateFrom(''); setDateTo(''); setActivePreset(null);
+  };
+
+  const handleDateInputChange = (setter) => (e) => {
+    setter(e.target.value);
+    setActivePreset(null);
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await walletService.exportTransactions(filters);
+      toast.success('Excel export downloaded');
+    } catch (err) {
+      toast.error('Failed to export transactions');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleRechargeSuccess = () => {
+    setShowRechargeModal(false);
+    fetchBalance();
+    fetchTransactions();
+    if (activeTab === 'recharges') fetchTopups();
+  };
+
+  const handleDownloadInvoice = async (topup) => {
+    setDownloadingId(topup.id);
+    try {
+      await walletService.downloadInvoice(topup.id, topup.invoice_number);
+    } catch (err) {
+      toast.error('Failed to download invoice');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const columns = [
+    {
+      key: 'created_at', label: 'Date & Time', width: '20%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(t.created_at)}</span>,
+    },
+    {
+      key: 'type', label: 'Type', width: '16%', padding: '16px 12px',
+      render: (t) => (
+        <span className="badge" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)',
+          background: t.transaction_type === 'CREDIT' ? 'var(--success-bg)' : 'var(--error-bg)',
+        }}>
+          {t.transaction_type === 'CREDIT' ? <ArrowUpCircle size={12} /> : <ArrowDownCircle size={12} />}
+          {referenceTypeLabel(t.reference_type)}
+        </span>
+      ),
+    },
+    {
+      key: 'amount', label: 'Amount', align: 'right', width: '14%', padding: '16px 12px',
+      render: (t) => (
+        <span style={{ fontSize: 14, fontWeight: 800, color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)' }}>
+          {t.transaction_type === 'CREDIT' ? '+' : '-'}{formatCredits(t.amount)}
+        </span>
+      ),
+    },
+    {
+      key: 'reference', label: 'Reference', width: '30%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{t.remarks || t.api_code || '—'}</span>,
+    },
+    {
+      key: 'balance_after', label: 'Balance After', align: 'right', width: '20%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{formatCredits(t.balance_after)}</span>,
+    },
+  ];
+
+  const topupColumns = [
+    {
+      key: 'created_at', label: 'Date', width: '16%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(t.created_at)}</span>,
+    },
+    {
+      key: 'status', label: 'Status', width: '13%', padding: '16px 12px',
+      render: (t) => {
+        const s = topupStatusStyle(t.status);
+        const Icon = s.icon;
+        return (
+          <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: s.color, background: s.bg }}>
+            <Icon size={12} /> {s.label}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'credits', label: 'Credits', align: 'right', width: '13%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--success)' }}>+{formatCredits(t.credits_to_add)}</span>,
+    },
+    {
+      key: 'gst', label: 'GST', align: 'right', width: '15%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>{t.gst_amount_inr != null ? formatINR(t.gst_amount_inr) : '—'}</span>,
+    },
+    {
+      key: 'total', label: 'Amount Paid', align: 'right', width: '15%', padding: '16px 12px',
+      render: (t) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</span>,
+    },
+    {
+      key: 'invoice', label: 'Invoice', width: '18%', padding: '16px 12px',
+      render: (t) => t.status === 'CREDITED' ? (
+        <button
+          onClick={() => handleDownloadInvoice(t)}
+          disabled={downloadingId === t.id}
+          style={{ ...compactField, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: downloadingId === t.id ? 'not-allowed' : 'pointer' }}
+        >
+          {downloadingId === t.id ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />}
+          {t.invoice_number || 'Download'}
+        </button>
+      ) : <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>—</span>,
+    },
+  ];
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <PageHeader title="My Wallet" subtitle="Your credit balance, recharges, and transaction history" compact={isMobile} />
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
+        {/* ─── Summary stat cards + Recharge button ─── */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 8 : 16, marginBottom: 16, alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 8 : 16, flex: 1 }}>
+            <StatCard title="Current Balance" value={balanceLoading ? '—' : (balance !== null ? formatCredits(balance) : '—')} icon={Wallet} color="var(--primary)" loading={balanceLoading} />
+            <StatCard title="Credited (in range)" value={summary ? `+${formatCredits(summary.total_credit)}` : '—'} icon={TrendingUp} color="var(--success)" loading={!summary} />
+            <StatCard title="Used (in range)" value={summary ? `-${formatCredits(summary.total_debit)}` : '—'} icon={TrendingDown} color="var(--error)" loading={!summary} />
+          </div>
+          <button
+            onClick={() => setShowRechargeModal(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '0 24px', background: 'var(--primary)', color: '#fff', border: 'none',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', minWidth: isMobile ? '100%' : 160,
+            }}
+          >
+            <Plus size={16} /> Recharge Wallet
+          </button>
+        </div>
+
+        {/* ─── Tabs ─── */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 0, borderBottom: '1px solid var(--outline)' }}>
+          {[
+            { key: 'transactions', label: 'Transaction History' },
+            { key: 'recharges', label: 'Recharge History' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '10px 18px', background: 'transparent', border: 'none',
+                borderBottom: `2px solid ${activeTab === tab.key ? 'var(--primary)' : 'transparent'}`,
+                color: activeTab === tab.key ? 'var(--primary)' : 'var(--on-muted)',
+                fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: -1,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'transactions' ? (
+          <>
+            <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
+              {/* ─── Filter toolbar ─── */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--outline)' }}>
+                <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 140, maxWidth: 260 }}>
+                  <Search size={13} color="var(--on-muted)" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <input
+                    type="text"
+                    placeholder="Search remarks, API…"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    style={{ ...compactField, width: '100%', paddingLeft: 26, boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                {isMobile && (
+                  <button
+                    onClick={() => setShowFilters((v) => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 10px', background: 'transparent',
+                      border: `1px solid ${activeFilterCount > 0 ? 'var(--primary)' : 'var(--outline)'}`,
+                      color: activeFilterCount > 0 ? 'var(--primary)' : 'var(--on-surface)',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer', borderRadius: 0,
+                    }}
+                  >
+                    <SlidersHorizontal size={13} /> Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                  </button>
+                )}
+
+                {(!isMobile || showFilters) && (
+                  <>
+                    <select style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
+                      <option value="">All types</option>
+                      {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {PRESETS.map((p) => (
+                        <button
+                          key={p.key}
+                          onClick={() => applyPreset(p)}
+                          style={{
+                            ...compactField,
+                            cursor: 'pointer',
+                            border: `1px solid ${activePreset === p.key ? 'var(--primary)' : 'var(--outline)'}`,
+                            color: activePreset === p.key ? 'var(--primary)' : 'var(--on-surface)',
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <input type="date" value={dateFrom} onChange={handleDateInputChange(setDateFrom)} style={{ ...compactField, maxWidth: 140 }} title="From date" />
+                    <input type="date" value={dateTo} onChange={handleDateInputChange(setDateTo)} style={{ ...compactField, maxWidth: 140 }} title="To date" />
+
+                    {activeFilterCount > 0 && (
+                      <button onClick={clearFilters} style={{ ...compactField, border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
+                        Clear ({activeFilterCount})
+                      </button>
+                    )}
+                  </>
+                )}
+
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  style={{ ...compactField, display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', cursor: exporting ? 'not-allowed' : 'pointer', border: '1px solid var(--outline)' }}
+                >
+                  {exporting ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileSpreadsheet size={13} />} Export Excel
+                </button>
+              </div>
+
+              {/* ─── Table / mobile card list ─── */}
+              {loading ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
+              ) : rows.length === 0 ? (
+                <EmptyState icon={Wallet} title="No transactions found" description="No wallet credit/debit history matches the applied filters." />
+              ) : isMobile ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                  {rows.map((t) => (
+                    <div key={t.id} style={{ background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <span className="badge" style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)',
+                            background: t.transaction_type === 'CREDIT' ? 'var(--success-bg)' : 'var(--error-bg)',
+                          }}>
+                            {t.transaction_type === 'CREDIT' ? <ArrowUpCircle size={12} /> : <ArrowDownCircle size={12} />}
+                            {referenceTypeLabel(t.reference_type)}
+                          </span>
+                          <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6 }}>{formatDateTime(t.created_at)}</div>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)', flexShrink: 0 }}>
+                          {t.transaction_type === 'CREDIT' ? '+' : '-'}{formatCredits(t.amount)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
+                        <span style={{ fontSize: 12, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.remarks || t.api_code || '—'}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', flexShrink: 0 }}>Bal: {formatCredits(t.balance_after)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <DataTable columns={columns} data={rows} rowKey="id" />
+              )}
+            </div>
+
+            {!loading && total > PAGE_SIZE && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', marginTop: 16 }}>
+                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
+                <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Page {page} of {Math.ceil(total / PAGE_SIZE)} · {total} total</span>
+                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} disabled={page * PAGE_SIZE >= total} onClick={() => setPage((p) => p + 1)}>Next</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
+              {topupsLoading ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
+              ) : topups.length === 0 ? (
+                <EmptyState icon={Wallet} title="No recharges yet" description="Your wallet recharge history and GST invoices will appear here." />
+              ) : isMobile ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                  {topups.map((t) => {
+                    const s = topupStatusStyle(t.status);
+                    const Icon = s.icon;
+                    return (
+                      <div key={t.id} style={{ background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: s.color, background: s.bg }}>
+                              <Icon size={12} /> {s.label}
+                            </span>
+                            <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6 }}>{formatDateTime(t.created_at)}</div>
+                          </div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success)', flexShrink: 0 }}>+{formatCredits(t.credits_to_add)}</div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
+                          <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>Paid {formatINR(t.amount_inr)}</span>
+                          {t.status === 'CREDITED' && (
+                            <button onClick={() => handleDownloadInvoice(t)} disabled={downloadingId === t.id} style={{ ...compactField, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                              <Download size={12} /> Invoice
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <DataTable columns={topupColumns} data={topups} rowKey="id" />
+              )}
+            </div>
+
+            {!topupsLoading && topupsTotal > PAGE_SIZE && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', marginTop: 16 }}>
+                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} disabled={topupsPage === 1} onClick={() => setTopupsPage((p) => p - 1)}>Previous</button>
+                <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Page {topupsPage} of {Math.ceil(topupsTotal / PAGE_SIZE)} · {topupsTotal} total</span>
+                <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} disabled={topupsPage * PAGE_SIZE >= topupsTotal} onClick={() => setTopupsPage((p) => p + 1)}>Next</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {showRechargeModal && (
+        <RechargeModal onClose={() => setShowRechargeModal(false)} onSuccess={handleRechargeSuccess} />
+      )}
     </div>
   );
 };
