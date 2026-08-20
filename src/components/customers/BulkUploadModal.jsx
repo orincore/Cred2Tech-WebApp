@@ -12,6 +12,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
   const [downloading, setDownloading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
+  const [overwrite, setOverwrite] = useState(false);
   const fileInputRef = useRef(null);
 
   if (!isOpen) return null;
@@ -19,6 +20,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
   const handleClose = () => {
     setFile(null);
     setResult(null);
+    setOverwrite(false);
     onClose();
   };
 
@@ -50,7 +52,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
     setUploading(true);
     setResult(null);
     try {
-      const data = await caseService.uploadBulkCases(file);
+      const data = await caseService.uploadBulkCases(file, { overwrite });
       setResult(data);
       if (data.success) {
         toast.success(`Imported ${data.summary.createdCases} case(s). ESR generated for ${data.summary.esrGeneratedCases || 0}.`);
@@ -128,6 +130,18 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
                 style={{ display: 'none' }}
               />
             </div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={overwrite}
+                onChange={(e) => setOverwrite(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                Overwrite existing Case Refs — if a row's Case Ref already exists, replace that case with this row instead of failing it.
+                Only applies to cases originally created via bulk upload with no payments, sanctions, or disbursements recorded against them.
+              </span>
+            </label>
           </div>
 
           {/* Results */}
@@ -170,6 +184,29 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
                           </td>
                           <td style={{ padding: '6px 8px' }}>{c.eligibleLenderCount || 0}/{c.totalLenderCount || 0}</td>
                           <td style={{ padding: '6px 8px', fontWeight: 700 }}>{formatINR(c.finalLoanEligibility)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {result.warnings?.length > 0 && (
+                <div style={{ marginTop: 12, maxHeight: 150, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--warning)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--warning)', textAlign: 'left', color: 'var(--warning)' }}>
+                        <th style={{ padding: '6px 8px' }}>Row</th>
+                        <th style={{ padding: '6px 8px' }}>Case Ref</th>
+                        <th style={{ padding: '6px 8px' }}>Warning</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.warnings.map((w, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+                          <td style={{ padding: '6px 8px' }}>{w.row}</td>
+                          <td style={{ padding: '6px 8px' }}>{w.caseRef}</td>
+                          <td style={{ padding: '6px 8px' }}>{w.message}</td>
                         </tr>
                       ))}
                     </tbody>

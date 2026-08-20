@@ -243,9 +243,10 @@ export const caseService = {
     window.URL.revokeObjectURL(url);
   },
 
-  uploadBulkCases: async (file) => {
+  uploadBulkCases: async (file, options = {}) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (options.overwrite) formData.append('overwrite', 'true');
     const response = await axiosInstance.post('/cases/bulk-upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
