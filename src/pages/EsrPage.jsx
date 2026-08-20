@@ -558,10 +558,19 @@ const CalcBreakdownPanel = ({ evaluations }) => {
   //
   // Mirror that same comparator here — eligible first, then loan amount ↓,
   // ROI ↑, tenure ↓ — so tab one is always the scheme the card advertises as
-  // best. Sorted copy: never mutate the prop array.
+  // best.
+  //
+  // On an "Any product type" case the same scheme name is commonly
+  // configured more than once for a lender — once per product it offers
+  // (HL and LAP each get their own copy), sometimes with inconsistent
+  // casing on top of that ("Net Profit Method" vs "NET PROFIT METHOD").
+  // Collapse those to one tab per scheme name (case/whitespace-insensitive),
+  // keeping only the best-ranked evaluation in each group by this same
+  // comparator, so a scheme is never shown more than once.
   const orderedEvaluations = useMemo(() => {
     if (!evaluations || evaluations.length === 0) return [];
-    return [...evaluations].sort((a, b) => {
+
+    const compare = (a, b) => {
       if (a.is_eligible !== b.is_eligible) return a.is_eligible ? -1 : 1;
 
       const loanA = a.final_eligible_loan_amount || 0;
@@ -573,23 +582,19 @@ const CalcBreakdownPanel = ({ evaluations }) => {
       if (roiB !== roiA) return roiA - roiB;
 
       return (b.max_tenure_months || 0) - (a.max_tenure_months || 0);
-    });
-  }, [evaluations]);
+    };
 
-  // On an "Any product type" case, the same scheme name (e.g. "Net Profit
-  // Method") is commonly configured separately per product (HL and LAP each
-  // have their own copy, with different LTV/tenure/ROI) — every product the
-  // lender offers gets evaluated, so both show up here as distinct entries.
-  // That reads as an accidental duplicate unless disambiguated: only append
-  // the product name to a tab label when its scheme_name isn't unique in
-  // this list, so the normal single-product-type case stays unchanged.
-  const schemeNameCounts = useMemo(() => {
-    const counts = {};
-    for (const e of orderedEvaluations) {
-      counts[e.scheme_name] = (counts[e.scheme_name] || 0) + 1;
+    const bestByScheme = new Map();
+    for (const e of evaluations) {
+      const key = String(e.scheme_name || '').trim().toUpperCase();
+      const existing = bestByScheme.get(key);
+      if (!existing || compare(e, existing) < 0) {
+        bestByScheme.set(key, e);
+      }
     }
-    return counts;
-  }, [orderedEvaluations]);
+
+    return [...bestByScheme.values()].sort(compare);
+  }, [evaluations]);
 
   if (orderedEvaluations.length === 0) return null;
 
@@ -668,7 +673,6 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
                       {e.scheme_name}
-                      {schemeNameCounts[e.scheme_name] > 1 && e.product_display_name ? ` (${e.product_display_name})` : ''}
                       {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
