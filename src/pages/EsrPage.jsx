@@ -576,6 +576,21 @@ const CalcBreakdownPanel = ({ evaluations }) => {
     });
   }, [evaluations]);
 
+  // On an "Any product type" case, the same scheme name (e.g. "Net Profit
+  // Method") is commonly configured separately per product (HL and LAP each
+  // have their own copy, with different LTV/tenure/ROI) — every product the
+  // lender offers gets evaluated, so both show up here as distinct entries.
+  // That reads as an accidental duplicate unless disambiguated: only append
+  // the product name to a tab label when its scheme_name isn't unique in
+  // this list, so the normal single-product-type case stays unchanged.
+  const schemeNameCounts = useMemo(() => {
+    const counts = {};
+    for (const e of orderedEvaluations) {
+      counts[e.scheme_name] = (counts[e.scheme_name] || 0) + 1;
+    }
+    return counts;
+  }, [orderedEvaluations]);
+
   if (orderedEvaluations.length === 0) return null;
 
   const ev = orderedEvaluations[activeScheme] || orderedEvaluations[0];
@@ -653,6 +668,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
                       {e.scheme_name}
+                      {schemeNameCounts[e.scheme_name] > 1 && e.product_display_name ? ` (${e.product_display_name})` : ''}
                       {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
