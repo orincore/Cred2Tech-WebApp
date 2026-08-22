@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Receipt,
   Trash2,
+  ServerCog,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -107,6 +108,13 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-system-status',
+    label: 'System Status',
+    path: '/admin/system-status',
+    icon: ServerCog,
     roles: ['SUPER_ADMIN'],
   },
   {

@@ -51,6 +51,7 @@ export const ROUTE_TITLES = [
   { path: '/admin/wallets/:dsaId', title: 'Wallet Details' },
   { path: '/admin/wallets', title: 'Wallets' },
   { path: '/admin/logs', title: 'API Logs' },
+  { path: '/admin/system-status', title: 'System Status' },
   { path: '/admin/lenders', title: 'Lender Configuration' },
   { path: '/admin/msme-cases', title: 'MSME Cases' },
   { path: '/admin/transactions', title: 'Transactions' },
