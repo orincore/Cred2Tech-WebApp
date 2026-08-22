@@ -76,6 +76,13 @@ export const AuthProvider = ({ children }) => {
   // /tickets (served by AppLayout, which uses this context) would hit a
   // stale isAuthenticated:false from before they logged in and get bounced
   // to /login — i.e. appear to "log out" even though their session is fine.
+  // A failed /auth/me is only proof the token is bad when the backend
+  // actually said so (401). A network error, timeout, or 5xx just means the
+  // backend was briefly unreachable — during a DR failover window, a
+  // deploy, or any other transient blip — and must NOT be treated as "log
+  // this person out". Retries with backoff first, since most blips this is
+  // built to ride out resolve within a few seconds; only a genuine 401 (at
+  // any attempt) clears the session immediately.
   const syncFromStorage = useCallback(async () => {
     const storedToken = localStorage.getItem('token') || getCookie('cred2tech_token');
     if (!storedToken) {
@@ -83,14 +90,25 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       return null;
     }
-    try {
-      const userData = await getMe();
-      const finalUser = normalizeUser(userData);
-      setToken(storedToken);
-      setUser(finalUser);
-      return finalUser;
-    } catch {
-      // Token is invalid/expired — clear everything
+
+    const delaysMs = [0, 1000, 2000, 3000]; // ~6s of total retry budget
+    let lastError = null;
+    for (const delay of delaysMs) {
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        const userData = await getMe();
+        const finalUser = normalizeUser(userData);
+        setToken(storedToken);
+        setUser(finalUser);
+        return finalUser;
+      } catch (err) {
+        lastError = err;
+        if (err.response?.status === 401) break; // definitively invalid — no point retrying
+      }
+    }
+
+    if (lastError?.response?.status === 401) {
+      // Token is genuinely invalid/expired — clear everything
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       deleteCookie('cred2tech_token');
@@ -98,11 +116,24 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       return null;
     }
+
+    // Backend still unreachable after retries: keep the token (it may well
+    // still be valid) and keep isLoading true rather than rendering routes
+    // against a null user — schedule another attempt rather than giving up.
+    setTimeout(() => { syncFromStorage(); }, 10000);
+    return undefined;
   }, []);
 
-  // On mount, try to rehydrate current user from stored token
+  // On mount, try to rehydrate current user from stored token. Only clears
+  // the loading state once syncFromStorage has actually resolved to a
+  // definite answer (authenticated or genuinely not) — a transient failure
+  // re-schedules itself internally rather than resolving early, so this
+  // intentionally does not use .finally().
   useEffect(() => {
-    syncFromStorage().finally(() => setIsLoading(false));
+    (async () => {
+      const result = await syncFromStorage();
+      if (result !== undefined) setIsLoading(false);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

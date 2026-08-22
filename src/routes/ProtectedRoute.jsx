@@ -16,8 +16,15 @@ const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
         try {
           await getMe();
         } catch (error) {
-          // Token is invalid, logout user
-          logout();
+          // Only a genuine 401 means the token is actually invalid. A
+          // network error, timeout, or 5xx just means the backend was
+          // briefly unreachable (a DR failover window, a deploy, a blip) —
+          // AuthContext already validated this session on mount; forcing a
+          // logout here on every transient hiccup was the exact bug that
+          // made short backend interruptions look like being logged out.
+          if (error.response?.status === 401) {
+            logout();
+          }
         } finally {
           setIsValidating(false);
         }

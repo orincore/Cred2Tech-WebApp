@@ -35,6 +35,39 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Transient-failure retry for GET requests only (safe to repeat — never
+// mutates anything): a network error or 5xx during a brief backend blip
+// (a DR failover window, a deploy, momentary infra hiccup) gets retried a
+// couple of times with short backoff before the caller ever sees an error,
+// so a short interruption doesn't surface as a visible failure in the UI.
+// Never retries 4xx (a real client error, retrying won't help) or non-GET
+// requests (retrying a POST/PUT/DELETE blind risks a duplicate side
+// effect). Opt out per-request with { skipRetry: true } in the request
+// config, for callers that need to fail fast instead (e.g. a request
+// already wrapped in its own retry/polling loop).
+const RETRY_DELAYS_MS = [500, 1500];
+const isRetryableFailure = (error) => {
+  if (error.config?.skipRetry) return false;
+  if ((error.config?.method || 'get').toLowerCase() !== 'get') return false;
+  if (!error.response) return true; // network error / timeout, no response at all
+  return error.response.status >= 500;
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (isRetryableFailure(error)) {
+      const attempt = error.config.__retryCount || 0;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        error.config.__retryCount = attempt + 1;
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+        return api(error.config);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Response interceptor: handle 401 globally
 api.interceptors.response.use(
   (response) => response,
