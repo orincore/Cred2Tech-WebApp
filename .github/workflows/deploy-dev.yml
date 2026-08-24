@@ -71,7 +71,14 @@ jobs:
             ln -sfn /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }} /opt/cred2tech/webapp-dev/current
             echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ github.sha }}"
             cd /opt/cred2tech/webapp-dev/releases
-            ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf
+            # Best-effort: an old release dir this deploy user doesn't own
+            # (e.g. left behind by a one-off manual/root deploy) must not
+            # fail the whole job — the site's already live at this point.
+            ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf 2>&1 | tee /tmp/cleanup.log || true
+            if [ -s /tmp/cleanup.log ]; then
+              echo "::warning::Old release cleanup had errors (see below) — site is live, but disk cleanup needs a look:"
+              cat /tmp/cleanup.log
+            fi
             echo "Cleanup done. Retained last 5 releases."
           EOF
 
