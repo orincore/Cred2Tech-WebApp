@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import MetricTile from '../components/ui/MetricTile';
+import { getLenderDisplayName } from '../constants/lenderPolicies';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -815,7 +816,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
                 <ClipboardList size={13} /> Reuse existing proposal?
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
-                Reuse proposal #{otherSubmitted?.proposal_number}'s data and documents for {lender.lender_name}?
+                Reuse proposal #{otherSubmitted?.proposal_number}'s data and documents for {getLenderDisplayName(lender)}?
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -859,7 +860,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
                 A proposal was already prepared (#{otherSubmitted?.proposal_number}).
-                Reuse its data and documents for {lender.lender_name}?
+                Reuse its data and documents for {getLenderDisplayName(lender)}?
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -1005,9 +1006,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const eligibleCount   = lenders.filter(l => l.is_eligible).length;
   const ineligibleCount = lenders.filter(l => !l.is_eligible).length;
 
-  const lenderNames = [...new Set(lenders.map(l => l.lender_name))].sort();
+  const lenderNames = [...new Set(lenders.map(getLenderDisplayName))].sort();
   const filteredLenders = lenders.filter(l =>
-    (lenderFilter === 'all' || l.lender_name === lenderFilter) &&
+    (lenderFilter === 'all' || getLenderDisplayName(l) === lenderFilter) &&
     (eligibilityFilter === 'all' || (eligibilityFilter === 'eligible' ? l.is_eligible : !l.is_eligible))
   );
 
@@ -1174,7 +1175,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                     {eligible ? <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
                               : <XCircle size={16} color="var(--text-tertiary)" style={{ flexShrink: 0, marginTop: 1 }} />}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{lender.lender_name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{getLenderDisplayName(lender)}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                         {lender.product_display_name || lender.product_type}
                         {eligible && lender.best_scheme_name ? ` · ${lender.best_scheme_name}` : ''}
