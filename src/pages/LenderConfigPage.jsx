@@ -7,6 +7,7 @@ import {
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert, Save } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { getLenderDisplayName } from '../constants/lenderPolicies';
 
 // Mirrors the backend's key-based type inference (Cred2Tech/backend's
 // src/utils/esrParsers.js normalizeParameter()) so the editor shown for a
@@ -18,7 +19,7 @@ import { toast } from 'react-hot-toast';
 const classifyParamType = (parameterKey) => {
    const k = (parameterKey || '').toLowerCase();
    if (k.includes('foir')) return 'foir'; // percent/slab/conditional — too variable to force into a fixed widget
-   if (k.includes('ltv') || k.includes('roi') || k.includes('pf')) return 'percent';
+   if (k.includes('percent') || k.includes('ltv') || k.includes('roi') || k.includes('pf')) return 'percent';
    if (k.includes('age') || k.includes('cutoff') || k.includes('tenure')) return 'integer';
    if (k.includes('loan') || k.includes('income')) return 'money';
    if (k.includes('elig_')) return 'boolean';
@@ -479,7 +480,7 @@ const LenderConfigPage = () => {
                      onChange={handleLenderChange}
                   >
                      <option value="">-- Select Lender --</option>
-                     {lenders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                     {lenders.map(l => <option key={l.id} value={l.id}>{getLenderDisplayName(l)}</option>)}
                   </select>
                   <button 
                      className="btn btn-outline" 
