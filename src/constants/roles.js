@@ -43,7 +43,7 @@ export const ROLE_OPTIONS = [
 
 // Roles allowed on the main dashboard ("/"). Kept in sync with the "/" route's
 // allowedRoles in AppRouter so UnauthorizedPage's auto-redirect never loops.
-export const DASHBOARD_ROLES = ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER'];
+export const DASHBOARD_ROLES = ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER'];
 
 export const TENANT_TYPES = ['CRED2TECH', 'DSA'];
 
