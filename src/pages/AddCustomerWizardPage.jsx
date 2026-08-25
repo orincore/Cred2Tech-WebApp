@@ -1284,18 +1284,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
-                      {!formData.mobile_verified ? (
-                        <button
-                          type="button"
-                          onClick={handleRequestConsent}
-                          disabled={saving || consentRequesting || !!consentRequest || !formData.business_mobile || !formData.business_pan || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                          className="btn btn-primary"
-                          style={{ padding: '0 20px' }}
-                          title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                        >
-                          {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                        </button>
-                      ) : (
+                      {formData.mobile_verified && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                             <CheckCircle2 size={18} /> Verified
@@ -1303,8 +1292,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
-                            onClick={() => setFormData(prev => ({ ...prev, mobile_verified: false }))}
-                            title="Edit mobile number"
+                            onClick={() => { setFormData(prev => ({ ...prev, mobile_verified: false })); setConsentRequest(null); }}
+                            title="Edit mobile number (you'll need to request consent again)"
                             style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                           >
                             <Pencil size={13} /> Edit
@@ -1317,7 +1306,34 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
                 <div className="grid-3" style={{ marginBottom: 24 }}>
                   <FormField label="Email Address" name="business_email" required>
-                    <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" />
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
+                      {!formData.mobile_verified ? (
+                        consentRequesting ? (
+                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Sending…</button>
+                        ) : consentRequest ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <PullingIndicator label="Waiting for approval…" />
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleRequestConsent}
+                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                            className="btn btn-primary"
+                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
+                            title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                          >
+                            {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          </button>
+                        )
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                          <CheckCircle2 size={18} /> Consented
+                        </div>
+                      )}
+                    </div>
                   </FormField>
 
                   <FormField label="Pincode" name="pincode" required>
@@ -1501,34 +1517,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <FormField label="Mobile Number" name={`comob_${realIdx}`}>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
-                              {!app.otp_verified ? (
-                                coappConsentRequesting[realIdx] ? (
-                                  <PullingIndicator label="Sending consent request…" />
-                                ) : coappConsent[realIdx] ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <PullingIndicator label="Waiting for approval…" />
-                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn btn-primary"
-                                    onClick={() => handleRequestCoapplicantConsent(realIdx)}
-                                    style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
-                                    disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                                    title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                                  >
-                                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                                  </button>
-                                )
-                              ) : (
+                              {app.otp_verified && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                   <CheckCircle2 size={16} /> Verified
                                   <button
                                     type="button"
                                     className="btn btn-ghost btn-sm"
-                                    onClick={() => updateApplicantRow(realIdx, 'otp_verified', false)}
-                                    title="Edit mobile number"
+                                    onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
+                                    title="Edit mobile number (you'll need to request consent again)"
                                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
                                   >
                                     <Pencil size={12} /> Edit
@@ -1550,7 +1546,34 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="560026" maxLength={6} />
                           </FormField>
                           <FormField label="Email" name={`coemail_${realIdx}`}>
-                            <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" />
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
+                              {!app.otp_verified ? (
+                                coappConsentRequesting[realIdx] ? (
+                                  <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
+                                ) : coappConsent[realIdx] ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <PullingIndicator label="Waiting for approval…" />
+                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                    style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
+                                    disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                                    title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                  >
+                                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                  </button>
+                                )
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
+                                  <CheckCircle2 size={16} /> Consented
+                                </div>
+                              )}
+                            </div>
                           </FormField>
                         </div>
                         <div className="grid-2">
