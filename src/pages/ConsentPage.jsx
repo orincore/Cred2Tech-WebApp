@@ -134,8 +134,25 @@ const ConsentPage = () => {
       <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
         Data Access Consent
       </h1>
+
+      {(details?.requested_by_name || details?.requesting_org) && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
+          <span className="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">badge</span>
+          <p className="text-[12px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
+            Requested by{' '}
+            <span className="font-bold">{details?.requested_by_name || 'a representative'}</span>
+            {details?.requesting_org && (
+              <>
+                {' '}from <span className="font-bold">{details.requesting_org}</span>
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
       <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
-        {details?.requesting_org || 'A lender partner'} on the Cred2Tech platform is requesting your consent to proceed
+        {details?.requested_by_name || 'A representative'}
+        {details?.requesting_org ? ` from ${details.requesting_org}` : ''} on the Cred2Tech platform is requesting your consent to proceed
         {details?.customer_name ? ` with the loan application for ${details.customer_name}` : ' with your loan application'}.
       </p>
 
@@ -176,7 +193,8 @@ const ConsentPage = () => {
           className="mt-0.5 w-4 h-4 accent-indigo-600 shrink-0 cursor-pointer"
         />
         <span className="text-[13px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
-          I have read and understood what data will be requested, and I agree to allow {details?.requesting_org || 'this platform'} to access it as described above.
+          I have read and understood what data will be requested, and I agree to allow {details?.requesting_org || 'this platform'}
+          {details?.requested_by_name ? ` (${details.requested_by_name})` : ''} to access it as described above.
         </span>
       </label>
 
