@@ -14,6 +14,7 @@ import {
   deleteCommissionRule
 } from '../api/commissionService';
 import { useAuth } from '../context/AuthContext';
+import { LENDERS_LIST } from '../constants/lenders';
 
 const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 
@@ -40,7 +41,7 @@ function ProductBadge({ type }) {
 }
 
 // ── Modal: Add Lender ──────────────────────────────────────────────────
-function LenderModal({ isOpen, onClose, onSave }) {
+function LenderModal({ isOpen, onClose, onSave, existingLenders = [] }) {
   const [lenderName, setLenderName] = useState('');
   const [saving, setSaving]         = useState(false);
 
@@ -51,10 +52,18 @@ function LenderModal({ isOpen, onClose, onSave }) {
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    if (!lenderName.trim()) { toast.error('Lender name is required'); return; }
+    const trimmedName = lenderName.trim();
+    if (!trimmedName) { toast.error('Lender name is required'); return; }
+    
+    const isDuplicate = existingLenders.some(l => l.lender_name.toLowerCase() === trimmedName.toLowerCase());
+    if (isDuplicate) {
+      toast.error('This lender has already been added');
+      return;
+    }
+
     setSaving(true);
     try {
-      await onSave({ lender_name: lenderName, is_active: true });
+      await onSave({ lender_name: trimmedName, is_active: true });
       onClose();
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to save lender');
@@ -73,7 +82,11 @@ function LenderModal({ isOpen, onClose, onSave }) {
             <label style={labelStyle}>LENDER NAME *</label>
             <input value={lenderName} onChange={e => setLenderName(e.target.value)}
               placeholder="e.g. HDFC Bank, Axis Bank, ICICI Bank"
+              list="lenders-list"
               style={inputStyle} onKeyDown={e => e.key === 'Enter' && handleSave()} />
+            <datalist id="lenders-list">
+              {LENDERS_LIST.map((name, i) => <option key={i} value={name} />)}
+            </datalist>
           </div>
         </div>
         <div style={modalFooter}>
@@ -659,6 +672,113 @@ export default function DSALenderContactsPage() {
                         </div>
                       </div>
 
+                      {/* Special Schemes */}
+                      <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                          <div>
+                            <div style={slabHeader}>SPECIAL PAYOUT SCHEMES</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Time-bound bonuses — stack with regular slabs</div>
+                          </div>
+                          <button onClick={() => {
+                            const newSchemes = [...(ruleState.special_schemes || []), { scheme_name: '', basis: 'CASE_COUNT', valid_from: '', valid_to: '', bonus_per_case: '', bonus_percent: '', is_active: true }];
+                            updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                          }} style={{ ...btnOutline, padding: '6px 12px', fontSize: 12 }}>
+                            <Plus size={13} /> Add Scheme
+                          </button>
+                        </div>
+                        
+                        {!ruleState.special_schemes || ruleState.special_schemes.length === 0 ? (
+                          <div style={{ padding: 14, background: 'var(--bg-elevated)', border: '1px dashed var(--border)', fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                            No special schemes configured.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {ruleState.special_schemes.map((sc, idx) => (
+                              <div key={idx} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', padding: '12px 16px', position: 'relative' }}>
+                                <button onClick={() => {
+                                  const newSchemes = ruleState.special_schemes.filter((_, i) => i !== idx);
+                                  updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                }} style={{ position: 'absolute', top: 12, right: 16, background: 'var(--error-bg)', border: '1px solid var(--error)', borderRadius: 0, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--error)' }}>
+                                  <X size={12} />
+                                </button>
+                                
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, paddingRight: 32 }}>
+                                  <div>
+                                    <label style={inputLabel}>SCHEME NAME</label>
+                                    <input value={sc.scheme_name || ''} placeholder="e.g. Q1FY26 Bonus" onChange={e => {
+                                      const newSchemes = [...ruleState.special_schemes];
+                                      newSchemes[idx].scheme_name = e.target.value;
+                                      updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                    }} style={inputStyle} />
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>BASIS</label>
+                                    <select value={sc.basis || 'CASE_COUNT'} onChange={e => {
+                                      const newSchemes = [...ruleState.special_schemes];
+                                      newSchemes[idx].basis = e.target.value;
+                                      updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                    }} style={inputStyle}>
+                                      <option value="CASE_COUNT">Case Count</option>
+                                      <option value="VOLUME">Volume</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>VALID FROM</label>
+                                    <input type="date" value={sc.valid_from ? sc.valid_from.split('T')[0] : ''} onChange={e => {
+                                      const newSchemes = [...ruleState.special_schemes];
+                                      newSchemes[idx].valid_from = e.target.value;
+                                      updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                    }} style={inputStyle} />
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>VALID TO</label>
+                                    <input type="date" value={sc.valid_to ? sc.valid_to.split('T')[0] : ''} onChange={e => {
+                                      const newSchemes = [...ruleState.special_schemes];
+                                      newSchemes[idx].valid_to = e.target.value;
+                                      updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                    }} style={inputStyle} />
+                                  </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginTop: 12, paddingRight: 32 }}>
+                                  <div>
+                                    <label style={inputLabel}>BONUS RATE (%)</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <input type="number" step="0.01" placeholder="e.g. 0.5" value={sc.bonus_percent || ''} onChange={e => {
+                                        const newSchemes = [...ruleState.special_schemes];
+                                        newSchemes[idx].bonus_percent = e.target.value;
+                                        updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                      }} style={inputStyle} />
+                                      <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>%</span>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label style={inputLabel}>BONUS PER CASE (₹)</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>₹</span>
+                                      <input type="number" placeholder="e.g. 500" value={sc.bonus_per_case || ''} onChange={e => {
+                                        const newSchemes = [...ruleState.special_schemes];
+                                        newSchemes[idx].bonus_per_case = e.target.value;
+                                        updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                      }} style={inputStyle} />
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                      <input type="checkbox" checked={sc.is_active !== false} onChange={e => {
+                                        const newSchemes = [...ruleState.special_schemes];
+                                        newSchemes[idx].is_active = e.target.checked;
+                                        updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
+                                      }} />
+                                      Active Scheme
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Info Note */}
                       <div style={{
                         background: 'var(--info-bg)', border: '1px solid var(--info)', borderRadius: 0,
@@ -699,6 +819,7 @@ export default function DSALenderContactsPage() {
         isOpen={lenderModal.open}
         onClose={() => setLenderModal({ open: false })}
         onSave={handleAddLender}
+        existingLenders={lenders}
       />
       </div>
     </div>

@@ -249,7 +249,7 @@ export default function CaseDetailPage() {
     if (!allocateUserId) return toast.error('Please select an employee.');
     try {
       await caseService.allocateDsaUser(id, allocateUserId);
-      toast.success('Case successfully allocated');
+      toast.success(caseData?.assigned_dsa_user_id ? 'Case successfully reallocated' : 'Case successfully allocated');
       setShowAllocateModal(false);
       fetchCase();
     } catch (err) {
@@ -381,6 +381,8 @@ export default function CaseDetailPage() {
   // from a purged case, since a bookmarked/typed URL could otherwise bypass
   // this button being disabled.
   const isPurged = !!caseData.data_purged_at;
+  const isLenderLocked = !!(disbursementSummary?.sanction?.lender_name || caseData?.lender_name);
+  const isProductTypeLocked = !!(disbursementSummary?.sanction?.product_type || caseData?.product_type);
 
   return (
     <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
@@ -412,7 +414,7 @@ export default function CaseDetailPage() {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {hasRole('DSA_ADMIN') && caseData?.lead_source === 'DIRECT_MSME' && (
-            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick} disabled={isPurged}><Users size={13} /> Allocate to Employee</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick} disabled={isPurged}><Users size={13} /> {caseData.assigned_dsa_user_id ? 'Reallocate Employee' : 'Allocate to Employee'}</button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => navigate(wizardPath)} disabled={isPurged}>Open Wizard</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowPropertyModal(true)} disabled={isPurged}>Edit Property Details</button>
@@ -776,9 +778,9 @@ export default function CaseDetailPage() {
                     <div className="form-group">
                       <label className="form-label">
                         Lender Name
-                        {sanctionForm.lender_name && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
+                        {isLenderLocked && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
                       </label>
-                      {sanctionForm.lender_name ? (
+                      {isLenderLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.lender_name}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
@@ -800,9 +802,9 @@ export default function CaseDetailPage() {
                     <div className="form-group">
                       <label className="form-label">
                         Product Type
-                        {sanctionForm.product_type && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
+                        {isProductTypeLocked && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
                       </label>
-                      {sanctionForm.product_type ? (
+                      {isProductTypeLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.product_type}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
@@ -846,7 +848,7 @@ export default function CaseDetailPage() {
                       <input
                         type="text" className="form-control"
                         value={disbursementSummary?.sanction?.loan_account_number || disbursementForm.loan_account_number || ''}
-                        disabled={!!disbursementSummary?.sanction?.loan_account_number || selectedStage === 'DISBURSED'}
+                        disabled={!!disbursementSummary?.sanction?.loan_account_number}
                         onChange={(e) => setDisbursementForm({ ...disbursementForm, loan_account_number: e.target.value })}
                         placeholder="e.g. LN123456789"
                       />
@@ -942,7 +944,7 @@ export default function CaseDetailPage() {
       {showAllocateModal && (
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAllocateModal(false); }}>
           <form onSubmit={handleAllocateSubmit} className="modal-box" style={{ maxWidth: 450, width: '92vw' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Allocate Case to Employee</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>{caseData?.assigned_dsa_user_id ? 'Reallocate Case to Employee' : 'Allocate Case to Employee'}</h3>
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Select Employee</label>
               {loadingUsers ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading users...</p> : (
@@ -954,7 +956,7 @@ export default function CaseDetailPage() {
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-ghost" onClick={() => setShowAllocateModal(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={loadingUsers || !allocateUserId}>Allocate</button>
+              <button type="submit" className="btn btn-primary" disabled={loadingUsers || !allocateUserId}>{caseData?.assigned_dsa_user_id ? 'Reallocate' : 'Allocate'}</button>
             </div>
           </form>
         </div>
