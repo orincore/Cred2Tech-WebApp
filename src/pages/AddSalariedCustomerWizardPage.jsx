@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { customerService } from '../api/customerService';
-import { otpService } from '../api/otpService';
 import { consentService } from '../api/consentService';
 import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
-import OtpInput from '../components/OtpInput';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb } from 'lucide-react';
@@ -15,6 +13,7 @@ import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import DataPullProgress from '../components/onboarding/DataPullProgress';
 import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
+import PullingIndicator from '../components/ui/PullingIndicator';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase } from '../utils/helpers';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
@@ -86,13 +85,13 @@ const AddSalariedCustomerWizardPage = () => {
 
   const [panVerifying, setPanVerifying] = useState(false);
 
-  // Customer consent gate — same shape as AddCustomerWizardPage's. Here PAN
-  // verify stays a manual button (unlike the business wizard's auto-fire),
-  // so this just becomes the new manual step that has to happen first.
+  // Customer consent gate — replaces the old mobile-OTP step entirely (see
+  // handleRequestConsent below). Approval sets formData.mobile_verified, so
+  // the existing "Verify PAN" button (already gated on that flag) needs no
+  // further changes.
   const [consentRequest, setConsentRequest] = useState(null);
   const [consentRequesting, setConsentRequesting] = useState(false);
   const [consentRequestFailed, setConsentRequestFailed] = useState(false);
-  const consentGranted = consentRequest?.status === 'GRANTED';
 
   // PAN here locks on `!!caseId || mobile_verified` — a compound condition
   // (not just "PAN itself verified"), so a plain "reset pan_verified"
@@ -145,15 +144,6 @@ const AddSalariedCustomerWizardPage = () => {
     return app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`;
   };
 
-  const [otpModal, setOtpModal] = useState({
-    isOpen: false,
-    targetType: null,
-    targetId: null,
-    mobile: '',
-    purpose: '',
-    otpInput: '',
-    loading: false
-  });
 
   useEffect(() => {
     restoreSession();
@@ -321,9 +311,9 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  // Replaces the old direct "Verify PAN" click as the first available action
-  // once mobile OTP is verified — emails the customer a consent link and
-  // opens a live subscription for the approval, same as the business wizard.
+  // Replaces the old "Send OTP" button entirely — there is no mobile OTP
+  // step anymore. Emails the customer a consent link and opens a live
+  // subscription for the approval, same as the business wizard.
   const handleRequestConsent = async () => {
     const email = formData.business_email?.trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -349,11 +339,15 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
+  // Live: the moment the customer approves, this sets mobile_verified — the
+  // same flag the old OTP-verify step used to set — so the "Verify PAN"
+  // button (gated on mobile_verified) becomes available, unchanged.
   useEffect(() => {
     if (!consentRequest?.id || consentRequest.status === 'GRANTED') return;
     const unsubscribe = subscribeToConsentRequest(consentRequest.id, (payload) => {
       if (payload.status === 'GRANTED') {
         setConsentRequest((prev) => (prev ? { ...prev, status: 'GRANTED' } : prev));
+        setFormData((prev) => ({ ...prev, mobile_verified: true }));
         toast.success('Customer approved — you can now verify PAN.');
       }
     });
@@ -361,33 +355,21 @@ const AddSalariedCustomerWizardPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consentRequest?.id]);
 
-  const handleSendPrimaryOtp = async () => {
-    try {
-      setSaving(true);
-      const { targetCustomerId } = await ensureDraftSaved();
-      const res = await otpService.sendOtp({
-        mobile: formData.business_mobile,
-        purpose: 'PRIMARY_APPLICANT',
-        target_type: 'CUSTOMER',
-        target_id: targetCustomerId
-      });
-      if (res.otp) toast.success(`[DEV] OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('OTP sent');
+  // Same consent gate as the primary applicant, per co-applicant — a
+  // co-applicant is a distinct person and can only consent for their own
+  // PAN, so each gets their own request/email/link, keyed by row index.
+  const [coappConsent, setCoappConsent] = useState({});
+  const [coappConsentRequesting, setCoappConsentRequesting] = useState({});
 
-      setOtpModal({ isOpen: true, targetType: 'CUSTOMER', targetId: targetCustomerId, mobile: formData.business_mobile, purpose: 'PRIMARY_APPLICANT', otpInput: '', loading: false });
-    } catch (e) {
-      toast.error(e.response?.data?.error || e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSendCoapplicantOtp = async (index) => {
+  const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
-    if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required for Co-Applicant OTP');
+    if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
+    if (!app.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) {
+      return toast.error("A valid email is required to send the co-applicant's consent request.");
+    }
 
+    setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
-      setSaving(true);
       const { targetCaseId } = await ensureDraftSaved();
 
       let targetAppId = app.id;
@@ -396,25 +378,40 @@ const AddSalariedCustomerWizardPage = () => {
         targetAppId = savedApp.id;
         const newArr = [...formData.applicants];
         newArr[index] = savedApp;
-        setFormData(prev => ({ ...prev, applicants: newArr }));
+        setFormData((prev) => ({ ...prev, applicants: newArr }));
       }
 
-      const res = await otpService.sendOtp({
-        mobile: app.mobile,
-        purpose: 'CO_APPLICANT',
-        target_type: 'APPLICANT',
-        target_id: targetAppId
+      const result = await consentService.requestConsent({
+        customer_id: formData.customer_id,
+        case_id: targetCaseId,
+        applicant_id: targetAppId,
       });
-      if (res.otp) toast.success(`[DEV] OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('OTP sent');
-
-      setOtpModal({ isOpen: true, targetType: 'APPLICANT', targetId: targetAppId, mobile: app.mobile, purpose: 'CO_APPLICANT', otpInput: '', loading: false });
+      setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
+      toast.success(`Consent request sent to ${app.email}. Waiting for them to approve.`);
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Failed to send OTP');
+      toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
     } finally {
-      setSaving(false);
+      setCoappConsentRequesting((prev) => ({ ...prev, [index]: false }));
     }
   };
+
+  useEffect(() => {
+    const unsubscribes = Object.entries(coappConsent).map(([idx, req]) => {
+      if (!req?.id || req.status === 'GRANTED') return null;
+      return subscribeToConsentRequest(req.id, (payload) => {
+        if (payload.status !== 'GRANTED') return;
+        setCoappConsent((prev) => ({ ...prev, [idx]: { ...prev[idx], status: 'GRANTED' } }));
+        setFormData((prev) => {
+          const list = [...prev.applicants];
+          if (list[idx]) list[idx] = { ...list[idx], otp_verified: true };
+          return { ...prev, applicants: list };
+        });
+        toast.success('Co-applicant approved — you can now verify their PAN.');
+      });
+    }).filter(Boolean);
+    return () => unsubscribes.forEach((fn) => fn());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coappConsent]);
 
   const handleVerifyPan = async (isCoapplicant = false, idx = null) => {
     if (typeof isCoapplicant === 'object') {
@@ -480,51 +477,6 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  const handleVerifyOtpSubmit = async () => {
-    if (otpModal.otpInput.length < 6) return toast.error('Enter valid 6-digit OTP');
-    try {
-      setOtpModal(prev => ({ ...prev, loading: true }));
-      await otpService.verifyOtp({
-        otp: otpModal.otpInput,
-        target_type: otpModal.targetType,
-        target_id: otpModal.targetId
-      });
-
-      toast.success('Verified Successfully!');
-
-      if (otpModal.targetType === 'CUSTOMER') {
-        setFormData(prev => ({ ...prev, mobile_verified: true }));
-      } else {
-        const newArr = [...formData.applicants].map(a =>
-          a.id === otpModal.targetId ? { ...a, otp_verified: true } : a
-        );
-        setFormData(prev => ({ ...prev, applicants: newArr }));
-      }
-      setOtpModal({ isOpen: false, targetType: null, targetId: null, mobile: '', purpose: '', otpInput: '', loading: false });
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Invalid OTP');
-    } finally {
-      setOtpModal(prev => ({ ...prev, loading: false }));
-    }
-  };
-
-  const handleResendOtp = async () => {
-    try {
-      setOtpModal(prev => ({ ...prev, loading: true }));
-      const res = await otpService.resendOtp({
-        mobile: otpModal.mobile,
-        purpose: otpModal.purpose,
-        target_type: otpModal.targetType,
-        target_id: otpModal.targetId
-      });
-      if (res.otp) toast.success(`[DEV] New OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('New OTP sent');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to resend');
-    } finally {
-      setOtpModal(prev => ({ ...prev, loading: false }));
-    }
-  };
 
   const addCoApplicantRow = () => {
     setFormData(prev => ({
@@ -853,37 +805,18 @@ const AddSalariedCustomerWizardPage = () => {
                             <Pencil size={13} /> Edit
                           </button>
                         </div>
-                      ) : formData.mobile_verified && !consentGranted && !isBulkInjectedCase ? (
-                        // Consent must be requested and approved before PAN can be
-                        // verified at all now — same reasoning as the gate below
-                        // (a real bureau pull must not happen before the customer
-                        // has explicitly approved it), just enforced one step
-                        // earlier since this button is a manual click, not an
-                        // auto-fire effect.
-                        consentRequesting ? (
-                          <button type="button" disabled className="btn btn-secondary">Sending consent request…</button>
-                        ) : consentRequest ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600 }}>
-                              Waiting for customer to approve consent…
-                            </span>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
-                          </div>
-                        ) : (
-                          <button type="button" onClick={handleRequestConsent} disabled={!formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Consent is not required for this test/injected case.' : undefined}>
-                            Request Consent
-                          </button>
-                        )
                       ) : formData.mobile_verified ? (
-                        // Only reachable once mobile OTP is verified AND the
-                        // customer has approved the consent request above —
-                        // matches the co-applicant section just below, which
-                        // already hides its own Verify PAN button behind
-                        // app.otp_verified. This button previously had no such
-                        // gate: nothing stopped Verify PAN (a real bureau pull of
-                        // the applicant's name/DOB) from being clicked before the
-                        // applicant had proven they own the mobile number on file
-                        // or approved consent for their data to be pulled.
+                        // Only reachable once the customer has approved the
+                        // consent request sent from the Mobile Number field
+                        // below (mobile_verified is now set on consent grant,
+                        // not by an OTP step) — matches the co-applicant
+                        // section just below, which already hides its own
+                        // Verify PAN button behind app.otp_verified. This
+                        // button previously had no such gate at all: nothing
+                        // stopped Verify PAN (a real bureau pull of the
+                        // applicant's name/DOB) from being clicked before the
+                        // applicant had approved consent for their data to be
+                        // pulled.
                         <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
                           {panVerifying ? 'Wait...' : 'Verify PAN'}
                         </button>
@@ -905,7 +838,18 @@ const AddSalariedCustomerWizardPage = () => {
                         disabled={formData.mobile_verified}
                       />
                       {!formData.mobile_verified ? (
-                        <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
+                        consentRequesting ? (
+                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 20px' }}>Sending consent request…</button>
+                        ) : consentRequest ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600 }}>
+                              Waiting for customer to approve consent…
+                            </span>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={handleRequestConsent} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Request Consent</button>
+                        )
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
@@ -1044,7 +988,16 @@ const AddSalariedCustomerWizardPage = () => {
                                   updateApplicantRow(realIdx, 'mobile', val);
                                 }} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
                                 {!app.otp_verified ? (
-                                  <button type="button" className="btn btn-primary" onClick={() => handleSendCoapplicantOtp(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Send OTP</button>
+                                  coappConsentRequesting[realIdx] ? (
+                                    <PullingIndicator label="Sending consent request…" />
+                                  ) : coappConsent[realIdx] ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                      <PullingIndicator label="Waiting for approval…" />
+                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                    </div>
+                                  ) : (
+                                    <button type="button" className="btn btn-primary" onClick={() => handleRequestCoapplicantConsent(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Request Consent</button>
+                                  )
                                 ) : (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                     <CheckCircle2 size={16} /> Verified
@@ -1247,40 +1200,6 @@ const AddSalariedCustomerWizardPage = () => {
       </div>
       </div>
 
-      {/* OTP Modal */}
-      {otpModal.isOpen && (
-        <div className="modal-overlay">
-          <div className="modal-box hide-scrollbar" style={{ width: 'min(480px, calc(100vw - 32px))', maxWidth: 480, padding: '32px 40px', maxHeight: '90vh', overflowY: 'auto' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-               <h3 style={{ fontSize: 20, fontWeight: 700 }}>Verify Mobile OTP</h3>
-             </div>
-             <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>
-               We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
-             </p>
-             <FormField label="Enter 6-Digit OTP" name="otpInput">
-               <OtpInput
-                 length={6}
-                 value={otpModal.otpInput}
-                 onChange={(v) => setOtpModal(prev => ({ ...prev, otpInput: v }))}
-                 onEnter={handleVerifyOtpSubmit}
-               />
-             </FormField>
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28 }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={handleResendOtp} disabled={otpModal.loading}>
-                   Resend OTP
-                </button>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setOtpModal(prev => ({ ...prev, isOpen: false }))} disabled={otpModal.loading}>
-                     Cancel
-                  </button>
-                  <button type="button" className="btn btn-primary" onClick={handleVerifyOtpSubmit} disabled={otpModal.loading || otpModal.otpInput.length < 6}>
-                     {otpModal.loading ? 'Verifying...' : 'Verify →'}
-                  </button>
-                </div>
-             </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

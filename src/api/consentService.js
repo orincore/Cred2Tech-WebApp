@@ -10,9 +10,11 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export const consentService = {
-  // DSA-side (authenticated) — call once mobile OTP is verified.
-  requestConsent: async ({ customer_id, case_id }) => {
-    const response = await api.post('/consent/request', { customer_id, case_id });
+  // DSA-side (authenticated). Pass applicant_id when this is a specific
+  // co-applicant's own consent request (PAN only, sent to their own email)
+  // rather than the primary customer's (PAN+GST+ITR+Bank).
+  requestConsent: async ({ customer_id, case_id, applicant_id }) => {
+    const response = await api.post('/consent/request', { customer_id, case_id, applicant_id });
     return response.data;
   },
 
