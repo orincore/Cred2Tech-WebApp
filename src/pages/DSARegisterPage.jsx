@@ -39,6 +39,55 @@ const countryOptions = countries.map(c => ({
   label: `${c.emoji} ${c.name} (${c.dialCode})`
 }));
 
+// Not provisioned yet (needs a free Cloudflare account, no DNS change) —
+// the widget simply doesn't render and nothing is gated until it's set.
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+const TURNSTILE_SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+
+const TurnstileWidget = ({ siteKey, onToken }) => {
+  const containerRef = useRef(null);
+  const widgetId = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const render = () => {
+      if (cancelled || !containerRef.current || !window.turnstile) return;
+      widgetId.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token) => onToken(token),
+        'expired-callback': () => onToken(''),
+        'error-callback': () => onToken(''),
+      });
+    };
+
+    if (window.turnstile) {
+      render();
+    } else {
+      const existing = document.querySelector(`script[src="${TURNSTILE_SCRIPT_SRC}"]`);
+      const script = existing || document.createElement('script');
+      if (!existing) {
+        script.src = TURNSTILE_SCRIPT_SRC;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener('load', render);
+      return () => script.removeEventListener('load', render);
+    }
+
+    return () => {
+      cancelled = true;
+      if (widgetId.current && window.turnstile) {
+        window.turnstile.remove(widgetId.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteKey]);
+
+  return <div ref={containerRef} />;
+};
+
 // Best-effort map from Signzy/GST's free-text "constitution of business" to
 // our fixed dropdown options — always overridable by the DSA afterward, so a
 // miss here just means the field stays blank rather than blocking anything.
@@ -62,7 +111,8 @@ const CustomDropdown = ({
   hasError,
   className,
   isPhoneCode = false,
-  name
+  name,
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -83,11 +133,13 @@ const CustomDropdown = ({
     <div className={`relative ${isPhoneCode ? 'shrink-0' : 'w-full'} ${className || ''}`} ref={dropdownRef}>
       <div
         ref={focusRef}
-        tabIndex={0}
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
         onBlur={() => { }}
-        className={`flex items-center justify-between ${isPhoneCode ? 'w-auto gap-1 p-0 pr-1 pb-0.5' : 'w-full pb-3 border-b'} bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} cursor-pointer transition-colors`}
-        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-between ${isPhoneCode ? 'w-auto gap-1 p-0 pr-1 pb-0.5' : 'w-full pb-3 border-b'} bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400'} transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        onClick={() => { if (!disabled) setIsOpen(!isOpen); }}
         onKeyDown={(e) => {
+          if (disabled) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             setIsOpen(!isOpen);
@@ -226,6 +278,14 @@ const DSARegisterPage = () => {
   const [gstRecords, setGstRecords] = useState([]);
   const [selectedGstin, setSelectedGstin] = useState(''); // '' | 'manual' | a gstin
   const lastLookedUpPan = useRef('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  // Auto-fill fields must never be hand-typed ahead of the API — that's the
+  // whole point of driving them off PAN/GST lookup instead of a free-text
+  // form a script could fill blindly. They unlock only once a lookup
+  // attempt has actually resolved (success or failure), never before.
+  const panFieldsLocked = panLookup.status === 'idle' || panLookup.status === 'loading';
+  const addressFieldsLocked = !selectedGstin;
 
   const [step, setStep] = useState(1);
 
@@ -491,7 +551,9 @@ const DSARegisterPage = () => {
       2: ['state', 'city', 'pincode'],
       3: ['admin_name', 'admin_password']
     };
+    if (step === 1 && panFieldsLocked) return true; // wait for the PAN lookup to resolve before advancing
     if (step === 2 && form.operational_states.length === 0) return true;
+    if (step === 3 && TURNSTILE_SITE_KEY && !turnstileToken) return true;
     return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
   };
 
@@ -575,6 +637,7 @@ const DSARegisterPage = () => {
         admin_name: form.admin_name.trim(),
         admin_password: form.admin_password,
         website: '', // honeypot — always empty for real users, see hidden input below
+        turnstile_token: turnstileToken || undefined,
       });
       setSuccess(true);
       toast.success('Registration successful! You can now log in.');
@@ -589,6 +652,7 @@ const DSARegisterPage = () => {
 
   const nextStep = (e) => {
     e.preventDefault();
+    if (step === 1 && panFieldsLocked) return; // Enter-key submits bypass the disabled button — block here too
     const errs = validateStep(step);
     if (Object.keys(errs).length) {
       setErrors(errs);
@@ -776,7 +840,7 @@ const DSARegisterPage = () => {
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Organization Name *</label>
-                      <input name="name" placeholder="e.g. Acme FinServe Pvt Ltd" value={form.name} onChange={handleChange} onBlur={() => handleFieldBlur('name')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                      <input name="name" placeholder={panFieldsLocked ? 'Enter your PAN above to auto-fill' : 'e.g. Acme FinServe Pvt Ltd'} value={form.name} disabled={panFieldsLocked} onChange={handleChange} onBlur={() => handleFieldBlur('name')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${panFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`} />
                       {errors.name && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.name}</span>}
                     </div>
                     <div>
@@ -800,7 +864,7 @@ const DSARegisterPage = () => {
                     </div>
                     <div>
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">GST Number (optional)</label>
-                      <input name="gst_number" placeholder="27AAACR5055K1Z7" value={form.gst_number} onChange={handleChange} onBlur={() => handleFieldBlur('gst_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.gst_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                      <input name="gst_number" placeholder={panFieldsLocked ? 'Auto-filled from PAN' : '27AAACR5055K1Z7'} value={form.gst_number} disabled={panFieldsLocked} onChange={handleChange} onBlur={() => handleFieldBlur('gst_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.gst_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${panFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`} />
                       {errors.gst_number && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.gst_number}</span>}
                     </div>
                     <div>
@@ -811,8 +875,9 @@ const DSARegisterPage = () => {
                         onChange={handleChange}
                         onBlur={() => handleFieldBlur('company_type')}
                         options={companyTypeOptions}
-                        placeholder="Select Type…"
+                        placeholder={panFieldsLocked ? 'Waiting for PAN lookup…' : 'Select Type…'}
                         hasError={!!errors.company_type}
+                        disabled={panFieldsLocked}
                       />
                       {errors.company_type && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.company_type}</span>}
                     </div>
@@ -858,13 +923,13 @@ const DSARegisterPage = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
                       <div className="md:col-span-2">
-                        <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Address (editable)</label>
-                        <input name="address_line" placeholder="Building, street, area" value={form.address_line} onChange={handleChange} className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400 focus:ring-0 transition-colors p-0" />
+                        <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Address {!addressFieldsLocked && '(editable)'}</label>
+                        <input name="address_line" placeholder={addressFieldsLocked ? 'Waiting for PAN/GST lookup…' : 'Building, street, area'} value={form.address_line} disabled={addressFieldsLocked} onChange={handleChange} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400 focus:ring-0 transition-colors p-0 ${addressFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`} />
                       </div>
                       <div>
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Pin Code *</label>
                         <div className="relative">
-                          <input name="pincode" placeholder="123 456" maxLength={6} value={form.pincode} onChange={handleChange} onBlur={(e) => handleFieldBlur('pincode', e.target.value)} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                          <input name="pincode" placeholder={addressFieldsLocked ? 'Waiting…' : '123 456'} maxLength={6} value={form.pincode} disabled={addressFieldsLocked} onChange={handleChange} onBlur={(e) => handleFieldBlur('pincode', e.target.value)} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${addressFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`} />
                           {isPincodeFetching && (
                             <div className="absolute right-0 bottom-3 w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
                           )}
@@ -875,11 +940,12 @@ const DSARegisterPage = () => {
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">City *</label>
                         <input
                           name="city"
-                          placeholder="e.g. Bangalore"
+                          placeholder={addressFieldsLocked ? 'Waiting…' : 'e.g. Bangalore'}
                           value={form.city}
+                          disabled={addressFieldsLocked}
                           onChange={(e) => handleChange({ target: { name: 'city', value: e.target.value.replace(/[^a-zA-Z\s\-]/g, '') } })}
                           onBlur={() => handleFieldBlur('city')}
-                          className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.city ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`}
+                          className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.city ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${addressFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                         />
                         {errors.city && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.city}</span>}
                       </div>
@@ -891,8 +957,9 @@ const DSARegisterPage = () => {
                           onChange={handleChange}
                           onBlur={() => handleFieldBlur('state')}
                           options={indianStates}
-                          placeholder="Select State…"
+                          placeholder={addressFieldsLocked ? 'Waiting for PAN/GST lookup…' : 'Select State…'}
                           hasError={!!errors.state}
+                          disabled={addressFieldsLocked}
                         />
                         {errors.state && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.state}</span>}
                       </div>
@@ -955,6 +1022,11 @@ const DSARegisterPage = () => {
                         })}
                       </div>
                     </div>
+                    {TURNSTILE_SITE_KEY && (
+                      <div className="md:col-span-2">
+                        <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onToken={setTurnstileToken} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
