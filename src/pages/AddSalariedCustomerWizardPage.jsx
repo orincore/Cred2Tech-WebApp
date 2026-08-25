@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { customerService } from '../api/customerService';
 import { otpService } from '../api/otpService';
+import { consentService } from '../api/consentService';
+import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import OtpInput from '../components/OtpInput';
 import { toast } from 'react-hot-toast';
@@ -83,6 +85,15 @@ const AddSalariedCustomerWizardPage = () => {
   const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
 
   const [panVerifying, setPanVerifying] = useState(false);
+
+  // Customer consent gate — same shape as AddCustomerWizardPage's. Here PAN
+  // verify stays a manual button (unlike the business wizard's auto-fire),
+  // so this just becomes the new manual step that has to happen first.
+  const [consentRequest, setConsentRequest] = useState(null);
+  const [consentRequesting, setConsentRequesting] = useState(false);
+  const [consentRequestFailed, setConsentRequestFailed] = useState(false);
+  const consentGranted = consentRequest?.status === 'GRANTED';
+
   // PAN here locks on `!!caseId || mobile_verified` — a compound condition
   // (not just "PAN itself verified"), so a plain "reset pan_verified"
   // toggle (like the main wizard uses) wouldn't actually unlock the input.
@@ -309,6 +320,46 @@ const AddSalariedCustomerWizardPage = () => {
       return { targetCaseId: caseId, targetCustomerId: formData.customer_id, savedCase };
     }
   };
+
+  // Replaces the old direct "Verify PAN" click as the first available action
+  // once mobile OTP is verified — emails the customer a consent link and
+  // opens a live subscription for the approval, same as the business wizard.
+  const handleRequestConsent = async () => {
+    const email = formData.business_email?.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return toast.error('A valid customer email is required to send the consent request.');
+    }
+
+    setConsentRequesting(true);
+    setConsentRequestFailed(false);
+    try {
+      const draft = await ensureDraftSaved();
+      const result = await consentService.requestConsent({
+        customer_id: draft.targetCustomerId,
+        case_id: draft.targetCaseId,
+      });
+      setConsentRequest({ id: result.id, status: result.status });
+      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      toast.error(errMsg);
+      setConsentRequestFailed(true);
+    } finally {
+      setConsentRequesting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!consentRequest?.id || consentRequest.status === 'GRANTED') return;
+    const unsubscribe = subscribeToConsentRequest(consentRequest.id, (payload) => {
+      if (payload.status === 'GRANTED') {
+        setConsentRequest((prev) => (prev ? { ...prev, status: 'GRANTED' } : prev));
+        toast.success('Customer approved — you can now verify PAN.');
+      }
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consentRequest?.id]);
 
   const handleSendPrimaryOtp = async () => {
     try {
@@ -802,14 +853,37 @@ const AddSalariedCustomerWizardPage = () => {
                             <Pencil size={13} /> Edit
                           </button>
                         </div>
+                      ) : formData.mobile_verified && !consentGranted && !isBulkInjectedCase ? (
+                        // Consent must be requested and approved before PAN can be
+                        // verified at all now — same reasoning as the gate below
+                        // (a real bureau pull must not happen before the customer
+                        // has explicitly approved it), just enforced one step
+                        // earlier since this button is a manual click, not an
+                        // auto-fire effect.
+                        consentRequesting ? (
+                          <button type="button" disabled className="btn btn-secondary">Sending consent request…</button>
+                        ) : consentRequest ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ background: 'var(--warning-bg)', color: 'var(--warning)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600 }}>
+                              Waiting for customer to approve consent…
+                            </span>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={handleRequestConsent} disabled={!formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Consent is not required for this test/injected case.' : undefined}>
+                            Request Consent
+                          </button>
+                        )
                       ) : formData.mobile_verified ? (
-                        // Only reachable once mobile OTP is verified — matches the
-                        // co-applicant section just below, which already hides its
-                        // own Verify PAN button behind app.otp_verified. This button
-                        // previously had no such gate: nothing stopped Verify PAN
-                        // (a real bureau pull of the applicant's name/DOB) from being
-                        // clicked before the applicant had proven they own the
-                        // mobile number on file.
+                        // Only reachable once mobile OTP is verified AND the
+                        // customer has approved the consent request above —
+                        // matches the co-applicant section just below, which
+                        // already hides its own Verify PAN button behind
+                        // app.otp_verified. This button previously had no such
+                        // gate: nothing stopped Verify PAN (a real bureau pull of
+                        // the applicant's name/DOB) from being clicked before the
+                        // applicant had proven they own the mobile number on file
+                        // or approved consent for their data to be pulled.
                         <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
                           {panVerifying ? 'Wait...' : 'Verify PAN'}
                         </button>

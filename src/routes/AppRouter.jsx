@@ -13,6 +13,7 @@ const MfaSetupPage = lazy(() => import('../pages/MfaSetupPage'));
 const MfaChallengePage = lazy(() => import('../pages/MfaChallengePage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
+const ConsentPage = lazy(() => import('../pages/ConsentPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
@@ -88,6 +89,7 @@ const AppRouter = () => (
           <Route path="/mfa-challenge" element={<MfaChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/customer-consent" element={<ConsentPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 

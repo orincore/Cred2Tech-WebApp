@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { customerService } from '../api/customerService';
 import { caseService } from '../api/caseService';
 import { otpService } from '../api/otpService';
+import { consentService } from '../api/consentService';
+import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import OtpInput from '../components/OtpInput';
 import { toast } from 'react-hot-toast';
@@ -184,6 +186,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [panVerifyFailed, setPanVerifyFailed] = useState(false);
   const [gstFetching, setGstFetching] = useState(false);
   const [gstFetchFailed, setGstFetchFailed] = useState(false);
+
+  // Customer consent gate — sits between "mobile OTP verified" and "PAN/GST
+  // pull happens". consentRequest holds {id, status}; requesting/error track
+  // the send-the-email call itself, not the customer's later response to it.
+  const [consentRequest, setConsentRequest] = useState(null);
+  const [consentRequesting, setConsentRequesting] = useState(false);
+  const [consentRequestFailed, setConsentRequestFailed] = useState(false);
+  const consentGranted = consentRequest?.status === 'GRANTED';
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
@@ -403,6 +413,51 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     return { targetCaseId, targetCustomerId, targetApplicants };
   };
 
+  // Fires once mobile OTP is verified, in place of the old immediate
+  // auto-PAN-verify. Creates the draft customer/case (same as handleVerifyPan
+  // used to do first anyway), emails the customer a consent link, and opens a
+  // live subscription so approval resumes the pull the instant it happens —
+  // no manual refresh needed on either side.
+  const handleRequestConsent = async () => {
+    const email = formData.business_email?.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return toast.error('A valid customer email is required to send the consent request.');
+    }
+
+    setConsentRequesting(true);
+    setConsentRequestFailed(false);
+    try {
+      const draft = await ensureDraftSaved();
+      const result = await consentService.requestConsent({
+        customer_id: draft.targetCustomerId,
+        case_id: draft.targetCaseId,
+      });
+      setConsentRequest({ id: result.id, status: result.status });
+      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      toast.error(errMsg);
+      setConsentRequestFailed(true);
+    } finally {
+      setConsentRequesting(false);
+    }
+  };
+
+  // Live: the moment the customer approves on their consent page, this flips
+  // consentGranted (derived from consentRequest.status) and the PAN-verify
+  // auto-fire effect below picks it up on its next render.
+  useEffect(() => {
+    if (!consentRequest?.id || consentRequest.status === 'GRANTED') return;
+    const unsubscribe = subscribeToConsentRequest(consentRequest.id, (payload) => {
+      if (payload.status === 'GRANTED') {
+        setConsentRequest((prev) => (prev ? { ...prev, status: 'GRANTED' } : prev));
+        toast.success('Customer approved — pulling their data now.');
+      }
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consentRequest?.id]);
+
   const handleVerifyPan = async (isCoapplicant = false, idx = null) => {
     // Prevent React onClick passing the synthetic event object as the first parameter
     if (typeof isCoapplicant === 'object') {
@@ -525,12 +580,37 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  // Auto-verify the primary business PAN once it's a full 10 characters —
-  // no manual "Verify PAN" click needed. Also waits for Mobile Number, since
-  // ensureDraftSaved() (called internally to create the draft case) requires
-  // both PAN and Mobile — firing on PAN alone would show a premature error
-  // if Mobile hasn't been filled in yet. Guarded by a ref (not formData) so
-  // a failed attempt doesn't retry in a tight loop; re-editing the PAN value
+  // Request customer consent once mobile OTP is verified — replaces the old
+  // behaviour of pulling PAN/GST immediately. Same ready/guard shape as the
+  // PAN auto-verify effect below (which now waits on consentGranted instead
+  // of firing directly off mobile_verified).
+  const consentAutoRequestAttempted = useRef(null);
+  useEffect(() => {
+    if (currentStep > 3 || formData.is_salaried) return;
+    const pan = formData.business_pan;
+    const ready = pan && pan.length === 10 && formData.mobile_verified && !isBulkInjectedCase;
+    if (
+      ready &&
+      !formData.pan_verified &&
+      !consentGranted &&
+      !consentRequest &&
+      !consentRequesting &&
+      consentAutoRequestAttempted.current !== pan
+    ) {
+      consentAutoRequestAttempted.current = pan;
+      handleRequestConsent();
+    } else if (!pan || pan.length !== 10) {
+      consentAutoRequestAttempted.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.business_pan, formData.business_mobile, formData.mobile_verified, formData.pan_verified, formData.is_salaried, consentGranted, consentRequest, consentRequesting]);
+
+  // Auto-verify the primary business PAN once consent has been granted — no
+  // manual "Verify PAN" click needed. Used to fire directly off
+  // mobile_verified; now waits on consentGranted (set by the effect above's
+  // live subscription) instead, so PAN/GST are never pulled before the
+  // customer has explicitly approved. Guarded by a ref (not formData) so a
+  // failed attempt doesn't retry in a tight loop; re-editing the PAN value
   // clears the guard and allows a fresh attempt.
   const panAutoVerifyAttempted = useRef(null);
   useEffect(() => {
@@ -545,14 +625,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // hasn't landed yet on this render.
     if (currentStep > 3 || formData.is_salaried) return;
     const pan = formData.business_pan;
-    // Gated on mobile_verified (OTP actually confirmed), not just a
-    // 10-digit mobile being typed. This was firing /external/pan/verify —
-    // which pulls the PAN holder's real name/DOB from the bureau — the
-    // moment a 10-digit number was entered, before the applicant had ever
-    // proven they own that number. GST auto-fetch below is gated on
-    // pan_verified, so fixing the OTP gate here fixes that pull too,
-    // transitively.
-    const ready = pan && pan.length === 10 && formData.mobile_verified && !isBulkInjectedCase;
+    // Gated on consentGranted, not just mobile_verified — this fires
+    // /external/pan/verify, which pulls the PAN holder's real name/DOB, and
+    // that must not happen before the customer has approved the consent
+    // request the effect above sent them. GST auto-fetch below is gated on
+    // pan_verified, so fixing the gate here fixes that pull too, transitively.
+    const ready = pan && pan.length === 10 && consentGranted && !isBulkInjectedCase;
     if (
       ready &&
       !formData.pan_verified &&
@@ -565,7 +643,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       panAutoVerifyAttempted.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.business_pan, formData.business_mobile, formData.mobile_verified, formData.pan_verified, panVerifying, formData.is_salaried]);
+  }, [currentStep, formData.business_pan, consentGranted, formData.pan_verified, panVerifying, formData.is_salaried]);
 
   // Auto-fetch GST records right after PAN verification succeeds — no manual
   // "Fetch GST" click needed. Same guard pattern as above.
@@ -1220,6 +1298,28 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <AlertCircle size={13} /> PAN verification failed — fix and re-enter
                           </span>
+                        ) : consentRequesting ? (
+                          <PullingIndicator label="Sending consent request…" />
+                        ) : consentRequest && !consentGranted ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <PullingIndicator label="Waiting for customer to approve consent…" />
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={handleRequestConsent}
+                              title="Resend the consent email"
+                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                              Resend
+                            </button>
+                          </div>
+                        ) : consentRequestFailed ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <AlertCircle size={13} /> Could not send consent request
+                            </span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleRequestConsent}>Retry</button>
+                          </div>
                         ) : formData.business_pan?.length === 10 ? (
                           <PullingIndicator label={formData.mobile_verified ? 'Queued…' : 'Verify mobile via OTP to continue…'} />
                         ) : null}
