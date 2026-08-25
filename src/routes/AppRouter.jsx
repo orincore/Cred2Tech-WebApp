@@ -117,7 +117,7 @@ const AppRouter = () => (
               </ProtectedRoute>
             } />
             <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <ProfilePage />
               </ProtectedRoute>
             } />
@@ -239,7 +239,7 @@ const AppRouter = () => (
             <Route
               path="/customers"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}>
                   <CustomersListPage />
                 </ProtectedRoute>
               }
@@ -328,7 +328,7 @@ const AppRouter = () => (
             <Route
               path="/financials/sub-dsa-payout"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'SUB_DSA']}>
                   <SubDsaPayoutPage />
                 </ProtectedRoute>
               }

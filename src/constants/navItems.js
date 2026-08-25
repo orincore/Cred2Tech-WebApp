@@ -148,7 +148,7 @@ export const NAV_ITEMS = [
     label: 'Dashboard',
     path: '/',
     icon: LayoutDashboard,
-    roles: ['DSA_ADMIN'],
+    roles: ['DSA_ADMIN', 'SUB_DSA'],
   },
   {
     id: 'dsa-team',
@@ -183,7 +183,7 @@ export const NAV_ITEMS = [
     label: 'Pipeline & Customers',
     path: '/customers',
     icon: Briefcase,
-    roles: ['DSA_ADMIN', 'DSA_MEMBER'],
+    roles: ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'],
   },
   {
     id: 'dsa-part-disbursement',
@@ -225,7 +225,7 @@ export const NAV_ITEMS = [
     label: 'Sub DSA Payout',
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
-    roles: ['DSA_ADMIN'],
+    roles: ['DSA_ADMIN', 'SUB_DSA'],
   },
   {
     id: 'dsa-wallet',
@@ -249,7 +249,7 @@ export const NAV_ITEMS = [
     label: 'My Profile',
     path: '/profile',
     icon: User,
-    roles: ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER'],
+    roles: ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER', 'SUB_DSA'],
   },
   {
     id: 'my-manager',
