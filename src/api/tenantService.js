@@ -34,12 +34,23 @@ export const publicRegisterDSA = async (data) => {
 };
 
 // Public — PAN/GST auto-fill lookup used by the registration wizard.
-export const publicLookupPan = async (pan_number) => {
-  const response = await axios.post(`${api.defaults.baseURL || ''}/tenants/public-lookup-pan`, { pan_number });
+export const publicLookupPan = async (pan_number, turnstile_token) => {
+  const response = await axios.post(`${api.defaults.baseURL || ''}/tenants/public-lookup-pan`, { pan_number, turnstile_token });
   return response.data;
 };
 
 export const getTenantSummary = async (tenantId) => {
   const response = await api.get(`/admin/tenants/${tenantId}/summary`);
+  return response.data;
+};
+
+// Public — DSA registration wizard's email/mobile OTP verification.
+export const sendDsaVerificationOtp = async ({ session_id, channel, destination }) => {
+  const response = await axios.post(`${api.defaults.baseURL || ''}/tenants/verify/send-otp`, { session_id, channel, destination });
+  return response.data;
+};
+
+export const confirmDsaVerificationOtp = async ({ session_id, channel, destination, otp }) => {
+  const response = await axios.post(`${api.defaults.baseURL || ''}/tenants/verify/confirm-otp`, { session_id, channel, destination, otp });
   return response.data;
 };

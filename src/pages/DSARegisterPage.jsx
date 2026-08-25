@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { publicRegisterDSA, publicLookupPan } from '../api/tenantService';
+import { publicRegisterDSA, publicLookupPan, sendDsaVerificationOtp, confirmDsaVerificationOtp } from '../api/tenantService';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -86,6 +86,68 @@ const TurnstileWidget = ({ siteKey, onToken }) => {
   }, [siteKey]);
 
   return <div ref={containerRef} />;
+};
+
+// Inline verify-by-code widget shared by the Business Email and Business
+// Mobile fields — status/otp/error live in the caller (emailVerify /
+// mobileVerify) since resetting on edit needs to reach in from handleChange.
+const VerifyContactBlock = ({ status, otp, error, disabled, onSend, onOtpChange, onConfirm }) => {
+  if (status === 'verified') {
+    return (
+      <div className="flex items-center gap-1.5 mt-2 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold">
+        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+        Verified
+      </div>
+    );
+  }
+
+  if (status === 'idle' || status === 'sending' || status === 'error') {
+    return (
+      <div className="mt-2">
+        <button
+          type="button"
+          disabled={disabled || status === 'sending'}
+          onClick={onSend}
+          className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {status === 'sending' ? 'Sending code…' : status === 'error' ? 'Try again' : 'Send verification code'}
+        </button>
+        {status === 'error' && error && <p className="text-[11px] text-red-500 mt-1">{error}</p>}
+      </div>
+    );
+  }
+
+  // sent | verifying
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <input
+        type="text"
+        inputMode="numeric"
+        maxLength={6}
+        placeholder="6-digit code"
+        value={otp}
+        onChange={(e) => onOtpChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        className="w-28 bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[13px] font-semibold pb-1.5 border-b border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400 focus:ring-0 transition-colors p-0"
+      />
+      <button
+        type="button"
+        disabled={status === 'verifying' || otp.length !== 6}
+        onClick={onConfirm}
+        className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {status === 'verifying' ? 'Verifying…' : 'Verify'}
+      </button>
+      <button
+        type="button"
+        disabled={status === 'verifying'}
+        onClick={onSend}
+        className="text-[11px] font-medium text-[#0a1628]/50 dark:text-[#e6edf7]/50 hover:text-[#0a1628] dark:hover:text-[#e6edf7] transition-colors disabled:opacity-50"
+      >
+        Resend
+      </button>
+      {error && <p className="text-[11px] text-red-500 w-full">{error}</p>}
+    </div>
+  );
 };
 
 // Best-effort map from Signzy/GST's free-text "constitution of business" to
@@ -196,19 +258,29 @@ const CustomDropdown = ({
 // keeps the panel open across multiple picks and shows selection as chips.
 const MultiSelectDropdown = ({ value, onChange, options, placeholder, hasError }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const ref = useRef(null);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
+      if (ref.current && !ref.current.contains(event.target)) { setIsOpen(false); setSearch(''); }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isOpen) searchRef.current?.focus();
+  }, [isOpen]);
+
   const toggle = (opt) => {
     onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
   };
+
+  const filteredOptions = search.trim()
+    ? options.filter((opt) => opt.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
 
   return (
     <div className="relative w-full" ref={ref}>
@@ -242,21 +314,38 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder, hasError }
       )}
 
       {isOpen && (
-        <div className="absolute z-50 w-full min-w-[220px] top-[calc(100%+4px)] left-0 bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-lg shadow-xl max-h-64 overflow-y-auto custom-scrollbar overflow-x-hidden p-1">
-          {options.map((opt) => {
-            const isSelected = value.includes(opt);
-            return (
-              <label
-                key={opt}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] cursor-pointer transition-colors
-                  ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-[#0a1628] dark:text-[#e6edf7] hover:bg-gray-50 dark:hover:bg-white/5'}`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input type="checkbox" checked={isSelected} onChange={() => toggle(opt)} className="w-4 h-4 accent-indigo-600 shrink-0" />
-                {opt}
-              </label>
-            );
-          })}
+        <div className="absolute z-50 w-full min-w-[220px] top-[calc(100%+4px)] left-0 bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-lg shadow-xl overflow-hidden p-1">
+          <div className="flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-gray-100 dark:border-gray-800">
+            <span className="material-symbols-outlined text-[16px] text-[#0a1628]/40 dark:text-[#e6edf7]/40">search</span>
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Search states…"
+              className="w-full bg-transparent border-0 outline-none text-[13px] text-[#0a1628] dark:text-[#e6edf7] focus:ring-0 p-0"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto custom-scrollbar overflow-x-hidden">
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-[13px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">No states match "{search}"</div>
+            )}
+            {filteredOptions.map((opt) => {
+              const isSelected = value.includes(opt);
+              return (
+                <label
+                  key={opt}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[14px] cursor-pointer transition-colors
+                    ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-[#0a1628] dark:text-[#e6edf7] hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input type="checkbox" checked={isSelected} onChange={() => toggle(opt)} className="w-4 h-4 accent-indigo-600 shrink-0" />
+                  {opt}
+                </label>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -278,6 +367,10 @@ const DSARegisterPage = () => {
   const [gstRecords, setGstRecords] = useState([]);
   const [selectedGstin, setSelectedGstin] = useState(''); // '' | 'manual' | a gstin
   const lastLookedUpPan = useRef('');
+  // Two independent CAPTCHA solves — Turnstile tokens are single-use, so the
+  // PAN lookup (the actual paid-API abuse target) and final registration
+  // each need their own widget/token rather than sharing one.
+  const [panTurnstileToken, setPanTurnstileToken] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
 
   // Auto-fill fields must never be hand-typed ahead of the API — that's the
@@ -286,6 +379,22 @@ const DSARegisterPage = () => {
   // attempt has actually resolved (success or failure), never before.
   const panFieldsLocked = panLookup.status === 'idle' || panLookup.status === 'loading';
   const addressFieldsLocked = !selectedGstin;
+  // The PAN field itself stays locked until CAPTCHA is solved (when
+  // configured) — that's what actually stops a script from spending the
+  // Signzy lookup call, not just gating the fields it fills in afterward.
+  const panCaptchaRequired = !!TURNSTILE_SITE_KEY && !panTurnstileToken;
+
+  // Stable per-form-load id correlating this registration attempt's email
+  // and mobile OTP verifications — the backend checks both belong to the
+  // same session before creating the tenant, so a script can't reuse one
+  // verified contact against a different one.
+  const registrationSessionId = useRef(null);
+  if (!registrationSessionId.current) {
+    registrationSessionId.current = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+  // idle | sending | sent | verifying | verified | error
+  const [emailVerify, setEmailVerify] = useState({ status: 'idle', otp: '', error: '' });
+  const [mobileVerify, setMobileVerify] = useState({ status: 'idle', otp: '', error: '' });
 
   const [step, setStep] = useState(1);
 
@@ -310,6 +419,12 @@ const DSARegisterPage = () => {
     setForm((p) => ({ ...p, [name]: value }));
     if (errors[name]) setErrors((p) => ({ ...p, [name]: '' }));
     setApiError('');
+
+    // A previously-verified contact stops being verified the moment it's
+    // edited — the OTP was proof of control over the OLD value.
+    if (name === 'email' && emailVerify.status === 'verified') {
+      setEmailVerify({ status: 'idle', otp: '', error: '' });
+    }
 
     // Trigger Pincode Lookup (manual-address correction path)
     if (name === 'pincode' && value.length === 6) {
@@ -360,6 +475,7 @@ const DSARegisterPage = () => {
     const pan = form.pan_number;
     const isValidPan = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan);
     if (!isValidPan || pan === lastLookedUpPan.current) return;
+    if (panCaptchaRequired) return; // wait for CAPTCHA — don't spend the lookup call yet; re-fires once solved
 
     lastLookedUpPan.current = pan;
     setPanLookup({ status: 'loading', error: '' });
@@ -368,7 +484,7 @@ const DSARegisterPage = () => {
 
     (async () => {
       try {
-        const data = await publicLookupPan(pan);
+        const data = await publicLookupPan(pan, panTurnstileToken);
         setPanLookup({ status: 'done', error: '' });
 
         setForm((p) => ({
@@ -394,7 +510,7 @@ const DSARegisterPage = () => {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.pan_number]);
+  }, [form.pan_number, panCaptchaRequired]);
 
   const applyGstSelection = (record) => {
     setSelectedGstin(record.gstin);
@@ -422,6 +538,10 @@ const DSARegisterPage = () => {
     setForm((p) => ({ ...p, [field]: cleaned }));
     if (errors[field]) setErrors((p) => ({ ...p, [field]: '' }));
     setApiError('');
+
+    if (field === 'mobile' && mobileVerify.status === 'verified') {
+      setMobileVerify({ status: 'idle', otp: '', error: '' });
+    }
   };
 
   const handleCountryCodeChange = (field, value) => {
@@ -431,6 +551,35 @@ const DSARegisterPage = () => {
 
     if (errors[field]) setErrors((p) => ({ ...p, [field]: '' }));
     setApiError('');
+
+    if (field === 'mobile_country_code' && mobileVerify.status === 'verified') {
+      setMobileVerify({ status: 'idle', otp: '', error: '' });
+    }
+  };
+
+  // Shared by both the email and mobile verification blocks below —
+  // channel/destination/state+setter differ, everything else is identical.
+  const sendOtpFor = async (channel, destination, setState) => {
+    setState((p) => ({ ...p, status: 'sending', error: '' }));
+    try {
+      await sendDsaVerificationOtp({ session_id: registrationSessionId.current, channel, destination });
+      setState({ status: 'sent', otp: '', error: '' });
+      toast.success(channel === 'EMAIL' ? 'Verification code sent to your email.' : 'Verification code sent via SMS.');
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Could not send verification code. Please try again.';
+      setState({ status: 'error', otp: '', error: msg });
+    }
+  };
+
+  const confirmOtpFor = async (channel, destination, otp, setState) => {
+    setState((p) => ({ ...p, status: 'verifying', error: '' }));
+    try {
+      await confirmDsaVerificationOtp({ session_id: registrationSessionId.current, channel, destination, otp });
+      setState({ status: 'verified', otp: '', error: '' });
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Invalid code. Please try again.';
+      setState((p) => ({ ...p, status: 'sent', error: msg }));
+    }
   };
 
   const handleFieldBlur = (field, directValue = null) => {
@@ -551,7 +700,9 @@ const DSARegisterPage = () => {
       2: ['state', 'city', 'pincode'],
       3: ['admin_name', 'admin_password']
     };
+    if (step === 1 && panCaptchaRequired) return true; // solve CAPTCHA before PAN lookup can even fire
     if (step === 1 && panFieldsLocked) return true; // wait for the PAN lookup to resolve before advancing
+    if (step === 1 && (emailVerify.status !== 'verified' || mobileVerify.status !== 'verified')) return true;
     if (step === 2 && form.operational_states.length === 0) return true;
     if (step === 3 && TURNSTILE_SITE_KEY && !turnstileToken) return true;
     return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
@@ -638,6 +789,7 @@ const DSARegisterPage = () => {
         admin_password: form.admin_password,
         website: '', // honeypot — always empty for real users, see hidden input below
         turnstile_token: turnstileToken || undefined,
+        verification_session_id: registrationSessionId.current,
       });
       setSuccess(true);
       toast.success('Registration successful! You can now log in.');
@@ -653,6 +805,7 @@ const DSARegisterPage = () => {
   const nextStep = (e) => {
     e.preventDefault();
     if (step === 1 && panFieldsLocked) return; // Enter-key submits bypass the disabled button — block here too
+    if (step === 1 && (emailVerify.status !== 'verified' || mobileVerify.status !== 'verified')) return;
     const errs = validateStep(step);
     if (Object.keys(errs).length) {
       setErrors(errs);
@@ -825,10 +978,17 @@ const DSARegisterPage = () => {
               <div className="flex-1">
                 {step === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                    {TURNSTILE_SITE_KEY && (
+                      <div className="md:col-span-2">
+                        <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Verify you're human *</label>
+                        <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">Required before we can look up your PAN.</p>
+                        <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onToken={setPanTurnstileToken} />
+                      </div>
+                    )}
                     <div className="md:col-span-2">
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">PAN Number *</label>
                       <div className="relative">
-                        <input name="pan_number" placeholder="ABCDE1234F" value={form.pan_number} onChange={handleChange} onBlur={() => handleFieldBlur('pan_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pan_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
+                        <input name="pan_number" placeholder={panCaptchaRequired ? 'Complete verification above first' : 'ABCDE1234F'} disabled={panCaptchaRequired} value={form.pan_number} onChange={handleChange} onBlur={() => handleFieldBlur('pan_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pan_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${panCaptchaRequired ? 'opacity-50 cursor-not-allowed' : ''}`} />
                         {panLookup.status === 'loading' && (
                           <div className="absolute right-0 bottom-3 w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
                         )}
@@ -847,6 +1007,16 @@ const DSARegisterPage = () => {
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Business Email *</label>
                       <input name="email" type="email" placeholder="office@acme.com" value={form.email} onChange={handleChange} onBlur={() => handleFieldBlur('email')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.email ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.email && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.email}</span>}
+                      {!errors.email && form.email && (
+                        <VerifyContactBlock
+                          status={emailVerify.status}
+                          otp={emailVerify.otp}
+                          error={emailVerify.error}
+                          onSend={() => sendOtpFor('EMAIL', form.email.trim().toLowerCase(), setEmailVerify)}
+                          onOtpChange={(v) => setEmailVerify((p) => ({ ...p, otp: v }))}
+                          onConfirm={() => confirmOtpFor('EMAIL', form.email.trim().toLowerCase(), emailVerify.otp, setEmailVerify)}
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Business Mobile *</label>
@@ -861,6 +1031,16 @@ const DSARegisterPage = () => {
                         <input name="mobile" type="tel" placeholder="98765 43210" value={form.mobile} onChange={(e) => handlePhoneChange('mobile', e.target.value)} onBlur={() => handleFieldBlur('mobile')} className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0" />
                       </div>
                       {errors.mobile && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.mobile}</span>}
+                      {!errors.mobile && form.mobile.length === 10 && (
+                        <VerifyContactBlock
+                          status={mobileVerify.status}
+                          otp={mobileVerify.otp}
+                          error={mobileVerify.error}
+                          onSend={() => sendOtpFor('MOBILE', form.mobile_country_code + form.mobile.trim(), setMobileVerify)}
+                          onOtpChange={(v) => setMobileVerify((p) => ({ ...p, otp: v }))}
+                          onConfirm={() => confirmOtpFor('MOBILE', form.mobile_country_code + form.mobile.trim(), mobileVerify.otp, setMobileVerify)}
+                        />
+                      )}
                     </div>
                     <div>
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">GST Number (optional)</label>
@@ -902,7 +1082,7 @@ const DSARegisterPage = () => {
                                 {selectedGstin === r.gstin ? 'radio_button_checked' : 'radio_button_unchecked'}
                               </span>
                               <div className="min-w-0">
-                                <div className="text-[13px] font-bold text-[#0a1628] dark:text-[#e6edf7] truncate">{r.trade_name || r.legal_name || r.gstin}</div>
+                                <div className="text-[13px] font-bold text-[#0a1628] dark:text-[#e6edf7] truncate">{r.display_name || r.gstin}</div>
                                 <div className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mt-0.5">{r.gstin}{r.status ? ` · ${r.status}` : ''}</div>
                                 {r.address && <div className="text-[12px] text-[#0a1628]/80 dark:text-[#e6edf7]/80 mt-1 leading-relaxed">{[r.address, r.city, r.state, r.pincode].filter(Boolean).join(', ')}</div>}
                               </div>
