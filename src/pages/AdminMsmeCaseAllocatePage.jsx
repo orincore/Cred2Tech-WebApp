@@ -68,12 +68,14 @@ const AdminMsmeCaseAllocatePage = () => {
   }, [caseId, navigate]);
 
   const allDsaUsers = useMemo(() => targets.flatMap(t =>
-    (t.users || []).map(u => ({
-      tenant_id: t.id,
-      tenant: t,
-      user_id: u.id,
-      user: u,
-    }))
+    (t.users || [])
+      .filter(u => u.role?.name === 'DSA_ADMIN')
+      .map(u => ({
+        tenant_id: t.id,
+        tenant: t,
+        user_id: u.id,
+        user: u,
+      }))
   ), [targets]);
 
   const query = search.trim().toLowerCase();

@@ -82,7 +82,7 @@ const SuperadminWalletDetail = () => {
    const handleAllocate = async (e) => {
       e.preventDefault();
       if (!allocation.credits || allocation.credits <= 0) return toast.error("Enter valid positive credits");
-      if (!allocation.remarks) return toast.error("Select a reason");
+      if (!allocation.remarks) return toast.error("Enter a reason");
 
       try {
          setAllocation(prev => ({ ...prev, loading: true }));
@@ -214,13 +214,7 @@ const SuperadminWalletDetail = () => {
                                  <input type="number" min="1" className="form-control" placeholder="e.g. 500" value={allocation.credits} onChange={e => setAllocation({ ...allocation, credits: e.target.value })} />
                               </FormField>
                               <FormField label="Reason *">
-                                 <select className="form-control" value={allocation.remarks} onChange={e => setAllocation({ ...allocation, remarks: e.target.value })}>
-                                    <option value="">— Select reason (mandatory) —</option>
-                                    <option value="Trial / Onboarding support">Trial / Onboarding support</option>
-                                    <option value="Compensation for failed API">Compensation for failed API</option>
-                                    <option value="Volume discount bonus">Volume discount bonus</option>
-                                    <option value="Manual correction">Manual correction</option>
-                                 </select>
+                                 <input type="text" className="form-control" placeholder="Enter reason for allocation" value={allocation.remarks} onChange={e => setAllocation({ ...allocation, remarks: e.target.value })} />
                               </FormField>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
