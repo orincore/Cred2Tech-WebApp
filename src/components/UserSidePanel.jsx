@@ -20,7 +20,7 @@ const roleBg = (role) => roleColor(role) + '18';
 const formatRoleText = (r) => (r?.name || r || 'Member').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 // ─── User Side Panel Component ───────────────────────────────
-const UserSidePanel = ({ selected, onClose, navigate, children }) => {
+const UserSidePanel = ({ selected, onClose, navigate, children, showViewProfile = true }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -130,17 +130,19 @@ const UserSidePanel = ({ selected, onClose, navigate, children }) => {
         )}
 
         {/* View profile button */}
-        <div style={{ width: '100%', marginTop: 16 }}>
-          <TravelingBorderButton
-            onClick={() => navigate(`/users/${selected.id}`)}
-            size="sm"
-            solid
-            showIcon={false}
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            View Full Profile
-          </TravelingBorderButton>
-        </div>
+        {showViewProfile && (
+          <div style={{ width: '100%', marginTop: 16 }}>
+            <TravelingBorderButton
+              onClick={() => navigate(`/users/${selected.id}`)}
+              size="sm"
+              solid
+              showIcon={false}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              View Full Profile
+            </TravelingBorderButton>
+          </div>
+        )}
       </div>
     </div>
   );

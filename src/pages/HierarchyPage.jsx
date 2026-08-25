@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { getUsers } from '../api/userService';
-import { MOCK_USERS } from '../constants/mockData';
+import { getTeam } from '../api/userService';
 import { getInitials } from '../utils/helpers';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import OrgCard from '../components/OrgCard';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -203,6 +203,12 @@ const DotPattern = ({ isDark }) => (
 // ─── Main HierarchyPage ───────────────────────────────────────
 const HierarchyPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // /users/create and /users/:id are both SUPER_ADMIN/DSA_ADMIN/
+  // CRED2TECH_MEMBER-only on the backend — DSA_MEMBER/SUB_DSA can view
+  // this page (via /users/team, scoped to their own subordinates) but
+  // can't add members or drill into a full user profile.
+  const canManageUsers = ['SUPER_ADMIN', 'DSA_ADMIN', 'CRED2TECH_MEMBER'].includes(user?.role);
   const { isMobile } = useResponsive();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -236,8 +242,8 @@ const HierarchyPage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await getUsers();
-        const userData = Array.isArray(data) ? data : data.users || MOCK_USERS;
+        const data = await getTeam();
+        const userData = Array.isArray(data) ? data : data.users || [];
         setUsers(userData);
         // Auto-expand all nodes with children on initial load
         const allIds = new Set();
@@ -253,19 +259,7 @@ const HierarchyPage = () => {
         addWithChildren(treeData);
         setExpanded(allIds);
       } catch {
-        setUsers(MOCK_USERS);
-        const treeData = buildTree(MOCK_USERS);
-        const allIds = new Set();
-        const addWithChildren = (nodes) => {
-          nodes.forEach(n => {
-            if (n._children?.length > 0) {
-              allIds.add(n.id);
-              addWithChildren(n._children);
-            }
-          });
-        };
-        addWithChildren(treeData);
-        setExpanded(allIds);
+        setUsers([]);
       }
       finally { setLoading(false); }
     };
@@ -450,12 +444,14 @@ const HierarchyPage = () => {
                 </button>
               </div>
               <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>{users.length} members</span>
-              <button
-                onClick={() => navigate('/users/create')}
-                style={{ padding: '7px 16px', fontSize: 12, fontWeight: 700, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
-              >
-                + Add Member
-              </button>
+              {canManageUsers && (
+                <button
+                  onClick={() => navigate('/users/create')}
+                  style={{ padding: '7px 16px', fontSize: 12, fontWeight: 700, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+                >
+                  + Add Member
+                </button>
+              )}
             </div>
           }
         />
@@ -510,6 +506,7 @@ const HierarchyPage = () => {
                     expanded={expanded}
                     onToggle={toggleExpand}
                     originalChildCount={originalChildCountMap[n.id] || 0}
+                    showViewProfile={canManageUsers}
                   />
                 ))}
               </g>
@@ -554,6 +551,7 @@ const HierarchyPage = () => {
             selected={selected}
             onClose={() => setSelected(null)}
             navigate={navigate}
+            showViewProfile={canManageUsers}
             children={{ onClickChild: (c) => setSelected(nodeMap[c.id] || c) }}
           />
         </div>
@@ -669,6 +667,7 @@ const HierarchyPage = () => {
             selected={selected}
             onClose={() => setSelected(null)}
             navigate={navigate}
+            showViewProfile={canManageUsers}
             children={{ onClickChild: (c) => setSelected(c) }}
           />
         </div>

@@ -174,7 +174,7 @@ const AppRouter = () => (
               }
             />
             <Route path="/hierarchy" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <HierarchyPage />
               </ProtectedRoute>
             } />
@@ -247,7 +247,7 @@ const AppRouter = () => (
             <Route
               path="/customers/add"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}>
                   <AddCustomerWizardPage />
                 </ProtectedRoute>
               }
@@ -255,7 +255,7 @@ const AppRouter = () => (
             <Route
               path="/customers/salaried/add"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}>
                   <AddSalariedCustomerWizardPage />
                 </ProtectedRoute>
               }
@@ -263,7 +263,7 @@ const AppRouter = () => (
             <Route
               path="/customers/:customer_id"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'MSME_CUSTOMER']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'SUB_DSA', 'MSME_CUSTOMER']}>
                   <CustomerProfilePage />
                 </ProtectedRoute>
               }
@@ -278,7 +278,7 @@ const AppRouter = () => (
             <Route
               path="/cases/:id"
               element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'MSME_CUSTOMER']}>
+                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'SUB_DSA', 'MSME_CUSTOMER']}>
                   <CaseDetailPage />
                 </ProtectedRoute>
               }

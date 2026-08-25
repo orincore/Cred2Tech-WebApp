@@ -5,6 +5,14 @@ export const getUsers = async () => {
   return response.data; // filtered list based on current user's role
 };
 
+// Same underlying (role-scoped) data as getUsers, but reachable by
+// DSA_MEMBER/SUB_DSA too — GET /users itself is admin-only. Use this for
+// any view (e.g. HierarchyPage) that non-admin DSA-side roles need to see.
+export const getTeam = async () => {
+  const response = await api.get('/users/team');
+  return response.data;
+};
+
 export const getUserById = async (id) => {
   const response = await api.get(`/users/${id}`);
   return response.data;
