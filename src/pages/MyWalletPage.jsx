@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import EmptyState from '../components/ui/EmptyState';
+import Badge from '../components/ui/Badge';
 import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
 import { getErrorMessage } from '../utils/helpers';
@@ -222,9 +223,93 @@ const RechargeModal = ({ onClose, onSuccess }) => {
   );
 };
 
+const AllocationModal = ({ type, employee, onClose, onSuccess }) => {
+  const [credits, setCredits] = useState('');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const wallet = employee?.EmployeeWallet?.[0] || { allocated_balance: 0 };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const creditsNum = Number(credits);
+    if (!creditsNum || creditsNum <= 0) {
+      toast.error('Enter a valid credits amount');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (type === 'ALLOCATE') {
+        await walletService.allocateEmployeeCredits(employee.id, creditsNum, note);
+      } else {
+        await walletService.revokeEmployeeCredits(employee.id, creditsNum, note);
+      }
+      toast.success(`Credits ${type === 'ALLOCATE' ? 'allocated' : 'revoked'} successfully`);
+      onSuccess();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Action failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: '100%', maxWidth: 420, borderRadius: 0, padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>
+            {type === 'ALLOCATE' ? 'Allocate' : 'Revoke'} Credits: {employee?.name}
+          </h3>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--on-muted)', padding: 4 }}><X size={18} /></button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ padding: 20 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', marginBottom: 6, display: 'block' }}>Credits Amount</label>
+            <input
+              type="number" min="1" required autoFocus
+              value={credits}
+              onChange={(e) => setCredits(e.target.value)}
+              style={{ ...compactField, width: '100%', boxSizing: 'border-box', fontSize: 16, padding: '10px 12px' }}
+            />
+            {type === 'REVOKE' && (
+              <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6 }}>
+                Maximum allowed: {formatCredits(wallet.allocated_balance)}
+              </p>
+            )}
+
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', marginTop: 16, marginBottom: 6, display: 'block' }}>Note (optional)</label>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ ...compactField, width: '100%', boxSizing: 'border-box' }}
+            />
+
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                width: '100%', marginTop: 20, padding: '12px', background: 'var(--primary)', color: '#fff',
+                border: 'none', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer',
+                opacity: submitting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {submitting ? 'Processing…' : 'Confirm'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const MyWalletPage = () => {
   const { isMobile } = useResponsive();
-  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'recharges'
+  const { hasRole } = useAuth();
+  const canManageEmployeeCredits = hasRole('DSA_ADMIN');
+  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'recharges' | 'employees'
   const [showRechargeModal, setShowRechargeModal] = useState(false);
 
   const [balance, setBalance] = useState(null);
@@ -251,6 +336,10 @@ const MyWalletPage = () => {
   const [topupsPage, setTopupsPage] = useState(1);
   const [topupsLoading, setTopupsLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState(null);
+
+  const [employees, setEmployees] = useState([]);
+  const [employeesLoading, setEmployeesLoading] = useState(true);
+  const [allocationModal, setAllocationModal] = useState(null); // { type: 'ALLOCATE'|'REVOKE', employee }
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 350);
@@ -304,9 +393,22 @@ const MyWalletPage = () => {
     }
   }, [topupsPage]);
 
+  const fetchEmployees = useCallback(async () => {
+    setEmployeesLoading(true);
+    try {
+      const result = await walletService.getEmployees();
+      setEmployees(result || []);
+    } catch (err) {
+      toast.error('Failed to load employee wallets');
+    } finally {
+      setEmployeesLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
   useEffect(() => { if (activeTab === 'recharges') fetchTopups(); }, [activeTab, fetchTopups]);
+  useEffect(() => { if (activeTab === 'employees' && canManageEmployeeCredits) fetchEmployees(); }, [activeTab, canManageEmployeeCredits, fetchEmployees]);
 
   const applyPreset = (preset) => {
     const [from, to] = preset.range();
@@ -343,6 +445,11 @@ const MyWalletPage = () => {
     fetchBalance();
     fetchTransactions();
     if (activeTab === 'recharges') fetchTopups();
+  };
+
+  const handleAllocationSuccess = () => {
+    setAllocationModal(null);
+    fetchEmployees();
   };
 
   const handleDownloadInvoice = async (topup) => {
@@ -436,6 +543,42 @@ const MyWalletPage = () => {
     },
   ];
 
+  const employeeColumns = [
+    {
+      key: 'employee', label: 'Employee', width: '30%', padding: '16px 12px',
+      render: (emp) => (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{emp.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>{emp.email}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'role', label: 'Role', width: '16%', padding: '16px 12px',
+      render: (emp) => <Badge type="role" value={emp.role?.name} />,
+    },
+    {
+      key: 'allocated', label: 'Allocated Balance', align: 'right', width: '18%', padding: '16px 12px',
+      render: (emp) => <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--primary)' }}>{formatCredits(emp.EmployeeWallet?.[0]?.allocated_balance || 0)}</span>,
+    },
+    {
+      key: 'consumed', label: 'Consumed', align: 'right', width: '16%', padding: '16px 12px',
+      render: (emp) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{formatCredits(emp.EmployeeWallet?.[0]?.consumed_credits || 0)}</span>,
+    },
+    {
+      key: 'actions', label: 'Actions', align: 'right', width: '20%', padding: '16px 12px',
+      render: (emp) => {
+        const allocatedBalance = emp.EmployeeWallet?.[0]?.allocated_balance || 0;
+        return (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => setAllocationModal({ type: 'ALLOCATE', employee: emp })}>Allocate</button>
+            <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} disabled={allocatedBalance === 0} onClick={() => setAllocationModal({ type: 'REVOKE', employee: emp })}>Revoke</button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -468,6 +611,7 @@ const MyWalletPage = () => {
           {[
             { key: 'transactions', label: 'Transaction History' },
             { key: 'recharges', label: 'Recharge History' },
+            ...(canManageEmployeeCredits ? [{ key: 'employees', label: 'Employee Credits' }] : []),
           ].map((tab) => (
             <button
               key={tab.key}
@@ -604,7 +748,7 @@ const MyWalletPage = () => {
               </div>
             )}
           </>
-        ) : (
+        ) : activeTab === 'recharges' ? (
           <>
             <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
               {topupsLoading ? (
@@ -652,11 +796,59 @@ const MyWalletPage = () => {
               </div>
             )}
           </>
+        ) : (
+          <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
+            <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--outline)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Employee Wallet Allocation</h3>
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>Allocate or revoke credits for your DSA team members</p>
+            </div>
+            {employeesLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
+            ) : employees.length === 0 ? (
+              <EmptyState icon={Wallet} title="No team members found" description="Add DSA team members from Team Management to allocate credits to them." />
+            ) : isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                {employees.map((emp) => {
+                  const wallet = emp.EmployeeWallet?.[0] || { allocated_balance: 0, consumed_credits: 0 };
+                  return (
+                    <div key={emp.id} style={{ background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{emp.name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>{emp.email}</div>
+                          <div style={{ marginTop: 6 }}><Badge type="role" value={emp.role?.name} /></div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary)' }}>{formatCredits(wallet.allocated_balance)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>Consumed: {formatCredits(wallet.consumed_credits)}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
+                        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0, flex: 1 }} onClick={() => setAllocationModal({ type: 'ALLOCATE', employee: emp })}>Allocate</button>
+                        <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0, flex: 1 }} disabled={wallet.allocated_balance === 0} onClick={() => setAllocationModal({ type: 'REVOKE', employee: emp })}>Revoke</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <DataTable columns={employeeColumns} data={employees} rowKey="id" />
+            )}
+          </div>
         )}
       </div>
 
       {showRechargeModal && (
         <RechargeModal onClose={() => setShowRechargeModal(false)} onSuccess={handleRechargeSuccess} />
+      )}
+
+      {allocationModal && (
+        <AllocationModal
+          type={allocationModal.type}
+          employee={allocationModal.employee}
+          onClose={() => setAllocationModal(null)}
+          onSuccess={handleAllocationSuccess}
+        />
       )}
     </div>
   );

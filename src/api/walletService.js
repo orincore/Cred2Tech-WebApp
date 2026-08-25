@@ -68,6 +68,22 @@ export const walletService = {
     const response = await api.get(`/wallet/topups/${topupId}/invoice`, { responseType: 'blob' });
     downloadBlob(response, `${invoiceNumber || `invoice-${topupId}`}.pdf`);
   },
+
+  // ── Employee credit allocation (DSA_ADMIN) ─────────────────────────────
+  getEmployees: async () => {
+    const response = await api.get('/wallet/employees');
+    return response.data;
+  },
+
+  allocateEmployeeCredits: async (userId, credits, note) => {
+    const response = await api.post(`/wallet/employees/${userId}/allocate`, { credits, note });
+    return response.data;
+  },
+
+  revokeEmployeeCredits: async (userId, credits, note) => {
+    const response = await api.post(`/wallet/employees/${userId}/revoke`, { credits, note });
+    return response.data;
+  },
 };
 
 export default walletService;

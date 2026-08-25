@@ -172,7 +172,15 @@ export default function CaseDetailPage() {
     amount: '', disbursement_date: new Date().toISOString().split('T')[0],
     next_disbursement_due_date: '', remarks: '', pdd_pending: false,
     pdd_documents: [{ document_name: '', due_date: '' }], loan_account_number: '',
+    subvention_amount: '',
   });
+
+  // A case can only take subvention once, in whichever tranche it's first
+  // entered — later tranches (and DISBURSED after a PARTLY_DISBURSED one)
+  // must not offer the field again.
+  const hasExistingSubvention = disbursementSummary?.disbursements?.some(
+    (d) => d.subvention_amount && Number(d.subvention_amount) > 0
+  );
 
   const fetchDisbursementSummary = useCallback(async () => {
     try {
@@ -872,6 +880,18 @@ export default function CaseDetailPage() {
                         <label className="form-label">Next Disbursement Due Date</label>
                         <input type="date" className="form-control" value={disbursementForm.next_disbursement_due_date} onChange={(e) => setDisbursementForm({ ...disbursementForm, next_disbursement_due_date: e.target.value })} />
                         <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 4 }}>Expected date for the remaining balance</div>
+                      </div>
+                    )}
+                    {!hasExistingSubvention && (
+                      <div className="form-group">
+                        <label className="form-label">Subvention Amount (₹)</label>
+                        <input type="number" className="form-control" value={disbursementForm.subvention_amount} onChange={(e) => setDisbursementForm({ ...disbursementForm, subvention_amount: e.target.value })} placeholder="e.g. 5000" />
+                        <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 4 }}>Deducted from Lender Commission</div>
+                      </div>
+                    )}
+                    {hasExistingSubvention && (
+                      <div style={{ gridColumn: 'span 2', fontSize: 11, color: 'var(--text-tertiary)', fontStyle: 'italic', padding: '8px 0' }}>
+                        * Subvention was already applied in a previous tranche. It can only be taken once per case.
                       </div>
                     )}
                     <div style={{ gridColumn: 'span 2', marginTop: 8 }}>
