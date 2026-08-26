@@ -30,6 +30,8 @@ const SuperadminApiLogsPage = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [smsBalance, setSmsBalance] = useState(null);
+  const [smsBalanceError, setSmsBalanceError] = useState(false);
 
   // Filters
   const [filters, setFilters] = useState({ page: 1, limit: 50, status: '', api_code: '' });
@@ -39,6 +41,7 @@ const SuperadminApiLogsPage = () => {
 
   useEffect(() => {
     fetchSummary();
+    fetchSmsBalance();
   }, []);
 
   useEffect(() => {
@@ -51,6 +54,20 @@ const SuperadminApiLogsPage = () => {
       setSummary(res.data);
     } catch (e) {
       console.error("Summary load fail");
+    }
+  };
+
+  // Live remaining SMS credit from alots.io — separate call/state from the
+  // usage-log summary above (different source, and shouldn't block or be
+  // blocked by it if one of the two fails).
+  const fetchSmsBalance = async () => {
+    try {
+      const res = await api.get(`/admin/api-logs/sms-balance`);
+      setSmsBalance(res.data.walletBalance);
+      setSmsBalanceError(false);
+    } catch (e) {
+      console.error("SMS balance load fail");
+      setSmsBalanceError(true);
     }
   };
 
@@ -162,11 +179,17 @@ const SuperadminApiLogsPage = () => {
                   <h4 style={{ color: 'var(--on-muted)', fontSize: 9, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>Failed Executions</h4>
                   <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary.total_failed_calls.toLocaleString()}</div>
                 </div>
+                <div style={{ background: 'var(--bg-surface)', padding: 10, borderRadius: 0, border: '1px solid var(--outline)' }}>
+                  <h4 style={{ color: 'var(--on-muted)', fontSize: 9, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>SMS Credits (alots.io)</h4>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: smsBalanceError ? 'var(--on-muted)' : '#0891b2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {smsBalanceError ? '—' : smsBalance == null ? '…' : `₹${smsBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                  </div>
+                </div>
               </div>
             )}
           </div>
         ) : (
-          <div style={{ padding: '20px 60px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ padding: '20px 60px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
             <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 0, border: '1px solid var(--outline)' }}>
               <h4 style={{ color: 'var(--on-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>Total API Pings</h4>
               <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)' }}>{summary.total_api_calls.toLocaleString()}</div>
@@ -182,6 +205,12 @@ const SuperadminApiLogsPage = () => {
             <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 0, border: '1px solid var(--outline)' }}>
               <h4 style={{ color: 'var(--on-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>Failed Executions</h4>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#dc2626' }}>{summary.total_failed_calls.toLocaleString()}</div>
+            </div>
+            <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 0, border: '1px solid var(--outline)' }}>
+              <h4 style={{ color: 'var(--on-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>SMS Credits (alots.io)</h4>
+              <div style={{ fontSize: 24, fontWeight: 800, color: smsBalanceError ? 'var(--on-muted)' : '#0891b2' }}>
+                {smsBalanceError ? 'Unavailable' : smsBalance == null ? '…' : `₹${smsBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+              </div>
             </div>
           </div>
         )

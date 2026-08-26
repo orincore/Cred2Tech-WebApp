@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Search, Trash2, ShieldAlert } from 'lucide-react';
+import { Search, Trash2, ShieldAlert, ExternalLink } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
 import EmptyState from '../components/ui/EmptyState';
@@ -68,6 +68,11 @@ const STAGE_STYLE = {
   REJECTED: { color: 'var(--error)', bg: 'var(--error-bg)' },
 };
 
+const PURGE_STATUS_STYLE = {
+  PURGED: { color: 'var(--success)', bg: 'var(--success-bg)' },
+  ACTIVE: { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' },
+};
+
 const InfoField = ({ label, value }) => (
   <div>
     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
@@ -94,6 +99,23 @@ const AdminDataPurgePage = () => {
   const [hardDeleteConfirmOpen, setHardDeleteConfirmOpen] = useState(false);
   const [hardDeleting, setHardDeleting] = useState(false);
 
+  // PAN search — the alternative to Case ID: finds every case, across every
+  // tenant (the same PAN can exist as separate Customer rows per tenant),
+  // for a right-to-erasure / bulk-cleanup request that doesn't come in with
+  // a specific case ID already in hand.
+  const [searchMode, setSearchMode] = useState('case'); // 'case' | 'pan'
+  const [panInput, setPanInput] = useState('');
+  const [panLoading, setPanLoading] = useState(false);
+  const [panResult, setPanResult] = useState(null); // { pan, customers: [{ ...customer, display_name, cases: [...] }] }
+
+  const [panBulkReason, setPanBulkReason] = useState('');
+  const [panPurgeAllConfirmOpen, setPanPurgeAllConfirmOpen] = useState(false);
+  const [panPurgingAll, setPanPurgingAll] = useState(false);
+
+  const [panHardDeleteReason, setPanHardDeleteReason] = useState('');
+  const [panDeleteAllConfirmOpen, setPanDeleteAllConfirmOpen] = useState(false);
+  const [panDeletingAll, setPanDeletingAll] = useState(false);
+
   const loadStatus = async (id) => {
     setLoading(true);
     try {
@@ -109,14 +131,97 @@ const AdminDataPurgePage = () => {
     }
   };
 
+  const loadPan = async (pan) => {
+    setPanLoading(true);
+    try {
+      const result = await adminPurgeService.getCasesByPan(pan);
+      setPanResult(result);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to look up cases for this PAN');
+      setPanResult(null);
+    } finally {
+      setPanLoading(false);
+    }
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
+    if (searchMode === 'pan') {
+      const pan = panInput.trim().toUpperCase();
+      if (!pan) {
+        toast.error('Enter a PAN');
+        return;
+      }
+      // Switching search modes clears whatever the OTHER mode had loaded —
+      // otherwise a stale single-case Danger Zone from a previous Case ID
+      // lookup could keep showing underneath a fresh PAN result.
+      setStatus(null);
+      setCaseId(null);
+      loadPan(pan);
+      return;
+    }
     const id = parseInt(caseIdInput.trim(), 10);
     if (!Number.isFinite(id)) {
       toast.error('Enter a valid case ID');
       return;
     }
+    setPanResult(null);
     loadStatus(id);
+  };
+
+  // Clicking "Manage" on a row in the PAN results reuses the exact same
+  // single-case Case Details / Retention Schedule / Purge / Danger Zone
+  // sections already built for Case ID search — no duplicate UI needed for
+  // "purge this one case" / "delete this one case" from the PAN view.
+  const handleManageCase = (id) => {
+    setSearchMode('case');
+    setCaseIdInput(String(id));
+    loadStatus(id);
+  };
+
+  const panCases = panResult?.customers?.flatMap((c) => c.cases.map((cs) => ({ ...cs, customer: c }))) || [];
+  const panNotPurgedCount = panCases.filter((c) => !c.data_purged_at).length;
+
+  const handleConfirmPurgeAllForPan = async () => {
+    setPanPurgingAll(true);
+    try {
+      const result = await adminPurgeService.purgeAllForPan(panResult.pan, panBulkReason.trim());
+      toast.success(
+        `Purged records across ${result.purgedCount} case(s); ${result.alreadyPurgedCount} already purged${result.failedCount > 0 ? `, ${result.failedCount} failed — check logs` : ''}.`,
+        { duration: 8000 }
+      );
+      setPanPurgeAllConfirmOpen(false);
+      setPanBulkReason('');
+      await loadPan(panResult.pan);
+      if (caseId) await loadStatus(caseId); // keep an open single-case view in sync too
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to purge cases for this PAN');
+    } finally {
+      setPanPurgingAll(false);
+    }
+  };
+
+  const handleConfirmDeleteAllForPan = async () => {
+    setPanDeletingAll(true);
+    try {
+      const result = await adminPurgeService.hardDeleteAllForPan(panResult.pan, panHardDeleteReason.trim());
+      toast.success(
+        `Permanently deleted ${result.deletedCount} case(s)${result.alreadyDeletedCount > 0 ? `, ${result.alreadyDeletedCount} were already gone` : ''}${result.failedCount > 0 ? `, ${result.failedCount} failed — check logs` : ''}.`,
+        { duration: 8000 }
+      );
+      setPanDeleteAllConfirmOpen(false);
+      setPanHardDeleteReason('');
+      // Everything for this PAN is gone — nothing left to show.
+      setPanResult(null);
+      setPanInput('');
+      setStatus(null);
+      setCaseId(null);
+      setCaseIdInput('');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to permanently delete cases for this PAN');
+    } finally {
+      setPanDeletingAll(false);
+    }
   };
 
   const pendingCount = status?.schedules?.filter((s) => s.status !== 'PURGED').length ?? 0;
@@ -179,39 +284,108 @@ const AdminDataPurgePage = () => {
     { key: 'reason', label: 'Reason', whiteSpace: 'normal', render: (l) => l.reason || '—' },
   ];
 
+  const panCaseColumns = [
+    { key: 'id', label: 'Case ID', width: 80 },
+    { key: 'tenant', label: 'Tenant', render: (c) => (c.customer?.tenant ? `${c.customer.tenant.name} (${c.customer.tenant.type})` : '—') },
+    { key: 'customer', label: 'Customer', render: (c) => c.customer?.display_name || c.customer_name || '—' },
+    { key: 'stage', label: 'Stage', width: 130, render: (c) => <Pill label={CASE_STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)} style={STAGE_STYLE[c.stage]} /> },
+    { key: 'category', label: 'Category', width: 100, render: (c) => formatStatusLabel(c.category) },
+    { key: 'lead_date', label: 'Lead Date', render: (c) => (c.lead_date ? formatDateTime(c.lead_date) : '—') },
+    {
+      key: 'purge_status', label: 'Purge Status', width: 100,
+      render: (c) => <Pill label={c.data_purged_at ? 'PURGED' : 'ACTIVE'} style={PURGE_STATUS_STYLE[c.data_purged_at ? 'PURGED' : 'ACTIVE']} />,
+    },
+    {
+      key: 'actions', label: '', width: 110,
+      render: (c) => (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => handleManageCase(c.id)}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+        >
+          <ExternalLink size={13} /> Manage
+        </button>
+      ),
+    },
+  ];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Data Purge"
-          subtitle="Look up a case's retention schedule and raise a manual early-deletion request (CT-004-DPP)."
+          subtitle="Look up a case by ID, or a PAN to see every case it touches across every tenant — raise a manual early-deletion request (CT-004-DPP)."
           compact={isMobile}
         />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
         <div style={{ marginBottom: 16 }}>
-          <SectionCard title="Look up a case">
+          <SectionCard title="Look up">
             <form onSubmit={handleSearch} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', padding: 20 }}>
-              <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
-                <label className="form-label" htmlFor="caseId">Case ID</label>
-                <input
-                  id="caseId"
-                  className="form-control"
-                  type="number"
-                  value={caseIdInput}
-                  onChange={(e) => setCaseIdInput(e.target.value)}
-                  placeholder="e.g. 1042"
-                />
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Search By</label>
+                <div style={{ display: 'flex' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${searchMode === 'case' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setSearchMode('case')}
+                    style={{ borderRadius: 0 }}
+                  >
+                    Case ID
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${searchMode === 'pan' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setSearchMode('pan')}
+                    style={{ borderRadius: 0 }}
+                  >
+                    PAN
+                  </button>
+                </div>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={loading} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {searchMode === 'case' ? (
+                <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
+                  <label className="form-label" htmlFor="caseId">Case ID</label>
+                  <input
+                    id="caseId"
+                    className="form-control"
+                    type="number"
+                    value={caseIdInput}
+                    onChange={(e) => setCaseIdInput(e.target.value)}
+                    placeholder="e.g. 1042"
+                  />
+                </div>
+              ) : (
+                <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
+                  <label className="form-label" htmlFor="pan">PAN</label>
+                  <input
+                    id="pan"
+                    className="form-control"
+                    type="text"
+                    value={panInput}
+                    onChange={(e) => setPanInput(e.target.value.toUpperCase())}
+                    placeholder="e.g. AABCE1234F"
+                    style={{ textTransform: 'uppercase' }}
+                    maxLength={10}
+                  />
+                  <span className="form-hint">Searches across every tenant — the same PAN can have separate customer records per tenant.</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={searchMode === 'case' ? loading : panLoading}
+                style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
                 <Search size={16} /> Look up
               </button>
             </form>
           </SectionCard>
         </div>
 
-        {loading && (
+        {searchMode === 'case' && loading && (
           <div style={{ marginBottom: 16 }}>
             <SectionCard>
               <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
@@ -219,7 +393,7 @@ const AdminDataPurgePage = () => {
           </div>
         )}
 
-        {!loading && !status && (
+        {searchMode === 'case' && !loading && !status && (
           <div style={{ marginBottom: 16 }}>
             <SectionCard>
               <EmptyState
@@ -231,7 +405,7 @@ const AdminDataPurgePage = () => {
           </div>
         )}
 
-        {!loading && status && !status.case && (
+        {searchMode === 'case' && !loading && status && !status.case && (
           <div style={{ marginBottom: 16 }}>
             <SectionCard>
               <EmptyState icon={ShieldAlert} title="Case not found" description={`No case exists with ID ${status.caseId}.`} />
@@ -239,7 +413,120 @@ const AdminDataPurgePage = () => {
           </div>
         )}
 
-        {!loading && status && status.case && (
+        {searchMode === 'pan' && panLoading && (
+          <div style={{ marginBottom: 16 }}>
+            <SectionCard>
+              <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
+            </SectionCard>
+          </div>
+        )}
+
+        {searchMode === 'pan' && !panLoading && !panResult && (
+          <div style={{ marginBottom: 16 }}>
+            <SectionCard>
+              <EmptyState
+                icon={ShieldAlert}
+                title="No PAN searched"
+                description="Enter a PAN above to see every case it touches, across every tenant."
+              />
+            </SectionCard>
+          </div>
+        )}
+
+        {searchMode === 'pan' && !panLoading && panResult && panCases.length === 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <SectionCard>
+              <EmptyState icon={ShieldAlert} title="No cases found" description={`No customer or case exists for PAN ${panResult.pan}.`} />
+            </SectionCard>
+          </div>
+        )}
+
+        {searchMode === 'pan' && !panLoading && panResult && panCases.length > 0 && (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <SectionCard title={`Cases for PAN ${panResult.pan} (${panCases.length})`}>
+                <DataTable columns={panCaseColumns} data={panCases} rowKey="id" isMobile={isMobile} stickyHeader={false} />
+              </SectionCard>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <SectionCard title="Bulk Purge — Every Case for this PAN">
+                <div style={{ padding: 20 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+                    {panNotPurgedCount > 0
+                      ? `${panNotPurgedCount} of ${panCases.length} case(s) for this PAN have not yet been purged. This purges every one of them, across every tenant, ahead of the normal 179-day retention window.`
+                      : `All ${panCases.length} case(s) for this PAN have already been purged — submitting here will have no effect.`}
+                  </p>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="panBulkReason">
+                      Reason<span className="required">*</span>
+                    </label>
+                    <textarea
+                      id="panBulkReason"
+                      className="form-control"
+                      rows={3}
+                      value={panBulkReason}
+                      onChange={(e) => setPanBulkReason(e.target.value)}
+                      placeholder="e.g. Customer submitted a right-to-erasure request covering every application"
+                    />
+                    <span className="form-hint">Required — recorded permanently in the purge audit trail for each case.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={!panBulkReason.trim()}
+                    onClick={() => setPanPurgeAllConfirmOpen(true)}
+                    style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Trash2 size={16} /> Purge All ({panCases.length} case{panCases.length === 1 ? '' : 's'})
+                  </button>
+                </div>
+              </SectionCard>
+            </div>
+
+            <div style={{ marginBottom: 16, border: '2px solid var(--error)' }}>
+              <SectionCard title="Danger Zone — Delete Every Case for this PAN">
+                <div style={{ padding: 20 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10 }}>
+                    Permanently and irreversibly deletes all <strong>{panCases.length}</strong> case(s) for PAN{' '}
+                    <strong>{panResult.pan}</strong>, across every tenant — every applicant, document, income entry,
+                    obligation, bureau/GST/ITR/bank-statement record, proposal, sanction, disbursement, PDD task, and
+                    every other row tied to each one, plus the actual files in storage.
+                  </p>
+                  <div className="notice notice-error" style={{ marginBottom: 14 }}>
+                    <ShieldAlert size={16} style={{ marginTop: 1, flexShrink: 0 }} />
+                    <span>Cases that will be deleted: {panCases.map((c) => `#${c.id}`).join(', ')}.</span>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="panHardDeleteReason">
+                      Reason<span className="required">*</span>
+                    </label>
+                    <textarea
+                      id="panHardDeleteReason"
+                      className="form-control"
+                      rows={3}
+                      value={panHardDeleteReason}
+                      onChange={(e) => setPanHardDeleteReason(e.target.value)}
+                      placeholder="e.g. Customer requested full account and data deletion"
+                    />
+                    <span className="form-hint">Required — recorded permanently in a standalone audit log that survives each case.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={!panHardDeleteReason.trim()}
+                    onClick={() => setPanDeleteAllConfirmOpen(true)}
+                    style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Trash2 size={16} /> Permanently Delete All ({panCases.length} case{panCases.length === 1 ? '' : 's'})
+                  </button>
+                </div>
+              </SectionCard>
+            </div>
+          </>
+        )}
+
+        {searchMode === 'case' && !loading && status && status.case && (
           <>
             <div style={{ marginBottom: 16 }}>
               <SectionCard title="Case Details">
@@ -396,6 +683,32 @@ const AdminDataPurgePage = () => {
         confirmLabel="Delete Permanently"
         isLoading={hardDeleting}
         confirmText={caseId != null ? `DELETE ${caseId}` : undefined}
+        danger
+      />
+
+      <ConfirmModal
+        isOpen={panPurgeAllConfirmOpen}
+        onClose={() => !panPurgingAll && setPanPurgeAllConfirmOpen(false)}
+        onConfirm={handleConfirmPurgeAllForPan}
+        title="Purge all cases for this PAN now?"
+        message={`This immediately and irreversibly purges all sensitive credit-information fields for ${panNotPurgedCount} not-yet-purged case(s) out of ${panCases.length} total for PAN ${panResult?.pan}, across every tenant. This cannot be undone.`}
+        notice={`Reason on record: "${panBulkReason.trim()}"`}
+        confirmLabel="Purge All"
+        isLoading={panPurgingAll}
+        confirmText={panResult?.pan}
+        danger
+      />
+
+      <ConfirmModal
+        isOpen={panDeleteAllConfirmOpen}
+        onClose={() => !panDeletingAll && setPanDeleteAllConfirmOpen(false)}
+        onConfirm={handleConfirmDeleteAllForPan}
+        title="Permanently delete all cases for this PAN?"
+        message={`This permanently deletes all ${panCases.length} case(s) for PAN ${panResult?.pan}, across every tenant — every related record and every file in storage for each one. There is no undo, no soft-delete, and no way to recover this data afterward.`}
+        notice={`Reason on record: "${panHardDeleteReason.trim()}"`}
+        confirmLabel="Delete All Permanently"
+        isLoading={panDeletingAll}
+        confirmText={panResult?.pan ? `DELETE ${panResult.pan}` : undefined}
         danger
       />
     </div>
