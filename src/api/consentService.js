@@ -23,6 +23,17 @@ export const consentService = {
     return response.data;
   },
 
+  // Rehydrates whatever consent request is still live for this subject
+  // (PENDING or GRANTED) — used on mount so a page reload / re-login doesn't
+  // lose track of a request that only ever existed as this tab's React
+  // state. Returns null when there's nothing active to resume. case_id is
+  // required for the primary lookup (applicant_id omitted) — consent is
+  // per-case, so this must never return a sibling case's own request.
+  getLatest: async ({ customer_id, case_id, applicant_id } = {}) => {
+    const response = await api.get('/consent/latest', { params: { customer_id, case_id, applicant_id } });
+    return response.data;
+  },
+
   // Public — the customer's own page, no auth.
   getPublicDetails: async (token) => {
     const response = await axios.get(`${API_BASE_URL}/consent/${token}`);

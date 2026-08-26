@@ -290,15 +290,18 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
         is_professional: caseData.customer?.is_professional || false,
         profession_type: caseData.customer?.profession_type || '',
-        // Trust the persisted flag for MSME too now — the backend seeds it
-        // true at customer creation from the login-verified mobile, and
-        // flips it true again via the same OTP flow DSA uses if the
-        // customer edits the number away from that default (see
-        // customer.service.js createOrAttachCustomer and otp.service.js
-        // verifyOtp). Forcing this to always read true regardless of the DB
-        // value used to be how MSME mobile edits were silently allowed to
-        // reach the backend unverified.
-        mobile_verified: caseData.customer?.mobile_verified || false,
+        // Sourced from THIS case's own primary Applicant row, not
+        // caseData.customer.mobile_verified — that field lives on the
+        // shared Customer record and is reused across every case for the
+        // same PAN, which used to let a brand-new loan application silently
+        // inherit "Consented" from a completely different, unrelated case
+        // for the same customer. Consent must be explicit per case; the
+        // backend now always seeds a new case's primary applicant
+        // unconsented and only flips this specific row true when this
+        // specific case's own consent request is granted (see
+        // case.service.js createCase/createSalariedCase/createCaseFromExisting
+        // and consent.service.js approveConsent).
+        mobile_verified: primaryApp?.otp_verified || false,
         is_locked: !!caseData.is_locked,
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
@@ -325,6 +328,32 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         customer_bank_profile: caseData.business_financials?.bank_statements || null
       });
       setSuggestedCoApplicants(caseData.suggested_co_applicants || []);
+
+      // Rehydrate any consent request that's still live for THIS case —
+      // otherwise a page reload or a fresh login after logging out loses the
+      // in-memory consentRequest/coappConsent state entirely and the UI
+      // falls back to "Request Consent" even though a request is genuinely
+      // still pending (or was quietly approved while the tab was closed, and
+      // the live socket update was missed for the same reason).
+      // Scoped by case_id (for the primary) / applicant_id (co-applicants,
+      // already unique per case) — never just customer_id, which would leak
+      // in a sibling case's own consent status for the same PAN.
+      // Best-effort: a failure here shouldn't block the rest of the case
+      // from loading, so a fresh "Request Consent" is the worst case, not
+      // a broken page.
+      if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
+        consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
+          .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
+          .catch(() => {});
+      }
+      (caseData.applicants || []).forEach((app, idx) => {
+        if (app.type !== 'CO_APPLICANT' || app.otp_verified || !app.id) return;
+        consentService.getLatest({ customer_id: caseData.customer?.id, case_id: caseData.id, applicant_id: app.id })
+          .then((latest) => {
+            if (latest) setCoappConsent((prev) => ({ ...prev, [idx]: { id: latest.id, status: latest.status } }));
+          })
+          .catch(() => {});
+      });
 
       // Only dispatch to a step on initial load. Callers re-syncing data
       // mid-edit (PAN reset, applicant reuse/removal) pass preserveStep=true
