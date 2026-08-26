@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Search, User, Building2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Search, User, Building2, CheckCircle2, Sparkles, MapPin } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
 import Badge from '../components/ui/Badge';
@@ -13,6 +13,17 @@ import {
   getAllocationTargets,
   allocateDirectMsmeCase,
 } from '../api/adminMsmeService';
+
+// Same list DSARegisterPage.jsx / OrganizationProfilePage.jsx use for
+// Operational States — kept local for the same reason as those pages'
+// own copies (small, stable list, not worth a shared module).
+const indianStates = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+];
 
 // Read-only "label: value" row, reused across the DSA/tenant detail panels.
 function InfoRow({ label, value }) {
@@ -44,6 +55,7 @@ const AdminMsmeCaseAllocatePage = () => {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [tenantSummary, setTenantSummary] = useState(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
@@ -58,6 +70,13 @@ const AdminMsmeCaseAllocatePage = () => {
         ]);
         setCaseData(caseRes);
         setTargets(Array.isArray(targetsRes) ? targetsRes : []);
+        // Pre-narrow to the MSME's own state so the most relevant DSAs are
+        // already in view without the admin having to do anything — they
+        // can still switch to "All States" from the filter.
+        const caseState = caseRes?.customer?.state?.trim();
+        if (caseState && indianStates.some(s => s.toLowerCase() === caseState.toLowerCase())) {
+          setStateFilter(caseState);
+        }
       } catch (err) {
         toast.error('Failed to load case for allocation');
         navigate('/admin/msme-cases');
@@ -78,12 +97,30 @@ const AdminMsmeCaseAllocatePage = () => {
       }))
   ), [targets]);
 
+  // The MSME's own state — a DSA whose operational_states includes it is
+  // the recommended match, since that's the whole point of collecting
+  // operational_states at DSA registration/profile (see
+  // OrganizationProfilePage.jsx): matching leads to partners who actually
+  // service that state.
+  const caseState = caseData?.customer?.state?.trim() || '';
+
   const query = search.trim().toLowerCase();
-  const filteredUsers = query
-    ? allDsaUsers.filter(u =>
-        u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query)
-      )
-    : [];
+  const filteredUsers = useMemo(() => {
+    return allDsaUsers
+      .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query))
+      .filter(u => !stateFilter || (u.tenant.operational_states || []).some(s => s.toLowerCase() === stateFilter.toLowerCase()))
+      .map(u => ({
+        ...u,
+        isRecommended: !!caseState && (u.tenant.operational_states || []).some(s => s.toLowerCase() === caseState.toLowerCase()),
+      }))
+      // Recommended (state match) first, then alphabetical by DSA name
+      // within each group — so the list is stable and scannable, not just
+      // whatever order the API happened to return.
+      .sort((a, b) => {
+        if (a.isRecommended !== b.isRecommended) return a.isRecommended ? -1 : 1;
+        return (a.tenant.name || '').localeCompare(b.tenant.name || '');
+      });
+  }, [allDsaUsers, query, stateFilter, caseState]);
 
   const selectUser = async (u) => {
     setSelectedUser(u);
@@ -177,7 +214,9 @@ const AdminMsmeCaseAllocatePage = () => {
 
         <SectionCard
           title={isReallocation ? 'Search & Select New DSA' : 'Search & Select DSA'}
-          subtitle="Type a DSA company or agent name — narrows as you type, no scrolling through every partner."
+          subtitle={caseState
+            ? `DSAs serving ${caseState} are recommended first — narrow further by name or state below.`
+            : 'Type a DSA company or agent name, or filter by state — narrows as you type.'}
         >
           <div style={{ padding: 20 }}>
             {selectedUser ? (
@@ -196,41 +235,70 @@ const AdminMsmeCaseAllocatePage = () => {
               </div>
             ) : (
               <div style={{ position: 'relative' }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={15} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-                  <input
-                    type="text"
-                    className="form-control"
-                    style={{ paddingLeft: 36 }}
-                    placeholder="Type DSA or agent name..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    autoFocus
-                  />
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div style={{ position: 'relative', flex: 2, minWidth: 220 }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>DSA or Agent Name</label>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={15} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Type DSA or agent name..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                      <MapPin size={12} /> State
+                    </label>
+                    <select
+                      className="form-control"
+                      value={stateFilter}
+                      onChange={e => setStateFilter(e.target.value)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <option value="">All States</option>
+                      {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
-                {query && (
-                  <div style={{
-                    position: 'relative', zIndex: 10, marginTop: 4,
-                    background: 'var(--surface)', border: '1px solid var(--outline)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    maxHeight: 280, overflowY: 'auto',
-                  }}>
-                    {filteredUsers.map(u => (
-                      <div
-                        key={`${u.tenant_id}-${u.user_id}`}
-                        onClick={() => selectUser(u)}
-                        style={{ padding: '10px 14px', borderBottom: '1px solid var(--outline)', cursor: 'pointer' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                      >
+
+                <div style={{
+                  marginTop: 12,
+                  background: 'var(--surface)', border: '1px solid var(--outline)',
+                  maxHeight: 320, overflowY: 'auto',
+                }}>
+                  {filteredUsers.map(u => (
+                    <div
+                      key={`${u.tenant_id}-${u.user_id}`}
+                      onClick={() => selectUser(u)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--outline)', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{u.tenant.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {u.user.name} ({u.user.role?.name})</div>
                       </div>
-                    ))}
-                    {filteredUsers.length === 0 && (
-                      <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching DSA found</div>
-                    )}
-                  </div>
-                )}
+                      {u.isRecommended && (
+                        <span style={{
+                          display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                          padding: '3px 8px', fontSize: 11, fontWeight: 700,
+                          color: 'var(--success)', background: 'var(--success-bg)', borderRadius: 999,
+                        }}>
+                          <Sparkles size={11} /> Recommended
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching DSA found</div>
+                  )}
+                </div>
               </div>
             )}
           </div>
