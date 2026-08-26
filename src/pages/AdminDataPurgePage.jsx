@@ -323,64 +323,78 @@ const AdminDataPurgePage = () => {
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
         <div style={{ marginBottom: 16 }}>
           <SectionCard title="Look up">
-            <form onSubmit={handleSearch} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', padding: 20 }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Search By</label>
-                <div style={{ display: 'flex' }}>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${searchMode === 'case' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setSearchMode('case')}
-                    style={{ borderRadius: 0 }}
-                  >
-                    Case ID
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${searchMode === 'pan' ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setSearchMode('pan')}
-                    style={{ borderRadius: 0 }}
-                  >
-                    PAN
-                  </button>
+            <form onSubmit={handleSearch} style={{ padding: 20 }}>
+              {/* The PAN-mode hint used to live inside the input's own
+                  form-group (flex-direction: column), so it silently made
+                  that one flex item taller than its siblings — which then
+                  threw off the whole row's alignItems: 'flex-end' and made
+                  the Look up button (and Search By toggle) sit at the wrong
+                  height relative to the input. Hint now renders on its own
+                  line below the row instead, so it can never affect row
+                  alignment. */}
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Search By</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${searchMode === 'case' ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setSearchMode('case')}
+                      style={{ borderRadius: 0 }}
+                    >
+                      Case ID
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${searchMode === 'pan' ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setSearchMode('pan')}
+                      style={{ borderRadius: 0 }}
+                    >
+                      PAN
+                    </button>
+                  </div>
                 </div>
+                {searchMode === 'case' ? (
+                  <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
+                    <label className="form-label" htmlFor="caseId">Case ID</label>
+                    <input
+                      id="caseId"
+                      className="form-control"
+                      type="number"
+                      value={caseIdInput}
+                      onChange={(e) => setCaseIdInput(e.target.value)}
+                      placeholder="e.g. 1042"
+                    />
+                  </div>
+                ) : (
+                  <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
+                    <label className="form-label" htmlFor="pan">PAN</label>
+                    <input
+                      id="pan"
+                      className="form-control"
+                      type="text"
+                      value={panInput}
+                      onChange={(e) => setPanInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. AABCE1234F"
+                      style={{ textTransform: 'uppercase' }}
+                      maxLength={10}
+                    />
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={searchMode === 'case' ? loading : panLoading}
+                  style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Search size={16} /> Look up
+                </button>
               </div>
-              {searchMode === 'case' ? (
-                <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
-                  <label className="form-label" htmlFor="caseId">Case ID</label>
-                  <input
-                    id="caseId"
-                    className="form-control"
-                    type="number"
-                    value={caseIdInput}
-                    onChange={(e) => setCaseIdInput(e.target.value)}
-                    placeholder="e.g. 1042"
-                  />
-                </div>
-              ) : (
-                <div className="form-group" style={{ marginBottom: 0, minWidth: 200 }}>
-                  <label className="form-label" htmlFor="pan">PAN</label>
-                  <input
-                    id="pan"
-                    className="form-control"
-                    type="text"
-                    value={panInput}
-                    onChange={(e) => setPanInput(e.target.value.toUpperCase())}
-                    placeholder="e.g. AABCE1234F"
-                    style={{ textTransform: 'uppercase' }}
-                    maxLength={10}
-                  />
-                  <span className="form-hint">Searches across every tenant — the same PAN can have separate customer records per tenant.</span>
-                </div>
+              {searchMode === 'pan' && (
+                <p className="form-hint" style={{ margin: '10px 0 0' }}>
+                  Searches across every tenant — the same PAN can have separate customer records per tenant.
+                </p>
               )}
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={searchMode === 'case' ? loading : panLoading}
-                style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <Search size={16} /> Look up
-              </button>
             </form>
           </SectionCard>
         </div>
