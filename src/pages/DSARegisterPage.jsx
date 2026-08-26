@@ -22,6 +22,7 @@ const initialForm = {
   operational_states: [],
   admin_name: '',
   admin_password: '',
+  terms_accepted: false,
 };
 
 const companyTypeOptions = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
@@ -43,6 +44,15 @@ const countryOptions = countries.map(c => ({
 // the widget simply doesn't render and nothing is gated until it's set.
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 const TURNSTILE_SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+
+// Mirrors the backend's own loopback bypass (Cred2Tech/src/utils/turnstile.js)
+// — when the whole stack is running on localhost there's no real bot to
+// stop, so the widget shouldn't gate the form at all. This is a UI
+// convenience only: the backend independently decides for itself (by the
+// request's actual source IP, not anything the client claims) whether to
+// require/verify a token, so this can't be used to skip CAPTCHA against a
+// real deployed backend by e.g. editing window.location in devtools.
+const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
 const TurnstileWidget = ({ siteKey, onToken }) => {
   const containerRef = useRef(null);
@@ -352,6 +362,94 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder, hasError }
   );
 };
 
+// Splits a line on **bold** markers, matching the same convention the
+// backend's dsaAgreement.service.js uses to render the identical source
+// markdown into a PDF — kept as a plain-text-with-**bold** subset (no
+// nested/mixed markdown) specifically so both renderers stay this simple.
+function renderBoldRuns(line, keyPrefix) {
+  return line.split(/(\*\*.+?\*\*)/g).filter(Boolean).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>
+      : <React.Fragment key={`${keyPrefix}-${i}`}>{part}</React.Fragment>
+  );
+}
+
+// Minimal markdown → JSX for the DSA Agreement preview modal — headers,
+// bold spans, and paragraphs only (matches the small subset the template
+// actually uses). Not a general-purpose renderer; keep the template within
+// this subset when editing it, same constraint the backend's pdfkit
+// renderer (dsaAgreement.service.js) already has.
+function renderAgreementMarkdown(text) {
+  const lines = text.split('\n');
+  const blocks = [];
+  let buf = [];
+  const flush = (key) => {
+    if (buf.length === 0) return;
+    const paragraph = buf.join(' ').trim();
+    buf = [];
+    if (paragraph) blocks.push(<p key={key} className="text-[13px] leading-relaxed text-[#0a1628] dark:text-[#e6edf7] mb-3">{renderBoldRuns(paragraph, key)}</p>);
+  };
+  lines.forEach((raw, idx) => {
+    const line = raw.trim();
+    if (line === '') { flush(`p${idx}`); return; }
+    if (line.startsWith('# ')) { flush(`p${idx}`); blocks.push(<h2 key={idx} className="text-[18px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-2 mb-3">{line.slice(2)}</h2>); return; }
+    if (line.startsWith('## ')) { flush(`p${idx}`); blocks.push(<h3 key={idx} className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-4 mb-2">{line.slice(3)}</h3>); return; }
+    if (line.startsWith('### ')) { flush(`p${idx}`); blocks.push(<h4 key={idx} className="text-[13.5px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-3 mb-1.5">{line.slice(4)}</h4>); return; }
+    if (line.startsWith('**[') && line.endsWith(']**')) {
+      flush(`p${idx}`);
+      blocks.push(<p key={idx} className="text-[12px] italic font-semibold text-amber-600 dark:text-amber-400 mb-3">{line.slice(2, -2)}</p>);
+      return;
+    }
+    buf.push(line);
+  });
+  flush('tail');
+  return blocks;
+}
+
+const DsaAgreementPreviewModal = ({ dsaName, adminName, template, loading, onClose }) => {
+  const substituted = template
+    ? template
+        .replaceAll('{{DSA_NAME}}', dsaName?.trim() || 'Your Organization')
+        .replaceAll('{{AGREEMENT_DATE}}', new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }))
+        .replaceAll('{{ADMIN_NAME}}', adminName?.trim() || 'the registering DSA Admin')
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-white dark:bg-[#0f1b2d] rounded-lg shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">DSA Partner Agreement — Preview</h3>
+          <button onClick={onClose} className="material-symbols-outlined text-[20px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 cursor-pointer hover:text-[#0a1628] dark:hover:text-[#e6edf7]">close</button>
+        </div>
+        <div className="px-5 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border-b border-[#c7d2fe]/60 dark:border-[#2d3a6c] shrink-0">
+          <p className="text-[11px] font-medium text-[#0a1628]/70 dark:text-[#e6edf7]/70">
+            This preview fills in your organization name as typed so far. The final PDF (with your registration date) is emailed to you once registration completes.
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {loading ? (
+            <p className="text-[13px] text-[#0a1628]/60 dark:text-[#e6edf7]/60">Loading…</p>
+          ) : (
+            renderAgreementMarkdown(substituted)
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 shrink-0 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-[13px] font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DSARegisterPage = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
@@ -361,6 +459,32 @@ const DSARegisterPage = () => {
   const [success, setSuccess] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [isPincodeFetching, setIsPincodeFetching] = useState(false);
+
+  // DSA Agreement preview — the one document of the three that's generated
+  // per-organization (name substituted in), so there's no static PDF to
+  // just link to like Terms of Use / Privacy Policy. Fetches the same
+  // markdown source the backend PDF renderer uses (mirrored to
+  // public/legal/dsa-agreement-template.md — see legal/source/ in the
+  // backend repo) and substitutes the org name client-side, live, so the
+  // preview reflects whatever the user has typed as their organization
+  // name even before a Tenant exists to generate a real PDF for.
+  const [showAgreementPreview, setShowAgreementPreview] = useState(false);
+  const [agreementTemplate, setAgreementTemplate] = useState(null);
+  const [agreementLoading, setAgreementLoading] = useState(false);
+
+  const openAgreementPreview = async () => {
+    setShowAgreementPreview(true);
+    if (agreementTemplate) return; // already fetched this session
+    setAgreementLoading(true);
+    try {
+      const res = await fetch('/legal/dsa-agreement-template.md');
+      setAgreementTemplate(await res.text());
+    } catch {
+      setAgreementTemplate('Could not load the agreement preview right now. The full document is still emailed to you once registration is complete.');
+    } finally {
+      setAgreementLoading(false);
+    }
+  };
 
   // PAN → auto-fill state
   const [panLookup, setPanLookup] = useState({ status: 'idle', error: '' }); // idle | loading | done | error
@@ -382,7 +506,7 @@ const DSARegisterPage = () => {
   // The PAN field itself stays locked until CAPTCHA is solved (when
   // configured) — that's what actually stops a script from spending the
   // Signzy lookup call, not just gating the fields it fills in afterward.
-  const panCaptchaRequired = !!TURNSTILE_SITE_KEY && !panTurnstileToken;
+  const panCaptchaRequired = !IS_LOCAL_DEV && !!TURNSTILE_SITE_KEY && !panTurnstileToken;
 
   // Stable per-form-load id correlating this registration attempt's email
   // and mobile OTP verifications — the backend checks both belong to the
@@ -704,7 +828,8 @@ const DSARegisterPage = () => {
     if (step === 1 && panFieldsLocked) return true; // wait for the PAN lookup to resolve before advancing
     if (step === 1 && (emailVerify.status !== 'verified' || mobileVerify.status !== 'verified')) return true;
     if (step === 2 && form.operational_states.length === 0) return true;
-    if (step === 3 && TURNSTILE_SITE_KEY && !turnstileToken) return true;
+    if (step === 3 && !IS_LOCAL_DEV && TURNSTILE_SITE_KEY && !turnstileToken) return true;
+    if (step === 3 && !form.terms_accepted) return true;
     return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
   };
 
@@ -787,6 +912,7 @@ const DSARegisterPage = () => {
         operational_states: form.operational_states,
         admin_name: form.admin_name.trim(),
         admin_password: form.admin_password,
+        terms_accepted: form.terms_accepted,
         website: '', // honeypot — always empty for real users, see hidden input below
         turnstile_token: turnstileToken || undefined,
         verification_session_id: registrationSessionId.current,
@@ -978,7 +1104,7 @@ const DSARegisterPage = () => {
               <div className="flex-1">
                 {step === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
-                    {TURNSTILE_SITE_KEY && (
+                    {TURNSTILE_SITE_KEY && !IS_LOCAL_DEV && (
                       <div className="md:col-span-2">
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Verify you're human *</label>
                         <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">Required before we can look up your PAN.</p>
@@ -1202,7 +1328,34 @@ const DSARegisterPage = () => {
                         })}
                       </div>
                     </div>
-                    {TURNSTILE_SITE_KEY && (
+                    <div className="md:col-span-2">
+                      <label className="flex items-start gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={form.terms_accepted}
+                          onChange={(e) => setForm((p) => ({ ...p, terms_accepted: e.target.checked }))}
+                          className="mt-0.5 w-4 h-4 accent-indigo-600 shrink-0 cursor-pointer"
+                        />
+                        <span className="text-[13px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
+                          I have read and agree to Cred2Tech's{' '}
+                          <a href="/legal/Terms-of-Use.pdf" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
+                            Terms of Use
+                          </a>{', '}
+                          <a href="/legal/Privacy-Policy.pdf" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
+                            Privacy Policy
+                          </a>{', and the '}
+                          <button
+                            type="button"
+                            onClick={openAgreementPreview}
+                            className="text-indigo-600 dark:text-indigo-400 underline cursor-pointer"
+                          >
+                            DSA Partner Agreement
+                          </button>
+                          {' '}between Cred2Tech and {form.name.trim() || 'my organization'}. All three will also be emailed to you once registration is complete.
+                        </span>
+                      </label>
+                    </div>
+                    {TURNSTILE_SITE_KEY && !IS_LOCAL_DEV && (
                       <div className="md:col-span-2">
                         <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onToken={setTurnstileToken} />
                       </div>
@@ -1260,6 +1413,16 @@ const DSARegisterPage = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {showAgreementPreview && (
+        <DsaAgreementPreviewModal
+          dsaName={form.name}
+          adminName={form.admin_name}
+          template={agreementTemplate}
+          loading={agreementLoading}
+          onClose={() => setShowAgreementPreview(false)}
+        />
       )}
     </>
   );

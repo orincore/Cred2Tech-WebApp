@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle, Save, ChevronDown, X, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getTenantById, updateTenant } from '../api/tenantService';
+import { getTenantById, updateTenant, getDsaAgreementPdfBlob } from '../api/tenantService';
 import { useAuth } from '../context/AuthContext';
-import { getErrorMessage, formatDateTime, toTitleCase } from '../utils/helpers';
+import { getErrorMessage, formatDateTime } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
@@ -13,18 +13,106 @@ import PageHeader from '../components/ui/PageHeader';
 // same reasoning as EditUserPage's own local DSA_ROLE_NAMES copy.
 const companyTypeOptions = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
 
+// Same list DSARegisterPage.jsx uses for Operational States — kept local
+// rather than shared for the same reason as companyTypeOptions above.
+const indianStates = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+];
+
+// A CSS-var-themed equivalent of DSARegisterPage.jsx's MultiSelectDropdown —
+// same behavior (search, chips, toggle), but built with this page's
+// var(--...) token styling instead of that page's hardcoded Tailwind
+// dark:-class colors, so it matches everything else on this form.
+const StatesMultiSelect = ({ value, onChange, options, placeholder, hasError, inputStyle }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) { setIsOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggle = (opt) => {
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+  };
+
+  const filteredOptions = search.trim()
+    ? options.filter((opt) => opt.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
+
+  return (
+    <div style={{ position: 'relative' }} ref={ref}>
+      <div
+        tabIndex={0}
+        onClick={() => setIsOpen((o) => !o)}
+        style={{ ...inputStyle, ...(hasError ? { borderBottomColor: 'var(--error)' } : {}), display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+      >
+        <span style={value.length === 0 ? { color: 'var(--on-muted)', fontWeight: 500 } : undefined}>
+          {value.length === 0 ? placeholder : `${value.length} state${value.length > 1 ? 's' : ''} selected`}
+        </span>
+        <ChevronDown size={16} style={{ color: 'var(--on-muted)', flexShrink: 0, transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+      </div>
+
+      {value.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+          {value.map((s) => (
+            <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: 'var(--primary-bg, var(--bg-elevated))', color: 'var(--primary)', fontSize: 11, fontWeight: 700, borderRadius: 999 }}>
+              {s}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); toggle(s); }} />
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isOpen && (
+        <div style={{ position: 'absolute', zIndex: 50, width: '100%', minWidth: 240, top: 'calc(100% + 4px)', left: 0, background: 'var(--surface)', border: '1px solid var(--outline)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Search states…"
+            autoFocus
+            style={{ width: '100%', boxSizing: 'border-box', border: 'none', borderBottom: '1px solid var(--outline)', outline: 'none', background: 'transparent', color: 'var(--on-surface)', fontSize: 13, padding: '10px 12px' }}
+          />
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {filteredOptions.length === 0 && (
+              <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--on-muted)' }}>No states match "{search}"</div>
+            )}
+            {filteredOptions.map((opt) => (
+              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', fontSize: 13, color: 'var(--on-surface)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)} />
+                {opt}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const OrganizationProfilePage = () => {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const [tenant, setTenant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', mobile: '', pan_number: '', gst_number: '', company_type: '', state: '', city: '', pincode: '' });
+  const [form, setForm] = useState({ name: '', mobile: '', pan_number: '', gst_number: '', company_type: '', state: '', city: '', pincode: '', address_line: '', operational_states: [] });
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isPincodeFetching, setIsPincodeFetching] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [viewingAgreement, setViewingAgreement] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -47,6 +135,8 @@ const OrganizationProfilePage = () => {
           state: data.state || '',
           city: data.city || '',
           pincode: data.pincode || '',
+          address_line: data.address_line || '',
+          operational_states: Array.isArray(data.operational_states) ? data.operational_states : [],
         });
       } catch (err) {
         setApiError(getErrorMessage(err));
@@ -145,7 +235,25 @@ const OrganizationProfilePage = () => {
     if (!form.city.trim()) e.city = 'City is required';
     if (!form.pincode) e.pincode = 'Pincode is required';
     else if (!/^[1-9][0-9]{5}$/.test(form.pincode)) e.pincode = 'Invalid 6-digit pincode';
+    if (form.operational_states.length === 0) e.operational_states = 'Select at least one state you provide service in';
     return e;
+  };
+
+  const handleViewAgreement = async () => {
+    setViewingAgreement(true);
+    try {
+      const blob = await getDsaAgreementPdfBlob(currentUser.tenant_id);
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      // Object URLs aren't auto-revoked — but revoking immediately can race
+      // the new tab still loading it, so give the browser a moment to
+      // actually open and start rendering it first.
+      setTimeout(() => window.URL.revokeObjectURL(url), 30000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to load DSA agreement');
+    } finally {
+      setViewingAgreement(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -165,6 +273,12 @@ const OrganizationProfilePage = () => {
         state: form.state.trim(),
         city: form.city.trim(),
         pincode: form.pincode,
+        // Always sent, even empty — the backend only treats this key as
+        // "leave untouched" when it's absent from the body entirely, not
+        // when it's an explicit empty string, so this page can actually
+        // clear the address (see tenant.controller.js's updateTenant guard).
+        address_line: form.address_line.trim(),
+        operational_states: form.operational_states,
       });
       setSuccess(true);
       toast.success('Organization details updated successfully');
@@ -241,10 +355,6 @@ const OrganizationProfilePage = () => {
                 <input type="email" value={tenant.email} disabled title="Organization email is your account identity and can't be changed here." style={readOnlyStyle} />
               </div>
               <div>
-                <label style={labelStyle}>Organization Type</label>
-                <input type="text" value={toTitleCase(tenant.type)} disabled style={readOnlyStyle} />
-              </div>
-              <div>
                 <label style={labelStyle}>Mobile Number</label>
                 <input
                   type="text"
@@ -308,6 +418,19 @@ const OrganizationProfilePage = () => {
             <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
               Location Info
             </h3>
+            <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+              <label style={labelStyle}>Address Line</label>
+              <input
+                type="text"
+                name="address_line"
+                value={form.address_line}
+                onChange={handleChange}
+                placeholder="e.g. 3rd Floor, Sunrise Chambers, MG Road"
+                style={inputStyle}
+                onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
+                onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
+              />
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
               <div>
                 <label style={labelStyle}>Pincode *</label>
@@ -357,16 +480,70 @@ const OrganizationProfilePage = () => {
                 {errors.city && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.city}</div>}
               </div>
             </div>
+            <div style={{ marginTop: isMobile ? 16 : 24 }}>
+              <label style={labelStyle}>Operational States *</label>
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 8px' }}>
+                States you provide DSA service in — used to match you with leads in the admin panel.
+              </p>
+              <StatesMultiSelect
+                value={form.operational_states}
+                onChange={(vals) => { setForm((p) => ({ ...p, operational_states: vals })); setErrors((p) => ({ ...p, operational_states: '' })); }}
+                options={indianStates}
+                placeholder="Select states…"
+                hasError={!!errors.operational_states}
+                inputStyle={inputStyle}
+              />
+              {errors.operational_states && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.operational_states}</div>}
+            </div>
           </div>
 
-          <div style={{ marginBottom: 32, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-            <div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)', margin: '4px 0 0' }}>{toTitleCase(tenant.status)}</p>
-            </div>
-            <div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Onboarded</span>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)', margin: '4px 0 0' }}>{formatDateTime(tenant.created_at)}</p>
+          <div style={{ marginBottom: 32 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
+              Legal Documents
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
+              <div>
+                <label style={labelStyle}>Terms of Use</label>
+                <a href="/legal/Terms-of-Use.pdf" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                  <FileText size={14} /> View PDF
+                </a>
+                {tenant.terms_accepted_at && (
+                  <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>
+                    Accepted {formatDateTime(tenant.terms_accepted_at)} (v{tenant.terms_version})
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>Privacy Policy</label>
+                <a href="/legal/Privacy-Policy.pdf" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                  <FileText size={14} /> View PDF
+                </a>
+                {tenant.privacy_accepted_at && (
+                  <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>
+                    Accepted {formatDateTime(tenant.privacy_accepted_at)} (v{tenant.privacy_version})
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>DSA Partner Agreement</label>
+                {tenant.agreement_accepted_at ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleViewAgreement}
+                      disabled={viewingAgreement}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: viewingAgreement ? 'not-allowed' : 'pointer' }}
+                    >
+                      <FileText size={14} /> {viewingAgreement ? 'Loading…' : 'View PDF'}
+                    </button>
+                    <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>
+                      Accepted {formatDateTime(tenant.agreement_accepted_at)} (v{tenant.agreement_version})
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 13, color: 'var(--on-muted)' }}>Not yet accepted</div>
+                )}
+              </div>
             </div>
           </div>
 
