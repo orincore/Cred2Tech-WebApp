@@ -225,6 +225,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                         <tr>
                           <th><input type="checkbox" checked={selectedCaseIds.size === candidates.length && candidates.length > 0} onChange={handleSelectAll} /></th>
                           <th>Case ID</th>
+                          <th>LAN</th>
                           <th>Customer</th>
                           <th style={{ textAlign: 'right' }}>Commission</th>
                         </tr>
@@ -234,6 +235,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                           <tr key={c.id}>
                             <td data-label="Select"><input type="checkbox" checked={selectedCaseIds.has(c.id)} onChange={() => handleSelectCase(c.id)} /></td>
                             <td data-label="Case ID" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.caseId}</td>
+                            <td data-label="LAN" style={{ color: 'var(--text-secondary)' }}>{c.lan}</td>
                             <td data-label="Customer">{c.customer}</td>
                             <td data-label="Commission" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(c.payout)}</td>
                           </tr>
@@ -287,6 +289,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                   <thead>
                     <tr style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
                       <th style={{ padding: 10, textAlign: 'left' }}>Case ID</th>
+                      <th style={{ padding: 10, textAlign: 'left' }}>LAN</th>
                       <th style={{ padding: 10, textAlign: 'left' }}>Customer</th>
                       <th style={{ padding: 10, textAlign: 'left' }}>Product</th>
                       <th style={{ padding: 10, textAlign: 'right' }}>Amount</th>
@@ -296,6 +299,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                     {previewData?.cases?.map((c, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #E5E7EB' }}>
                         <td style={{ padding: 10 }}>{c.caseId}</td>
+                        <td style={{ padding: 10, color: '#4B5563' }}>{c.lan}</td>
                         <td style={{ padding: 10, color: '#4B5563' }}>{c.customer}</td>
                         <td style={{ padding: 10, color: '#4B5563' }}>{c.product}</td>
                         <td style={{ padding: 10, textAlign: 'right', fontWeight: 500 }}>{formatCurrency(c.amount)}</td>

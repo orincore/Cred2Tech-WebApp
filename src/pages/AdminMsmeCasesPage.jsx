@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Users, ArrowRight, ChevronDown } from 'lucide-react';
+import { Users, ArrowRight, ChevronDown, Search, Filter } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
@@ -40,6 +40,8 @@ const AdminMsmeCasesPage = () => {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showStats, setShowStats] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState('ALL'); // 'ALL' | 'ALLOCATED' | 'UNALLOCATED'
 
   const fetchCases = async () => {
     try {
@@ -59,6 +61,30 @@ const AdminMsmeCasesPage = () => {
     unallocated: cases.filter(c => !c.assigned_dsa_tenant_id).length,
     allocated: cases.filter(c => c.assigned_dsa_tenant_id).length,
   }), [cases]);
+
+  const filteredCases = useMemo(() => {
+    return cases.filter(c => {
+      // 1. Allocation filter
+      if (filterMode === 'ALLOCATED' && !c.assigned_dsa_tenant_id) return false;
+      if (filterMode === 'UNALLOCATED' && c.assigned_dsa_tenant_id) return false;
+      
+      // 2. Search text
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const businessName = toTitleCase(resolveEntityName(c.customer)) || '';
+        const pan = c.customer?.business_pan || '';
+        const dsaName = c.assigned_dsa_user?.name || '';
+        
+        if (!businessName.toLowerCase().includes(q) && 
+            !pan.toLowerCase().includes(q) &&
+            !dsaName.toLowerCase().includes(q)) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [cases, filterMode, searchTerm]);
 
   const goToAllocate = (caseRecord) => navigate(`/admin/msme-cases/${caseRecord.id}/allocate`);
 
@@ -182,16 +208,52 @@ const AdminMsmeCasesPage = () => {
           </div>
         )}
 
+        {/* --- Search and Filter Bar --- */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 20, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 300px' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={14} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                placeholder="Search by Business Name, PAN, or DSA Name..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%', padding: '8px 12px 8px 36px',
+                  background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
+                  fontSize: 13, color: 'var(--on-surface)', outline: 'none'
+                }}
+              />
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Filter size={14} color="var(--on-muted)" />
+            <select
+              value={filterMode}
+              onChange={e => setFilterMode(e.target.value)}
+              style={{
+                padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
+                fontSize: 13, color: 'var(--on-surface)', outline: 'none', cursor: 'pointer'
+              }}
+            >
+              <option value="ALL">All Leads</option>
+              <option value="ALLOCATED">Allocated</option>
+              <option value="UNALLOCATED">Unallocated</option>
+            </select>
+          </div>
+        </div>
+
       {loading ? (
         <div className="card" style={{ padding: 0, borderRadius: 0 }}>
           <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
         </div>
-      ) : cases.length === 0 ? (
+      ) : filteredCases.length === 0 ? (
         <div className="card" style={{ padding: 0, borderRadius: 0 }}>
           <EmptyState
             icon={Users}
-            title="No Direct MSME cases"
-            description="Self-onboarded MSME leads awaiting allocation will show up here."
+            title="No Direct MSME cases found"
+            description="Adjust your search or filter criteria."
           />
         </div>
       ) : isMobile ? (
@@ -201,7 +263,7 @@ const AdminMsmeCasesPage = () => {
         // horizontally scrollable; a card puts every field for one lead in a
         // single vertical read.
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cases.map((c) => {
+          {filteredCases.map((c) => {
             const isPaid = c.case_payment?.status === 'PAID';
             return (
               <div
@@ -273,7 +335,7 @@ const AdminMsmeCasesPage = () => {
         </div>
       ) : (
         <div className="card" style={{ padding: 0, borderRadius: 0 }}>
-          <DataTable columns={columns} data={cases} />
+          <DataTable columns={columns} data={filteredCases} />
         </div>
       )}
       </div>

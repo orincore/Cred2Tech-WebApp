@@ -182,6 +182,16 @@ export default function CaseDetailPage() {
     (d) => d.subvention_amount && Number(d.subvention_amount) > 0
   );
 
+  // Auto-resolve tenant_lender_id if it's missing but lender_name is locked
+  useEffect(() => {
+    if (sanctionForm.lender_name && !sanctionForm.tenant_lender_id && tenantLenders.length > 0) {
+      const match = tenantLenders.find(l => l.lender_name === sanctionForm.lender_name);
+      if (match) {
+        setSanctionForm(prev => ({ ...prev, tenant_lender_id: String(match.id) }));
+      }
+    }
+  }, [sanctionForm.lender_name, sanctionForm.tenant_lender_id, tenantLenders]);
+
   const fetchDisbursementSummary = useCallback(async () => {
     try {
       const data = await caseService.getDisbursementSummary(id);
