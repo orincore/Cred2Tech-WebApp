@@ -1061,6 +1061,30 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     );
   }
 
+  // Same required fields handleStep1Submit already toast-validates on submit
+  // (business_pan, mobile_verified/consent, dob) plus the ones only marked
+  // "required" on the FormField itself and never actually enforced before
+  // now (business_email, pincode, profession_type when is_professional) —
+  // gates the Business Entity subpage's own "Next" button so it can't be
+  // clicked past with any of them still empty, same treatment as
+  // AddSalariedCustomerWizardPage's equivalent button.
+  const isProfessional = formData.is_professional === 'true' || formData.is_professional === true;
+  const step1BusinessValid = !!formData.business_pan
+    && !!formData.mobile_verified
+    && !!formData.business_email
+    && !!formData.pincode
+    && !!formData.dob
+    && (!isProfessional || !!formData.profession_type);
+  // Gates the final Step 1 submit ("Continue to Financials") in addition to
+  // the business-subpage fields above — handleStep1Submit also requires
+  // every co-applicant that has a PAN entered to have a DOB too.
+  const step1CoApplicantsValid = step1BusinessValid
+    && !formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
+  // Same product/property requirement handleStep3Submit already
+  // toast-validates on submit.
+  const step3Valid = !!formData.product_type
+    && (!PROPERTY_REQUIRED.includes(formData.product_type) || (!!formData.property_type && !!formData.market_value));
+
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: (isMobile && !isMsme) ? '84px 16px 24px' : isMobile ? '24px 16px' : '24px 20px' }}>
       <style>{`
@@ -1431,7 +1455,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 type="button"
                 className="btn btn-primary btn-lg"
                 onClick={goToCoApplicants}
-                disabled={!formData.mobile_verified}
+                disabled={!step1BusinessValid}
+                title={!step1BusinessValid ? 'Complete every required field and consent before continuing' : undefined}
               >
                 Next: Co-Applicants →
               </button>
@@ -1637,7 +1662,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Business Entity</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
+              <button
+                className="btn btn-primary btn-lg"
+                type="submit"
+                disabled={saving || !step1CoApplicantsValid}
+                title={!step1CoApplicantsValid ? 'Complete every required field (and each co-applicant\'s DOB) before continuing' : undefined}
+              >
                 {saving ? 'Processing...' : 'Continue to Financials →'}
               </button>
             </div>
@@ -1932,7 +1962,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
               <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !step3Valid}>
                 {saving ? 'Saving...' : 'Next: Income Summary →'}
               </button>
             </div>

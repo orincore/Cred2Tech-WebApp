@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { customerService } from '../api/customerService';
@@ -7,7 +7,7 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb } from 'lucide-react';
+import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import DataPullProgress from '../components/onboarding/DataPullProgress';
@@ -83,7 +83,37 @@ const AddSalariedCustomerWizardPage = () => {
   // trigger on this page is disabled for them.
   const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
 
+  // Credit cost/wallet display — same convention AddCustomerWizardPage
+  // already uses for its own paid pulls (Request Consent, Bureau, GST, ITR,
+  // Bank). This page is DSA-only (see AppRouter's allowedRoles for
+  // /customers/salaried/add), so unlike that page there's no isMsme branch
+  // to skip the wallet gate for.
+  const [costs, setCosts] = useState({ PAN_FETCH: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0 });
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  useEffect(() => {
+    api.get('/wallet/api-costs')
+      .then(res => {
+        const data = res.data;
+        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
+        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
+        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
+        setCosts({ PAN_FETCH: panFetch, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations });
+      })
+      .catch(err => console.error(err));
+
+    api.get('/wallet/balance')
+      .then(res => setWalletBalance(res.data.balance))
+      .catch(console.error);
+  }, []);
+
   const [panVerifying, setPanVerifying] = useState(false);
+  const [panVerifyFailed, setPanVerifyFailed] = useState(false);
+  // Per-co-applicant-row PAN verify-in-flight state — separate from the
+  // primary's panVerifying so one co-applicant's auto-verify (or the
+  // primary's) never shows every other row as "Verifying…" too. Same
+  // convention AddCustomerWizardPage.jsx already uses.
+  const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
 
   // Customer consent gate — replaces the old mobile-OTP step entirely (see
   // handleRequestConsent below). Approval sets formData.mobile_verified, so
@@ -236,7 +266,14 @@ const AddSalariedCustomerWizardPage = () => {
         business_email: caseData.customer?.business_email || '',
         pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
         dob: toDateInputValue(caseData.customer?.dob),
-        mobile_verified: caseData.customer?.mobile_verified || false,
+        // Sourced from THIS case's own primary Applicant row, not
+        // caseData.customer.mobile_verified — that field lives on the shared
+        // Customer record and is reused across every case for the same PAN,
+        // which let a brand-new salaried case silently inherit "Consented"
+        // from a completely different, unrelated case for the same customer.
+        // Consent must be explicit per case (see the same fix already applied
+        // in AddCustomerWizardPage.jsx, and case.service.js/consent.service.js).
+        mobile_verified: primaryApp?.otp_verified || false,
         applicants: restoredApplicants.map(app => ({
           ...app,
           mobile: (app.mobile || '').replace(/\D/g, ''),
@@ -250,7 +287,7 @@ const AddSalariedCustomerWizardPage = () => {
         market_value: caseData.property?.market_value || '',
       });
 
-      if (caseData.customer?.mobile_verified && restoredApplicants.length > 0) {
+      if (primaryApp?.otp_verified && restoredApplicants.length > 0) {
         setCurrentStep(2);
       } else {
         setCurrentStep(1);
@@ -419,9 +456,11 @@ const AddSalariedCustomerWizardPage = () => {
       idx = null;
     }
 
-    if (!formData.business_pan || formData.business_pan.length < 10) return toast.error('Valid PAN required');
+    const pan = isCoapplicant && idx !== null ? formData.applicants[idx]?.pan_number : formData.business_pan;
+    if (!pan || pan.length < 10) return toast.error('Valid PAN required');
 
-    setPanVerifying(true);
+    if (isCoapplicant && idx !== null) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: true }));
+    else { setPanVerifying(true); setPanVerifyFailed(false); }
 
     try {
       // Always persist the current PAN before verifying it — not just for a
@@ -444,7 +483,7 @@ const AddSalariedCustomerWizardPage = () => {
       }
 
       const res = await api.post('/external/pan/verify', {
-        pan: isCoapplicant ? formData.applicants[idx].pan_number : formData.business_pan,
+        pan,
         customer_id: targetCustomerId,
         case_id: targetCaseId,
         is_coapplicant: isCoapplicant,
@@ -472,10 +511,60 @@ const AddSalariedCustomerWizardPage = () => {
     } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to verify PAN';
       toast.error(errMsg);
+      if (!isCoapplicant) setPanVerifyFailed(true);
     } finally {
-      setPanVerifying(false);
+      if (isCoapplicant && idx !== null) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: false }));
+      else setPanVerifying(false);
     }
   };
+
+  // Auto-verify the primary applicant's PAN the instant consent is granted —
+  // no manual "Verify PAN" click needed, same as AddCustomerWizardPage's
+  // auto-verify effect. Guarded by a ref (not formData) so a failed attempt
+  // doesn't retry in a tight loop; re-editing the PAN value clears the guard.
+  const panAutoVerifyAttempted = useRef(null);
+  useEffect(() => {
+    if (currentStep > 1) return;
+    const pan = formData.business_pan;
+    const ready = pan && pan.length === 10 && formData.mobile_verified && !isBulkInjectedCase;
+    if (
+      ready &&
+      !formData.pan_verified &&
+      !panVerifying &&
+      panAutoVerifyAttempted.current !== pan
+    ) {
+      panAutoVerifyAttempted.current = pan;
+      handleVerifyPan();
+    } else if (!pan || pan.length !== 10) {
+      panAutoVerifyAttempted.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.business_pan, formData.mobile_verified, formData.pan_verified, panVerifying]);
+
+  // Auto-verify each co-applicant's PAN once their own consent is granted —
+  // same no-manual-click pattern as the primary above, guarded per-index so a
+  // failed attempt doesn't retry in a tight loop.
+  const coappPanAutoVerifyAttempted = useRef({});
+  useEffect(() => {
+    if (currentStep > 1 || isBulkInjectedCase) return;
+    formData.applicants.forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT') return;
+      const pan = app.pan_number;
+      if (
+        pan && pan.length === 10 &&
+        app.otp_verified &&
+        !app.pan_verified &&
+        !coappPanVerifyingMap[idx] &&
+        coappPanAutoVerifyAttempted.current[idx] !== pan
+      ) {
+        coappPanAutoVerifyAttempted.current[idx] = pan;
+        handleVerifyPan(true, idx);
+      } else if (!pan || pan.length !== 10) {
+        coappPanAutoVerifyAttempted.current[idx] = null;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.applicants, coappPanVerifyingMap]);
 
 
   const addCoApplicantRow = () => {
@@ -805,21 +894,24 @@ const AddSalariedCustomerWizardPage = () => {
                             <Pencil size={13} /> Edit
                           </button>
                         </div>
+                      ) : panVerifying ? (
+                        <PullingIndicator label="Verifying PAN…" />
+                      ) : panVerifyFailed ? (
+                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertCircle size={13} /> PAN verification failed — fix and re-enter
+                        </span>
                       ) : formData.mobile_verified ? (
-                        // Only reachable once the customer has approved the
+                        // Reachable the instant the customer approves the
                         // consent request sent from the Mobile Number field
-                        // below (mobile_verified is now set on consent grant,
-                        // not by an OTP step) — matches the co-applicant
-                        // section just below, which already hides its own
-                        // Verify PAN button behind app.otp_verified. This
-                        // button previously had no such gate at all: nothing
-                        // stopped Verify PAN (a real bureau pull of the
-                        // applicant's name/DOB) from being clicked before the
-                        // applicant had approved consent for their data to be
-                        // pulled.
-                        <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
-                          {panVerifying ? 'Wait...' : 'Verify PAN'}
-                        </button>
+                        // below (mobile_verified is now set on consent
+                        // grant) — the panAutoVerifyAttempted effect fires
+                        // Verify PAN automatically from here, same as
+                        // AddCustomerWizardPage's primary PAN auto-verify.
+                        // No manual click needed (and none was ever safe
+                        // before consent was granted, since that would pull
+                        // the applicant's real name/DOB before they'd
+                        // consented to it).
+                        !isBulkInjectedCase && <PullingIndicator label="Queued…" />
                       ) : null}
                     </div>
                   </FormField>
@@ -892,7 +984,16 @@ const AddSalariedCustomerWizardPage = () => {
                             <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
                           </div>
                         ) : (
-                          <button type="button" onClick={handleRequestConsent} disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Request Consent</button>
+                          <button
+                            type="button"
+                            onClick={handleRequestConsent}
+                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || walletBalance < costs.PAN_FETCH}
+                            className="btn btn-primary"
+                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
+                            title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                          >
+                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          </button>
                         )
                       ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
@@ -921,6 +1022,8 @@ const AddSalariedCustomerWizardPage = () => {
                 type="button"
                 className="btn btn-primary btn-lg"
                 onClick={() => setStep1SubPage('coapplicants')}
+                disabled={!formData.business_pan || !formData.business_name || !formData.business_email || !formData.pincode || !formData.mobile_verified}
+                title={!formData.mobile_verified ? 'Complete every required field and consent before continuing' : undefined}
               >
                 Next: Co-Applicants →
               </button>
@@ -980,10 +1083,14 @@ const AddSalariedCustomerWizardPage = () => {
                                       <Pencil size={12} /> Edit
                                     </button>
                                   </div>
-                                ) : app.otp_verified ? (
-                                  <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying || isBulkInjectedCase} className="btn btn-secondary btn-sm" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
-                                    {panVerifying ? 'Wait...' : 'Verify PAN'}
-                                  </button>
+                                ) : coappPanVerifyingMap[realIdx] ? (
+                                  <PullingIndicator label="Verifying PAN…" />
+                                ) : app.otp_verified && !isBulkInjectedCase && (app.pan_number || '').length === 10 ? (
+                                  // Auto-verified the instant this co-applicant's own
+                                  // consent is granted (coappPanAutoVerifyAttempted
+                                  // effect) — no manual click needed, same as the
+                                  // primary applicant above.
+                                  <PullingIndicator label="Queued…" />
                                 ) : null}
                               </div>
                             </FormField>
@@ -1041,7 +1148,16 @@ const AddSalariedCustomerWizardPage = () => {
                                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
                                     </div>
                                   ) : (
-                                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} style={{ padding: '0 12px', whiteSpace: 'nowrap' }} disabled={saving}>Request Consent</button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary btn-sm"
+                                      onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                      style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
+                                      disabled={saving || walletBalance < costs.PAN_FETCH}
+                                      title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                    >
+                                      {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                    </button>
                                   )
                                 ) : (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
@@ -1100,7 +1216,9 @@ const AddSalariedCustomerWizardPage = () => {
                       downloading={downloadingFor === app.id}
                       onStart={() => handleRunBureau(app.id)}
                       loading={saving}
-                      disabled={isBulkInjectedCase}
+                      cost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+                      disabled={isBulkInjectedCase || walletBalance < (costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS)}
+                      disabledTitle={isBulkInjectedCase ? undefined : `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}.`}
                     />
                   ))}
                 </div>
@@ -1135,7 +1253,14 @@ const AddSalariedCustomerWizardPage = () => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
+              <button
+                className="btn btn-primary btn-lg"
+                type="submit"
+                disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
+                title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
+              >
+                Continue to Product Selection →
+              </button>
             </div>
           </form>
         )}
@@ -1204,7 +1329,11 @@ const AddSalariedCustomerWizardPage = () => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>
+              <button
+                className="btn btn-primary btn-lg"
+                type="submit"
+                disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
+              >
                 {saving ? 'Saving...' : 'Complete Salaried Customer Profile →'}
               </button>
             </div>
