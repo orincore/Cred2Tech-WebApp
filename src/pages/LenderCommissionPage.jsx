@@ -287,36 +287,59 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
 
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 28, fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                      <th style={{ padding: 10, textAlign: 'left' }}>Case ID</th>
-                      <th style={{ padding: 10, textAlign: 'left' }}>LAN</th>
-                      <th style={{ padding: 10, textAlign: 'left' }}>Customer</th>
-                      <th style={{ padding: 10, textAlign: 'left' }}>Product</th>
-                      <th style={{ padding: 10, textAlign: 'right' }}>Amount</th>
+                    <tr style={{ borderTop: '2px solid #111827', borderBottom: '2px solid #111827' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', borderRight: '1px solid #E5E7EB' }}>SI<br/>No.</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', borderRight: '1px solid #E5E7EB' }}>Particulars</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>Quantity</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>Rate</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>per</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {previewData?.cases?.map((c, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                        <td style={{ padding: 10 }}>{c.caseId}</td>
-                        <td style={{ padding: 10, color: '#4B5563' }}>{c.lan}</td>
-                        <td style={{ padding: 10, color: '#4B5563' }}>{c.customer}</td>
-                        <td style={{ padding: 10, color: '#4B5563' }}>{c.product}</td>
-                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 500 }}>{formatCurrency(c.amount)}</td>
+                        <td style={{ padding: 10, verticalAlign: 'top', borderRight: '1px solid #E5E7EB' }}>{i + 1}</td>
+                        <td style={{ padding: 10, verticalAlign: 'top', borderRight: '1px solid #E5E7EB' }}>
+                          <div style={{ fontWeight: 700, marginBottom: 4 }}>Commission Income</div>
+                          <div style={{ fontStyle: 'italic', marginBottom: 4 }}>{c.customer}</div>
+                          <div style={{ color: '#4B5563' }}>Disb Amount - {c.disb_amount ? `${Number(c.disb_amount).toLocaleString('en-IN')}/-` : 'N/A'}</div>
+                          <div style={{ color: '#4B5563' }}>Disb Date - {c.disb_date}</div>
+                          <div style={{ color: '#4B5563' }}>Payout - {c.payout_percent}%</div>
+                          <div style={{ color: '#4B5563' }}>Product - {c.product}</div>
+                        </td>
+                        <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                        <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                        <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, verticalAlign: 'top' }}>{formatCurrency(c.amount)}</td>
                       </tr>
                     ))}
+                    <tr style={{ borderBottom: 'none' }}>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>CGST</td>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>9</td>
+                      <td style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>%</td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700 }}>{formatCurrency((previewData?.gst || 0) / 2)}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>SGST</td>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>9</td>
+                      <td style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>%</td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700 }}>{formatCurrency((previewData?.gst || 0) / 2)}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '2px solid #111827' }}>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>Total</td>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, fontSize: 15 }}>{formatCurrency(previewData?.total)}</td>
+                    </tr>
                   </tbody>
                 </table>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <table style={{ width: 280, fontSize: 14 }}>
-                    <tbody>
-                      <tr><td style={{ padding: 6, color: '#4B5563' }}>Subtotal</td><td style={{ padding: 6, textAlign: 'right' }}>{formatCurrency(previewData?.subtotal)}</td></tr>
-                      <tr><td style={{ padding: 6, color: '#4B5563', borderBottom: '1px solid #E5E7EB' }}>GST (18%)</td><td style={{ padding: 6, textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>{formatCurrency(previewData?.gst)}</td></tr>
-                      <tr><td style={{ padding: '10px 6px', fontWeight: 700, fontSize: 15 }}>Total Amount</td><td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, fontSize: 15 }}>{formatCurrency(previewData?.total)}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
               </div>
             </div>
             <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
