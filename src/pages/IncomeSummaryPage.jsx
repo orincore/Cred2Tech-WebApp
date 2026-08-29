@@ -12,9 +12,17 @@ const INCOME_TYPES_MSME = [
   'Dividend Income', 'Agriculture Income', 'Professional Fees', 'Other'
 ];
 // A salaried employee has no business/directorial income concepts — swap
-// those out for a plain Salary/Bonus entry instead.
+// those out for a plain Salary/Incentive/Bonus entry instead. Incentive and
+// Bonus are kept as SEPARATE options (not one combined "Bonus / Incentive"
+// choice): the ESR engine treats them differently (incentive is a recurring
+// 3-month average, bonus is a single latest-year figure) and a combined
+// label couldn't be matched to either bucket, so it was silently excluded
+// from every lender's income calculation. Agriculture Income was previously
+// only offered on the MSME side even though a salaried applicant can
+// legitimately have agricultural land income too.
 const INCOME_TYPES_SALARIED = [
-  'Salary', 'Bonus / Incentive', 'Rental Income — Bank', 'Rental Income — Cash',
+  'Salary', 'Incentive', 'Bonus', 'Agriculture Income',
+  'Rental Income — Bank', 'Rental Income — Cash',
   'Interest Income', 'Dividend Income', 'Other'
 ];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'Bank Credit', 'None'];
