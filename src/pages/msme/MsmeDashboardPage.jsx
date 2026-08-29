@@ -152,7 +152,7 @@ const MsmeDashboardPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: 16 }}>
                 {[
                   { title: 'Active Cases', value: String(cases.filter(c => c.stage !== 'CLOSED' && c.stage !== 'REJECTED').length), subtitle: 'This month', icon: FolderOpen, color: 'var(--info)' },
-                  { title: 'Loan Applied', value: activeCase.loan_amount ? formatCompactINR(activeCase.loan_amount) : '—', subtitle: activeCase.product_type || 'Product TBD', icon: BarChart3, color: 'var(--success)' },
+                  { title: 'Loan Applied', value: (activeCase.loan_amount || activeCase.sanctioned_amount) ? formatCompactINR(activeCase.loan_amount || activeCase.sanctioned_amount) : '—', subtitle: activeCase.product_type || 'Product TBD', icon: BarChart3, color: 'var(--success)' },
                   { title: 'Bureau Score', value: cibilScore || '—', subtitle: cibilScore ? (cibilScore >= 700 ? 'Good' : 'Fair') : 'Available after bureau pull', icon: Star, color: 'var(--warning)' },
                   { title: 'All Time Cases', value: totalCasesCount ?? '—', subtitle: 'Since you joined', icon: Archive, color: 'var(--role-admin)' },
                 ].map((card, i) => (
@@ -194,7 +194,7 @@ const MsmeDashboardPage = () => {
                           <tr key={c.id}>
                             <td style={{ fontWeight: 700 }}>CASE-{c.id}</td>
                             <td>{c.product_type || 'TBD'}</td>
-                            <td>{c.loan_amount ? formatCompactINR(c.loan_amount) : '—'}</td>
+                            <td>{(c.loan_amount || c.sanctioned_amount) ? formatCompactINR(c.loan_amount || c.sanctioned_amount) : '—'}</td>
                             <td>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                                 <Badge type="level" value={CASE_STAGE_LABELS[c.stage] || c.stage} />

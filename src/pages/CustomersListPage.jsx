@@ -57,16 +57,16 @@ const STAGE_LABELS = {
 
 // [light, dark] pill colors per stage — matches the theme-aware pill pattern used elsewhere (e.g. UsersListPage role pills)
 const STAGE_COLORS = {
-  LEAD_CREATED:         { light: ['#FEF3C7', '#92400E'], dark: ['#78350F', '#FDE68A'] },
-  DATA_COLLECTION:      { light: ['#E0F2FE', '#0369A1'], dark: ['#0c4a6e', '#7dd3fc'] },
-  LEAD_SENT_TO_LENDER:  { light: ['#F3E8FF', '#6B21A8'], dark: ['#4c1d95', '#d8b4fe'] },
-  ESR_GENERATED:        { light: ['#FFEDD5', '#C2410C'], dark: ['#7c2d12', '#fdba74'] },
-  APPROVED:             { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
-  DISBURSED:            { light: ['#DCFCE7', '#166534'], dark: ['#14532d', '#86efac'] },
-  PARTLY_DISBURSED:     { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
-  CLOSED:               { light: ['#F3F4F6', '#374151'], dark: ['#1f2937', '#d1d5db'] },
-  REJECTED:             { light: ['#FEE2E2', '#991B1B'], dark: ['#7f1d1d', '#fca5a5'] },
-  DRAFT:                { light: ['#F3F4F6', '#6B7280'], dark: ['#1f2937', '#9ca3af'] },
+  LEAD_CREATED: { light: ['#FEF3C7', '#92400E'], dark: ['#78350F', '#FDE68A'] },
+  DATA_COLLECTION: { light: ['#E0F2FE', '#0369A1'], dark: ['#0c4a6e', '#7dd3fc'] },
+  LEAD_SENT_TO_LENDER: { light: ['#F3E8FF', '#6B21A8'], dark: ['#4c1d95', '#d8b4fe'] },
+  ESR_GENERATED: { light: ['#FFEDD5', '#C2410C'], dark: ['#7c2d12', '#fdba74'] },
+  APPROVED: { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
+  DISBURSED: { light: ['#DCFCE7', '#166534'], dark: ['#14532d', '#86efac'] },
+  PARTLY_DISBURSED: { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
+  CLOSED: { light: ['#F3F4F6', '#374151'], dark: ['#1f2937', '#d1d5db'] },
+  REJECTED: { light: ['#FEE2E2', '#991B1B'], dark: ['#7f1d1d', '#fca5a5'] },
+  DRAFT: { light: ['#F3F4F6', '#6B7280'], dark: ['#1f2937', '#9ca3af'] },
 };
 
 const ENTITY_TYPE_OPTIONS = ['Partnership', 'Pvt Ltd', 'LLP', 'Proprietorship', 'Public Ltd'].map(v => ({ value: v, label: v }));

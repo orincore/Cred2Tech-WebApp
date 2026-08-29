@@ -191,7 +191,7 @@ const AdminMsmeCaseAllocatePage = () => {
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 24px' : '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <SectionCard title="Case Summary">
           <div style={{ padding: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
-            <InfoRow label="Requested Loan" value={caseData.loan_amount ? `₹${Number(caseData.loan_amount).toLocaleString('en-IN')}` : 'Not Specified'} />
+            <InfoRow label="Requested Loan" value={(caseData.loan_amount || caseData.sanctioned_amount) ? `₹${Number(caseData.loan_amount || caseData.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified'} />
             <InfoRow label="Stage" value={<Badge type="level" value={caseData.stage} />} />
             <InfoRow label="Payment" value={caseData.case_payment?.status === 'PAID' ? 'Paid' : 'Pending'} />
             <InfoRow label="Registered" value={formatDate(caseData.created_at)} />
