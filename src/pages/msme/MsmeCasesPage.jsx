@@ -149,8 +149,8 @@ const MsmeCasesPage = () => {
                             ? formatCompactINR(c.total_disbursed_amount)
                             : c.sanctioned_amount
                               ? formatCompactINR(c.sanctioned_amount)
-                              : c.loan_amount
-                                ? formatCompactINR(c.loan_amount)
+                              : (c.loan_amount || c.sanctioned_amount)
+                                ? formatCompactINR(c.loan_amount || c.sanctioned_amount)
                                 : '—'}
                         </td>
                         <td data-label="Status">

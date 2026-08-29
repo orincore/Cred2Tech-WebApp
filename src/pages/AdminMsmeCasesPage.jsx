@@ -104,7 +104,7 @@ const AdminMsmeCasesPage = () => {
       render: (c) => (
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>
-            {c.loan_amount ? `₹${Number(c.loan_amount).toLocaleString('en-IN')}` : 'Not Specified'}
+            {(c.loan_amount || c.sanctioned_amount) ? `₹${Number(c.loan_amount || c.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>{c.product_type || '—'}</div>
         </div>
@@ -292,7 +292,7 @@ const AdminMsmeCasesPage = () => {
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Requested Loan</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>
-                      {c.loan_amount ? `₹${Number(c.loan_amount).toLocaleString('en-IN')}` : 'Not Specified'}
+                      {(c.loan_amount || c.sanctioned_amount) ? `₹${Number(c.loan_amount || c.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified'}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{c.product_type || '—'}</div>
                   </div>

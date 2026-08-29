@@ -186,7 +186,7 @@ const MsmeCaseDetailPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12 }}>
             <div className="card" style={{ padding: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 6 }}>Requested</div>
-              <div style={{ fontSize: 17, fontWeight: 800 }}>{caseData.loan_amount ? formatCompactINR(caseData.loan_amount) : '—'}</div>
+              <div style={{ fontSize: 17, fontWeight: 800 }}>{(caseData.loan_amount || caseData.sanctioned_amount) ? formatCompactINR(caseData.loan_amount || caseData.sanctioned_amount) : '—'}</div>
             </div>
             <div className="card" style={{ padding: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 6 }}>Sanctioned</div>
