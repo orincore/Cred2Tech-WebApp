@@ -624,8 +624,12 @@ const CalcBreakdownPanel = ({ evaluations }) => {
           color: ev.dscr_min_ratio != null && ev.dscr_actual_ratio < ev.dscr_min_ratio ? 'var(--error)' : 'var(--success)',
           bg: ev.dscr_min_ratio != null && ev.dscr_actual_ratio < ev.dscr_min_ratio ? 'var(--error-bg)' : 'var(--success-bg)' }
       : { label: 'FOIR', value: fmtPct(ev.foir_actual_percent), icon: TrendingDown,
-          color: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error)' : 'var(--success)',
-          bg: ev.foir_actual_percent > ev.foir_allowed_percent ? 'var(--error-bg)' : 'var(--success-bg)' },
+          // foir_allowed_percent is null for "No DBR" ABB-based methods —
+          // foir_actual_percent there is a derived EMI-capacity utilization
+          // ratio, not a policy limit, so there is nothing to be "over" and
+          // the error color must not fire just because null coerces to 0.
+          color: (ev.foir_allowed_percent != null && ev.foir_actual_percent > ev.foir_allowed_percent) ? 'var(--error)' : 'var(--success)',
+          bg: (ev.foir_allowed_percent != null && ev.foir_actual_percent > ev.foir_allowed_percent) ? 'var(--error-bg)' : 'var(--success-bg)' },
     { label: 'LTV', value: ev.actual_final_ltv_percent != null ? `${(ev.actual_final_ltv_percent * 100).toFixed(0)}%` : '—', icon: Home, color: 'var(--role-admin)', bg: 'var(--role-admin-bg)' },
     { label: 'PF', value: (ev.pf_min != null || ev.pf_max != null)
         ? `${ev.pf_min != null ? (ev.pf_min * 100).toFixed(2) : '—'}%–${ev.pf_max != null ? (ev.pf_max * 100).toFixed(2) : '—'}%`
