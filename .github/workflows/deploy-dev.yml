@@ -7,6 +7,22 @@ on:
   push:
     branches-ignore:
       - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy to dev"
+        type: string
+        required: true
+      commit_sha:
+        description: "Exact commit SHA to deploy (defaults to the tip of `branch`). Note: the workflow FILE itself still runs from whichever branch's copy was dispatched (always main here) — only the checked-out app code is pinned to this SHA."
+        type: string
+        required: false
+      correlation_id:
+        description: "Opaque id set by the Deploy Portal to correlate this run back to its own record; blank for ordinary manual runs."
+        type: string
+        required: false
+
+run-name: Deploy Frontend Dev ${{ github.event.inputs.correlation_id }}
 
 concurrency:
   group: deploy-webapp-dev
@@ -19,6 +35,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.event.inputs.branch || github.ref }}
+          fetch-depth: ${{ github.event.inputs.commit_sha && 0 || 1 }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -38,8 +57,24 @@ jobs:
       - name: Set release metadata
         id: meta
         run: |
+          BRANCH="${{ github.event.inputs.branch || github.ref_name }}"
+          # `git rev-parse` reads the actually-checked-out commit — NOT
+          # `github.sha`, which for a workflow_dispatch run reflects the
+          # SHA of the dispatch `ref` (always `main` here per the Deploy
+          # Portal's fixed dispatchRef), not the `commit_sha` input that
+          # was actually checked out above.
           echo "release_ts=$(date +%Y%m%d_%H%M%S)" >> "$GITHUB_OUTPUT"
-          echo "branch=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "git_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Write version.json
+        # Lets the Deploy Portal read "what's actually live on
+        # dev.app.cred2tech.com" the same way it reads the backend's
+        # /health — via a plain GET, no SSH/API polling needed.
+        run: |
+          printf '{"commit":"%s","branch":"%s","release_ts":"%s"}\n' \
+            "${{ steps.meta.outputs.git_commit }}" "${{ steps.meta.outputs.branch }}" "${{ steps.meta.outputs.release_ts }}" \
+            > dist/version.json
 
       - name: Set up SSH
         run: |
@@ -70,7 +105,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s <<EOF
             set -e
             ln -sfn /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }} /opt/cred2tech/webapp-dev/current
-            echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ github.sha }}"
+            echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ steps.meta.outputs.git_commit }}"
             cd /opt/cred2tech/webapp-dev/releases
             # Best-effort: an old release dir this deploy user doesn't own
             # (e.g. left behind by a one-off manual/root deploy) must not
