@@ -89,6 +89,11 @@ const AppRouter = () => (
           <Route path="/mfa-challenge" element={<MfaChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* /c/:token is the short form used in the SMS link (every char
+              counts alongside the OTP + fixed template text in one 160-char
+              segment) — /customer-consent?token= stays mounted too so any
+              already-sent link keeps working. */}
+          <Route path="/c/:token" element={<ConsentPage />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />

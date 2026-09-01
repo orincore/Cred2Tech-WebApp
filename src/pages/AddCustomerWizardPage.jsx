@@ -432,17 +432,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     return { targetCaseId, targetCustomerId, targetApplicants };
   };
 
-  // Replaces the old "Send OTP" button entirely — there is no mobile OTP
-  // step anymore. Creates the draft customer/case (same as handleVerifyPan
-  // used to do first anyway), emails the customer a consent link, and opens
-  // a live subscription so approval resumes the pull the instant it happens
-  // — no manual refresh needed on either side.
+  // Replaces the old "Send OTP" button entirely — there is no separate mobile
+  // OTP step anymore, it's folded into this one. Creates the draft customer/
+  // case (same as handleVerifyPan used to do first anyway), texts the
+  // customer an OTP + consent link via SMS, and opens a live subscription so
+  // approval resumes the pull the instant it happens — no manual refresh
+  // needed on either side.
   const handleRequestConsent = async () => {
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return toast.error('A valid customer email is required to send the consent request.');
-    }
-    if (!formData.business_mobile) {
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
       return toast.error('Mobile number is required to send the consent request.');
     }
 
@@ -455,7 +453,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         case_id: draft.targetCaseId,
       });
       setConsentRequest({ id: result.id, status: result.status });
-      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
       toast.error(errMsg);
@@ -491,9 +489,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
     if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
-    if (!app.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) {
-      return toast.error("A valid email is required to send the co-applicant's consent request.");
-    }
 
     setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
@@ -514,7 +509,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         applicant_id: targetAppId,
       });
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
-      toast.success(`Consent request sent to ${app.email}. Waiting for them to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
     } finally {
@@ -1287,7 +1282,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               type="button"
                               className="btn btn-ghost btn-sm"
                               onClick={handleRequestConsent}
-                              title="Resend the consent email"
+                              title="Resend the consent SMS"
                               style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                             >
                               Resend
@@ -1367,7 +1362,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         ) : consentRequest ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
                           </div>
                         ) : (
                           <button
@@ -1608,7 +1603,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                 ) : coappConsent[realIdx] ? (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                     <PullingIndicator label="Waiting for approval…" />
-                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
                                   </div>
                                 ) : (
                                   <button

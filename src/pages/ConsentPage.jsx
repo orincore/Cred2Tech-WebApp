@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { consentService } from '../api/consentService';
 import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -35,16 +35,21 @@ const StatusScreen = ({ icon, iconColorClass, title, body, action }) => (
 
 const ConsentPage = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const { token: pathToken } = useParams();
+  const token = pathToken || searchParams.get('token');
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [otp, setOtp] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [granted, setGranted] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendNotice, setResendNotice] = useState('');
 
   useEffect(() => {
     document.title = 'Cred2Tech | Data Consent';
@@ -65,17 +70,39 @@ const ConsentPage = () => {
     })();
   }, [token]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(() => setResendCooldown((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, [resendCooldown]);
+
   const handleApprove = async () => {
-    if (!agreed) return;
+    if (!agreed || otp.trim().length !== 6) return;
     setSubmitting(true);
     setSubmitError('');
     try {
-      await consentService.approve(token);
+      await consentService.approve(token, otp.trim());
       setGranted(true);
     } catch (err) {
       setSubmitError(getErrorMessage(err) || 'Failed to record your consent. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setResending(true);
+    setSubmitError('');
+    setResendNotice('');
+    try {
+      await consentService.resendOtp(token);
+      setResendNotice('A new OTP has been sent to your mobile number.');
+      setResendCooldown(30);
+    } catch (err) {
+      setSubmitError(getErrorMessage(err) || 'Failed to resend OTP. Please try again.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -86,7 +113,7 @@ const ConsentPage = () => {
           icon="error"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
           title="Invalid Link"
-          body="This consent link is missing its token. Please use the link from your email."
+          body="This consent link is missing its token. Please use the link from your SMS."
         />
       </PageShell>
     );
@@ -185,7 +212,14 @@ const ConsentPage = () => {
         </div>
       )}
 
-      <label className="flex items-start gap-3 mb-6 cursor-pointer select-none">
+      {resendNotice && !submitError && (
+        <div className="flex items-center gap-2 px-3 py-2.5 mb-5 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400">
+          <span className="material-symbols-outlined text-[15px]">check_circle</span>
+          {resendNotice}
+        </div>
+      )}
+
+      <label className="flex items-start gap-3 mb-5 cursor-pointer select-none">
         <input
           type="checkbox"
           checked={agreed}
@@ -198,10 +232,38 @@ const ConsentPage = () => {
         </span>
       </label>
 
+      <div className="mb-6">
+        <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
+          Enter OTP{details?.masked_mobile ? ` sent to ${details.masked_mobile}` : ' sent to your mobile number'}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="6-digit code"
+            className="flex-1 min-w-0 px-3 py-2.5 text-[14px] font-medium tracking-[0.3em] bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500"
+          />
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={resending || resendCooldown > 0}
+            className="shrink-0 px-3 text-[12px] font-bold text-indigo-600 dark:text-indigo-400 border border-[#c7d2fe]/60 dark:border-[#2d3a6c] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : resending ? 'Sending…' : 'Resend OTP'}
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
+          The code is valid for 10 minutes. Didn't get it? Tap Resend OTP.
+        </p>
+      </div>
+
       <TravelingBorderButton
         type="button"
         size="sm"
-        disabled={!agreed || submitting}
+        disabled={!agreed || otp.length !== 6 || submitting}
         onClick={handleApprove}
         className="w-full rounded-none"
       >

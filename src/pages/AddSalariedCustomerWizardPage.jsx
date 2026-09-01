@@ -348,13 +348,14 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  // Replaces the old "Send OTP" button entirely — there is no mobile OTP
-  // step anymore. Emails the customer a consent link and opens a live
-  // subscription for the approval, same as the business wizard.
+  // Replaces the old "Send OTP" button entirely — there is no separate
+  // mobile OTP step anymore, it's folded into this one. Texts the customer
+  // an OTP + consent link via SMS and opens a live subscription for the
+  // approval, same as the business wizard.
   const handleRequestConsent = async () => {
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return toast.error('A valid customer email is required to send the consent request.');
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
+      return toast.error('Mobile number is required to send the consent request.');
     }
 
     setConsentRequesting(true);
@@ -366,7 +367,7 @@ const AddSalariedCustomerWizardPage = () => {
         case_id: draft.targetCaseId,
       });
       setConsentRequest({ id: result.id, status: result.status });
-      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
       toast.error(errMsg);
@@ -401,9 +402,6 @@ const AddSalariedCustomerWizardPage = () => {
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
     if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
-    if (!app.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) {
-      return toast.error("A valid email is required to send the co-applicant's consent request.");
-    }
 
     setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
@@ -424,7 +422,7 @@ const AddSalariedCustomerWizardPage = () => {
         applicant_id: targetAppId,
       });
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
-      toast.success(`Consent request sent to ${app.email}. Waiting for them to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
     } finally {
@@ -981,7 +979,7 @@ const AddSalariedCustomerWizardPage = () => {
                         ) : consentRequest ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
                           </div>
                         ) : (
                           <button
@@ -1145,7 +1143,7 @@ const AddSalariedCustomerWizardPage = () => {
                                   ) : coappConsent[realIdx] ? (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                       <PullingIndicator label="Waiting for approval…" />
-                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
                                     </div>
                                   ) : (
                                     <button

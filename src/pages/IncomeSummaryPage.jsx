@@ -25,7 +25,7 @@ const INCOME_TYPES_SALARIED = [
   'Rental Income — Bank', 'Rental Income — Cash',
   'Interest Income', 'Dividend Income', 'Other'
 ];
-const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'Bank Credit', 'None'];
+const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'None'];
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
