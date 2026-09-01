@@ -24,15 +24,51 @@ const MONTH_MS = 1000 * 60 * 60 * 24 * 30.44; // average month length
 
 // Two independent facts per obligation, not a single status:
 //  - "Availed within X months" — how recently the loan was taken (loan_start_date vs today)
-//  - "O/s < X months" — approximate remaining tenure, estimated as
-//    outstanding_amount / emi_per_month (a flat, interest-free estimate —
-//    there's no stored maturity/tenure field to compute this exactly, this
-//    is the agreed quick-screening heuristic)
+//  - "O/s < X months" — approximate remaining tenure, accurately estimated using
+//    standard amortizing loan math (log formula) based on product ROI defaults.
 // Each side always shows a label when the underlying data exists — including
 // a "12+" fallback once a loan ages/outlasts both thresholds — so a row only
 // goes blank on a side when that side's source data is genuinely missing
 // (no loan_start_date, or EMI unverified/zero so remaining tenure can't be
 // estimated at all).
+const estimateRemainingTenure = (obl) => {
+  const p = obl.outstanding_amount;
+  const emi = obl.emi_per_month;
+  
+  if (!p || p <= 0 || !emi || emi <= 0) return 0;
+  
+  const TERMS_MAP = {
+    "Loan Against Property": 9.50,
+    "Housing Loan": 8.00,
+    "Business Loan": 16.00,
+    "Personal Loan": 13.00,
+    "Auto Loan": 9.00,
+    "Two Wheeler Loan": 9.00,
+    "Commercial Vehicle": 9.00,
+    "Consumer Loan": 8.00,
+    "Agri Loan": 10.00,
+    "Education Loan": 9.00,
+    "Term loan": 9.50
+  };
+  
+  const roi = TERMS_MAP[obl.loan_type];
+  
+  // Fall back to flat division for non-amortizing types or unknown types
+  if (!roi || obl.loan_type === 'Credit Card' || obl.loan_type === 'Overdraft') {
+    return p / emi;
+  }
+  
+  const r = (roi / 100) / 12;
+  
+  // Protect against negative amortization / bad data (EMI < Interest)
+  if (emi <= p * r) {
+    return p / emi;
+  }
+  
+  // Exact remaining months for amortizing loan: n = log(E / (E - P*r)) / log(1 + r)
+  return Math.log(emi / (emi - p * r)) / Math.log(1 + r);
+};
+
 const getObligationDetails = (obl) => {
   // Manual entries never have a loan_start_date — the "Add Loan Not in
   // Bureau" form doesn't collect one — so only the O/s-remaining half of
@@ -51,7 +87,7 @@ const getObligationDetails = (obl) => {
   }
 
   if (obl.emi_per_month > 0 && obl.outstanding_amount != null) {
-    const monthsRemaining = obl.outstanding_amount / obl.emi_per_month;
+    const monthsRemaining = estimateRemainingTenure(obl);
     if (monthsRemaining <= 6) details.push({ label: 'O/s < 6 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else if (monthsRemaining <= 12) details.push({ label: 'O/s < 12 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else details.push({ label: 'O/s 12+ months', color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' });

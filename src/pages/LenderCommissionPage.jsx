@@ -361,7 +361,8 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
 // ── Export Payouts Modal ─────────────────────────────────────────────────────
 function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
   const [loadingType, setLoadingType] = useState(null); // 'excel' or 'pdf'
-  const [filters, setFilters] = useState({ month: availableMonths[0] || '', lenderName: '', product: 'All Products' });
+  const [filters, setFilters] = useState({ month: availableMonths[0] || '', lenderName: '', product: 'All Products', search: '' });
+  const [searchInput, setSearchInput] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
   const [candidateLoading, setCandidateLoading] = useState(false);
@@ -388,7 +389,12 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
     } else {
       setCandidates([]);
     }
-  }, [filters.lenderName, filters.month, filters.product]);
+  }, [filters.lenderName, filters.month, filters.product, filters.search]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setFilters(prev => ({ ...prev, search: searchInput }));
+  };
 
   const handleSelectAll = (e) => {
     setSelectedCaseIds(e.target.checked ? new Set(candidates.map(c => c.id)) : new Set());
@@ -478,6 +484,19 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
                 <option value="LAP">LAP</option>
                 <option value="HL">Home Loan</option>
               </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Search</label>
+              <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 8 }}>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="Case ID or Customer..." 
+                  value={searchInput} 
+                  onChange={(e) => setSearchInput(e.target.value)} 
+                />
+                <button type="submit" className="btn btn-secondary btn-icon"><Search size={16} /></button>
+              </form>
             </div>
           </div>
 
