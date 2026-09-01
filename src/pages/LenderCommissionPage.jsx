@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Landmark, ChevronDown, ChevronUp, X, Printer, FileText, Search } from 'lucide-react';
+import { Landmark, ChevronDown, ChevronUp, X, Printer, FileText, Search, FileDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
-  getLenderCommissions, getInvoiceCandidates, previewInvoice, updateLedgerStatus, syncMissingLenderCommissions,
+  getLenderCommissions, getInvoiceCandidates, previewInvoice, updateLedgerStatus, syncMissingLenderCommissions, exportLenderCommissionExcel, exportLenderCommissionPdf
 } from '../api/commissionOperationsService';
 import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -358,6 +358,180 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
   );
 }
 
+// ── Export Payouts Modal ─────────────────────────────────────────────────────
+function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
+  const [loadingType, setLoadingType] = useState(null); // 'excel' or 'pdf'
+  const [filters, setFilters] = useState({ month: availableMonths[0] || '', lenderName: '', product: 'All Products' });
+  const [candidates, setCandidates] = useState([]);
+  const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
+  const [candidateLoading, setCandidateLoading] = useState(false);
+
+  useEffect(() => {
+    if (filters.month || filters.lenderName) {
+      (async () => {
+        try {
+          setCandidateLoading(true);
+          const res = await getLenderCommissions(filters);
+          if (res.success && res.data.lendersData) {
+            const allCases = [];
+            res.data.lendersData.forEach(l => {
+              allCases.push(...l.cases);
+            });
+            setCandidates(allCases);
+          }
+        } catch (e) {
+          toast.error('Failed to load cases');
+        } finally {
+          setCandidateLoading(false);
+        }
+      })();
+    } else {
+      setCandidates([]);
+    }
+  }, [filters.lenderName, filters.month, filters.product]);
+
+  const handleSelectAll = (e) => {
+    setSelectedCaseIds(e.target.checked ? new Set(candidates.map(c => c.id)) : new Set());
+  };
+  const handleSelectCase = (id) => {
+    const newSet = new Set(selectedCaseIds);
+    if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
+    setSelectedCaseIds(newSet);
+  };
+
+  const handleExport = async (type) => {
+    if (selectedCaseIds.size === 0) return toast.error('Select at least one case to export');
+    setLoadingType(type);
+    try {
+      const ledgerIds = [];
+      candidates.forEach(c => {
+        if (selectedCaseIds.has(c.id)) {
+          if (c.ledgers) {
+            ledgerIds.push(...c.ledgers.map(l => l.id));
+          } else if (c.ledger_ids) {
+            ledgerIds.push(...c.ledger_ids);
+          }
+        }
+      });
+
+      const exportFilters = {
+        ...filters,
+        ledger_ids: ledgerIds
+      };
+      
+      let blob;
+      if (type === 'excel') {
+        blob = await exportLenderCommissionExcel(exportFilters);
+      } else {
+        blob = await exportLenderCommissionPdf(exportFilters);
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `DSA_Payouts.${type === 'excel' ? 'xlsx' : 'pdf'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      
+      onClose();
+    } catch (e) {
+      toast.error(`Failed to export ${type.toUpperCase()}`);
+    } finally {
+      setLoadingType(null);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" style={{ maxWidth: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Export Payouts</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
+              Select cases to export as Excel or PDF
+            </p>
+          </div>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+
+        <div style={{ padding: 24, flex: 1, overflowY: 'auto', background: 'var(--bg-elevated)' }}>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Month</label>
+              <select className="form-control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
+                <option value="">-- All Months --</option>
+                {availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Lender</label>
+              <select className="form-control" value={filters.lenderName} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
+                <option value="All Lenders">All Lenders</option>
+                {availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Product</label>
+              <select className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
+                <option value="All Products">All Products</option>
+                <option value="LAP">LAP</option>
+                <option value="HL">Home Loan</option>
+              </select>
+            </div>
+          </div>
+
+          {candidateLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><LoadingSpinner size={24} /></div>
+          ) : candidates.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>No commission records found for this selection.</div>
+          ) : (
+            <div className="card" style={{ overflow: 'hidden' }}>
+              <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th><input type="checkbox" checked={selectedCaseIds.size === candidates.length && candidates.length > 0} onChange={handleSelectAll} /></th>
+                      <th>Case ID</th>
+                      <th>LAN</th>
+                      <th>Customer</th>
+                      <th style={{ textAlign: 'center' }}>Status</th>
+                      <th style={{ textAlign: 'right' }}>Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map(c => (
+                      <tr key={c.id}>
+                        <td data-label="Select"><input type="checkbox" checked={selectedCaseIds.has(c.id)} onChange={() => handleSelectCase(c.id)} /></td>
+                        <td data-label="Case ID" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.caseId}</td>
+                        <td data-label="LAN" style={{ color: 'var(--text-secondary)' }}>{c.lan}</td>
+                        <td data-label="Customer">{c.customer}</td>
+                        <td data-label="Status" style={{ textAlign: 'center' }}><StatusBadge status={c.status} /></td>
+                        <td data-label="Commission" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(c.payout)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Selected: <strong>{selectedCaseIds.size}</strong> cases</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-secondary" onClick={() => handleExport('excel')} disabled={selectedCaseIds.size === 0 || loadingType !== null}>
+              {loadingType === 'excel' ? <LoadingSpinner size={16} color="currentColor" /> : <><FileDown size={14} /> Export Excel</>}
+            </button>
+            <button className="btn btn-secondary" onClick={() => handleExport('pdf')} disabled={selectedCaseIds.size === 0 || loadingType !== null}>
+              {loadingType === 'pdf' ? <LoadingSpinner size={16} color="currentColor" /> : <><FileDown size={14} /> Export PDF</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Lender cases table + card ────────────────────────────────────────────────
 function LenderCommissionCasesTable({ cases, onUpdateClick }) {
   if (!cases || cases.length === 0) {
@@ -435,6 +609,7 @@ export default function LenderCommissionPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ summaryData: [], lendersData: [], availableMonths: [], availableLenders: [], hasAnyRecords: false });
   const [showGenerateInvoice, setShowGenerateInvoice] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [statusModalCase, setStatusModalCase] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -520,9 +695,14 @@ export default function LenderCommissionPage() {
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
       <PageHeader title="Lender Commission" subtitle="Track and invoice expected commissions from lending partners" />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 24 }}>
-        <button className="btn btn-secondary" onClick={handleSync} disabled={syncing}>{syncing ? 'Syncing...' : '↻ Sync Past'}</button>
-        <button className="btn btn-primary" onClick={() => setShowGenerateInvoice(true)}><FileText size={14} /> Generate Invoice</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary" onClick={() => setShowExportModal(true)}><FileDown size={14} /> Export</button>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary" onClick={handleSync} disabled={syncing}>{syncing ? 'Syncing...' : '↻ Sync Past'}</button>
+          <button className="btn btn-primary" onClick={() => setShowGenerateInvoice(true)}><FileText size={14} /> Generate Invoice</button>
+        </div>
       </div>
 
       {loading && data.lendersData.length === 0 ? (
@@ -614,6 +794,14 @@ export default function LenderCommissionPage() {
           availableMonths={data.availableMonths}
           availableLenders={data.availableLenders}
           onSuccess={() => { setShowGenerateInvoice(false); fetchCommissions(); }}
+        />
+      )}
+
+      {showExportModal && (
+        <ExportPayoutsModal
+          onClose={() => setShowExportModal(false)}
+          availableMonths={data.availableMonths}
+          availableLenders={data.availableLenders}
         />
       )}
 

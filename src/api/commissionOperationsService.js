@@ -45,3 +45,31 @@ export const syncMissingLenderCommissions = async () => {
     const response = await api.post(`/commission-operations/lender-commission/sync-missing`);
     return response.data;
 };
+
+export const exportLenderCommissionExcel = async (filters) => {
+    const payload = {
+        month: filters.month,
+        lender_name: filters.lenderName && filters.lenderName !== 'All Lenders' ? filters.lenderName : undefined,
+        product_type: filters.product && filters.product !== 'All Products' ? filters.product : undefined,
+        search: filters.search,
+        ledger_ids: filters.ledger_ids
+    };
+    const response = await api.post(`/commission-operations/lender-commission/export/excel`, payload, {
+        responseType: 'blob'
+    });
+    return response.data;
+};
+
+export const exportLenderCommissionPdf = async (filters) => {
+    const payload = {
+        month: filters.month,
+        lender_name: filters.lenderName && filters.lenderName !== 'All Lenders' ? filters.lenderName : undefined,
+        product_type: filters.product && filters.product !== 'All Products' ? filters.product : undefined,
+        search: filters.search,
+        ledger_ids: filters.ledger_ids
+    };
+    const response = await api.post(`/commission-operations/lender-commission/export/pdf`, payload, {
+        responseType: 'blob'
+    });
+    return response.data;
+};
