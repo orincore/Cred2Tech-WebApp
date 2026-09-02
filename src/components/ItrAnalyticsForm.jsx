@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     AlertCircle,
-    FileText, Download, Trash2, Mail, XCircle, RefreshCw
+    FileText, Download, Trash2, Mail, XCircle, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
@@ -101,6 +101,7 @@ const ItrAnalyticsForm = ({
 
     const [pan, setPan] = useState(prefillPan || '');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
@@ -178,6 +179,7 @@ const ItrAnalyticsForm = ({
             setLocalStatus('PROCESSING');
             setIsOpen(false);
             setPassword(''); // Clear sensitive field immediately
+            setShowPassword(false);
             // Collapse the wait for the next server tick so the row flips to
             // "Processing" immediately.
             refresh();
@@ -473,13 +475,30 @@ const ItrAnalyticsForm = ({
                                 />
                             </FormField>
                             <FormField label="ITR Portal Password" required>
-                                <input
-                                    type="password"
-                                    className="form-control"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    placeholder="Enter portal password"
-                                />
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        className="form-control"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                        placeholder="Enter portal password"
+                                        style={{ paddingRight: 36 }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword((s) => !s)}
+                                        tabIndex={-1}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                        style={{
+                                            position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            background: 'transparent', border: 'none', cursor: 'pointer',
+                                            color: 'var(--text-tertiary)',
+                                        }}
+                                    >
+                                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    </button>
+                                </div>
                             </FormField>
                         </div>
                     </div>
