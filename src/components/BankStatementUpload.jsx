@@ -48,6 +48,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     const status = livePull?.status || localStatus;
     const reportId = livePull?.report_id || localReportId;
+    // Dev-only — the background supervisor's own retrieveWorkOrder call
+    // failing (socket.service.js's mergeVendorErrors), distinct from the
+    // manual "Check now" failure captured in providerError below. Cleared
+    // automatically server-side the moment a retry succeeds.
+    const vendorSyncError = livePull?.vendor_error || null;
     const documentIds = livePull
         ? { excel: livePull.bank_excel_document_id || null, json: livePull.bank_json_document_id || null }
         : localDocumentIds;
@@ -302,10 +307,25 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             {IS_DEV_BUILD && providerError && (
                 <div style={{ margin: '0 16px 16px', padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 12, fontFamily: 'monospace', border: '1px dashed var(--error)' }}>
                     <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                        [DEV ONLY] Signzy provider call failed{providerError.status ? ` — HTTP ${providerError.status}` : ''}
+                        [DEV ONLY] Signzy provider call failed (manual "Check now"){providerError.status ? ` — HTTP ${providerError.status}` : ''}
                     </div>
                     <div>{providerError.endpoint}</div>
                     <div style={{ marginTop: 4 }}>{providerError.message}</div>
+                </div>
+            )}
+
+            {/* Dev-only diagnostic — the background supervisor's own
+                retrieveWorkOrder polling failing, distinct from the manual
+                "Check now" failure above. Same Signzy entitlement gap, but
+                worth showing separately since this is the automatic path
+                that runs with no user action at all. */}
+            {IS_DEV_BUILD && vendorSyncError && (
+                <div style={{ margin: '0 16px 16px', padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 12, fontFamily: 'monospace', border: '1px dashed var(--error)' }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                        [DEV ONLY] Signzy provider call failed (background auto-sync){vendorSyncError.status ? ` — HTTP ${vendorSyncError.status}` : ''}
+                    </div>
+                    <div>Signzy statementanalysis/authenticate + retrieve-work-order (server-side, polled automatically)</div>
+                    <div style={{ marginTop: 4 }}>{vendorSyncError.message}</div>
                 </div>
             )}
 
