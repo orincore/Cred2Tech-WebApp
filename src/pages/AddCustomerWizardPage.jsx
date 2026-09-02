@@ -197,6 +197,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [consentRequestFailed, setConsentRequestFailed] = useState(false);
   const consentGranted = consentRequest?.status === 'GRANTED';
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
+  // Same PAN->GSTIN lookup the primary applicant gets, per self-employed
+  // co-applicant — keyed by applicant index (mirrors coappPanVerifyingMap).
+  const [coappGstFetchingMap, setCoappGstFetchingMap] = useState({});
+  const [coappGstFetchFailedMap, setCoappGstFetchFailedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
 
@@ -320,7 +324,24 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         // confirmed on case 2187 (3 real re-charges within 2 hours).
         pan_fetch_completed: caseData.data_pull_status?.pan_status === 'COMPLETE',
         linked_gstins: currentPanProfile?.gstin_records || [],
-        applicants: (caseData.applicants || []).map(a => ({ ...a, dob: toDateInputValue(a.dob) })),
+        applicants: (caseData.applicants || []).map(a => {
+          // Same PAN->GSTIN lookup cache as the primary's own pan_profile/
+          // linked_gstins above, just keyed by this co-applicant's own PAN
+          // instead of the customer's business_pan — CustomerPanProfile rows
+          // for a case's co-applicants live under the same customer_id (see
+          // handleFetchCoAppGst), so they're already present in this same
+          // caseData.customer.pan_profiles list.
+          const coPanProfile = a.type === 'CO_APPLICANT' && a.pan_number
+            ? (caseData.customer?.pan_profiles?.find(p => p.pan === a.pan_number) || null)
+            : null;
+          return {
+            ...a,
+            dob: toDateInputValue(a.dob),
+            pan_gst_profile: coPanProfile,
+            pan_gst_linked_gstins: coPanProfile?.gstin_records || [],
+            pan_gst_fetch_completed: !!coPanProfile
+          };
+        }),
         product_type: caseData.product_type || '',
         dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
@@ -675,6 +696,43 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
+  // Same PAN->GSTIN lookup as handleFetchGst above, run against a
+  // self-employed co-applicant's own PAN instead of the primary's business
+  // PAN. Uses the same /external/pan/fetch endpoint (customer_id is always
+  // the case's one Customer row — co-applicants don't have their own — so
+  // the resulting CustomerPanProfile lands in the same caseData.customer.
+  // pan_profiles list the load effect already reads for co-applicants).
+  const handleFetchCoAppGst = async (idx) => {
+    const app = formData.applicants[idx];
+    if (!app?.pan_number || app.pan_number.length < 10) return toast.error('Valid PAN required');
+    if (!formData.customer_id || !caseId) return toast.error('Please verify PAN first to generate a case');
+
+    setCoappGstFetchingMap(prev => ({ ...prev, [idx]: true }));
+    setCoappGstFetchFailedMap(prev => ({ ...prev, [idx]: false }));
+    try {
+      const res = await api.post(`/external/pan/fetch`, {
+        pan: app.pan_number,
+        customer_id: formData.customer_id,
+        case_id: caseId
+      });
+      const data = res.data;
+
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map((a, i) => i === idx
+          ? { ...a, pan_gst_profile: data, pan_gst_fetch_completed: true, pan_gst_linked_gstins: data.gst_records || [] }
+          : a)
+      }));
+      toast.success(`GST Records Fetched for ${toTitleCase(app.name) || app.pan_number}!`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to fetch GST';
+      toast.error(errMsg);
+      setCoappGstFetchFailedMap(prev => ({ ...prev, [idx]: true }));
+    } finally {
+      setCoappGstFetchingMap(prev => ({ ...prev, [idx]: false }));
+    }
+  };
+
   // Auto-verify the primary business PAN once mobile_verified is true — no
   // manual "Verify PAN" click needed. There's no separate OTP step anymore:
   // mobile_verified is now set by the backend the moment the customer
@@ -778,6 +836,37 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, formData.applicants, coappPanVerifyingMap]);
+
+  // Same auto-fetch-once-PAN-is-verified pattern as the primary applicant's
+  // gstAutoFetchAttempted effect above, run per self-employed co-applicant —
+  // GST is a business/self-employment concept, so this only applies to
+  // co-applicants who are themselves self-employed (same filter the GST
+  // subpage's co-applicant loop already uses).
+  const coappGstAutoFetchAttempted = useRef({});
+  useEffect(() => {
+    if (currentStep > 3 || formData.is_salaried) return;
+    if (isBulkInjectedCase) return;
+    formData.applicants.forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT' || app.employment_type !== 'SELF_EMPLOYED') return;
+      const pan = app.pan_number;
+      if (
+        app.pan_verified &&
+        pan &&
+        !app.pan_gst_profile &&
+        !app.pan_gst_fetch_completed &&
+        !coappGstFetchingMap[idx] &&
+        caseId &&
+        formData.customer_id &&
+        coappGstAutoFetchAttempted.current[idx] !== pan
+      ) {
+        coappGstAutoFetchAttempted.current[idx] = pan;
+        handleFetchCoAppGst(idx);
+      } else if (!pan) {
+        coappGstAutoFetchAttempted.current[idx] = null;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.applicants, coappGstFetchingMap, caseId, formData.customer_id, formData.is_salaried, isBulkInjectedCase]);
 
   const checkPanDuplicate = async (pan) => {
     // Tenant-wide duplicate lookup is a DSA workflow; MSME borrowers must not
@@ -949,7 +1038,30 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           savedApps.push(savedApp);
         }
       }
-      setFormData(prev => ({ ...prev, applicants: savedApps }));
+      // addApplicant's response only carries real DB columns — merge back the
+      // client-only pan_gst_*/gst_report_completed annotations (see the case-
+      // load effect and handleFetchCoAppGst above) from the pre-submit state,
+      // matched by identity. Without this, a co-applicant's already-fetched
+      // GST-lookup result would vanish the instant Step 1 is submitted (this
+      // fires on every "Save & Next" from the co-applicants subpage, which
+      // can happen after a co-applicant's GST has already auto-fetched on
+      // this same step), and the auto-fetch effect would then re-run it —
+      // another real paid PAN_FETCH call for data already on hand.
+      setFormData(prev => ({
+        ...prev,
+        applicants: savedApps.map(saved => {
+          const existing = prev.applicants.find(a =>
+            a.type === saved.type && (a.id === saved.id || (a.pan_number && a.pan_number === saved.pan_number))
+          );
+          return existing ? {
+            ...saved,
+            pan_gst_profile: existing.pan_gst_profile,
+            pan_gst_linked_gstins: existing.pan_gst_linked_gstins,
+            pan_gst_fetch_completed: existing.pan_gst_fetch_completed,
+            gst_report_completed: existing.gst_report_completed
+          } : saved;
+        })
+      }));
 
       goToStep(2);
     } catch (error) {
@@ -1800,25 +1912,70 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       co-applicants who are themselves self-employed. Each
                       instance is scoped by applicantId (see GstAnalyticsForm's
                       own applicant_id filtering) so co-applicants never see or
-                      trigger each other's (or the primary's) GST pull. */}
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED').map((coApp, idx) => (
-                      <div key={idx} style={{ borderTop: '1px solid var(--border)' }}>
-                          <GstAnalyticsForm
-                             caseId={caseId}
-                             customerId={formData.customer_id}
-                             applicantId={coApp.id}
-                             applicantType="CO_APPLICANT"
-                             applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
-                             linkedGstins={[]}
-                             onComplete={() => {}}
-                             onRemoved={() => {}}
-                             onboardingMode={mode}
-                             walletBalance={walletBalance}
-                             gstCost={costs.GST_FETCH}
-                             disabled={isBulkInjectedCase}
-                          />
+                      trigger each other's (or the primary's) GST pull.
+                      Carrying the REAL index (realIdx) through the filter —
+                      not the filtered list's own local index — matters here
+                      because handleFetchCoAppGst/coappGstFetchingMap/the
+                      auto-fetch effect above all index into the unfiltered
+                      formData.applicants array; the primary applicant and any
+                      non-self-employed co-applicants earlier in that array
+                      would otherwise silently shift every index here. */}
+                  {formData.applicants && formData.applicants
+                    .map((a, realIdx) => ({ a, realIdx }))
+                    .filter(({ a }) => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED')
+                    .map(({ a: coApp, realIdx }, idx) => {
+                      const coAppFetching = !!coappGstFetchingMap[realIdx];
+                      const coAppFetchFailed = !!coappGstFetchFailedMap[realIdx];
+                      const coAppLinkedGstins = coApp.pan_gst_linked_gstins || [];
+                      // Same "genuinely fetched, came back empty" detection as
+                      // the primary's — lookup ran (pan_gst_profile truthy),
+                      // no GSTINs, and no real GST report already pulled for
+                      // this specific co-applicant.
+                      const coAppNotFound = !!coApp.pan_gst_profile && !coApp.gst_report_completed && coAppLinkedGstins.length === 0;
+                      return (
+                      <div key={coApp.id || realIdx} style={{ borderTop: '1px solid var(--border)' }}>
+                          {!coApp.gst_report_completed && coAppLinkedGstins.length === 0 && (
+                            <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                              {coAppFetching ? (
+                                <PullingIndicator label="Fetching GST records for this PAN…" />
+                              ) : coAppFetchFailed ? (
+                                <>
+                                  <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
+                                  </span>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
+                                </>
+                              ) : coAppNotFound ? (
+                                <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                                </span>
+                              ) : (
+                                <>
+                                  <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={!coApp.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {!coAppNotFound && (
+                            <GstAnalyticsForm
+                               caseId={caseId}
+                               customerId={formData.customer_id}
+                               applicantId={coApp.id}
+                               applicantType="CO_APPLICANT"
+                               applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
+                               linkedGstins={coAppLinkedGstins}
+                               onComplete={() => updateApplicantRow(realIdx, 'gst_report_completed', true)}
+                               onRemoved={() => updateApplicantRow(realIdx, 'gst_report_completed', false)}
+                               onboardingMode={mode}
+                               walletBalance={walletBalance}
+                               gstCost={costs.GST_FETCH}
+                               disabled={isBulkInjectedCase}
+                            />
+                          )}
                       </div>
-                  ))}
+                      );
+                  })}
                 </div>
             </div>
 
