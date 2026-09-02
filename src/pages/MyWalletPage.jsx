@@ -72,8 +72,41 @@ const PRESETS = [
   },
 ];
 
-const REFERENCE_TYPE_LABEL = { RAZORPAY_TOPUP: 'Credits Recharge' };
+// Clean, underscore-free labels for the "Type" badge — reference_type comes
+// straight off the wallet_transactions enum (API_CALL, RAZORPAY_TOPUP, ...),
+// which reads as raw code in a customer-facing log otherwise.
+const REFERENCE_TYPE_LABEL = {
+  API_CALL: 'Debit',
+  RAZORPAY_TOPUP: 'Credits Recharge',
+  ADMIN_TOPUP: 'Admin Topup',
+  REFUND: 'Refund',
+  MANUAL_ADJUSTMENT: 'Manual Adjustment',
+  EMPLOYEE_ALLOCATION: 'Employee Allocation',
+  EMPLOYEE_REVOCATION: 'Employee Revocation',
+};
 const referenceTypeLabel = (type) => REFERENCE_TYPE_LABEL[type] || type;
+
+// Falls back for an api_code the backend couldn't resolve a customer/case for
+// (older rows, or a call that never carried one) — still underscore-free.
+const API_CODE_FALLBACK_LABEL = {
+  GST_FETCH: 'GST Fetch',
+  BUREAU_OBLIGATIONS: 'Bureau Obligations',
+  ITR_ANALYTICS: 'ITR Analytics',
+};
+
+// The Reference column for an API-call debit: GST_FETCH / BUREAU_OBLIGATIONS /
+// ITR_ANALYTICS etc. are internal api_codes, meaningless to a DSA reading
+// their own usage log — swapped for who the call was actually run for
+// ("<Customer> · Case <id>"), which the backend attaches (customer_name/
+// case_id) by joining the api_usage_log the deduction was logged against.
+const transactionReferenceLabel = (t) => {
+  if (t.remarks) return t.remarks;
+  if (t.api_code) {
+    const who = t.customer_name || API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
+    return t.case_id ? `${who} · Case ${t.case_id}` : who;
+  }
+  return '—';
+};
 
 const formatCredits = (n) => `${Number(n || 0).toLocaleString('en-IN')}`;
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -491,7 +524,7 @@ const MyWalletPage = () => {
     },
     {
       key: 'reference', label: 'Reference', width: '30%', padding: '16px 12px',
-      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{t.remarks || t.api_code || '—'}</span>,
+      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{transactionReferenceLabel(t)}</span>,
     },
     {
       key: 'balance_after', label: 'Balance After', align: 'right', width: '20%', padding: '16px 12px',
@@ -729,7 +762,7 @@ const MyWalletPage = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.remarks || t.api_code || '—'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transactionReferenceLabel(t)}</span>
                         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', flexShrink: 0 }}>Bal: {formatCredits(t.balance_after)}</span>
                       </div>
                     </div>
