@@ -243,11 +243,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
 
     return (
         <div style={{ padding: 24 }}>
-            {applicantType === 'CO_APPLICANT' && (
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 16 }}>
-                    {applicantName || 'Co-Applicant'}
-                </div>
-            )}
+            {/* The applicant-name heading now lives in the parent wizard page
+                (rendered unconditionally there, above both this form and the
+                "not applicable" empty state) — this component can render with
+                no visible name context at all when hidden by that state, so
+                duplicating a heading here would only show up in the cases
+                where it's least needed. */}
             {!isSuccess && (
             <>
             <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>

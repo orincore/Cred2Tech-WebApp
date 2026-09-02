@@ -1850,6 +1850,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
                </div>
+                {/* Applicant name — this card and the co-applicant loop below it
+                    share one "GST Profile" header, which by itself doesn't say
+                    WHOSE GST this is. Shown unconditionally (unlike the old
+                    per-instance heading that used to live inside
+                    GstAnalyticsForm) so it stays visible even in the
+                    "not applicable" state below, where GstAnalyticsForm itself
+                    doesn't render at all. */}
+                <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Applicant'}
+                </div>
                 {/* This strip is about the PAN→GSTIN lookup (linked_gstins) only —
                     a separate, weaker signal than the real GST pull. It must not
                     render once the real pull (gst_completed) has succeeded, or it
@@ -1932,8 +1942,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       // no GSTINs, and no real GST report already pulled for
                       // this specific co-applicant.
                       const coAppNotFound = !!coApp.pan_gst_profile && !coApp.gst_report_completed && coAppLinkedGstins.length === 0;
+                      const coAppDisplayName = toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`;
                       return (
                       <div key={coApp.id || realIdx} style={{ borderTop: '1px solid var(--border)' }}>
+                          {/* Same reasoning as the primary's heading above — shown
+                              unconditionally so it's visible even when
+                              GstAnalyticsForm itself is hidden (not-found state). */}
+                          <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                            {coAppDisplayName}
+                          </div>
                           {!coApp.gst_report_completed && coAppLinkedGstins.length === 0 && (
                             <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
                               {coAppFetching ? (
@@ -1963,7 +1980,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                customerId={formData.customer_id}
                                applicantId={coApp.id}
                                applicantType="CO_APPLICANT"
-                               applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
+                               applicantName={coAppDisplayName}
                                linkedGstins={coAppLinkedGstins}
                                onComplete={() => updateApplicantRow(realIdx, 'gst_report_completed', true)}
                                onRemoved={() => updateApplicantRow(realIdx, 'gst_report_completed', false)}
