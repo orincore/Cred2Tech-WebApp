@@ -1243,17 +1243,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         .wizard-page .notice {
           border-radius: 0 !important;
         }
-        /* Dark mode: the shared grey text tokens read too low-contrast on
-           this data-heavy page — bump them to white here specifically,
-           without touching the global theme. */
+        /* --text-secondary/--text-tertiary are identical to --text-primary
+           in the global theme (see index.css) — this page used to "fix" the
+           resulting low-contrast labels by forcing both straight to pure
+           white/black, but that just moved the bug: --text-tertiary also
+           drives every placeholder's color (.form-control::placeholder), so
+           a full-strength placeholder became indistinguishable from real
+           typed text across all 7 steps. Real, distinct muted tones instead
+           of a blunt full-contrast override — secondary for labels/helper
+           text (still clearly readable), tertiary dimmer still for anything
+           meant to read as "hint, not content" (placeholders included). */
         :root.dark .wizard-page {
-          --text-secondary: #ffffff;
-          --text-tertiary: #ffffff;
+          --text-secondary: #c3cce0;
+          --text-tertiary: #8b98bd;
         }
-        /* Light mode: same low-contrast grey complaint — use black instead. */
         :root:not(.dark) .wizard-page {
-          --text-secondary: #000000;
-          --text-tertiary: #000000;
+          --text-secondary: #334155;
+          --text-tertiary: #64748b;
         }
         .hide-scrollbar {
           scrollbar-width: none;
@@ -1959,6 +1965,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                        walletBalance={walletBalance}
                        gstCost={costs.GST_FETCH}
                        disabled={isBulkInjectedCase}
+                       prefillEmail={formData.business_email}
+                       prefillMobile={formData.business_mobile}
                     />
                   )}
 
@@ -2033,6 +2041,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                walletBalance={walletBalance}
                                gstCost={costs.GST_FETCH}
                                disabled={isBulkInjectedCase}
+                               prefillEmail={coApp.email}
+                               prefillMobile={coApp.mobile}
                             />
                           )}
                       </div>

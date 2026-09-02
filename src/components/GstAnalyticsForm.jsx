@@ -22,7 +22,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false }) => {
+const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -34,6 +34,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const [mode, setMode] = useState('IN_SYSTEM');
     const authType = 'PASSWORD';
     const [isManualGstin, setIsManualGstin] = useState(false);
+    // Same select-or-type-your-own pattern as the GSTIN field above — default
+    // to whatever email/mobile this applicant already has on file (from step
+    // 1) instead of making the DSA retype it, while still allowing a
+    // different one to be entered.
+    const [isManualEmail, setIsManualEmail] = useState(!prefillEmail);
+    const [isManualMobile, setIsManualMobile] = useState(!prefillMobile);
 
     const [formData, setFormData] = useState({
         gstin: '',
@@ -41,8 +47,8 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         password: '',
         from_date: `${AUTO_FROM_MONTH}${AUTO_FROM_YEAR}`,
         to_date: `${AUTO_TO_MONTH}${AUTO_TO_YEAR}`,
-        emails: '',
-        mobile_numbers: ''
+        emails: prefillEmail || '',
+        mobile_numbers: prefillMobile || ''
     });
 
     const [loading, setLoading] = useState(false);
@@ -123,6 +129,23 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
             setFormData(prev => ({ ...prev, gstin: activeGstin }));
         }
     }, [linkedGstins]);
+
+    // Same idea as the GSTIN prefill above — this applicant's step-1 email/
+    // mobile can arrive after this component's first mount (case data is
+    // still loading), so re-sync once it does. Only while still on the
+    // "use the registered one" select (not after the DSA has switched to
+    // manual entry), and only overwrites an empty field — never clobbers
+    // something already typed.
+    useEffect(() => {
+        if (prefillEmail && !isManualEmail && !formData.emails) {
+            setFormData(prev => ({ ...prev, emails: prefillEmail }));
+        }
+    }, [prefillEmail, isManualEmail]);
+    useEffect(() => {
+        if (prefillMobile && !isManualMobile && !formData.mobile_numbers) {
+            setFormData(prev => ({ ...prev, mobile_numbers: prefillMobile }));
+        }
+    }, [prefillMobile, isManualMobile]);
 
     const fetchRequests = async () => {
         try {
@@ -408,11 +431,65 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                 <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link To</span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
+                                {/* Same select-or-type-your-own pattern as the GSTIN
+                                    field — defaults to whichever email/mobile this
+                                    applicant already has on file from step 1, so the
+                                    DSA isn't retyping something already captured. */}
                                 <FormField label="Target Emails (comma separated)">
-                                    <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
+                                    {!isManualEmail && prefillEmail ? (
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <select
+                                                className="form-control"
+                                                value={formData.emails}
+                                                onChange={e => {
+                                                    if (e.target.value === '__manual__') {
+                                                        setIsManualEmail(true);
+                                                        setFormData({ ...formData, emails: '' });
+                                                    } else {
+                                                        setFormData({ ...formData, emails: e.target.value });
+                                                    }
+                                                }}
+                                            >
+                                                <option value={prefillEmail}>{prefillEmail} (on file)</option>
+                                                <option value="__manual__">Enter manually...</option>
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
+                                            {prefillEmail && (
+                                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setIsManualEmail(false); setFormData({ ...formData, emails: prefillEmail }); }}>Cancel</button>
+                                            )}
+                                        </div>
+                                    )}
                                 </FormField>
                                 <FormField label="Target Mobile Numbers (comma separated)">
-                                    <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
+                                    {!isManualMobile && prefillMobile ? (
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <select
+                                                className="form-control"
+                                                value={formData.mobile_numbers}
+                                                onChange={e => {
+                                                    if (e.target.value === '__manual__') {
+                                                        setIsManualMobile(true);
+                                                        setFormData({ ...formData, mobile_numbers: '' });
+                                                    } else {
+                                                        setFormData({ ...formData, mobile_numbers: e.target.value });
+                                                    }
+                                                }}
+                                            >
+                                                <option value={prefillMobile}>{prefillMobile} (on file)</option>
+                                                <option value="__manual__">Enter manually...</option>
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
+                                            {prefillMobile && (
+                                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setIsManualMobile(false); setFormData({ ...formData, mobile_numbers: prefillMobile }); }}>Cancel</button>
+                                            )}
+                                        </div>
+                                    )}
                                 </FormField>
                             </div>
                             <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
