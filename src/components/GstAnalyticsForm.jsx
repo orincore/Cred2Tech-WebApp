@@ -22,7 +22,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false }) => {
+const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -59,7 +59,30 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
     // Websockets can be blocked by corporate proxies; this one-shot REST read
     // keeps the component usable in that case until/unless a push arrives.
     const [fallbackRequests, setFallbackRequests] = useState([]);
-    const activeRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
+    // One case can render several of these — one per self-employed applicant
+    // (primary + co-applicants) — so every request list must be scoped to
+    // THIS applicant, the same way ItrAnalyticsForm's selectPullForApplicant
+    // does; both snapshot.gst.requests and the REST fallback already carry
+    // applicant_id per row (see casePullSnapshot.service.js's serializeGst
+    // and external.gst.controller.js's getRequestDetails applicant_id filter).
+    const wantedApplicantId = applicantId == null ? null : Number(applicantId);
+    const allRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
+    const activeRequests = allRequests.filter(r => (r.applicant_id ?? null) === wantedApplicantId);
+
+    // Hoisted above the effects below (moved from further down the file) so
+    // gstPhase can be derived from THIS applicant's own latest request
+    // instead of snapshot.gst.overall.phase, which is a case-wide rollup —
+    // with multiple GstAnalyticsForm instances rendered per case (one per
+    // self-employed applicant), the overall phase would fire every
+    // instance's onComplete/toast the moment ANY one applicant's pull
+    // finished, not just this card's own.
+    const visibleRequests = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
+    const latestRequest = visibleRequests[0] || null;
+    // `phase` is only present on realtime snapshots; the REST fallback shape
+    // has just the raw status, so derive from that when a push hasn't arrived yet.
+    const phase = latestRequest && (latestRequest.phase
+        || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
+            : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
 
     // Neither `snapshot` (starts null until the socket delivers its first
     // push) nor `fallbackRequests` (starts []) carry any synchronous "has
@@ -80,7 +103,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
     // Announce completion exactly once per transition — snapshots arrive every
     // couple of seconds while a pull is live, so reacting to the raw value
     // would re-toast continuously.
-    const gstPhase = snapshot?.gst?.overall?.phase;
+    const gstPhase = phase;
     usePhaseTransition(gstPhase, {
         COMPLETED: () => toast.success('GST report ready!'),
         FAILED: () => toast.error('GST request failed'),
@@ -102,7 +125,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     const fetchRequests = async () => {
         try {
-            const res = await api.get(`/external/gst/requests?case_id=${caseId}`);
+            const res = await api.get(`/external/gst/requests?case_id=${caseId}&applicant_id=${wantedApplicantId ?? 'null'}`);
             if (res.data.success) {
                 setFallbackRequests(res.data.data);
                 if (res.data.data.some(r => r.status === 'REPORT_READY' || r.status === 'COMPLETED')) {
@@ -135,6 +158,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             const payload = {
                 customer_id: customerId,
                 case_id: caseId,
+                applicant_id: applicantId,
                 mode: mode,
                 auth_type: mode === 'IN_SYSTEM' ? authType : null,
                 gstin: formData.gstin,
@@ -201,18 +225,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         }
     };
 
-    // Hoisted out of the old inline IIFE so both the form-visibility check
-    // below AND the status panel can agree on one computation — previously
-    // the form rendered unconditionally while only this panel checked
-    // completion, which is exactly how the fetch form kept showing up
-    // alongside an already-completed "GST data pulled successfully" panel.
-    const visibleRequests = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
-    const latestRequest = visibleRequests[0] || null;
-    // `phase` is only present on realtime snapshots; the REST fallback shape
-    // has just the raw status, so derive from that when a push hasn't arrived yet.
-    const phase = latestRequest && (latestRequest.phase
-        || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
-            : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
     const isSuccess = phase === 'COMPLETED';
     const isDead = phase === 'FAILED';
 
@@ -231,6 +243,11 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     return (
         <div style={{ padding: 24 }}>
+            {applicantType === 'CO_APPLICANT' && (
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 16 }}>
+                    {applicantName || 'Co-Applicant'}
+                </div>
+            )}
             {!isSuccess && (
             <>
             <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>

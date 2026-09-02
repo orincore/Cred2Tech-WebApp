@@ -127,6 +127,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // (case.category === 'SALARIED') — drives which stepper labels show.
     is_salaried: false,
     pan_verified: false,
+    pan_fetch_completed: false,
     linked_gstins: [],
     applicants: [],
     product_type: '',
@@ -305,6 +306,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         is_locked: !!caseData.is_locked,
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
+        // Independent of currentPanProfile/matchingPanProfile above: that join
+        // is scoped through caseData.customer.pan_profiles (a customer_id FK),
+        // which silently misses the cached CustomerPanProfile row whenever the
+        // PAN's fetch previously ran under a different Customer record (e.g. a
+        // repeat applicant re-onboarded into a fresh case) — the profile row
+        // stays valid (pan is the real, globally-unique cache key) but never
+        // shows up in this relation. This backend-set status flag is the same
+        // pattern already used for gst_completed below and does not depend on
+        // that relation at all, so it stays correct even when the join misses.
+        // Without it, a reopened case with a "missed" profile join silently
+        // re-ran the paid PAN_FETCH vendor call (₹20 credits) on every load —
+        // confirmed on case 2187 (3 real re-charges within 2 hours).
+        pan_fetch_completed: caseData.data_pull_status?.pan_status === 'COMPLETE',
         linked_gstins: currentPanProfile?.gstin_records || [],
         applicants: (caseData.applicants || []).map(a => ({ ...a, dob: toDateInputValue(a.dob) })),
         product_type: caseData.product_type || '',
@@ -650,7 +664,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       });
       const data = res.data;
 
-      setFormData(prev => ({ ...prev, pan_profile: data, linked_gstins: data.gst_records || [] }));
+      setFormData(prev => ({ ...prev, pan_profile: data, pan_fetch_completed: true, linked_gstins: data.gst_records || [] }));
       toast.success('GST Records Fetched Successfully!');
     } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to fetch GST';
@@ -719,6 +733,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       formData.pan_verified &&
       pan &&
       !formData.pan_profile &&
+      // Belt-and-suspenders on top of !formData.pan_profile: that check can
+      // miss a genuinely-completed pull (see pan_fetch_completed's own
+      // comment above, set from case load) — without this, reopening such a
+      // case re-fired the paid PAN_FETCH vendor call every single time.
+      !formData.pan_fetch_completed &&
       !gstFetching &&
       caseId &&
       formData.customer_id &&
@@ -728,7 +747,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       handleFetchGst();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan, caseId, formData.customer_id, formData.is_salaried]);
+  }, [currentStep, formData.pan_verified, formData.pan_profile, formData.pan_fetch_completed, gstFetching, formData.business_pan, caseId, formData.customer_id, formData.is_salaried]);
 
   // Auto-verify each co-applicant's PAN once it's a full 10 characters — same
   // no-manual-click pattern as the primary PAN above, guarded per-index so a
@@ -1737,6 +1756,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <GstAnalyticsForm
                      caseId={caseId}
                      customerId={formData.customer_id}
+                     applicantId={null}
+                     applicantType="PRIMARY"
                      linkedGstins={formData.linked_gstins}
                      gstCompleted={formData.gst_completed}
                      onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
@@ -1746,6 +1767,31 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                      gstCost={costs.GST_FETCH}
                      disabled={isBulkInjectedCase}
                   />
+
+                  {/* Same self-employed co-applicant loop as ITR below — GST is
+                      a business/self-employment concept, so only applies to
+                      co-applicants who are themselves self-employed. Each
+                      instance is scoped by applicantId (see GstAnalyticsForm's
+                      own applicant_id filtering) so co-applicants never see or
+                      trigger each other's (or the primary's) GST pull. */}
+                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED').map((coApp, idx) => (
+                      <div key={idx} style={{ borderTop: '1px solid var(--border)' }}>
+                          <GstAnalyticsForm
+                             caseId={caseId}
+                             customerId={formData.customer_id}
+                             applicantId={coApp.id}
+                             applicantType="CO_APPLICANT"
+                             applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
+                             linkedGstins={[]}
+                             onComplete={() => {}}
+                             onRemoved={() => {}}
+                             onboardingMode={mode}
+                             walletBalance={walletBalance}
+                             gstCost={costs.GST_FETCH}
+                             disabled={isBulkInjectedCase}
+                          />
+                      </div>
+                  ))}
                 </div>
             </div>
 
