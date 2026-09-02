@@ -280,9 +280,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // flips primaryApp.pan_verified back to true directly, independent
       // of this check).
       const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
+      // Same "consent must be explicit per case" principle mobile_verified
+      // below already enforces — a Customer/CustomerPanProfile row is shared
+      // across every case for the same PAN, so without this gate, a BRAND
+      // NEW case for a customer who'd already consented on some earlier,
+      // unrelated case silently showed that other case's PAN-verified name,
+      // DOB, and GST status the moment the page loaded — before this case's
+      // own customer had ever approved anything. Only once THIS case's own
+      // primary applicant has otp_verified (its consent) does an existing
+      // profile get reused at all; before that, none of it is shown, exactly
+      // like a customer who has genuinely never consented anywhere.
+      const consentGrantedForThisCase = !!primaryApp?.otp_verified;
       const matchingPanProfile = caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null;
       const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
-      const panVerifiedNow = !!primaryApp?.pan_verified || (!!matchingPanProfile && !wasResetOnThisCase);
+      const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
       const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
 
       setCaseId(caseData.id);
