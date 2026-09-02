@@ -88,44 +88,75 @@ jobs:
           printf '%s\n' "187.127.150.119 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXYdZ7LNWwSouKUAO7rWhT8YyAvU2a86Yt8o9fEvjkmt+8dvXoiIcHHgAWKteWQiiZ8XErhO8uOaDAfEFnWEv8=" >> ~/.ssh/known_hosts
           printf '%s\n' "187.127.150.119 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAgCzT99SI9ryEH9PuMh1tCkSDOGMaYjFKmVqgApHAbZ" >> ~/.ssh/known_hosts
 
+      # The VPS's sshd occasionally drops/times out an incoming connection
+      # (transient, not an auth or host-key problem — DEPLOYMENT.md's own
+      # troubleshooting note used to say "just re-run it"). `retry` below
+      # makes every SSH-touching step below self-heal from that instead of
+      # needing a manual `gh run rerun --failed`. -o ConnectTimeout=15 on
+      # every ssh/rsync invocation matters just as much as the retry loop
+      # itself — without it, a hung attempt can sit for minutes on the
+      # OS-level default before failing, which would make even 3 retries
+      # slower than just re-running the job by hand.
+      - name: Install SSH retry helper
+        run: |
+          cat > ~/retry.sh <<'RETRY_HELPER'
+          retry() {
+            local max=3 delay=10 attempt=1
+            until "$@"; do
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::Command failed after $max attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $attempt/$max failed, retrying in ${delay}s..." >&2
+              attempt=$((attempt+1))
+              sleep "$delay"
+            done
+          }
+          RETRY_HELPER
+
       - name: Create remote release directory
         run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          source ~/retry.sh
+          retry ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "mkdir -p /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }}"
 
       - name: Rsync build output
         run: |
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+          source ~/retry.sh
+          retry rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o StrictHostKeyChecking=yes" \
             dist/ \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }}/"
 
       - name: Switch symlink + cleanup old releases
         run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s <<EOF
-            set -e
-            ln -sfn /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }} /opt/cred2tech/webapp-dev/current
-            echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ steps.meta.outputs.git_commit }}"
-            cd /opt/cred2tech/webapp-dev/releases
-            # Best-effort: an old release dir this deploy user doesn't own
-            # (e.g. left behind by a one-off manual/root deploy) must not
-            # fail the whole job — the site's already live at this point.
-            ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf 2>&1 | tee /tmp/cleanup.log || true
-            if [ -s /tmp/cleanup.log ]; then
-              echo "::warning::Old release cleanup had errors (see below) — site is live, but disk cleanup needs a look:"
-              cat /tmp/cleanup.log
-            fi
-            echo "Cleanup done. Retained last 5 releases."
-          EOF
+          source ~/retry.sh
+          cat > /tmp/switch-symlink.sh <<'REMOTE_SCRIPT'
+          set -e
+          ln -sfn /opt/cred2tech/webapp-dev/releases/${{ steps.meta.outputs.release_ts }} /opt/cred2tech/webapp-dev/current
+          echo "Live: branch=${{ steps.meta.outputs.branch }} release=${{ steps.meta.outputs.release_ts }} commit=${{ steps.meta.outputs.git_commit }}"
+          cd /opt/cred2tech/webapp-dev/releases
+          # Best-effort: an old release dir this deploy user doesn't own
+          # (e.g. left behind by a one-off manual/root deploy) must not
+          # fail the whole job — the site's already live at this point.
+          ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf 2>&1 | tee /tmp/cleanup.log || true
+          if [ -s /tmp/cleanup.log ]; then
+            echo "::warning::Old release cleanup had errors (see below) — site is live, but disk cleanup needs a look:"
+            cat /tmp/cleanup.log
+          fi
+          echo "Cleanup done. Retained last 5 releases."
+          REMOTE_SCRIPT
+          retry ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -s < /tmp/switch-symlink.sh
 
       - name: Smoke test
         run: |
+          source ~/retry.sh
           # Runs on the VPS itself, not the GH runner. --resolve pins the
           # real hostname to localhost for both the TCP connection and TLS
           # SNI (nginx picks the vhost/cert off SNI, not the Host header, so
           # a Host-header-only override on an IP/localhost URL would hit the
           # wrong cert's default vhost).
-          CODE=$(ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          CODE=$(retry ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "curl -s -o /dev/null -w '%{http_code}' --resolve dev.app.cred2tech.com:443:127.0.0.1 https://dev.app.cred2tech.com/")
           echo "HTTP $CODE"
           [ "$CODE" = "200" ] || { echo "::error::Smoke test failed: expected 200, got $CODE"; exit 1; }
