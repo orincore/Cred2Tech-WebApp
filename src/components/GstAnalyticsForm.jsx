@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, FileText, Download, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
@@ -48,6 +48,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const [loading, setLoading] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     // Live status is pushed from the server (see hooks/useCasePullStatus) — no
     // client-side polling. The server keeps one sync loop per case, so this
@@ -250,119 +251,195 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 duplicating a heading here would only show up in the cases
                 where it's least needed. */}
             {!isSuccess && (
-            <>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                    <input type="radio" name="gstMode" value="IN_SYSTEM" checked={mode === 'IN_SYSTEM'} onChange={() => setMode('IN_SYSTEM')} />
-                    Enter Details in System
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                    <input type="radio" name="gstMode" value="AUTH_LINK" checked={mode === 'AUTH_LINK'} onChange={() => setMode('AUTH_LINK')} />
-                    Send Auth Link to Customer
-                </label>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-                <FormField label="SELECT GSTIN" required>
-                    {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <select
-                                className="form-control"
-                                value={formData.gstin}
-                                onChange={e => {
-                                    if (e.target.value === '__manual__') {
-                                        setIsManualGstin(true);
-                                        setFormData({ ...formData, gstin: '' });
-                                    } else {
-                                        setFormData({ ...formData, gstin: e.target.value });
-                                    }
-                                }}
-                            >
-                                <option value="">Select GSTIN</option>
-                                {linkedGstins.map(g => (
-                                    <option key={g.gstin} value={g.gstin}>
-                                        {g.gstin}{isUsableEntityName(g.registration_name) ? ` (${g.registration_name})` : ''} - {formatStatusLabel(g.status)}
-                                    </option>
-                                ))}
-                                <option value="__manual__">Enter manually...</option>
-                            </select>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
-                            {linkedGstins && linkedGstins.length > 0 && (
-                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsManualGstin(false)}>Cancel</button>
-                            )}
-                        </div>
-                    )}
-                </FormField>
-            </div>
-
-            {/* Username + password grouped together in one bordered box, side
-                by side — they're one logical credential pair, not two
-                unrelated fields, so they shouldn't read as separate rows. */}
-            {mode === 'IN_SYSTEM' && (
-                <div style={{ background: 'var(--bg-elevated)', padding: 16, borderRadius: 0, marginBottom: 16, border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-                        <FormField label="GST Username" required>
-                            <input
-                                type="text"
-                                value={formData.username}
-                                onChange={e => setFormData({...formData, username: e.target.value})}
-                                className="form-control"
-                                placeholder="GST portal username"
-                                autoComplete="off"
-                                name="gst-username-no-autofill"
-                            />
-                        </FormField>
-                        <FormField label="GST Password" required>
-                            <input
-                                type="password"
-                                value={formData.password}
-                                onChange={e => setFormData({...formData, password: e.target.value})}
-                                className="form-control"
-                                placeholder="GST portal password"
-                                autoComplete="new-password"
-                                name="gst-password-no-autofill"
-                            />
-                        </FormField>
+            <div style={{
+                border: '1px solid var(--border)',
+                background: 'var(--bg-surface)',
+                marginBottom: 24,
+            }}>
+                {/* Section header — gives this block presence instead of
+                    dropping straight into a bare radio row. */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '14px 20px',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--bg-elevated)',
+                }}>
+                    <div style={{
+                        width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(79,70,229,0.12)', color: '#4f46e5', flexShrink: 0,
+                    }}>
+                        <Building2 size={16} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>GST Verification</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Pull the last 24 months of GST returns for this business</div>
                     </div>
                 </div>
-            )}
 
-            {mode === 'AUTH_LINK' && (
-                 <div style={{ marginBottom: 16 }}>
-                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-                         <FormField label="Target Emails (comma separated)">
-                            <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
-                         </FormField>
-                         <FormField label="Target Mobile Numbers (comma separated)">
-                            <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
-                         </FormField>
-                     </div>
-                     <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                        At least one email or mobile number is required — the customer receives the auth link there, not through the GST username/password fields above.
-                     </p>
-                 </div>
-            )}
+                <div style={{ padding: 20 }}>
+                    {/* Segmented mode toggle — same two options as before, styled
+                        as tabs instead of raw radio inputs. */}
+                    <div style={{
+                        display: 'inline-flex', padding: 3, marginBottom: 20,
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                        width: isMobile ? '100%' : 'auto',
+                    }}>
+                        {[
+                            { value: 'IN_SYSTEM', label: 'Enter Details in System' },
+                            { value: 'AUTH_LINK', label: 'Send Auth Link to Customer' },
+                        ].map((opt) => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setMode(opt.value)}
+                                style={{
+                                    flex: isMobile ? 1 : 'none',
+                                    padding: '7px 16px',
+                                    fontSize: 12.5, fontWeight: 700,
+                                    border: 'none', cursor: 'pointer',
+                                    background: mode === opt.value ? '#4f46e5' : 'transparent',
+                                    color: mode === opt.value ? '#fff' : 'var(--text-secondary)',
+                                    transition: 'background 0.15s, color 0.15s',
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
 
-            {!isMsme && gstCost != null && walletBalance < gstCost && (
-                <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
-                    <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
+                    <div style={{ marginBottom: 20 }}>
+                        <FormField label="SELECT GSTIN" required>
+                            {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <select
+                                        className="form-control"
+                                        value={formData.gstin}
+                                        onChange={e => {
+                                            if (e.target.value === '__manual__') {
+                                                setIsManualGstin(true);
+                                                setFormData({ ...formData, gstin: '' });
+                                            } else {
+                                                setFormData({ ...formData, gstin: e.target.value });
+                                            }
+                                        }}
+                                    >
+                                        <option value="">Select GSTIN</option>
+                                        {linkedGstins.map(g => (
+                                            <option key={g.gstin} value={g.gstin}>
+                                                {g.gstin}{isUsableEntityName(g.registration_name) ? ` (${g.registration_name})` : ''} - {formatStatusLabel(g.status)}
+                                            </option>
+                                        ))}
+                                        <option value="__manual__">Enter manually...</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
+                                    {linkedGstins && linkedGstins.length > 0 && (
+                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsManualGstin(false)}>Cancel</button>
+                                    )}
+                                </div>
+                            )}
+                        </FormField>
+                    </div>
+
+                    {/* Username + password grouped together in one bordered box,
+                        side by side — they're one logical credential pair, not
+                        two unrelated fields, so they shouldn't read as separate
+                        rows. Left accent bar + lock icon mark it as the
+                        sensitive-input block. */}
+                    {mode === 'IN_SYSTEM' && (
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+                                <Lock size={13} color="#4f46e5" />
+                                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Portal Credentials</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
+                                <FormField label="GST Username" required>
+                                    <input
+                                        type="text"
+                                        value={formData.username}
+                                        onChange={e => setFormData({...formData, username: e.target.value})}
+                                        className="form-control"
+                                        placeholder="GST portal username"
+                                        autoComplete="off"
+                                        name="gst-username-no-autofill"
+                                    />
+                                </FormField>
+                                <FormField label="GST Password" required>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={formData.password}
+                                            onChange={e => setFormData({...formData, password: e.target.value})}
+                                            className="form-control"
+                                            placeholder="GST portal password"
+                                            autoComplete="new-password"
+                                            name="gst-password-no-autofill"
+                                            style={{ paddingRight: 36 }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword((s) => !s)}
+                                            tabIndex={-1}
+                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                            style={{
+                                                position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                background: 'transparent', border: 'none', cursor: 'pointer',
+                                                color: 'var(--text-tertiary)',
+                                            }}
+                                        >
+                                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                        </button>
+                                    </div>
+                                </FormField>
+                            </div>
+                            <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
+                                Sent directly to the GST portal to pull the report — never stored.
+                            </p>
+                        </div>
+                    )}
+
+                    {mode === 'AUTH_LINK' && (
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+                                <Mail size={13} color="#4f46e5" />
+                                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link To</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
+                                <FormField label="Target Emails (comma separated)">
+                                    <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
+                                </FormField>
+                                <FormField label="Target Mobile Numbers (comma separated)">
+                                    <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
+                                </FormField>
+                            </div>
+                            <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
+                                At least one email or mobile number is required — the customer receives the auth link there, not through the GST username/password fields above.
+                            </p>
+                        </div>
+                    )}
+
+                    {!isMsme && gstCost != null && walletBalance < gstCost && (
+                        <div style={{ padding: 12, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 20 }}>
+                            <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={handleCreateRequest}
+                        disabled={disabled || loading || !formData.gstin || (!isMsme && gstCost != null && walletBalance < gstCost)}
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                        title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
+                    >
+                        <Send size={14} />
+                        {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
+                    </button>
                 </div>
-            )}
-
-            <button
-                type="button"
-                onClick={handleCreateRequest}
-                disabled={disabled || loading || !formData.gstin || (!isMsme && gstCost != null && walletBalance < gstCost)}
-                className="btn btn-primary"
-                style={{ marginBottom: 24 }}
-                title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
-            >
-                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
-            </button>
-            </>
+            </div>
             )}
 
             {latestRequest && (
