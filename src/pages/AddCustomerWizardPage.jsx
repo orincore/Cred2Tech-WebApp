@@ -1212,16 +1212,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // clicked past with any of them still empty, same treatment as
   // AddSalariedCustomerWizardPage's equivalent button.
   const isProfessional = formData.is_professional === 'true' || formData.is_professional === true;
-  // Every required field on this subpage EXCEPT consent — gates the
-  // Request Consent button itself (asking for consent before the rest of
-  // the form is even filled in is pointless) and, once consent is granted,
-  // is the only thing left gating Save & Next (mobile_verified is
-  // guaranteed true in that branch already).
-  const step1BusinessFieldsValid = !!formData.business_pan
+  // Everything the customer can actually fill in BEFORE consent exists —
+  // gates the Request Consent button itself. business_name/dob are
+  // deliberately excluded: they're read-only, auto-fetched by PAN
+  // verification, which itself only auto-fires once consent is granted (see
+  // the panAutoVerifyAttempted effect above) — requiring dob here used to
+  // create an unbreakable deadlock where consent could never be requested
+  // because dob didn't exist yet, and dob could never exist because consent
+  // hadn't been requested yet.
+  const step1ConsentFieldsValid = !!formData.business_pan
+    && !!formData.business_mobile
     && !!formData.business_email
     && !!formData.pincode
-    && !!formData.dob
     && (!isProfessional || !!formData.profession_type);
+  // Everything above, PLUS dob — by the time this is checked (once consent
+  // is granted), PAN auto-verify has already run and filled it in, so this
+  // only ever gates the *next* step (Save & Next), never Request Consent.
+  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob;
   const step1BusinessValid = step1BusinessFieldsValid && !!formData.mobile_verified;
   // Gates the final Step 1 submit ("Continue to Financials") in addition to
   // the business-subpage fields above — handleStep1Submit also requires
@@ -1575,6 +1582,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </FormField>
                 </div>
 
+                {(formData.is_professional === true || formData.is_professional === 'true') && (
+                  <div className="grid-2" style={{ marginBottom: 24 }}>
+                    <FormField label="Select Your Profession" name="profession_type" required>
+                      <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
+                        <option value="">Select Profession</option>
+                        <option value="CA">CA</option>
+                        <option value="Lawyer">Lawyer</option>
+                        <option value="Doctor">Doctor</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </FormField>
+                  </div>
+                )}
+
                 <div className="grid-2" style={{ marginBottom: 24 }}>
                   <FormField label="Business Name / Full Name" name="business_name" disabled>
                     <input
@@ -1598,22 +1619,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     />
                   </FormField>
                 </div>
-
-                {(formData.is_professional === true || formData.is_professional === 'true') && (
-                  <div className="grid-2">
-                    <FormField label="Select Your Profession" name="profession_type" required>
-                      <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
-                        <option value="">Select Profession</option>
-                        <option value="CA">CA</option>
-                        <option value="Lawyer">Lawyer</option>
-                        <option value="Doctor">Doctor</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </FormField>
-                  </div>
-                )}
-
-                
               </div>
             </div>
 
@@ -1630,9 +1635,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <button
                     type="button"
                     onClick={handleRequestConsent}
-                    disabled={saving || !step1BusinessFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                    disabled={saving || !step1ConsentFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
                     className="btn btn-primary btn-lg"
-                    title={!step1BusinessFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                   >
                     {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
                   </button>
