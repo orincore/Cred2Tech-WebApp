@@ -450,7 +450,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                                     }
                                                 }}
                                             >
-                                                <option value={prefillEmail}>{prefillEmail} (on file)</option>
+                                                <option value={prefillEmail}>{prefillEmail}</option>
                                                 <option value="__manual__">Enter manually...</option>
                                             </select>
                                         </div>
@@ -478,7 +478,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                                     }
                                                 }}
                                             >
-                                                <option value={prefillMobile}>{prefillMobile} (on file)</option>
+                                                <option value={prefillMobile}>{prefillMobile}</option>
                                                 <option value="__manual__">Enter manually...</option>
                                             </select>
                                         </div>
