@@ -14,6 +14,7 @@ const MfaChallengePage = lazy(() => import('../pages/MfaChallengePage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const ConsentPage = lazy(() => import('../pages/ConsentPage'));
+const ItrAuthPage = lazy(() => import('../pages/ItrAuthPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
@@ -99,6 +100,15 @@ const AppRouter = () => (
           <Route path="/SUNBY/:token" element={<ConsentPage />} />
           <Route path="/c/:token" element={<ConsentPage />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
+          {/* Same domain+senderId+token shape as the consent link above, with
+              an extra "itr" segment so the router can tell the two link types
+              apart at a glance (both hit /SUNBY/... otherwise) — see
+              itrAuthLink.service.js's requestItrAuthLink(). Delivered by
+              email today; kept under the DLT sender-ID segment so the same
+              link shape is SMS-ready later without a URL scheme change. */}
+          <Route path="/SUNBY/itr/:token" element={<ItrAuthPage />} />
+          <Route path="/c/itr/:token" element={<ItrAuthPage />} />
+          <Route path="/itr-auth" element={<ItrAuthPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 

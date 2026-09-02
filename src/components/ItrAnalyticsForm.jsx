@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     AlertCircle,
-    FileText, Download, Trash2
+    FileText, Download, Trash2, Mail, XCircle
 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
@@ -10,6 +10,7 @@ import Skeleton from './ui/Skeleton';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
+import { itrAuthLinkService } from '../api/itrAuthLinkService';
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -78,9 +79,14 @@ const ItrAnalyticsForm = ({
         setLocalExcelUrl(existingRecord.excel_url || null);
     }, [existingRecord, localReferenceId]);
 
+    // A revoked/expired auth link also resolves to phase FAILED (see
+    // casePullSnapshot.service.js's describeItrAuthLink) — that's the DSA's
+    // own deliberate action (or an inert timeout), not a provider failure,
+    // and the cancel button below already gives its own confirmation toast.
+    // Only a real provider failure on an actual pull should trigger this one.
     usePhaseTransition(livePull ? phase : null, {
         COMPLETED: () => toast.success('ITR analytics ready!'),
-        FAILED: () => toast.error('ITR analytics processing failed at provider'),
+        FAILED: () => { if (!livePull?.is_auth_link_request) toast.error('ITR analytics processing failed at provider'); },
     });
 
     // Hand the finished payload up once it exists — also covers the case where
@@ -101,10 +107,56 @@ const ItrAnalyticsForm = ({
     const [cancelling, setCancelling] = useState(false);
     const [refetching, setRefetching] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [sendingLink, setSendingLink] = useState(false);
+    const [cancellingLink, setCancellingLink] = useState(false);
 
     const incomePreview = livePull?.income_preview || null;
 
+    // A link created but never yet used by the customer — see
+    // casePullSnapshot.service.js's serializeItrAuthLink. This is the only
+    // state where "Fetch ITR" should be replaced by a Cancel Request action:
+    // once the customer submits, livePull becomes the real ItrAnalyticsRequest
+    // row (reference_id present) and the ordinary PROCESSING branch below
+    // takes back over automatically.
+    const isAuthLinkPending = status === 'AWAITING_CUSTOMER_ACTION' && livePull?.is_auth_link_request;
+    const authLinkId = livePull?.auth_link_id;
+
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
+
+    // Emails the customer a link to enter their own ITR portal PAN/password —
+    // an alternative to the DSA keying it in directly below. No data is
+    // pulled by this call itself; it only sends the link and flips this row
+    // to "Action needed — waiting for the customer" until they submit it.
+    const handleSendAuthLink = async () => {
+        setSendingLink(true);
+        try {
+            await itrAuthLinkService.requestLink({ customer_id: customerId, case_id: caseId, applicant_id: applicantId });
+            toast.success('ITR authorisation link sent to the customer');
+            setIsOpen(false);
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to send the ITR auth link');
+        } finally {
+            setSendingLink(false);
+        }
+    };
+
+    // Revokes a still-pending link before the customer has used it — if they
+    // open it afterwards, the page shows "This request has been revoked."
+    const handleCancelAuthLink = async () => {
+        if (!authLinkId) return;
+        if (!window.confirm('Cancel this ITR authorisation link? The customer will no longer be able to use it.')) return;
+        setCancellingLink(true);
+        try {
+            await itrAuthLinkService.cancelLink(authLinkId);
+            toast.success('ITR auth link cancelled');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel the ITR auth link');
+        } finally {
+            setCancellingLink(false);
+        }
+    };
 
     const handleAnalyze = async () => {
         if (!pan) return toast.error('PAN is required');
@@ -214,7 +266,7 @@ const ItrAnalyticsForm = ({
     return (
         <div style={{
             backgroundColor: 'var(--bg-base)',
-            border: `1px solid ${status === 'COMPLETED' ? 'var(--success)' : status === 'FAILED' ? 'var(--error)' : status === 'PROCESSING' ? 'var(--warning)' : 'var(--border)'}`,
+            border: `1px solid ${status === 'COMPLETED' ? 'var(--success)' : status === 'FAILED' ? 'var(--error)' : (status === 'PROCESSING' || isAuthLinkPending) ? 'var(--warning)' : 'var(--border)'}`,
             borderRadius: 0,
             overflow: 'hidden'
         }}>
@@ -230,9 +282,12 @@ const ItrAnalyticsForm = ({
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{applicantName}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{roleLabel}</span>
+                    {isAuthLinkPending && livePull?.recipient_email && (
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            Auth link sent to {livePull.recipient_email}
+                        </span>
+                    )}
                 </div>
-
-                
 
                 {/* Right: Pills + Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
@@ -240,7 +295,19 @@ const ItrAnalyticsForm = ({
                     <PullStatusTracker phase={phase} label={phaseLabel} progress={progress} />
 
                     {/* Action Button */}
-                    {status === 'PROCESSING' ? (
+                    {isAuthLinkPending ? (
+                        // Link sent, customer hasn't submitted it yet — no data has
+                        // been touched, so the only action available is revoking it.
+                        <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={handleCancelAuthLink}
+                            disabled={cancellingLink}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                        >
+                            <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                        </button>
+                    ) : status === 'PROCESSING' ? (
                         <button
                             type="button"
                             className="btn btn-ghost btn-sm"
@@ -291,17 +358,35 @@ const ItrAnalyticsForm = ({
                             </button>
                         </div>
                     ) : (
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => setIsOpen(!isOpen)}
-                            disabled={disabled}
-                            title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
-                        >
-                            {isMsme
-                                ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
-                                : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setIsOpen(!isOpen)}
+                                disabled={disabled}
+                                title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
+                            >
+                                {isMsme
+                                    ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
+                                    : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
+                            </button>
+                            {/* DSA-only: email the customer a link to enter their own
+                                PAN/password instead — never available in MSME self-service
+                                mode, since there the customer already is the one filling
+                                the form in directly. */}
+                            {!isMsme && (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={handleSendAuthLink}
+                                    disabled={disabled || sendingLink || walletBalance < itrCost}
+                                    title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : (walletBalance < itrCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${itrCost}.` : "Email the customer a link to enter their own ITR portal credentials")}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <Mail size={13} /> {sendingLink ? 'Sending…' : 'Send Auth Link'}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -338,7 +423,7 @@ const ItrAnalyticsForm = ({
             {/* Expando: credential entry — only relevant pre-completion, since the
                 completed state's only action (Excel download) already lives in the
                 summary row above; no separate "Analytics Summary" panel needed. */}
-            {isOpen && status !== 'COMPLETED' && (
+            {isOpen && status !== 'COMPLETED' && !isAuthLinkPending && (
                 <div style={{ padding: 24, backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         
