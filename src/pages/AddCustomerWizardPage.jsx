@@ -16,6 +16,7 @@ import api from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
 import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import GstPullStatusBanner from '../components/case/GstPullStatusBanner';
+import ItrPullStatusBanner from '../components/case/ItrPullStatusBanner';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
@@ -1296,9 +1297,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         onStepClick={(step) => goToStep(step)}
       />
 
-      {/* Case-wide, not step-scoped — stays visible while a GST pull kicked
-          off on step 2 keeps running in the background on any other step. */}
+      {/* Case-wide, not step-scoped — stays visible while a GST/ITR pull
+          kicked off on step 2 keeps running in the background on any other
+          step (ITR: whether the DSA entered credentials directly or the
+          customer authorised it via an emailed auth link). */}
       {!formData.is_salaried && <GstPullStatusBanner caseId={caseId} />}
+      {!formData.is_salaried && <ItrPullStatusBanner caseId={caseId} />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {currentStep === 1 && (

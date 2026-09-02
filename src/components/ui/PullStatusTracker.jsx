@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 /**
  * Animated live status for a data pull (GST / ITR / bank statement).
@@ -63,10 +63,13 @@ const StatusPill = ({ phase, style }) => {
         whiteSpace: 'nowrap',
       }}
     >
+      {/* AWAITING_CUSTOMER used to get a static Clock icon instead of the
+          working-dots animation every other live phase has — looked dead
+          rather than "still waiting on something", so it now animates like
+          the rest of LIVE_PHASES. */}
       {phase === 'COMPLETED' ? <CheckCircle2 size={13} />
         : phase === 'FAILED' ? <AlertCircle size={13} />
-          : phase === 'AWAITING_CUSTOMER' ? <Clock size={13} />
-            : isLive ? <WorkingDots color={style.color} /> : null}
+          : isLive ? <WorkingDots color={style.color} /> : null}
       {style.text}
     </span>
   );

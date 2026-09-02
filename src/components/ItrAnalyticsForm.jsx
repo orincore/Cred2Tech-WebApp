@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     AlertCircle,
-    FileText, Download, Trash2, Mail, XCircle
+    FileText, Download, Trash2, Mail, XCircle, RefreshCw
 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
@@ -297,16 +297,32 @@ const ItrAnalyticsForm = ({
                     {/* Action Button */}
                     {isAuthLinkPending ? (
                         // Link sent, customer hasn't submitted it yet — no data has
-                        // been touched, so the only action available is revoking it.
-                        <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={handleCancelAuthLink}
-                            disabled={cancellingLink}
-                            style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
-                        >
-                            <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
-                        </button>
+                        // been touched, so the only actions available are re-sending
+                        // it (e.g. the customer says they never got the email, or the
+                        // first one expired) or revoking it. Resend reuses the same
+                        // requestItrAuthLink call Send Auth Link does — it already
+                        // supersedes the still-pending link and issues a fresh one.
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleSendAuthLink}
+                                disabled={sendingLink}
+                                title="Send a fresh auth link — the current one will be revoked"
+                                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                                <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={handleCancelAuthLink}
+                                disabled={cancellingLink}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                            >
+                                <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                            </button>
+                        </div>
                     ) : status === 'PROCESSING' ? (
                         <button
                             type="button"
