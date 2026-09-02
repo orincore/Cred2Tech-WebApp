@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban } from 'lucide-react';
 import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
@@ -141,6 +141,24 @@ const ProfilePage = () => {
   const [revokeDeviceTarget, setRevokeDeviceTarget] = useState(null); // { id, device_label } | null
   const [revokingDevice, setRevokingDevice] = useState(false);
 
+  // "Active Sessions" — real logins auth.middleware.js checks on every
+  // request (distinct from trusted devices above, which only skip the MFA
+  // challenge). Revoking one logs that device out immediately.
+  const [sessions, setSessions] = useState(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokeSessionTarget, setRevokeSessionTarget] = useState(null); // { id, device_label, isCurrentDevice } | null
+  const [revokingSession, setRevokingSession] = useState(false);
+  const [banSessionTarget, setBanSessionTarget] = useState(null); // { id, device_label, isCurrentDevice, ip_address } | null
+  const [banningSession, setBanningSession] = useState(false);
+
+  // "Blocked Devices" — everything Ban Device above has blocked; Unban
+  // reverses it (the device just goes back to logging in normally, it does
+  // not restore the old session).
+  const [blockedDevices, setBlockedDevices] = useState(null);
+  const [blockedDevicesLoading, setBlockedDevicesLoading] = useState(false);
+  const [unbanTarget, setUnbanTarget] = useState(null); // { id, ip_address } | null
+  const [unbanning, setUnbanning] = useState(false);
+
   const loadMfaStatus = async () => {
     setMfaLoading(true);
     try {
@@ -165,10 +183,36 @@ const ProfilePage = () => {
     }
   };
 
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const data = await mfaApi.listSessions();
+      setSessions(data);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const loadBlockedDevices = async () => {
+    setBlockedDevicesLoading(true);
+    try {
+      const data = await mfaApi.listBlockedDevices();
+      setBlockedDevices(data);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBlockedDevicesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeSection === 'mfa' && !isMsmeUser) {
       if (!mfaStatus) loadMfaStatus();
       if (!trustedDevices) loadTrustedDevices();
+      if (!sessions) loadSessions();
+      if (!blockedDevices) loadBlockedDevices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
@@ -188,6 +232,78 @@ const ProfilePage = () => {
       toast.error(getErrorMessage(err));
     } finally {
       setRevokingDevice(false);
+    }
+  };
+
+  const openRevokeSession = (session) => setRevokeSessionTarget(session);
+  const closeRevokeSession = () => setRevokeSessionTarget(null);
+
+  const confirmRevokeSession = async () => {
+    if (!revokeSessionTarget) return;
+    setRevokingSession(true);
+    try {
+      await mfaApi.revokeSession(revokeSessionTarget.id);
+      // Revoking the row already flagged "This device" on the list is this
+      // DSA logging themselves out right now — the backend's own check
+      // (comparing the revoked token to the request's own bearer token)
+      // would reach the same conclusion, but the list already told us
+      // client-side, so there's no need to inspect the response for it.
+      if (revokeSessionTarget.isCurrentDevice) {
+        toast.success('Signed out of this device.');
+        logout();
+        return;
+      }
+      toast.success('Session revoked — that device has been signed out.');
+      setRevokeSessionTarget(null);
+      await loadSessions();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setRevokingSession(false);
+    }
+  };
+
+  const openBanSession = (session) => setBanSessionTarget(session);
+  const closeBanSession = () => setBanSessionTarget(null);
+
+  const confirmBanSession = async () => {
+    if (!banSessionTarget) return;
+    setBanningSession(true);
+    try {
+      const result = await mfaApi.banSessionDevice(banSessionTarget.id);
+      // Same "logged out, no further usage" rule as revoke — banning your
+      // own current device signs you out immediately too, not just the
+      // *other* device it was meant for.
+      if (banSessionTarget.isCurrentDevice || result?.revokedCurrentDevice) {
+        toast.success(result?.message || 'Device blocked and signed out.');
+        logout();
+        return;
+      }
+      toast.success(result?.message || 'Device blocked — it can no longer log in to this account.');
+      setBanSessionTarget(null);
+      await Promise.all([loadSessions(), loadBlockedDevices()]);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBanningSession(false);
+    }
+  };
+
+  const openUnban = (device) => setUnbanTarget(device);
+  const closeUnban = () => setUnbanTarget(null);
+
+  const confirmUnban = async () => {
+    if (!unbanTarget) return;
+    setUnbanning(true);
+    try {
+      const result = await mfaApi.unbanDevice(unbanTarget.id);
+      toast.success(result?.message || 'Device unbanned.');
+      setUnbanTarget(null);
+      await loadBlockedDevices();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setUnbanning(false);
     }
   };
 
@@ -750,6 +866,108 @@ const ProfilePage = () => {
                       <TravelingBorderButton size="sm" onClick={() => openStepUp('backup-codes')}>Regenerate</TravelingBorderButton>
                     </div>
 
+                    {/* Active Sessions — real logins auth.middleware.js checks on
+                        every request (distinct from Trusted Devices below,
+                        which only ever skips the MFA challenge). Revoking one
+                        signs that device out immediately, not just at its next
+                        login. Reuses Trusted Devices' exact card/row layout. */}
+                    <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 2px' }}>Active Sessions</p>
+                      <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 14px' }}>
+                        Everywhere you're currently signed in. Revoking a session signs that device out right away.
+                      </p>
+                      {sessionsLoading && !sessions ? (
+                        <LoadingSpinner size={20} />
+                      ) : !sessions || sessions.length === 0 ? (
+                        <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>No active sessions found.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {sessions.map((s) => (
+                            <div key={s.id} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 12, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--outline)',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                <OsIcon userAgent={s.user_agent} size={20} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {s.device_label || 'Unknown device'}
+                                    {s.isCurrentDevice && (
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.12)', padding: '2px 8px', borderRadius: 4 }}>
+                                        This device
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '3px 0 0' }}>
+                                    Last active {formatDateTime(s.last_activity_at)} · Signed in {formatDateTime(s.created_at)}
+                                    {s.location ? ` · ${s.location}` : ''}
+                                    {s.ip_address ? ` · ${s.ip_address}` : ''}
+                                  </p>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                                <button
+                                  onClick={() => openRevokeSession(s)}
+                                  title={s.isCurrentDevice ? 'Sign out of this device' : 'Revoke this session'}
+                                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 6, display: 'flex' }}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                                <button
+                                  onClick={() => openBanSession(s)}
+                                  title="Revoke and block this device's IP from ever logging in again"
+                                  disabled={!s.ip_address}
+                                  style={{
+                                    background: 'none', border: 'none', cursor: s.ip_address ? 'pointer' : 'not-allowed',
+                                    color: s.ip_address ? '#b91c1c' : 'var(--on-muted)', opacity: s.ip_address ? 1 : 0.4,
+                                    padding: 6, display: 'flex',
+                                  }}
+                                >
+                                  <Ban size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Blocked Devices — everything Ban Device above has
+                        blocked, with an Unban option to reverse it. */}
+                    <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 2px' }}>Blocked Devices</p>
+                      <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 14px' }}>
+                        Devices you've banned can't log in to this account at all, even with the correct password.
+                      </p>
+                      {blockedDevicesLoading && !blockedDevices ? (
+                        <LoadingSpinner size={20} />
+                      ) : !blockedDevices || blockedDevices.length === 0 ? (
+                        <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>No blocked devices.</p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {blockedDevices.map((b) => (
+                            <div key={b.id} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              gap: 12, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--outline)',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                <Ban size={20} color="#b91c1c" style={{ flexShrink: 0 }} />
+                                <div style={{ minWidth: 0 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>
+                                    {b.ip_address}
+                                  </p>
+                                  <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '3px 0 0' }}>
+                                    Blocked {formatDateTime(b.created_at)}
+                                  </p>
+                                </div>
+                              </div>
+                              <TravelingBorderButton onClick={() => openUnban(b)} size="sm">Unban</TravelingBorderButton>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Trusted Devices */}
                     <div style={{ padding: 18, border: '1px solid var(--outline)' }}>
                       <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 2px' }}>Trusted Devices</p>
@@ -1013,6 +1231,116 @@ const ProfilePage = () => {
                 <TravelingBorderButton onClick={closeRevokeDevice} size="sm" disabled={revokingDevice}>Cancel</TravelingBorderButton>
                 <TravelingBorderButton onClick={confirmRevokeDevice} size="sm" color="red" disabled={revokingDevice}>
                   {revokingDevice ? 'Revoking...' : 'Revoke'}
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Session Confirmation — same plain-confirm treatment as
+          Trusted Devices above, but this one signs the device out right
+          away (and, if it's the current one, signs this tab out too). */}
+      {revokeSessionTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff', borderRadius: 20, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32, maxWidth: 400, width: '90%', animation: 'slideUp 0.2s ease',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              }}>
+                <Trash2 size={32} color="#dc2626" />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#e6edf7' : '#0a1628', marginBottom: 8 }}>
+                {revokeSessionTarget.isCurrentDevice ? 'Sign out of this device?' : 'Revoke this session?'}
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--on-muted)', marginBottom: 24 }}>
+                {revokeSessionTarget.isCurrentDevice
+                  ? "You'll be signed out immediately and need to log in again."
+                  : `${revokeSessionTarget.device_label || 'This device'} will be signed out immediately.`}
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton onClick={closeRevokeSession} size="sm" disabled={revokingSession}>Cancel</TravelingBorderButton>
+                <TravelingBorderButton onClick={confirmRevokeSession} size="sm" color="red" disabled={revokingSession}>
+                  {revokingSession ? 'Revoking...' : 'Revoke'}
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {banSessionTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff', borderRadius: 20, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32, maxWidth: 420, width: '90%', animation: 'slideUp 0.2s ease',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: isDark ? 'rgba(185, 28, 28, 0.15)' : 'rgba(185, 28, 28, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              }}>
+                <Ban size={32} color="#b91c1c" />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#e6edf7' : '#0a1628', marginBottom: 8 }}>
+                Ban this device?
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--on-muted)', marginBottom: 24 }}>
+                {banSessionTarget.isCurrentDevice
+                  ? "You'll be signed out immediately, and this device's IP address won't be able to log in to this account again — even with the correct password."
+                  : `${banSessionTarget.device_label || 'This device'} will be signed out immediately, and its IP address${banSessionTarget.ip_address ? ` (${banSessionTarget.ip_address})` : ''} won't be able to log in to this account again — even with the correct password.`}
+                {' '}Use this if you believe someone else has your credentials.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton onClick={closeBanSession} size="sm" disabled={banningSession}>Cancel</TravelingBorderButton>
+                <TravelingBorderButton onClick={confirmBanSession} size="sm" color="red" disabled={banningSession}>
+                  {banningSession ? 'Banning...' : 'Ban Device'}
+                </TravelingBorderButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unbanTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.15s ease',
+        }}>
+          <div style={{
+            background: isDark ? '#162048' : '#ffffff', borderRadius: 20, boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3)',
+            padding: 32, maxWidth: 400, width: '90%', animation: 'slideUp 0.2s ease',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: isDark ? 'rgba(22, 163, 74, 0.15)' : 'rgba(22, 163, 74, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              }}>
+                <ShieldCheck size={32} color="#16a34a" />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: isDark ? '#e6edf7' : '#0a1628', marginBottom: 8 }}>
+                Unban this device?
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--on-muted)', marginBottom: 24 }}>
+                {unbanTarget.ip_address} will be able to log in to this account again with the correct password.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <TravelingBorderButton onClick={closeUnban} size="sm" disabled={unbanning}>Cancel</TravelingBorderButton>
+                <TravelingBorderButton onClick={confirmUnban} size="sm" disabled={unbanning}>
+                  {unbanning ? 'Unbanning...' : 'Unban'}
                 </TravelingBorderButton>
               </div>
             </div>

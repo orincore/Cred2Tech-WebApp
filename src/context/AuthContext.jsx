@@ -2,12 +2,21 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import toast from 'react-hot-toast';
 import { login as loginApi, getMe } from '../api/authService';
 import * as mfaApi from '../api/mfaService';
+import api, { setSuppressAuthRedirect } from '../api/axiosInstance';
 
 const AuthContext = createContext(null);
 
 // Auto-logout after this long with no user activity anywhere on the page.
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+
+// How often an actively-open tab checks whether its own session got
+// revoked/banned from elsewhere (Active Sessions, Profile page). Deliberately
+// a plain poll, not a socket — this app already prefers polling over a
+// persistent connection for infrequent events like this one (see
+// consent-status polling), and a revoked session is rare enough that a
+// dedicated channel isn't worth the memory.
+const SESSION_LIVENESS_POLL_MS = 20 * 1000;
 
 // Cookie helper functions
 const setCookie = (name, value, days) => {
@@ -65,6 +74,14 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('token') || getCookie('cred2tech_token'));
   const [isLoading, setIsLoading] = useState(true);
+  // True the instant the liveness poll (below) finds this exact session was
+  // revoked or banned while the tab was open — drives SessionRevokedModal.
+  // Deliberately does NOT itself clear token/user: doing so would flip
+  // isAuthenticated false and let ProtectedRoute silently redirect out from
+  // under the popup before the user ever sees it or gets to pick Login vs
+  // Sign Up. That only happens once they click through the modal (see
+  // acknowledgeSessionRevoked).
+  const [sessionRevoked, setSessionRevoked] = useState(false);
 
   // Re-reads whatever token is currently in localStorage/cookie and
   // rehydrates user/token state from it. Exposed (not just used on mount)
@@ -185,6 +202,47 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  // Live "your session was revoked/banned" check — a real login (an actual
+  // UserSession row auth.middleware.js checks on every request), not the
+  // idle timer above, can be killed from another device via Active Sessions
+  // at any moment. Polls while a tab is open and authenticated; skips its
+  // own request's 401 past the shared interceptor's silent redirect
+  // (skipAuthRedirect) so this handler decides what happens instead.
+  useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+
+    const checkLiveness = async () => {
+      try {
+        await api.get('/auth/me', { skipAuthRedirect: true });
+      } catch (err) {
+        if (cancelled || err?.response?.status !== 401) return;
+        // Suppress the shared interceptor for any other in-flight/future
+        // call too, not just this one — otherwise a second call 401ing a
+        // moment later could still silently redirect the popup away.
+        setSuppressAuthRedirect(true);
+        setSessionRevoked(true);
+      }
+    };
+
+    const intervalId = setInterval(checkLiveness, SESSION_LIVENESS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [token]);
+
+  // SessionRevokedModal's Login/Sign Up buttons both call this before
+  // navigating — it's the only place sessionRevoked actually triggers the
+  // real logout (clearing token/user, which is what lets ProtectedRoute
+  // send them to /login on the next render) and re-arms the shared
+  // interceptor for the next session.
+  const acknowledgeSessionRevoked = useCallback(() => {
+    setSuppressAuthRedirect(false);
+    setSessionRevoked(false);
+    logout();
+  }, [logout]);
+
   // Auto-logout after IDLE_TIMEOUT_MS with zero activity anywhere on the
   // page — a single setTimeout that gets cleared and restarted on every
   // activity event, rather than a polling interval, so it costs nothing
@@ -227,6 +285,8 @@ export const AuthProvider = ({ children }) => {
     refreshUser,
     syncFromStorage,
     logout,
+    sessionRevoked,
+    acknowledgeSessionRevoked,
     hasRole: (roles) => {
       if (!user?.role) return false;
       return Array.isArray(roles)

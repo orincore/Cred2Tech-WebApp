@@ -19,6 +19,7 @@ const LoginPage = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [loginState, setLoginState] = useState('idle');
   const [apiError, setApiError] = useState('');
+  const [deviceBlocked, setDeviceBlocked] = useState(false);
 
   useEffect(() => {
     document.title = 'Cred2Tech | Login';
@@ -75,10 +76,19 @@ const LoginPage = () => {
       });
     } catch (err) {
       setLoginState('error');
+      setTimeout(() => setLoginState('idle'), 1200);
+      // Account-owner "Ban Device" (Active Sessions, Profile page) rejects
+      // this IP before the password is even checked — the backend flags it
+      // with code DEVICE_BLOCKED so this gets its own dedicated popup
+      // instead of the plain inline error banner, and never proceeds to a
+      // signed-in state.
+      if (err?.response?.data?.code === 'DEVICE_BLOCKED') {
+        setDeviceBlocked(true);
+        return;
+      }
       const msg = getErrorMessage(err);
       setApiError(msg);
       toast.error(msg);
-      setTimeout(() => setLoginState('idle'), 1200);
     }
   };
 
@@ -241,6 +251,36 @@ const LoginPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Device blocked popup — account owner used "Ban Device" on this
+          device/IP from Active Sessions (Profile page). Deliberately its own
+          modal, not the inline error banner, and never lets sign-in proceed. */}
+      {deviceBlocked && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-[1000] bg-black/50"
+          style={{ backdropFilter: 'blur(4px)' }}
+        >
+          <div className="bg-white dark:bg-[#162048] rounded-[20px] shadow-2xl p-8 max-w-[400px] w-[90%] text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-5">
+              <span className="material-symbols-outlined text-[32px] text-red-600">block</span>
+            </div>
+            <h3 className="text-xl font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">
+              This device is blocked
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+              This device has been blocked by the account owner.
+              If you feel your account has been taken over by somebody else,
+              contact us at{' '}
+              <a href="mailto:support@cred2tech.com" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                support@cred2tech.com
+              </a>.
+            </p>
+            <TravelingBorderButton onClick={() => setDeviceBlocked(false)} size="sm" className="w-full">
+              OK
+            </TravelingBorderButton>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

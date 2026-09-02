@@ -5,6 +5,7 @@ import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import SessionRevokedModal from '../components/SessionRevokedModal';
 import { DASHBOARD_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
@@ -98,6 +99,7 @@ const AppRouter = () => (
   <BrowserRouter>
     <AuthProvider>
       <RouteTitle />
+      <SessionRevokedModal />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
