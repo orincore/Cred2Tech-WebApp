@@ -407,7 +407,7 @@ const ItrAnalyticsForm = ({
                                     title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Email the customer a link to enter their own ITR portal credentials")}
                                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                 >
-                                    <Mail size={13} /> {sendingLink ? 'Sending…' : 'Send Auth Link'}
+                                    <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
                                 </button>
                             )}
                         </div>
