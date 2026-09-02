@@ -435,26 +435,31 @@ const ItrAnalyticsForm = ({
                         </div>
                     )}
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
-                        <FormField label="PAN / ITR Username" required>
-                            <input
-                                type="text"
-                                className="form-control"
-                                value={pan}
-                                onChange={e => setPan(e.target.value.toUpperCase())}
-                                placeholder="ABCDE1234F"
-                                style={{ textTransform: 'uppercase' }}
-                            />
-                        </FormField>
-                        <FormField label="ITR Portal Password" required>
-                            <input
-                                type="password"
-                                className="form-control"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                placeholder="Enter portal password"
-                            />
-                        </FormField>
+                    {/* Username + password grouped side by side in one bordered
+                        box — same treatment as GstAnalyticsForm's credential
+                        group, since they're one logical credential pair. */}
+                    <div style={{ background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+                            <FormField label="PAN / ITR Username" required>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={pan}
+                                    onChange={e => setPan(e.target.value.toUpperCase())}
+                                    placeholder="ABCDE1234F"
+                                    style={{ textTransform: 'uppercase' }}
+                                />
+                            </FormField>
+                            <FormField label="ITR Portal Password" required>
+                                <input
+                                    type="password"
+                                    className="form-control"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="Enter portal password"
+                                />
+                            </FormField>
+                        </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>

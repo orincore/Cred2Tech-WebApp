@@ -262,7 +262,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 </label>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div style={{ marginBottom: 16 }}>
                 <FormField label="SELECT GSTIN" required>
                     {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
                         <div style={{ display: 'flex', gap: 8 }}>
@@ -296,36 +296,36 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         </div>
                     )}
                 </FormField>
-
-                {mode === 'IN_SYSTEM' && (
-                    <FormField label="GST Username" required>
-                        <input
-                            type="text"
-                            value={formData.username}
-                            onChange={e => setFormData({...formData, username: e.target.value})}
-                            className="form-control"
-                            placeholder="GST portal username"
-                            autoComplete="off"
-                            name="gst-username-no-autofill"
-                        />
-                    </FormField>
-                )}
             </div>
 
+            {/* Username + password grouped together in one bordered box, side
+                by side — they're one logical credential pair, not two
+                unrelated fields, so they shouldn't read as separate rows. */}
             {mode === 'IN_SYSTEM' && (
-                 <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
-                    <div style={{ flex: 1 }}>
-                         <FormField label="GST Password" required>
-                             <input
-                                 type="password"
-                                 value={formData.password}
-                                 onChange={e => setFormData({...formData, password: e.target.value})}
-                                 className="form-control"
-                                 placeholder="GST portal password"
-                                 autoComplete="new-password"
-                                 name="gst-password-no-autofill"
-                             />
-                         </FormField>
+                <div style={{ background: 'var(--bg-elevated)', padding: 16, borderRadius: 0, marginBottom: 16, border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+                        <FormField label="GST Username" required>
+                            <input
+                                type="text"
+                                value={formData.username}
+                                onChange={e => setFormData({...formData, username: e.target.value})}
+                                className="form-control"
+                                placeholder="GST portal username"
+                                autoComplete="off"
+                                name="gst-username-no-autofill"
+                            />
+                        </FormField>
+                        <FormField label="GST Password" required>
+                            <input
+                                type="password"
+                                value={formData.password}
+                                onChange={e => setFormData({...formData, password: e.target.value})}
+                                className="form-control"
+                                placeholder="GST portal password"
+                                autoComplete="new-password"
+                                name="gst-password-no-autofill"
+                            />
+                        </FormField>
                     </div>
                 </div>
             )}
