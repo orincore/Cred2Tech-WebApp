@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
@@ -74,6 +74,26 @@ const PageLoader = () => (
   </div>
 );
 
+// Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
+// is domain/senderId/<opaque-token> with no further path segments (see
+// consent.service.js's senderId() comment), so an ITR auth link can't live
+// under its own /itr/ path without breaking that registered pattern. Both
+// link types now share this exact same route, told apart by a same-length
+// 3-letter prefix baked into the token itself instead: consent tokens start
+// "CON" (generateConsentToken(), consent.service.js) and ITR auth tokens
+// start "ITR" (generateItrAuthToken(), itrAuthLink.service.js) — same total
+// length either way, so the two link types read as obviously distinct at a
+// glance rather than looking like variants of one opaque string.
+// useParams() inside ConsentPage/ItrAuthPage still resolves correctly from
+// here, since it reads the matched route's own context, not which
+// component instance calls it. Anything NOT starting with "ITR" (including
+// a pre-prefix legacy token, if one is ever still outstanding) falls back
+// to ConsentPage.
+const SmsLinkDispatcher = () => {
+  const { token } = useParams();
+  return token && token.startsWith('ITR') ? <ItrAuthPage /> : <ConsentPage />;
+};
+
 const AppRouter = () => (
   <BrowserRouter>
     <AuthProvider>
@@ -94,20 +114,15 @@ const AppRouter = () => (
               counts alongside the OTP + fixed template text in one 160-char
               segment) — the path segment matches the DLT-registered sender ID
               (ALOTS_SENDER, see consent.service.js's senderId()) so the link
-              matches what's on file with the telecom DLT registry.
+              matches what's on file with the telecom DLT registry. Consent
+              AND ITR-auth links both resolve here now (see SmsLinkDispatcher
+              above) — the DLT-registered shape has no room for a second link
+              type to get its own extra path segment.
               /c/:token and /customer-consent?token= stay mounted too so any
               already-sent link keeps working. */}
-          <Route path="/SUNBY/:token" element={<ConsentPage />} />
-          <Route path="/c/:token" element={<ConsentPage />} />
+          <Route path="/SUNBY/:token" element={<SmsLinkDispatcher />} />
+          <Route path="/c/:token" element={<SmsLinkDispatcher />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
-          {/* Same domain+senderId+token shape as the consent link above, with
-              an extra "itr" segment so the router can tell the two link types
-              apart at a glance (both hit /SUNBY/... otherwise) — see
-              itrAuthLink.service.js's requestItrAuthLink(). Delivered by
-              email today; kept under the DLT sender-ID segment so the same
-              link shape is SMS-ready later without a URL scheme change. */}
-          <Route path="/SUNBY/itr/:token" element={<ItrAuthPage />} />
-          <Route path="/c/itr/:token" element={<ItrAuthPage />} />
           <Route path="/itr-auth" element={<ItrAuthPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />

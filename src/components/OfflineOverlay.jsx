@@ -107,7 +107,16 @@ const OfflineOverlay = () => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [isOffline, justRestored, attemptRestore]);
 
+  // One full rotation per click, not a continuous spin — spinCount just
+  // keeps incrementing, and framer-motion always animates from wherever the
+  // icon currently sits to the new target, so every click adds exactly one
+  // more 360° turn regardless of how long the underlying check takes (the
+  // spin itself is a fixed, fast acknowledgement of the click; "Checking…"
+  // text covers the rest of the wait if the network round-trip is slower).
+  const [spinCount, setSpinCount] = useState(0);
+
   const handleManualRetry = async () => {
+    setSpinCount((c) => c + 1);
     setChecking(true);
     await attemptRestore();
     setChecking(false);
@@ -200,7 +209,13 @@ const OfflineOverlay = () => {
                     disabled={checking}
                     className="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white bg-[#4f46e5] hover:bg-[#4338ca] disabled:opacity-60 transition-colors"
                   >
-                    <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
+                    <motion.span
+                      animate={{ rotate: spinCount * 360 }}
+                      transition={{ duration: 0.6, ease: 'easeInOut' }}
+                      style={{ display: 'inline-flex' }}
+                    >
+                      <RefreshCw size={14} />
+                    </motion.span>
                     {checking ? 'Checking…' : 'Try Again'}
                   </button>
                 </motion.div>
