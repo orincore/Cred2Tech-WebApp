@@ -7,7 +7,7 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -165,10 +165,26 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
        })
        .catch(err => console.error(err));
+  }, [isMsme]);
 
-     api.get('/wallet/balance')
-       .then(res => setWalletBalance(res.data.balance))
-       .catch(console.error);
+  // Polled (not fetched once) so the header pill reflects a deduction the
+  // moment it happens — a GST/ITR/bank/PAN pull kicked off from any step, or
+  // a customer authorising an ITR pull via an emailed link, all charge this
+  // same wallet server-side without this page necessarily being the one that
+  // triggered it (e.g. the auth-link submission happens on a page the
+  // customer has open, not this one).
+  useEffect(() => {
+     if (isMsme) return; // wallet/credits are DSA-only
+
+     let cancelled = false;
+     const fetchBalance = () => {
+       api.get('/wallet/balance')
+         .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
+         .catch(console.error);
+     };
+     fetchBalance();
+     const interval = setInterval(fetchBalance, 10000);
+     return () => { cancelled = true; clearInterval(interval); };
   }, [isMsme]);
 
   // A brand-new case (urlCaseId unset) must start completely blank — no
@@ -1280,11 +1296,36 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             {caseId ? ((formData.proprietor_name || formData.business_name) ? toTitleCase(formData.proprietor_name || formData.business_name) : "Resume Draft Case") : "Add New Customer / New Case"}
           </h1>
         </div>
-        {caseId && (
-          <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Check size={16} /> Auto-saved
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {/* One fixed spot in the wizard's own header — rendered here once,
+              so it reads identically (same place, same look) on every one of
+              the 7 steps rather than being repeated per-step. Polled (see the
+              effect above), not fetched once, so a deduction from any pull —
+              including a customer authorising an ITR pull via an emailed
+              link on a page this DSA doesn't have open — shows up here on
+              its own within a few seconds, with no page reload needed. */}
+          {!isMsme && (
+            <div
+              title="Remaining wallet credits — updates automatically"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px',
+                background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
+                border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
+                borderRadius: 999, fontSize: 13, fontWeight: 700,
+                color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
+              }}
+            >
+              <Wallet size={14} />
+              {walletBalance.toLocaleString('en-IN')} Credits
+            </div>
+          )}
+          {caseId && (
+            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Check size={16} /> Auto-saved
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stepper — all 7 steps of the case journey render inline in this
