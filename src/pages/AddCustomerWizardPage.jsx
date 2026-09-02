@@ -1576,14 +1576,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 </div>
 
                 <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Business Name / Full Name" name="business_name" disabled={formData.pan_verified}>
+                  <FormField label="Business Name / Full Name" name="business_name" disabled>
                     <input
                       type="text"
                       value={formData.business_name}
                       onChange={e => setFormData({ ...formData, business_name: e.target.value })}
                       className="form-control"
-                      placeholder={formData.pan_verified ? 'Autofetched via PAN' : 'Autofetched via PAN or enter manually'}
-                      disabled={formData.pan_verified}
+                      placeholder="Autofetched via PAN"
+                      disabled
                     />
                   </FormField>
 

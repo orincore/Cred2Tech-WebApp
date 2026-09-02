@@ -960,8 +960,8 @@ const AddSalariedCustomerWizardPage = () => {
                 </div>
 
                 <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Full Name (As Per PAN)" name="business_name" required>
-                    <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Arjun Sharma" disabled={!!caseId} />
+                  <FormField label="Full Name (As Per PAN)" name="business_name" required disabled>
+                    <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
                   </FormField>
 
                   <FormField label="Date Of Birth" name="dob">
