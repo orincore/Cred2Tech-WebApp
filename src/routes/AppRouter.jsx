@@ -89,10 +89,14 @@ const AppRouter = () => (
           <Route path="/mfa-challenge" element={<MfaChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          {/* /c/:token is the short form used in the SMS link (every char
+          {/* /SUNBY/:token is the short form used in the SMS link (every char
               counts alongside the OTP + fixed template text in one 160-char
-              segment) — /customer-consent?token= stays mounted too so any
+              segment) — the path segment matches the DLT-registered sender ID
+              (ALOTS_SENDER, see consent.service.js's senderId()) so the link
+              matches what's on file with the telecom DLT registry.
+              /c/:token and /customer-consent?token= stay mounted too so any
               already-sent link keeps working. */}
+          <Route path="/SUNBY/:token" element={<ConsentPage />} />
           <Route path="/c/:token" element={<ConsentPage />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
