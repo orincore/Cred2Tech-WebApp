@@ -1083,12 +1083,17 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // clicked past with any of them still empty, same treatment as
   // AddSalariedCustomerWizardPage's equivalent button.
   const isProfessional = formData.is_professional === 'true' || formData.is_professional === true;
-  const step1BusinessValid = !!formData.business_pan
-    && !!formData.mobile_verified
+  // Every required field on this subpage EXCEPT consent — gates the
+  // Request Consent button itself (asking for consent before the rest of
+  // the form is even filled in is pointless) and, once consent is granted,
+  // is the only thing left gating Save & Next (mobile_verified is
+  // guaranteed true in that branch already).
+  const step1BusinessFieldsValid = !!formData.business_pan
     && !!formData.business_email
     && !!formData.pincode
     && !!formData.dob
     && (!isProfessional || !!formData.profession_type);
+  const step1BusinessValid = step1BusinessFieldsValid && !!formData.mobile_verified;
   // Gates the final Step 1 submit ("Continue to Financials") in addition to
   // the business-subpage fields above — handleStep1Submit also requires
   // every co-applicant that has a PAN entered to have a DOB too.
@@ -1375,27 +1380,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <FormField label="Email Address" name="business_email" required>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
-                      {!formData.mobile_verified ? (
-                        consentRequesting ? (
-                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Sending…</button>
-                        ) : consentRequest ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleRequestConsent}
-                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                            className="btn btn-primary"
-                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
-                            title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                          >
-                            {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                          </button>
-                        )
-                      ) : (
+                      {/* The actual Request Consent action (and its
+                          sending/waiting/resend states) now lives in this
+                          sub-page's footer, in the same slot the Save & Next
+                          button occupies once consent is granted — this field
+                          just mirrors the end result once it lands. */}
+                      {formData.mobile_verified && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                           <CheckCircle2 size={18} /> Consented
                         </div>
@@ -1465,15 +1455,36 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             </div>
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={goToCoApplicants}
-                disabled={!step1BusinessValid}
-                title={!step1BusinessValid ? 'Complete every required field and consent before continuing' : undefined}
-              >
-                Next: Co-Applicants →
-              </button>
+              {!formData.mobile_verified ? (
+                consentRequesting ? (
+                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                ) : consentRequest ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <PullingIndicator label="Waiting for customer to approve consent…" />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestConsent}
+                    disabled={saving || !step1BusinessFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                    className="btn btn-primary btn-lg"
+                    title={!step1BusinessFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                  >
+                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={goToCoApplicants}
+                  disabled={!step1BusinessValid}
+                  title={!step1BusinessValid ? 'Complete every required field before continuing' : undefined}
+                >
+                  Save & Next
+                </button>
+              )}
             </div>
             </>
             )}
@@ -1682,7 +1693,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 disabled={saving || !step1CoApplicantsValid}
                 title={!step1CoApplicantsValid ? 'Complete every required field (and each co-applicant\'s DOB) before continuing' : undefined}
               >
-                {saving ? 'Processing...' : 'Continue to Financials →'}
+                {saving ? 'Processing...' : 'Save & Next'}
               </button>
             </div>
             </>
@@ -1744,6 +1755,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         </span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
                       </>
+                    ) : formData.pan_profile ? (
+                      // The PAN→GSTIN lookup genuinely ran and came back empty —
+                      // distinct from "not attempted yet" below. No GSTIN means
+                      // there's nothing for a GST pull to run against, so the
+                      // pull form itself is skipped entirely rather than
+                      // offering a manual-entry option for a business that has
+                      // no real GST registration on file.
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                      </span>
                     ) : (
                       <>
                         <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
@@ -1753,20 +1774,26 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </div>
                 )}
                 <div style={{ padding: 0 }}>
-                  <GstAnalyticsForm
-                     caseId={caseId}
-                     customerId={formData.customer_id}
-                     applicantId={null}
-                     applicantType="PRIMARY"
-                     linkedGstins={formData.linked_gstins}
-                     gstCompleted={formData.gst_completed}
-                     onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
-                     onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
-                     onboardingMode={mode}
-                     walletBalance={walletBalance}
-                     gstCost={costs.GST_FETCH}
-                     disabled={isBulkInjectedCase}
-                  />
+                  {/* No GSTIN on file for the primary (lookup ran, came back
+                      empty) and no real pull already completed — the message
+                      above already says so; don't also show a pull form with
+                      nothing to select and only a pointless manual-GSTIN path. */}
+                  {!(formData.pan_profile && !formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0)) && (
+                    <GstAnalyticsForm
+                       caseId={caseId}
+                       customerId={formData.customer_id}
+                       applicantId={null}
+                       applicantType="PRIMARY"
+                       linkedGstins={formData.linked_gstins}
+                       gstCompleted={formData.gst_completed}
+                       onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
+                       onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
+                       onboardingMode={mode}
+                       walletBalance={walletBalance}
+                       gstCost={costs.GST_FETCH}
+                       disabled={isBulkInjectedCase}
+                    />
+                  )}
 
                   {/* Same self-employed co-applicant loop as ITR below — GST is
                       a business/self-employment concept, so only applies to
@@ -1798,7 +1825,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => { goToStep(1); setStep1SubPage('coapplicants'); }}>← Back to Co-Applicants</button>
               <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('itr')}>
-                Next: ITR Analytics →
+                Save & Next
               </button>
             </div>
             </>
@@ -1854,7 +1881,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep2SubPage('gst')}>← Back to GST</button>
               <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('bank')}>
-                Next: Bank Statements →
+                Save & Next
               </button>
             </div>
             </>
@@ -1929,7 +1956,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setStep2SubPage('itr')}>← Back to ITR Analytics</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save & Next'}</button>
             </div>
             </>
             )}
@@ -2004,7 +2031,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
               <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !step3Valid}>
-                {saving ? 'Saving...' : 'Next: Income Summary →'}
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>

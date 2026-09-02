@@ -719,6 +719,18 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
+  // Every required field on the Personal Details subpage EXCEPT consent —
+  // gates the Request Consent button itself (no point asking for consent
+  // before the rest of the form is filled in) and, once consent is granted,
+  // is the only thing left gating Save & Next (mobile_verified is
+  // guaranteed true in that branch already). Mirrors
+  // AddCustomerWizardPage's step1BusinessFieldsValid/step1BusinessValid.
+  const step1FieldsValid = !!formData.business_pan
+    && !!formData.business_name
+    && !!formData.business_email
+    && !!formData.pincode;
+  const step1Valid = step1FieldsValid && !!formData.mobile_verified;
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
 
   return (
@@ -973,27 +985,12 @@ const AddSalariedCustomerWizardPage = () => {
                         placeholder="arjun@example.com"
                         style={{ flex: 1, minWidth: 160 }}
                       />
-                      {!formData.mobile_verified ? (
-                        consentRequesting ? (
-                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Sending…</button>
-                        ) : consentRequest ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleRequestConsent}
-                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || walletBalance < costs.PAN_FETCH}
-                            className="btn btn-primary"
-                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
-                            title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                          >
-                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
-                          </button>
-                        )
-                      ) : (
+                      {/* The actual Request Consent action (and its
+                          sending/waiting/resend states) now lives in this
+                          sub-page's footer, in the same slot the Save & Next
+                          button occupies once consent is granted — this
+                          field just mirrors the end result once it lands. */}
+                      {formData.mobile_verified && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                           <CheckCircle2 size={18} /> Consented
                         </div>
@@ -1016,15 +1013,36 @@ const AddSalariedCustomerWizardPage = () => {
             </div>
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={() => setStep1SubPage('coapplicants')}
-                disabled={!formData.business_pan || !formData.business_name || !formData.business_email || !formData.pincode || !formData.mobile_verified}
-                title={!formData.mobile_verified ? 'Complete every required field and consent before continuing' : undefined}
-              >
-                Next: Co-Applicants →
-              </button>
+              {!formData.mobile_verified ? (
+                consentRequesting ? (
+                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                ) : consentRequest ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <PullingIndicator label="Waiting for customer to approve consent…" />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestConsent}
+                    disabled={saving || !step1FieldsValid || walletBalance < costs.PAN_FETCH}
+                    className="btn btn-primary btn-lg"
+                    title={!step1FieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                  >
+                    {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={() => setStep1SubPage('coapplicants')}
+                  disabled={!step1Valid}
+                  title={!step1Valid ? 'Complete every required field before continuing' : undefined}
+                >
+                  Save & Next
+                </button>
+              )}
             </div>
             </>
             )}
@@ -1185,7 +1203,7 @@ const AddSalariedCustomerWizardPage = () => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
-                {saving ? 'Processing...' : 'Continue to Financials →'}
+                {saving ? 'Processing...' : 'Save & Next'}
               </button>
             </div>
             </>
@@ -1257,7 +1275,7 @@ const AddSalariedCustomerWizardPage = () => {
                 disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
                 title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
               >
-                Continue to Product Selection →
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>
@@ -1332,7 +1350,7 @@ const AddSalariedCustomerWizardPage = () => {
                 type="submit"
                 disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
               >
-                {saving ? 'Saving...' : 'Complete Salaried Customer Profile →'}
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>
