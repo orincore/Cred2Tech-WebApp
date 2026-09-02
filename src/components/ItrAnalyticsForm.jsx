@@ -373,14 +373,20 @@ const ItrAnalyticsForm = ({
                             {/* DSA-only: email the customer a link to enter their own
                                 PAN/password instead — never available in MSME self-service
                                 mode, since there the customer already is the one filling
-                                the form in directly. */}
+                                the form in directly. Deliberately NOT gated on the current
+                                wallet balance (unlike the expando's direct-entry Analyze
+                                button) — same as "Fetch ITR" above: the wallet is only
+                                actually charged once the customer submits, which may be
+                                well after the DSA has topped up, so blocking the send here
+                                would be premature. The real balance check still happens
+                                server-side at submit time either way. */}
                             {!isMsme && (
                                 <button
                                     type="button"
                                     className="btn btn-secondary btn-sm"
                                     onClick={handleSendAuthLink}
-                                    disabled={disabled || sendingLink || walletBalance < itrCost}
-                                    title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : (walletBalance < itrCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${itrCost}.` : "Email the customer a link to enter their own ITR portal credentials")}
+                                    disabled={disabled || sendingLink}
+                                    title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Email the customer a link to enter their own ITR portal credentials")}
                                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                 >
                                     <Mail size={13} /> {sendingLink ? 'Sending…' : 'Send Auth Link'}
