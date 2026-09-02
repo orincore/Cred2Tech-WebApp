@@ -644,20 +644,21 @@ const AddSalariedCustomerWizardPage = () => {
       }
 
       // status can be SUCCESS, PARTIAL_SUCCESS, or FAILED — PARTIAL_SUCCESS
-      // covers "the independent obligations pull succeeded but the credit
-      // score call itself failed" (e.g. a vendor-side error for this
-      // applicant). That's not a completed CIBIL check, even though the
-      // request as a whole didn't throw, so success must be judged by
-      // whether THIS applicant's score actually came back — not by the
-      // overall status string alone.
+      // covers "some applicants in this batch succeeded, this one didn't"
+      // (e.g. a vendor-side error for this specific applicant's Experian
+      // pull, which now provides both the score and obligations in one
+      // call — see bureau.controller.js). That's not a completed bureau
+      // check for THIS applicant even though the request as a whole didn't
+      // throw, so success must be judged by whether their score actually
+      // came back — not by the overall status string alone.
       const targetApp = formData.applicants.find(a => a.id === applicantId);
       const newScore = targetApp?.type === 'PRIMARY'
         ? data.applicantScore
         : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
 
       if (!newScore) {
-        const scoreError = data.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
-        toast.error(scoreError?.error || 'Bureau score not returned — CIBIL check incomplete for this applicant.');
+        const pullError = data.errors?.find(e => e.applicantId === applicantId);
+        toast.error(pullError?.error || 'Bureau score not returned for this applicant.');
         return;
       }
 

@@ -272,9 +272,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       const freshApplicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
 
-      // bureau_fetched only flips true once the credit-score call itself
-      // succeeds — that's what decides whether the pull button disappears
-      // (per applicant) or switches to a "Retry" label.
+      // bureau_fetched only flips true once the Experian pull actually
+      // returns a usable score — that's what decides whether the pull
+      // button disappears (per applicant) or switches to a "Retry" label.
       setBureauFailedFor(prev => {
         const next = new Set(prev);
         if (freshApplicant?.bureau_fetched) next.delete(applicantId);
@@ -282,15 +282,13 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         return next;
       });
 
-      // Score and obligations are two independent vendor calls now (see
-      // bureau.controller.js) — a failure in one no longer means the other
-      // never ran, so check specifically what actually failed instead of
-      // guessing at a PAN/DOB problem whenever the count comes back flat.
-      const scoreError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
+      // Score and obligations both come from one Experian pull now (see
+      // bureau.controller.js — the separate CIBIL score check was dropped),
+      // so a single vendor error covers both; check what actually failed
+      // instead of guessing at a PAN/DOB problem whenever the count comes
+      // back flat.
       const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (scoreError) {
-        toast.error(`Bureau score check failed: ${scoreError.error}`, { duration: 8000 });
-      } else if (after > before) {
+      if (after > before) {
         toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
