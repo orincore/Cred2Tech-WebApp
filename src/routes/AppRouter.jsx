@@ -15,6 +15,7 @@ const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const ConsentPage = lazy(() => import('../pages/ConsentPage'));
 const ItrAuthPage = lazy(() => import('../pages/ItrAuthPage'));
+const GstAuthPage = lazy(() => import('../pages/GstAuthPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
@@ -80,22 +81,29 @@ const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--b
 
 // Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
 // is domain/senderId/<opaque-token> with no further path segments (see
-// consent.service.js's senderId() comment), so an ITR auth link can't live
-// under its own /itr/ path without breaking that registered pattern. Both
-// link types now share this exact same route, told apart by a same-length
-// 3-letter prefix baked into the token itself instead: consent tokens start
-// "CON" (generateConsentToken(), consent.service.js) and ITR auth tokens
-// start "ITR" (generateItrAuthToken(), itrAuthLink.service.js) — same total
-// length either way, so the two link types read as obviously distinct at a
-// glance rather than looking like variants of one opaque string.
-// useParams() inside ConsentPage/ItrAuthPage still resolves correctly from
-// here, since it reads the matched route's own context, not which
-// component instance calls it. Anything NOT starting with "ITR" (including
-// a pre-prefix legacy token, if one is ever still outstanding) falls back
-// to ConsentPage.
+// consent.service.js's senderId() comment), so an ITR/GST auth link can't
+// live under its own /itr/ or /gst/ path without breaking that registered
+// pattern. All three link types now share this exact same route, told apart
+// by a same-length 3-letter prefix baked into the token itself instead:
+// consent tokens start "CON" (generateConsentToken(), consent.service.js),
+// ITR auth tokens start "ITR" (generateItrAuthToken(), itrAuthLink.service.js),
+// and GST auth tokens start "GST" (generateGstAuthToken(), gstAuthLink.service.js)
+// — same total length either way, so the link types read as obviously
+// distinct at a glance rather than looking like variants of one opaque
+// string. The GST auth link is only ever delivered by email (never SMS), so
+// it has no DLT constraint of its own, but it still shares this shape/
+// dispatcher for consistency with the other two link types rather than
+// getting a bespoke route.
+// useParams() inside ConsentPage/ItrAuthPage/GstAuthPage still resolves
+// correctly from here, since it reads the matched route's own context, not
+// which component instance calls it. Anything NOT starting with "ITR" or
+// "GST" (including a pre-prefix legacy token, if one is ever still
+// outstanding) falls back to ConsentPage.
 const SmsLinkDispatcher = () => {
   const { token } = useParams();
-  return token && token.startsWith('ITR') ? <ItrAuthPage /> : <ConsentPage />;
+  if (token && token.startsWith('ITR')) return <ItrAuthPage />;
+  if (token && token.startsWith('GST')) return <GstAuthPage />;
+  return <ConsentPage />;
 };
 
 const AppRouter = () => (
@@ -129,6 +137,7 @@ const AppRouter = () => (
           <Route path="/c/:token" element={<SmsLinkDispatcher />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
           <Route path="/itr-auth" element={<ItrAuthPage />} />
+          <Route path="/gst-auth" element={<GstAuthPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 

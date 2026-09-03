@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, FileText, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send, RefreshCw, XCircle } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
@@ -8,6 +8,7 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
 import { useCasePullStatus, usePhaseTransition } from '../hooks/useCasePullStatus';
+import { gstAuthLinkService } from '../api/gstAuthLinkService';
 
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
@@ -34,12 +35,6 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const [mode, setMode] = useState('IN_SYSTEM');
     const authType = 'PASSWORD';
     const [isManualGstin, setIsManualGstin] = useState(false);
-    // Same select-or-type-your-own pattern as the GSTIN field above — default
-    // to whatever email/mobile this applicant already has on file (from step
-    // 1) instead of making the DSA retype it, while still allowing a
-    // different one to be entered.
-    const [isManualEmail, setIsManualEmail] = useState(!prefillEmail);
-    const [isManualMobile, setIsManualMobile] = useState(!prefillMobile);
 
     const [formData, setFormData] = useState({
         gstin: '',
@@ -47,8 +42,6 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         password: '',
         from_date: `${AUTO_FROM_MONTH}${AUTO_FROM_YEAR}`,
         to_date: `${AUTO_TO_MONTH}${AUTO_TO_YEAR}`,
-        emails: prefillEmail || '',
-        mobile_numbers: prefillMobile || ''
     });
 
     const [loading, setLoading] = useState(false);
@@ -91,6 +84,18 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
             : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
 
+    // A link created but never yet used by the customer — see
+    // casePullSnapshot.service.js's serializeGstAuthLink. This is the only
+    // state where the "Send Auth Link" form should be replaced by a
+    // Resend/Cancel action: once the customer submits, latestRequest becomes
+    // the real GstrAnalyticsRequest row and the ordinary PROCESSING branch
+    // below takes back over automatically. Mirrors ItrAnalyticsForm's own
+    // isAuthLinkPending.
+    const isAuthLinkPending = latestRequest?.is_auth_link_request && latestRequest?.status === 'AWAITING_CUSTOMER_ACTION';
+    const authLinkId = latestRequest?.auth_link_id;
+    const [sendingLink, setSendingLink] = useState(false);
+    const [cancellingLink, setCancellingLink] = useState(false);
+
     // Neither `snapshot` (starts null until the socket delivers its first
     // push) nor `fallbackRequests` (starts []) carry any synchronous "has
     // this pull already completed" signal on mount — unlike ITR/Bank, this
@@ -130,23 +135,6 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         }
     }, [linkedGstins]);
 
-    // Same idea as the GSTIN prefill above — this applicant's step-1 email/
-    // mobile can arrive after this component's first mount (case data is
-    // still loading), so re-sync once it does. Only while still on the
-    // "use the registered one" select (not after the DSA has switched to
-    // manual entry), and only overwrites an empty field — never clobbers
-    // something already typed.
-    useEffect(() => {
-        if (prefillEmail && !isManualEmail && !formData.emails) {
-            setFormData(prev => ({ ...prev, emails: prefillEmail }));
-        }
-    }, [prefillEmail, isManualEmail]);
-    useEffect(() => {
-        if (prefillMobile && !isManualMobile && !formData.mobile_numbers) {
-            setFormData(prev => ({ ...prev, mobile_numbers: prefillMobile }));
-        }
-    }, [prefillMobile, isManualMobile]);
-
     const fetchRequests = async () => {
         try {
             const res = await api.get(`/external/gst/requests?case_id=${caseId}&applicant_id=${wantedApplicantId ?? 'null'}`);
@@ -173,9 +161,11 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         if (mode === 'IN_SYSTEM' && authType === 'PASSWORD' && !formData.password) {
             return toast.error("Password is required for Password auth");
         }
-        if (mode === 'AUTH_LINK' && !formData.emails.trim() && !formData.mobile_numbers.trim()) {
-            return toast.error("Enter at least one customer email or mobile number to send the auth link to");
-        }
+
+        // AUTH_LINK mode is handled entirely by handleSendAuthLink below — it
+        // emails the customer our own self-hosted link (never Signzy's own
+        // hosted auth-link page) instead of submitting this form.
+        if (mode === 'AUTH_LINK') return handleSendAuthLink();
 
         setLoading(true);
         try {
@@ -184,16 +174,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 case_id: caseId,
                 applicant_id: applicantId,
                 mode: mode,
-                auth_type: mode === 'IN_SYSTEM' ? authType : null,
+                auth_type: authType,
                 gstin: formData.gstin,
-                // Only meaningful for IN_SYSTEM auth — omit for AUTH_LINK so a
-                // stale value typed while on the other tab is never sent.
-                username: mode === 'IN_SYSTEM' ? formData.username : undefined,
-                password: mode === 'IN_SYSTEM' ? formData.password : undefined,
+                username: formData.username,
+                password: formData.password,
                 from_date: formData.from_date,
                 to_date: formData.to_date,
-                emails: formData.emails ? formData.emails.split(',').map(s => s.trim()) : [],
-                mobile_numbers: formData.mobile_numbers ? formData.mobile_numbers.split(',').map(s => s.trim()) : [],
                 pdf_url: true,
                 entity_details: true
             };
@@ -212,6 +198,43 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
             toast.error(`GST request failed: ${message}`, { duration: 8000 });
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Emails the customer a link to enter their own GST portal username/
+    // password — a self-hosted alternative to the DSA keying it in directly
+    // above (never Signzy's own hosted auth-link page). No data is pulled by
+    // this call itself; it only sends the link and flips this row to
+    // "Action needed — waiting for the customer" until they submit it.
+    // Mirrors ItrAnalyticsForm.jsx's own handleSendAuthLink.
+    const handleSendAuthLink = async () => {
+        if (!formData.gstin) return toast.error("Select or enter a GSTIN first");
+        setSendingLink(true);
+        try {
+            await gstAuthLinkService.requestLink({ customer_id: customerId, case_id: caseId, applicant_id: applicantId, gstin: formData.gstin });
+            toast.success('GST authorisation link sent to the customer');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to send the GST auth link');
+        } finally {
+            setSendingLink(false);
+        }
+    };
+
+    // Revokes a still-pending link before the customer has used it — if they
+    // open it afterwards, the page shows "This request has been revoked."
+    const handleCancelAuthLink = async () => {
+        if (!authLinkId) return;
+        if (!window.confirm('Cancel this GST authorisation link? The customer will no longer be able to use it.')) return;
+        setCancellingLink(true);
+        try {
+            await gstAuthLinkService.cancelLink(authLinkId);
+            toast.success('GST auth link cancelled');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel the GST auth link');
+        } finally {
+            setCancellingLink(false);
         }
     };
 
@@ -273,7 +296,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 no visible name context at all when hidden by that state, so
                 duplicating a heading here would only show up in the cases
                 where it's least needed. */}
-            {!isSuccess && (
+            {!isSuccess && !isAuthLinkPending && (
             <div style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg-surface)',
@@ -430,70 +453,19 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                 <Mail size={13} color="#4f46e5" />
                                 <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link To</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
-                                {/* Same select-or-type-your-own pattern as the GSTIN
-                                    field — defaults to whichever email/mobile this
-                                    applicant already has on file from step 1, so the
-                                    DSA isn't retyping something already captured. */}
-                                <FormField label="Target Emails (comma separated)">
-                                    {!isManualEmail && prefillEmail ? (
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            <select
-                                                className="form-control"
-                                                value={formData.emails}
-                                                onChange={e => {
-                                                    if (e.target.value === '__manual__') {
-                                                        setIsManualEmail(true);
-                                                        setFormData({ ...formData, emails: '' });
-                                                    } else {
-                                                        setFormData({ ...formData, emails: e.target.value });
-                                                    }
-                                                }}
-                                            >
-                                                <option value={prefillEmail}>{prefillEmail}</option>
-                                                <option value="__manual__">Enter manually...</option>
-                                            </select>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
-                                            {prefillEmail && (
-                                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setIsManualEmail(false); setFormData({ ...formData, emails: prefillEmail }); }}>Cancel</button>
-                                            )}
-                                        </div>
-                                    )}
-                                </FormField>
-                                <FormField label="Target Mobile Numbers (comma separated)">
-                                    {!isManualMobile && prefillMobile ? (
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            <select
-                                                className="form-control"
-                                                value={formData.mobile_numbers}
-                                                onChange={e => {
-                                                    if (e.target.value === '__manual__') {
-                                                        setIsManualMobile(true);
-                                                        setFormData({ ...formData, mobile_numbers: '' });
-                                                    } else {
-                                                        setFormData({ ...formData, mobile_numbers: e.target.value });
-                                                    }
-                                                }}
-                                            >
-                                                <option value={prefillMobile}>{prefillMobile}</option>
-                                                <option value="__manual__">Enter manually...</option>
-                                            </select>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
-                                            {prefillMobile && (
-                                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setIsManualMobile(false); setFormData({ ...formData, mobile_numbers: prefillMobile }); }}>Cancel</button>
-                                            )}
-                                        </div>
-                                    )}
-                                </FormField>
+                            <div style={{ padding: 16 }}>
+                                {prefillEmail ? (
+                                    <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                                        The customer will receive a link at <strong>{prefillEmail}</strong> to enter their own GST portal username and password.
+                                    </p>
+                                ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
+                                        <AlertCircle size={15} /> No email address on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one before sending the auth link.
+                                    </div>
+                                )}
                             </div>
                             <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
-                                At least one email or mobile number is required — the customer receives the auth link there, not through the GST username/password fields above.
+                                Nothing is pulled until the customer submits their own credentials — this only sends the link.
                             </p>
                         </div>
                     )}
@@ -507,21 +479,76 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                     <button
                         type="button"
                         onClick={handleCreateRequest}
-                        disabled={disabled || loading || !formData.gstin || (!isMsme && gstCost != null && walletBalance < gstCost)}
+                        disabled={disabled || loading || sendingLink || !formData.gstin
+                            || (mode === 'AUTH_LINK' && !prefillEmail)
+                            || (!isMsme && gstCost != null && walletBalance < gstCost)}
                         className="btn btn-primary"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                         title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
                     >
-                        <Send size={14} />
-                        {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
+                        {mode === 'AUTH_LINK' ? (
+                            <>
+                                <Mail size={14} />
+                                {sendingLink ? 'Sending…' : isMsme ? 'Send Auth Link' : `Send Auth Link (~${gstCost ?? 1} Cr)`}
+                            </>
+                        ) : (
+                            <>
+                                <Send size={14} />
+                                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
             )}
 
             {latestRequest && (
-                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
-                    {isDead ? (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : (isDead || isAuthLinkPending) ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
+                    {isAuthLinkPending ? (
+                        // Link sent, customer hasn't submitted it yet — no data has
+                        // been touched, so the only actions available are re-sending
+                        // it (e.g. the customer says they never got the email, or the
+                        // first one expired) or revoking it. Mirrors ItrAnalyticsForm's
+                        // own isAuthLinkPending branch. Resend reuses the same
+                        // handleSendAuthLink call the Send Auth Link button does — it
+                        // already supersedes the still-pending link and issues a fresh one.
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                <PullStatusTracker
+                                    variant="panel"
+                                    phase={phase}
+                                    label={latestRequest.label || 'Waiting for the customer to authorise'}
+                                    progress={latestRequest.progress ?? 12}
+                                />
+                                {latestRequest.recipient_email && (
+                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                        Auth link sent to {latestRequest.recipient_email}
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={handleSendAuthLink}
+                                    disabled={sendingLink}
+                                    title="Send a fresh auth link — the current one will be revoked"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={handleCancelAuthLink}
+                                    disabled={cancellingLink}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                                >
+                                    <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : isDead ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
                             <AlertCircle size={16} /> {latestRequest.label || (latestRequest.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
                         </div>
