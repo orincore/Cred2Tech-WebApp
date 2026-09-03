@@ -15,8 +15,8 @@ const GST_LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATIN
 
 const getCibilColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
-  if (score >= 750) return 'var(--success)';
-  if (score >= 700) return 'var(--warning)';
+  if (score >= 700) return 'var(--success)';
+  if (score >= 650) return 'var(--warning)';
   return 'var(--error)';
 };
 
@@ -176,30 +176,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       const reports = {};
       (caseData.applicants || []).forEach(a => {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
-        
-        // Check for new Befisc HTML report URL or Signzy PDF URL
-        const checks = a.bureau_checks || [];
-        if (checks.length > 0) {
-           const raw = checks[0].raw_response || {};
-           const htmlUrl = raw.result?.htmlUrl || raw.htmlUrl;
-           const pdfUrl = raw.data?.CIBILPDF;
-           
-           if (htmlUrl) {
-              reports[a.id] = { htmlUrl };
-           } else if (pdfUrl) {
-              reports[a.id] = { pdfUrl };
-           }
-        }
       });
       setApplicantNames(names);
 
-      // The bureau vendor (Experian, via Signzy) hands back the actual report
-      // file at pull time, which gets ingested into document storage per
-      // applicant (see experian.service.js) — surface it here rather than
-      // regenerating anything client-side.
+      // Every bureau pull (BEFISC, Signzy CIBIL fallback, or the older
+      // Experian flow) snapshots its report into S3-backed document storage
+      // at pull time — see befiscBureau.service.js / signzyCibil.service.js.
+      // The vendor's own link (BEFISC's webtoken URL especially) is single-use
+      // and expires within hours, so the stored document is the only copy
+      // that stays downloadable/shareable later. listDocuments returns newest
+      // first, so the first match per applicant is always their latest report.
       try {
         const docs = await listDocuments({ caseId });
-        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
+        docs.filter(d => d.document_type === 'CIBIL_REPORT_PDF' || d.original_file_name?.startsWith('Experian_Report_'))
           .forEach(d => { if (!reports[d.applicant_id]) reports[d.applicant_id] = d; });
         setBureauReports(reports);
       } catch (docErr) {
@@ -341,19 +330,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleDownloadReport = async (applicantId) => {
     const doc = bureauReports[applicantId];
-    if (!doc) return;
-    
-    // New Befisc report or Signzy PDF
-    if (doc.htmlUrl) {
-      window.open(doc.htmlUrl, '_blank');
-      return;
-    }
-    if (doc.pdfUrl) {
-      window.open(doc.pdfUrl, '_blank');
-      return;
-    }
-    
-    // Old Experian file download
+    if (!doc?.id) return;
+
+    // Always the S3-stored copy — BEFISC's webtoken URL and any raw vendor
+    // pdfUrl are single-use/short-lived, so this document is the only thing
+    // that stays downloadable (or shareable) after the pull itself.
     setDownloadingFor(applicantId);
     try {
       await downloadDocument(doc.id, doc.original_file_name);
@@ -457,7 +438,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 self-service journeys (same component, rendered inline by
                 AddCustomerWizardPage for each). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-              {bureauReports[applicant.id] && (
+              {bureauReports[applicant.id]?.id && (
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleDownloadReport(applicant.id)}
