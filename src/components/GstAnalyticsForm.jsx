@@ -95,6 +95,16 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const authLinkId = latestRequest?.auth_link_id;
     const [sendingLink, setSendingLink] = useState(false);
     const [cancellingLink, setCancellingLink] = useState(false);
+    // Optimistic flag: hides the "Send Auth Link" form the instant the send
+    // succeeds, without waiting on the realtime snapshot's own round trip
+    // (refresh() -> server rebroadcast -> socket push) to flip
+    // isAuthLinkPending. Dropped again once the snapshot actually catches up
+    // (whatever it then shows — pending link or, if the customer was
+    // implausibly fast, a real submitted pull — takes over from there).
+    const [linkJustSent, setLinkJustSent] = useState(false);
+    useEffect(() => {
+        setLinkJustSent(false);
+    }, [latestRequest?.id, latestRequest?.status]);
 
     // Neither `snapshot` (starts null until the socket delivers its first
     // push) nor `fallbackRequests` (starts []) carry any synchronous "has
@@ -213,6 +223,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         try {
             await gstAuthLinkService.requestLink({ customer_id: customerId, case_id: caseId, applicant_id: applicantId, gstin: formData.gstin });
             toast.success('GST authorisation link sent to the customer');
+            setLinkJustSent(true);
             refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || 'Failed to send the GST auth link');
@@ -296,7 +307,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 no visible name context at all when hidden by that state, so
                 duplicating a heading here would only show up in the cases
                 where it's least needed. */}
-            {!isSuccess && !isAuthLinkPending && (
+            {!isSuccess && !isAuthLinkPending && !linkJustSent && (
             <div style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg-surface)',
@@ -500,6 +511,21 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                     </button>
                 </div>
             </div>
+            )}
+
+            {!latestRequest && linkJustSent && (
+                // Bridges the gap between the send succeeding and the realtime
+                // snapshot catching up (see linkJustSent above) — without this,
+                // hiding the form immediately would flash an empty panel for a
+                // moment instead of confirming the send went through.
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: 'var(--bg-surface)' }}>
+                    <PullStatusTracker
+                        variant="panel"
+                        phase="AWAITING_CUSTOMER"
+                        label="GST authorisation link sent"
+                        progress={12}
+                    />
+                </div>
             )}
 
             {latestRequest && (
