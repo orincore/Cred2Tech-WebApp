@@ -249,14 +249,20 @@ const ItrAnalyticsForm = ({
         }
     };
 
-    // `existingRecord` is a synchronous prop (the parent wizard already
-    // awaited the case load before this component ever mounts), so this
-    // resolves to true on the very first render in the normal case — no
-    // artificial delay. It only stays false for the rare tick where the prop
-    // genuinely hasn't arrived yet, showing a skeleton instead of a
-    // default/empty "Fetch ITR" state that would otherwise flash before
-    // snapping to the real one.
-    if (existingRecord === undefined) {
+    // `existingRecord` is normally a synchronous prop (the parent wizard
+    // already awaited the case load before this component ever mounts), so
+    // this resolves on the very first render in the common case — no
+    // artificial delay. But it can also stay `undefined` for the entire
+    // session if the parent wizard's in-memory case data was built before
+    // this field existed on it (e.g. navigating straight from the GST step
+    // to the ITR step without a full page reload) — gating on it alone then
+    // left this stuck on a skeleton forever, only resolving on a manual
+    // refresh once the parent re-fetched the case fresh. `snapshot` (see
+    // hooks/useCasePullStatus) resolves independently over the socket
+    // regardless of what the parent prop ever does, so also treating that as
+    // "ready" — matching GstAnalyticsForm's own dataReady gate — means this
+    // never gets stuck even when `existingRecord` never arrives.
+    if (existingRecord === undefined && snapshot === null) {
         return (
             <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
                 <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
