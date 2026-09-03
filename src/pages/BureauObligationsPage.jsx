@@ -173,8 +173,23 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // the PAN-verified name from the full case record so we can show a
       // real name instead of that placeholder wherever it's available.
       const names = {};
+      const reports = {};
       (caseData.applicants || []).forEach(a => {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
+        
+        // Check for new Befisc HTML report URL or Signzy PDF URL
+        const checks = a.bureau_checks || [];
+        if (checks.length > 0) {
+           const raw = checks[0].raw_response || {};
+           const htmlUrl = raw.result?.htmlUrl || raw.htmlUrl;
+           const pdfUrl = raw.data?.CIBILPDF;
+           
+           if (htmlUrl) {
+              reports[a.id] = { htmlUrl };
+           } else if (pdfUrl) {
+              reports[a.id] = { pdfUrl };
+           }
+        }
       });
       setApplicantNames(names);
 
@@ -184,9 +199,8 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // regenerating anything client-side.
       try {
         const docs = await listDocuments({ caseId });
-        const reports = {};
         docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
-          .forEach(d => { reports[d.applicant_id] = d; });
+          .forEach(d => { if (!reports[d.applicant_id]) reports[d.applicant_id] = d; });
         setBureauReports(reports);
       } catch (docErr) {
         // Non-fatal — obligations already loaded fine, just no download button.
@@ -328,6 +342,18 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   const handleDownloadReport = async (applicantId) => {
     const doc = bureauReports[applicantId];
     if (!doc) return;
+    
+    // New Befisc report or Signzy PDF
+    if (doc.htmlUrl) {
+      window.open(doc.htmlUrl, '_blank');
+      return;
+    }
+    if (doc.pdfUrl) {
+      window.open(doc.pdfUrl, '_blank');
+      return;
+    }
+    
+    // Old Experian file download
     setDownloadingFor(applicantId);
     try {
       await downloadDocument(doc.id, doc.original_file_name);
