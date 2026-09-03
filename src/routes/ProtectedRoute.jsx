@@ -1,38 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getMe } from '../api/authService';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import PageSkeleton from '../components/ui/PageSkeleton';
 
 const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
   const { user, isAuthenticated, isLoading, hasRole, hasTenantType, logout } = useAuth();
   const location = useLocation();
-  const [isValidating, setIsValidating] = useState(false);
 
+  // Background safety net only — deliberately does NOT block rendering
+  // (used to via its own isValidating skeleton, which fired a full extra
+  // page-level skeleton on every single navigation between protected
+  // routes, since a fresh ProtectedRoute element mounts per route match).
+  // isAuthenticated already reflects a locally-stored, well-formed token,
+  // and a genuinely revoked/expired one is already caught two other ways
+  // that don't need a render-blocking check here: axiosInstance's own 401
+  // interceptor (the very first real API call the page below makes) and
+  // AuthContext's live session-revoked poll (SessionRevokedModal). This
+  // getMe() call is just an extra, slightly earlier confirmation of the
+  // same thing — worth keeping, not worth a loading state of its own.
   useEffect(() => {
-    const validateToken = async () => {
-      if (isAuthenticated) {
-        setIsValidating(true);
-        try {
-          await getMe();
-        } catch (error) {
-          // Token is invalid, logout user
-          logout();
-        } finally {
-          setIsValidating(false);
-        }
-      }
-    };
-
-    validateToken();
+    if (!isAuthenticated) return;
+    getMe().catch(() => logout());
   }, [isAuthenticated, logout]);
 
-  if (isLoading || isValidating) {
-    return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <LoadingSpinner size={40} fullPage />
-      </div>
-    );
+  if (isLoading) {
+    return <PageSkeleton />;
   }
 
   if (!isAuthenticated) {

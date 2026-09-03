@@ -573,7 +573,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
 
                                     <button type="button" onClick={() => handleDeleteRequest(latestRequest.id)} disabled={deleting}
                                         className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}>
-                                        <Trash2 size={14} /> {deleting ? 'Removing...' : 'Remove'}
+                                        <Trash2 size={14} /> {deleting ? 'Deleting...' : 'Delete'}
                                     </button>
                                 </div>
                             </div>

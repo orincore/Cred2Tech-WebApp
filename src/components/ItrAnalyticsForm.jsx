@@ -372,7 +372,7 @@ const ItrAnalyticsForm = ({
                                 disabled={deleting}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
                             >
-                                <Trash2 size={13} /> {deleting ? 'Removing...' : 'Remove'}
+                                <Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}
                             </button>
                         </div>
                     ) : (

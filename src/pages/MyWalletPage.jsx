@@ -96,14 +96,17 @@ const API_CODE_FALLBACK_LABEL = {
 
 // The Reference column for an API-call debit: GST_FETCH / BUREAU_OBLIGATIONS /
 // ITR_ANALYTICS etc. are internal api_codes, meaningless to a DSA reading
-// their own usage log — swapped for who the call was actually run for
-// ("<Customer> · Case <id>"), which the backend attaches (customer_name/
-// case_id) by joining the api_usage_log the deduction was logged against.
+// their own usage log on their own — shown as "<Service> — <Customer> ·
+// Case <id>" so it's clear BOTH which service ran AND who it ran for. The
+// customer/case half comes from the backend (customer_name/case_id),
+// attached by joining the api_usage_log the deduction was logged against;
+// it's appended to, never a replacement for, the service name below.
 const transactionReferenceLabel = (t) => {
   if (t.remarks) return t.remarks;
   if (t.api_code) {
-    const who = t.customer_name || API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
-    return t.case_id ? `${who} · Case ${t.case_id}` : who;
+    const service = API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
+    const who = t.customer_name ? `${t.customer_name}${t.case_id ? ` · Case ${t.case_id}` : ''}` : null;
+    return who ? `${service} — ${who}` : service;
   }
   return '—';
 };

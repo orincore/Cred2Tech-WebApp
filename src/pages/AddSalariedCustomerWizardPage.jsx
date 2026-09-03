@@ -15,7 +15,7 @@ import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseW
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
-import { toTitleCase } from '../utils/helpers';
+import { toTitleCase, formatDate } from '../utils/helpers';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -720,16 +720,25 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  // Every required field on the Personal Details subpage EXCEPT consent —
-  // gates the Request Consent button itself (no point asking for consent
-  // before the rest of the form is filled in) and, once consent is granted,
-  // is the only thing left gating Save & Next (mobile_verified is
-  // guaranteed true in that branch already). Mirrors
-  // AddCustomerWizardPage's step1BusinessFieldsValid/step1BusinessValid.
-  const step1FieldsValid = !!formData.business_pan
-    && !!formData.business_name
+  // Everything the customer can actually fill in BEFORE consent exists —
+  // gates the Request Consent button itself. business_name/dob are
+  // deliberately excluded: they're read-only, auto-fetched by PAN
+  // verification, which itself only auto-fires once mobile_verified flips
+  // true (see the panAutoVerifyAttempted-style effect for this page) —
+  // requiring business_name here used to create an unbreakable deadlock
+  // where consent could never be requested because business_name didn't
+  // exist yet, and business_name could never exist because consent hadn't
+  // been requested yet. Mirrors AddCustomerWizardPage's identical fix
+  // (step1ConsentFieldsValid/step1BusinessFieldsValid).
+  const step1ConsentFieldsValid = !!formData.business_pan
+    && !!formData.business_mobile
     && !!formData.business_email
     && !!formData.pincode;
+  // Everything above, PLUS business_name — by the time this is checked
+  // (once consent is granted), PAN auto-verify has already run and filled
+  // it in, so this only ever gates the *next* step (Save & Next), never
+  // Request Consent.
+  const step1FieldsValid = step1ConsentFieldsValid && !!formData.business_name;
   const step1Valid = step1FieldsValid && !!formData.mobile_verified;
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
@@ -960,21 +969,6 @@ const AddSalariedCustomerWizardPage = () => {
                   </FormField>
                 </div>
 
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Full Name (As Per PAN)" name="business_name" required disabled>
-                    <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
-                  </FormField>
-
-                  <FormField label="Date Of Birth" name="dob">
-                    <input
-                      type="date"
-                      value={formData.dob || ''}
-                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                      className="form-control"
-                    />
-                  </FormField>
-                </div>
-
                 <div className="grid-2">
                   <FormField label="Email Address" name="business_email" required>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1010,6 +1004,38 @@ const AddSalariedCustomerWizardPage = () => {
                     />
                   </FormField>
                 </div>
+
+                {/* Hidden until consent is actually granted — before that,
+                    business_name/dob are always empty (they're only ever
+                    auto-fetched by PAN verification, which itself only
+                    fires once mobile_verified flips true), so showing two
+                    permanently-blank "Autofetched via PAN" fields up front
+                    was just noise. Reusing index.css's existing slideUp
+                    keyframe for the reveal keeps this consistent with the
+                    rest of the app rather than introducing a new animation. */}
+                {formData.mobile_verified && (
+                  <div className="grid-2" style={{ marginTop: 24, animation: 'slideUp 0.35s ease' }}>
+                    <FormField label="Full Name (As Per PAN)" name="business_name" disabled>
+                      <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
+                    </FormField>
+
+                    {/* Never user-editable — always auto-fetched by PAN
+                        verification by the time this is visible at all — so
+                        a plain read-only text field (not a date-picker,
+                        which implies an editable value) showing a
+                        human-formatted date. */}
+                    <FormField label="Date Of Birth" name="dob" disabled>
+                      <input
+                        type="text"
+                        value={formData.dob ? formatDate(formData.dob) : ''}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                        readOnly
+                      />
+                    </FormField>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1026,9 +1052,9 @@ const AddSalariedCustomerWizardPage = () => {
                   <button
                     type="button"
                     onClick={handleRequestConsent}
-                    disabled={saving || !step1FieldsValid || walletBalance < costs.PAN_FETCH}
+                    disabled={saving || !step1ConsentFieldsValid || walletBalance < costs.PAN_FETCH}
                     className="btn btn-primary btn-lg"
-                    title={!step1FieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                   >
                     {`Request Consent (~${costs.PAN_FETCH} Cr)`}
                   </button>

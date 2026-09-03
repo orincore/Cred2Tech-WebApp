@@ -552,10 +552,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         onClick={() => handleDeleteObligation(obl.id)}
                         disabled={deletingId === obl.id}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
-                        title="Remove obligation"
+                        title="Delete obligation"
                       >
                         <Trash2 size={14} />
-                        {deletingId === obl.id ? 'Removing…' : 'Remove'}
+                        {deletingId === obl.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </div>
                   </div>

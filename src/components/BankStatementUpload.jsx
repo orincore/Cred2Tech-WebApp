@@ -16,6 +16,8 @@ import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '.
 // misses the deployed dev server (still a production Vite build).
 const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
+const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
@@ -45,14 +47,26 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         excel: existingStatus?.report_excel_url || null,
         json: existingStatus?.report_json_url || null,
     });
+    // Preview figures — same idea as GstAnalyticsForm's turnover_preview, but
+    // sourced from `existingStatus` only (case.service.js#getCaseById), not
+    // the realtime socket snapshot: unlike GST's turnover (backed by a
+    // pre-parsed FY summary table, cheap to look up on every tick),
+    // avg_monthly_credit/total_credits only exist by parsing the raw vendor
+    // JSON, which casePullSnapshot.service.js deliberately never selects on
+    // every socket tick (see its own BANK_SELECT comment on why). These are
+    // static once a pull completes, so a snapshot-per-poll isn't needed —
+    // one read at page load is enough.
+    const [localPreview, setLocalPreview] = useState({
+        avg_bank_balance_latest_year: existingStatus?.avg_bank_balance_latest_year ?? null,
+        avg_bank_balance_previous_year: existingStatus?.avg_bank_balance_previous_year ?? null,
+        financial_year_latest: existingStatus?.financial_year_latest ?? null,
+        financial_year_previous: existingStatus?.financial_year_previous ?? null,
+        avg_monthly_credit: existingStatus?.avg_monthly_credit ?? null,
+        total_credits: existingStatus?.total_credits ?? null,
+    });
 
     const status = livePull?.status || localStatus;
     const reportId = livePull?.report_id || localReportId;
-    // Dev-only — the background supervisor's own retrieveWorkOrder call
-    // failing (socket.service.js's mergeVendorErrors), distinct from the
-    // manual "Check now" failure captured in providerError below. Cleared
-    // automatically server-side the moment a retry succeeds.
-    const vendorSyncError = livePull?.vendor_error || null;
     const documentIds = livePull
         ? { excel: livePull.bank_excel_document_id || null, json: livePull.bank_json_document_id || null }
         : localDocumentIds;
@@ -84,6 +98,14 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         setLocalSourceUrls({
             excel: existingStatus.report_excel_url || null,
             json: existingStatus.report_json_url || null,
+        });
+        setLocalPreview({
+            avg_bank_balance_latest_year: existingStatus.avg_bank_balance_latest_year ?? null,
+            avg_bank_balance_previous_year: existingStatus.avg_bank_balance_previous_year ?? null,
+            financial_year_latest: existingStatus.financial_year_latest ?? null,
+            financial_year_previous: existingStatus.financial_year_previous ?? null,
+            avg_monthly_credit: existingStatus.avg_monthly_credit ?? null,
+            total_credits: existingStatus.total_credits ?? null,
         });
     }, [existingStatus, localReportId]);
 
@@ -301,6 +323,29 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 </div>
             </div>
 
+            {/* Turnover-preview-style summary — same idea and layout as
+                GstAnalyticsForm's own preview grid, so GST and Bank read as
+                one consistent design instead of GST alone having a preview.
+                Sourced from `existingStatus` (see localPreview above), so it
+                appears the instant the pull is COMPLETED without waiting on
+                a live socket field that doesn't carry this. */}
+            {status === 'COMPLETED' && (localPreview.avg_bank_balance_latest_year != null || localPreview.total_credits != null) && (
+                <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14,
+                    padding: isMobile ? '14px 16px' : '16px 24px', borderTop: '1px solid var(--border)',
+                }}>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Daily Average Balance</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.avg_bank_balance_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{localPreview.financial_year_latest || '—'}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Bank Credit</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.total_credits)}</div>
+                    </div>
+                </div>
+            )}
+
             {/* Dev-only diagnostic — Signzy retrieve-work-order/download-report
                 entitlement gap, kept visible (not just a toast) for a vendor
                 escalation. Never renders in a production build. */}
@@ -311,21 +356,6 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                     </div>
                     <div>{providerError.endpoint}</div>
                     <div style={{ marginTop: 4 }}>{providerError.message}</div>
-                </div>
-            )}
-
-            {/* Dev-only diagnostic — the background supervisor's own
-                retrieveWorkOrder polling failing, distinct from the manual
-                "Check now" failure above. Same Signzy entitlement gap, but
-                worth showing separately since this is the automatic path
-                that runs with no user action at all. */}
-            {IS_DEV_BUILD && vendorSyncError && (
-                <div style={{ margin: '0 16px 16px', padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 12, fontFamily: 'monospace', border: '1px dashed var(--error)' }}>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                        [DEV ONLY] Signzy provider call failed (background auto-sync){vendorSyncError.status ? ` — HTTP ${vendorSyncError.status}` : ''}
-                    </div>
-                    <div>Signzy statementanalysis/authenticate + retrieve-work-order (server-side, polled automatically)</div>
-                    <div style={{ marginTop: 4 }}>{vendorSyncError.message}</div>
                 </div>
             )}
 

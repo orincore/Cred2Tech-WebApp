@@ -21,7 +21,7 @@ import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
-import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
 import EsrStep from './EsrPage';
@@ -1607,29 +1607,44 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </div>
                 )}
 
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Business Name / Full Name" name="business_name" disabled>
-                    <input
-                      type="text"
-                      value={formData.business_name}
-                      onChange={e => setFormData({ ...formData, business_name: e.target.value })}
-                      className="form-control"
-                      placeholder="Autofetched via PAN"
-                      disabled
-                    />
-                  </FormField>
+                {/* Hidden until consent is actually granted — before that,
+                    business_name/dob are always empty (they're only ever
+                    auto-fetched by PAN verification, which itself only
+                    fires once mobile_verified flips true), so showing two
+                    permanently-blank "Autofetched via PAN" fields up front
+                    was just noise. Reusing index.css's existing slideUp
+                    keyframe for the reveal keeps this consistent with the
+                    rest of the app rather than introducing a new animation. */}
+                {formData.mobile_verified && (
+                  <div className="grid-2" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
+                    <FormField label="Business Name / Full Name" name="business_name" disabled>
+                      <input
+                        type="text"
+                        value={formData.business_name}
+                        onChange={e => setFormData({ ...formData, business_name: e.target.value })}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                      />
+                    </FormField>
 
-                  <FormField label="Date Of Birth / Incorporation" name="dob" required disabled={formData.pan_verified}>
-                    <input
-                      type="date"
-                      value={formData.dob || ''}
-                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                      className="form-control"
-                      required
-                      disabled={formData.pan_verified}
-                    />
-                  </FormField>
-                </div>
+                    {/* Never user-editable — always auto-fetched by PAN
+                        verification by the time this is visible at all — so
+                        a plain read-only text field (not a date-picker,
+                        which implies an editable value) showing a
+                        human-formatted date. */}
+                    <FormField label="Date Of Birth / Incorporation" name="dob" disabled>
+                      <input
+                        type="text"
+                        value={formData.dob ? formatDate(formData.dob) : ''}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                        readOnly
+                      />
+                    </FormField>
+                  </div>
+                )}
               </div>
             </div>
 

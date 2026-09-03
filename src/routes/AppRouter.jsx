@@ -4,7 +4,6 @@ import { AuthProvider } from '../context/AuthContext';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
 import SessionRevokedModal from '../components/SessionRevokedModal';
 import { DASHBOARD_ROLES } from '../constants/roles';
 
@@ -69,11 +68,15 @@ const MsmeCaseDetailPage = lazy(() => import('../pages/msme/MsmeCaseDetailPage')
 const MsmeTransactionsPage = lazy(() => import('../pages/msme/MsmeTransactionsPage'));
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
-const PageLoader = () => (
-  <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <LoadingSpinner size={40} fullPage />
-  </div>
-);
+// Fires only while a lazy route's own JS chunk is still downloading —
+// typically sub-100ms after the first visit (cached thereafter), and
+// immediately followed by that page's own tailored loading skeleton once it
+// mounts and starts fetching its data. Deliberately a blank, not a second,
+// differently-shaped generic skeleton: three different skeleton treatments
+// flashing in sequence (this one, ProtectedRoute's, then the real page's)
+// read as broken, not as "loading" — this is the one of those three that
+// carries no useful shape of its own to preserve, so it's the one dropped.
+const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
 
 // Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
 // is domain/senderId/<opaque-token> with no further path segments (see
