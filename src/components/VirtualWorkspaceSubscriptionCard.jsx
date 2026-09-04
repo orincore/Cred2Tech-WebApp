@@ -105,7 +105,7 @@ const PlanCard = ({ plan, variant, selected, onSelect }) => {
 // via Cancel — which keeps the current plan active until it actually
 // expires rather than switching mid-cycle.
 const VirtualWorkspaceSubscriptionCard = () => {
-  const { hasRole } = useAuth();
+  const { hasRole, refreshUser } = useAuth();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('RAZORPAY_AUTOPAY');
@@ -128,7 +128,14 @@ const VirtualWorkspaceSubscriptionCard = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+    // Sidebar.jsx's nav-access gate reads virtual_workspace_restricted_nav_
+    // item_ids off the GLOBAL AuthContext user object, which only /auth/me
+    // repopulates — refreshing this card's OWN status above does nothing
+    // for it. Without this, a subscribe/upgrade/cancel just now still shows
+    // the Free plan's restricted sidebar until the next full page reload.
+    // Cheap enough to just always pair it with the card's own refresh.
+    refreshUser().catch(() => {});
+  }, [refreshUser]);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
