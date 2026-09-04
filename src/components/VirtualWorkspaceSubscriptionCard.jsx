@@ -21,6 +21,13 @@ const STATUS_LABEL = {
 // Self-contained — fetches/manages its own state so it can drop into
 // OrganizationProfilePage.jsx without threading into that page's own large
 // form/state. DSA_ADMIN only, matches the subscription routes' own gating.
+//
+// Deliberately simple, on purpose: a tenant who chooses to pay (either
+// payment method) is always charged and activated immediately, and renews
+// on that same date every month — regardless of the platform-wide
+// free_until date below. That date only ever matters to a tenant who
+// DOESN'T subscribe (see is_currently_free below, and Sidebar.jsx's gate) —
+// it never defers or splits an active subscribe/upgrade.
 const VirtualWorkspaceSubscriptionCard = () => {
   const { hasRole } = useAuth();
   const [status, setStatus] = useState(null);
@@ -52,11 +59,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const { subscription, wallet_balance, plans, monthly_price_credits, billing_enabled, is_currently_free, free_until, key_id } = status;
   const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
-  // Opens Razorpay Checkout against an already-created subscription — shared
-  // by a fresh subscribe and by "Complete Payment Setup" for a subscription
-  // stuck at CREATED/AUTHENTICATED (e.g. one an admin started on this
-  // tenant's behalf, or a Checkout the tenant closed before finishing).
-  const openCheckout = async (razorpaySubscriptionId) => {
+  // Opens Razorpay Checkout for mandate authorization against an
+  // already-created subscription — shared by a fresh subscribe, a plan
+  // switch, and "Complete Payment Setup" for one stuck at CREATED/
+  // AUTHENTICATED (e.g. one an admin started on this tenant's behalf, or a
+  // Checkout the tenant closed before finishing). The authorization itself
+  // IS the charge — Razorpay bills immediately on success.
+  const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace') => {
     const Razorpay = await loadRazorpay();
     const rzp = new Razorpay({
       key: key_id,
@@ -70,7 +79,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
           });
-          toast.success('Subscribed to Virtual Workspace');
+          toast.success(successMessage);
           fetchStatus();
         } catch (err) {
           toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
@@ -92,22 +101,14 @@ const VirtualWorkspaceSubscriptionCard = () => {
         promo_code: promoCode.trim() || null,
       });
 
-      if (res.data.free) {
-        // During the platform-wide free window, subscribe() never touches
-        // Razorpay at all — no razorpay_subscription_id to open Checkout
-        // against, regardless of which payment_method was chosen.
-        toast.success(res.data.message || 'Activated — free for now, no payment required');
-        await fetchStatus();
-        return;
-      }
-
       if (res.data.payment_method === 'WALLET_CREDITS') {
         toast.success('Subscribed — paid from wallet credits');
         await fetchStatus();
         return;
       }
 
-      // RAZORPAY_AUTOPAY — open Checkout against the created subscription.
+      // RAZORPAY_AUTOPAY — open Checkout against the created subscription;
+      // authorizing it is what charges the first month, right now.
       await openCheckout(res.data.razorpay_subscription_id);
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to start subscription');
@@ -153,11 +154,6 @@ const VirtualWorkspaceSubscriptionCard = () => {
         promo_code: promoCode.trim() || null,
       });
 
-      if (res.data.free) {
-        toast.success(res.data.message || 'Plan switched — free for now, no payment required');
-        await fetchStatus();
-        return;
-      }
       if (res.data.payment_method === 'WALLET_CREDITS') {
         toast.success('Plan switched — paid from wallet credits');
         await fetchStatus();
@@ -208,18 +204,15 @@ const VirtualWorkspaceSubscriptionCard = () => {
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace Subscription</h3>
           <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>
-            {freeUntilLabel ? `Free until ${freeUntilLabel} — from ₹${monthly_price_credits}/month afterward` : `From ₹${monthly_price_credits}/month — auto-renews`}
+            {freeUntilLabel ? `Free until ${freeUntilLabel} for tenants who don't subscribe — plans below are ₹${monthly_price_credits}/month and start right away` : `From ₹${monthly_price_credits}/month — auto-renews`}
           </p>
         </div>
       </div>
 
       <div style={{ padding: 20 }}>
-        {is_currently_free && (
+        {is_currently_free && !activeLike && (
           <div style={{ padding: '12px 14px', marginBottom: 16, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)', fontSize: 12.5, lineHeight: 1.6 }}>
-            🎉 <strong>Congrats — Virtual Workspace is free until {freeUntilLabel}!</strong> This period will not charge your account.
-            {activeLike && (
-              <> Your existing subscription has been extended till {freeUntilLabel} — your next renewal will be on {freeUntilLabel}.</>
-            )}
+            🎉 <strong>Congrats — Virtual Workspace is free until {freeUntilLabel}!</strong> No need to subscribe to keep using it during this period.
           </div>
         )}
         {needsCheckout && (
@@ -258,7 +251,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
             )}
             <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>
               ₹{subscription.effective_amount_credits}/month
-              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : subscription.pending_cancellation ? 'full access until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
+              {subscription.current_period_end && ` — ${subscription.pending_cancellation ? 'full access until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
             </p>
 
             {subscription.pending_cancellation && (
@@ -362,8 +355,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 style={{ maxWidth: 220, textTransform: 'uppercase' }}
               />
             </div>
+            <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 10px' }}>
+              {paymentMethod === 'RAZORPAY_AUTOPAY'
+                ? "You'll be charged right now, and auto-pay renews the same date every month."
+                : "You'll be charged from your wallet right now, and it auto-renews the same date every month."}
+            </p>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0 }}>
-              {busy ? 'Starting…' : is_currently_free ? `Activate — Free until ${freeUntilLabel}` : 'Subscribe'}
+              {busy ? 'Starting…' : 'Subscribe'}
             </button>
           </>
         )}

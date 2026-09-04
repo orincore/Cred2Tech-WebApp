@@ -170,15 +170,13 @@ const AdminTenantManagePage = () => {
     setBusy(true);
     try {
       const res = await adminSubscribeVirtualWorkspace(id, { planId: subPlanId, paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
-      if (res.free) {
-        toast.success(res.message || 'Activated — free for now, no payment required');
-      } else if (res.payment_method === 'WALLET_CREDITS') {
+      if (res.payment_method === 'WALLET_CREDITS') {
         toast.success('Subscribed — paid from tenant wallet credits');
       } else {
         toast.success(
-          `Razorpay subscription created (${res.razorpay_subscription_id}) — Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page.`
+          `Razorpay subscription created (${res.razorpay_subscription_id}) — Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page. Authorizing it charges the first month immediately.`
           + (res.short_url ? ` Backup link: ${res.short_url}` : ''),
-          { duration: 12000 }
+          { duration: 14000 }
         );
       }
       await fetchData();
@@ -199,17 +197,15 @@ const AdminTenantManagePage = () => {
     setBusy(true);
     try {
       const res = await adminUpgradeVirtualWorkspacePlan(id, { planId: upgradePlanId, promoCode: subPromoCode.trim() || null });
-      if (res.free) {
-        toast.success(res.message || 'Plan switched — free for now, no payment required');
-      } else if (res.payment_method === 'WALLET_CREDITS') {
+      if (res.payment_method === 'WALLET_CREDITS') {
         toast.success('Plan switched — paid from tenant wallet credits');
       } else if (res.updated_in_place) {
         toast.success('Plan switched — Razorpay changed the renewal price on the tenant\'s existing mandate directly, no re-authorization needed');
       } else {
         toast.success(
-          `Plan switched — Razorpay subscription created (${res.razorpay_subscription_id}); Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page.`
+          `Plan switched — Razorpay subscription created (${res.razorpay_subscription_id}); Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page. Authorizing it charges the first month immediately.`
           + (res.short_url ? ` Backup link: ${res.short_url}` : ''),
-          { duration: 12000 }
+          { duration: 14000 }
         );
       }
       await fetchData();
