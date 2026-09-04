@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle, Check } from 'lucide-react';
+import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay } from '../utils/razorpay';
@@ -18,6 +18,75 @@ const STATUS_LABEL = {
   COMPLETED: 'Completed',
 };
 
+const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+
+// One plan tile, shared by the "choose a plan" (not yet subscribed) and
+// "all plans" (already subscribed, upgrade-only) grids — same visual
+// language, different selectability rules depending on `variant`.
+const PlanCard = ({ plan, variant, selected, onSelect }) => {
+  const isCurrent = variant === 'current';
+  const isLocked = variant === 'locked'; // priced at/below current — upgrade-only, cancel to go lower
+  const disabled = isCurrent || isLocked;
+  const hasIntro = plan.first_cycle_price_credits != null && plan.first_cycle_price_credits !== plan.monthly_price_credits;
+
+  return (
+    <label
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 4, padding: '12px 14px',
+        cursor: disabled ? 'default' : 'pointer',
+        border: `1px solid ${isCurrent ? 'var(--success)' : selected ? 'var(--primary)' : 'var(--outline)'}`,
+        background: isCurrent ? 'var(--success-bg)' : selected ? 'var(--primary-subtle)' : 'var(--bg-surface)',
+        opacity: isLocked ? 0.55 : 1,
+        minWidth: 168,
+        maxWidth: 220,
+        flex: '1 1 168px',
+        transition: 'border-color 0.12s ease, background 0.12s ease',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)' }}>
+          {!disabled && (
+            <input type="radio" checked={selected} onChange={onSelect} style={{ margin: 0 }} />
+          )}
+          {plan.name}
+        </span>
+        {isCurrent && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 800, color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            <ShieldCheck size={11} /> Current
+          </span>
+        )}
+        {isLocked && <Lock size={12} color="var(--on-muted)" />}
+      </div>
+
+      {hasIntro ? (
+        <>
+          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--on-surface)' }}>{money(plan.first_cycle_price_credits)} first month</span>
+          <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>then {money(plan.monthly_price_credits)}/mo</span>
+        </>
+      ) : (
+        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--on-surface)' }}>{money(plan.monthly_price_credits)}<span style={{ fontSize: 11, fontWeight: 600, color: 'var(--on-muted)' }}>/mo</span></span>
+      )}
+
+      {plan.description && <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>{plan.description}</span>}
+
+      {plan.included_features?.length > 0 && (
+        <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {plan.included_features.map((feature, i) => (
+            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 10.5, color: 'var(--on-muted)' }}>
+              <Check size={11} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
+              {feature}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isLocked && (
+        <span style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 2 }}>Cancel your subscription to move to this plan</span>
+      )}
+    </label>
+  );
+};
+
 // Self-contained — fetches/manages its own state so it can drop into
 // OrganizationProfilePage.jsx without threading into that page's own large
 // form/state. DSA_ADMIN only, matches the subscription routes' own gating.
@@ -28,6 +97,13 @@ const STATUS_LABEL = {
 // free_until date below. That date only ever matters to a tenant who
 // DOESN'T subscribe (see is_currently_free below, and Sidebar.jsx's gate) —
 // it never defers or splits an active subscribe/upgrade.
+//
+// Switching plans is upgrade-only: a tenant already subscribed can only
+// move to a HIGHER-priced plan (paying the price difference right now,
+// same subscription/mandate kept — see upgradePlan()'s doc comment on the
+// backend). Moving to anything cheaper, including Free, only ever happens
+// via Cancel — which keeps the current plan active until it actually
+// expires rather than switching mid-cycle.
 const VirtualWorkspaceSubscriptionCard = () => {
   const { hasRole } = useAuth();
   const [status, setStatus] = useState(null);
@@ -42,9 +118,11 @@ const VirtualWorkspaceSubscriptionCard = () => {
     try {
       const res = await api.get('/virtual-workspace/subscription');
       setStatus(res.data);
-      const defaultPlanId = res.data.subscription?.plan_id || res.data.plans?.[0]?.id || '';
-      setPlanId(String(defaultPlanId));
-      setSwitchPlanId(String(defaultPlanId));
+      const currentPlanId = res.data.subscription?.plan_id || res.data.plans?.[0]?.id || '';
+      setPlanId(String(currentPlanId));
+      // Defaults to the current plan itself — nothing pre-selected as an
+      // "upgrade" until the tenant actually picks a pricier one.
+      setSwitchPlanId(String(currentPlanId));
     } catch {
       // Non-fatal — card just shows nothing actionable.
     } finally {
@@ -56,15 +134,15 @@ const VirtualWorkspaceSubscriptionCard = () => {
 
   if (!hasRole('DSA_ADMIN') || loading || !status) return null;
 
-  const { subscription, wallet_balance, plans, monthly_price_credits, billing_enabled, is_currently_free, free_until, key_id } = status;
+  const { subscription, wallet_balance, plans, monthly_price_credits, is_currently_free, free_until, key_id } = status;
   const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
   // Opens Razorpay Checkout for mandate authorization against an
-  // already-created subscription — shared by a fresh subscribe, a plan
-  // switch, and "Complete Payment Setup" for one stuck at CREATED/
-  // AUTHENTICATED (e.g. one an admin started on this tenant's behalf, or a
-  // Checkout the tenant closed before finishing). The authorization itself
-  // IS the charge — Razorpay bills immediately on success.
+  // already-created subscription — shared by a fresh subscribe and by
+  // "Complete Payment Setup" for one stuck at CREATED/AUTHENTICATED (e.g.
+  // one an admin started on this tenant's behalf, or a Checkout the tenant
+  // closed before finishing). The authorization itself IS the charge —
+  // Razorpay bills immediately on success.
   const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace') => {
     const Razorpay = await loadRazorpay();
     const rzp = new Razorpay({
@@ -85,6 +163,26 @@ const VirtualWorkspaceSubscriptionCard = () => {
           toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
         }
       },
+      theme: { color: '#4F46E5' },
+    });
+    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
+    rzp.open();
+  };
+
+  // Opens Razorpay Checkout for a plain ONE-TIME payment (an Order, not a
+  // Subscription) — the upgrade price-difference charge. onPaid runs
+  // after Razorpay confirms the payment client-side; the caller is
+  // responsible for verifying it server-side (confirm-upgrade-payment).
+  const openOneTimeCheckout = async ({ order_id, amount, currency, key_id: orderKeyId }, description, onPaid) => {
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({
+      key: orderKeyId || key_id,
+      order_id,
+      amount,
+      currency,
+      name: 'Cred2Tech Virtual Workspace',
+      description,
+      handler: (response) => onPaid(response),
       theme: { color: '#4F46E5' },
     });
     rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
@@ -126,49 +224,43 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
-  // "Free" isn't a priced plan — it's the restricted-access tier (limited
-  // dashboard nav, no wallet recharge, no paid features) you land on
-  // without an active subscription. Takes effect immediately, same as any
-  // other plan switch.
-  const handleDowngradeToFree = async () => {
-    setBusy(true);
-    try {
-      await api.post('/virtual-workspace/subscription/downgrade-to-free');
-      toast.success('Switched to the Free plan — restricted access until you upgrade again');
-      await fetchStatus();
-    } catch (err) {
-      toast.error(getErrorMessage(err) || 'Failed to switch to the Free plan');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const selectedSwitchPlan = plans?.find((p) => String(p.id) === String(switchPlanId));
+  const upgradeDiff = selectedSwitchPlan ? selectedSwitchPlan.monthly_price_credits - subscription?.effective_amount_credits : 0;
 
   const handleSwitchPlan = async () => {
-    if (!switchPlanId) return toast.error('Select a plan');
-    if (switchPlanId === 'FREE') return handleDowngradeToFree();
+    if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
     if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
+    if (upgradeDiff <= 0) return toast.error('Cancel your subscription to move to a lower-priced plan');
     setBusy(true);
     try {
-      const res = await api.post('/virtual-workspace/subscription/upgrade', {
-        plan_id: switchPlanId,
-        promo_code: promoCode.trim() || null,
-      });
+      const res = await api.post('/virtual-workspace/subscription/upgrade', { plan_id: switchPlanId });
 
       if (res.data.payment_method === 'WALLET_CREDITS') {
-        toast.success('Plan switched — paid from wallet credits');
+        toast.success(`Upgraded to ${selectedSwitchPlan.name} — ${money(upgradeDiff)} debited from wallet`);
         await fetchStatus();
         return;
       }
-      if (res.data.updated_in_place) {
-        // Razorpay changed the renewal price on the same mandate directly —
-        // no fresh Checkout needed.
-        toast.success('Plan switched');
-        await fetchStatus();
-        return;
-      }
-      toast.success('Plan switched — complete the new payment authorization below to activate it');
-      await openCheckout(res.data.razorpay_subscription_id);
-      await fetchStatus();
+
+      // RAZORPAY_AUTOPAY — a one-time Checkout for just the price
+      // difference; paying it is what applies the upgrade.
+      await openOneTimeCheckout(
+        res.data,
+        `Upgrade to ${selectedSwitchPlan.name} — price difference`,
+        async (response) => {
+          try {
+            await api.post('/virtual-workspace/subscription/confirm-upgrade-payment', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            toast.success(`Upgraded to ${selectedSwitchPlan.name} — subscription stays active, auto-pay bills the new price from next cycle`);
+            await fetchStatus();
+          } catch (err) {
+            toast.error(getErrorMessage(err) || 'Payment succeeded, but applying the upgrade failed — contact support with this payment reference.', { duration: 10000 });
+            await fetchStatus();
+          }
+        }
+      );
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to switch plan');
     } finally {
@@ -204,7 +296,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace Subscription</h3>
           <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>
-            {freeUntilLabel ? `Free until ${freeUntilLabel} for tenants who don't subscribe — plans below are ₹${monthly_price_credits}/month and start right away` : `From ₹${monthly_price_credits}/month — auto-renews`}
+            {freeUntilLabel ? `Free until ${freeUntilLabel} for tenants who don't subscribe — plans below are ${money(monthly_price_credits)}/month and start right away` : `From ${money(monthly_price_credits)}/month — auto-renews`}
           </p>
         </div>
       </div>
@@ -250,7 +342,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
               </p>
             )}
             <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>
-              ₹{subscription.effective_amount_credits}/month
+              {money(subscription.effective_amount_credits)}/month
               {subscription.current_period_end && ` — ${subscription.pending_cancellation ? 'full access until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
             </p>
 
@@ -260,30 +352,44 @@ const VirtualWorkspaceSubscriptionCard = () => {
               </p>
             )}
 
-            {!subscription.pending_cancellation && (
+            {!subscription.pending_cancellation && plans?.length > 0 && (
               <div style={{ borderTop: '1px solid var(--outline)', marginTop: 16, paddingTop: 16 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 8 }}>Switch Plan</p>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <select className="form-control" value={switchPlanId} onChange={(e) => setSwitchPlanId(e.target.value)} style={{ maxWidth: 260 }}>
-                    <option value="FREE">Free (Restricted Access)</option>
-                    {plans?.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/month</option>
-                    ))}
-                  </select>
-                  <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy || String(switchPlanId) === String(subscription.plan_id)} style={{ borderRadius: 0 }}>
-                    {busy ? 'Switching…' : switchPlanId === 'FREE' ? 'Switch to Free' : 'Switch Plan'}
-                  </button>
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6, marginBottom: 0 }}>
-                  {switchPlanId === 'FREE'
-                    ? 'Takes effect immediately — cancels billing right now and restricts your access (limited dashboard, no wallet recharge, no paid features) until you upgrade again.'
-                    : "Takes effect immediately — starts a fresh billing cycle at the new plan's price."}
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ArrowUpCircle size={13} /> All Plans
                 </p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {plans.map((p) => {
+                    const isCurrent = String(p.id) === String(subscription.plan_id);
+                    const isLocked = !isCurrent && p.monthly_price_credits <= subscription.effective_amount_credits;
+                    return (
+                      <PlanCard
+                        key={p.id}
+                        plan={p}
+                        variant={isCurrent ? 'current' : isLocked ? 'locked' : 'upgrade'}
+                        selected={String(switchPlanId) === String(p.id)}
+                        onSelect={() => setSwitchPlanId(String(p.id))}
+                      />
+                    );
+                  })}
+                </div>
+                {selectedSwitchPlan && String(switchPlanId) !== String(subscription.plan_id) && upgradeDiff > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy} style={{ borderRadius: 0 }}>
+                      {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name} — pay ${money(upgradeDiff)} now`}
+                    </button>
+                    <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>
+                      Your subscription stays active — this charges just the difference, and auto-pay bills {money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
             {!subscription.pending_cancellation && (
               <div style={{ borderTop: '1px solid var(--outline)', marginTop: 16, paddingTop: 16 }}>
+                <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 8px' }}>
+                  Want a lower-priced plan (or Free)? Cancel below instead — your current plan stays active until it expires, no mid-cycle switch.
+                </p>
                 <button className="btn btn-ghost btn-sm" onClick={handleCancel} disabled={busy} style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)' }}>
                   Cancel Subscription
                 </button>
@@ -297,39 +403,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Choose a plan</label>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   {plans.map((p) => (
-                    <label
+                    <PlanCard
                       key={p.id}
-                      style={{
-                        display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 14px', cursor: 'pointer',
-                        border: `1px solid ${String(planId) === String(p.id) ? 'var(--primary)' : 'var(--outline)'}`,
-                        background: String(planId) === String(p.id) ? 'var(--primary-subtle)' : 'transparent',
-                        minWidth: 140,
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
-                        <input type="radio" checked={String(planId) === String(p.id)} onChange={() => setPlanId(String(p.id))} />
-                        {p.name}
-                      </span>
-                      {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits ? (
-                        <>
-                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)' }}>₹{p.first_cycle_price_credits} first month</span>
-                          <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>then ₹{p.monthly_price_credits}/mo</span>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)' }}>₹{p.monthly_price_credits}/mo</span>
-                      )}
-                      {p.description && <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>{p.description}</span>}
-                      {p.included_features?.length > 0 && (
-                        <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          {p.included_features.map((feature, i) => (
-                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 10.5, color: 'var(--on-muted)' }}>
-                              <Check size={11} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
-                              {feature}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </label>
+                      plan={p}
+                      variant="upgrade"
+                      selected={String(planId) === String(p.id)}
+                      onSelect={() => setPlanId(String(p.id))}
+                    />
                   ))}
                 </div>
               </div>

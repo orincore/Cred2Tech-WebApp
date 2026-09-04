@@ -78,11 +78,16 @@ const AdminTenantManagePage = () => {
     try {
       const res = await getTenantSummary(id);
       setData(res);
-      // Default both selectors to the tenant's current plan (once subscribed)
-      // or the cheapest active plan, so the dropdown never opens empty.
+      // Subscribe selector defaults to the tenant's current plan (once
+      // subscribed) or the cheapest active plan, so it never opens empty.
       const defaultPlanId = res.subscription?.plan_id || res.plans?.[0]?.id || '';
       setSubPlanId(String(defaultPlanId));
-      setUpgradePlanId(String(defaultPlanId));
+      // Upgrade selector only ever lists plans priced ABOVE what's
+      // currently paid (see the Upgrade Plan section render) — default to
+      // the first one of those, not the current plan itself, which
+      // wouldn't be a valid option in that filtered list.
+      const cheapestUpgrade = res.plans?.find((p) => p.monthly_price_credits > (res.subscription?.effective_amount_credits ?? -1));
+      setUpgradePlanId(cheapestUpgrade ? String(cheapestUpgrade.id) : '');
     } catch (err) {
       toast.error('Failed to load tenant details');
     } finally {
@@ -187,26 +192,26 @@ const AdminTenantManagePage = () => {
     }
   };
 
-  // Switches an already-subscribed tenant to a different plan, effective
-  // immediately — mirrors the DSA's own self-service upgrade in
-  // VirtualWorkspaceSubscriptionCard.jsx.
+  // Upgrades an already-subscribed tenant to a HIGHER-priced plan — same
+  // subscription/mandate stays active, the tenant just owes the price
+  // difference. Mirrors the DSA's own self-service upgrade in
+  // VirtualWorkspaceSubscriptionCard.jsx. Downgrades aren't offered here at
+  // all (see the Upgrade Plan section's filtered dropdown) — the backend
+  // rejects them outright regardless.
   const handleAdminUpgradePlan = async () => {
     if (!upgradePlanId) return toast.error('Select a plan');
-    if (upgradePlanId === 'FREE') return handleDowngradeToFree();
-    if (String(upgradePlanId) === String(subscription?.plan_id)) return toast.error('Tenant is already on this plan');
     setBusy(true);
     try {
-      const res = await adminUpgradeVirtualWorkspacePlan(id, { planId: upgradePlanId, promoCode: subPromoCode.trim() || null });
+      const res = await adminUpgradeVirtualWorkspacePlan(id, { planId: upgradePlanId });
       if (res.payment_method === 'WALLET_CREDITS') {
-        toast.success('Plan switched — paid from tenant wallet credits');
-      } else if (res.updated_in_place) {
-        toast.success('Plan switched — Razorpay changed the renewal price on the tenant\'s existing mandate directly, no re-authorization needed');
-      } else {
+        toast.success('Plan upgraded — the price difference was debited from the tenant\'s wallet immediately');
+      } else if (res.upgrade_payment_required) {
         toast.success(
-          `Plan switched — Razorpay subscription created (${res.razorpay_subscription_id}); Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page. Authorizing it charges the first month immediately.`
-          + (res.short_url ? ` Backup link: ${res.short_url}` : ''),
+          `Upgrade started — the tenant needs to open their Subscription page (Profile → Subscription) to pay the ₹${res.amount / 100} difference and apply it. Their subscription stays active in the meantime; no notification was sent automatically for this one-time charge.`,
           { duration: 14000 }
         );
+      } else {
+        toast.success('Plan upgraded');
       }
       await fetchData();
     } catch (err) {
@@ -462,23 +467,28 @@ const AdminTenantManagePage = () => {
 
               {isSubscribedLike && (
                 <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16, marginBottom: 20 }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Switch Plan</p>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 260 }}>
-                      <option value="FREE">Free (Restricted Access)</option>
-                      {data.plans.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/mo</option>
-                      ))}
-                    </select>
-                    <button onClick={handleAdminUpgradePlan} disabled={busy || String(upgradePlanId) === String(subscription.plan_id)} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
-                      {upgradePlanId === 'FREE' ? 'Switch to Free' : 'Switch Plan'}
-                    </button>
-                  </div>
-                  <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8 }}>
-                    {upgradePlanId === 'FREE'
-                      ? 'Takes effect immediately — cancels billing right now and restricts access (limited dashboard nav, no wallet recharge, no paid features) until upgraded again.'
-                      : "Takes effect immediately — cancels the current billing arrangement and starts a fresh cycle on the new plan's price."}
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 4 }}>Upgrade Plan</p>
+                  <p style={{ fontSize: 11, color: 'var(--on-muted)', marginBottom: 10 }}>
+                    Upgrade-only — only plans priced higher than the tenant's current ₹{subscription.effective_amount_credits}/mo are listed. Moving to a lower-priced plan (or Free) isn't a direct switch; use "Grant Free Access"/Lock above, or have the tenant cancel and let their current plan expire first.
                   </p>
+                  {(() => {
+                    const upgradeOptions = data.plans.filter((p) => p.monthly_price_credits > subscription.effective_amount_credits);
+                    if (upgradeOptions.length === 0) {
+                      return <p style={{ fontSize: 11.5, color: 'var(--on-muted)', fontStyle: 'italic' }}>No higher-priced plan is configured to upgrade to.</p>;
+                    }
+                    return (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                          {upgradeOptions.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/mo (+₹{p.monthly_price_credits - subscription.effective_amount_credits} now)</option>
+                          ))}
+                        </select>
+                        <button onClick={handleAdminUpgradePlan} disabled={busy || !upgradePlanId} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
+                          {busy ? 'Upgrading…' : 'Upgrade Plan'}
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

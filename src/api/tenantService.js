@@ -77,8 +77,8 @@ export const adminSubscribeVirtualWorkspace = async (tenantId, { planId, payment
 
 // Switches an already-subscribed tenant to a different plan — takes effect
 // immediately (see upgradePlan() in virtualWorkspaceSubscription.service.js).
-export const adminUpgradeVirtualWorkspacePlan = async (tenantId, { planId, promoCode }) => {
-  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/upgrade`, { plan_id: planId, promo_code: promoCode });
+export const adminUpgradeVirtualWorkspacePlan = async (tenantId, { planId }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/upgrade`, { plan_id: planId });
   return response.data;
 };
 
