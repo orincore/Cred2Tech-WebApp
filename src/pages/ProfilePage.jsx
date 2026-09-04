@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid } from 'lucide-react';
 import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
@@ -13,6 +13,7 @@ import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
 import PageHeader from '../components/ui/PageHeader';
+import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
 
 // Responsive hook
 const useResponsive = () => {
@@ -56,7 +57,7 @@ const InfoRow = ({ label, value, mono = false, last = false }) => (
 );
 
 const ProfilePage = () => {
-  const { user: authUser, token, logout } = useAuth();
+  const { user: authUser, token, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -83,6 +84,11 @@ const ProfilePage = () => {
   // used elsewhere on this page — comparing against `.role?.name` here always
   // read undefined, so every MSME customer was silently treated as staff.
   const isMsmeUser = authUser?.role === 'MSME_CUSTOMER';
+  // Subscription management is a DSA_ADMIN-only concern (matches
+  // VirtualWorkspaceSubscriptionCard's own self-gating and the same card's
+  // existing home on OrganizationProfilePage) — DSA_MEMBER/SUB_DSA staff
+  // don't manage tenant billing, so the tab doesn't appear for them.
+  const canManageSubscription = hasRole('DSA_ADMIN');
   const sidebarItems = isMsmeUser
     ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' }]
     : [
@@ -90,6 +96,7 @@ const ProfilePage = () => {
         { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
         { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'Manage your MFA methods' },
         { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
+        ...(canManageSubscription ? [{ id: 'subscription', icon: LayoutGrid, label: 'Subscription', subtitle: 'Plan, billing, and upgrades' }] : []),
       ];
 
   useEffect(() => {
@@ -1060,6 +1067,15 @@ const ProfilePage = () => {
                     <InfoRow label="Account Created" value={formatDateTime(u.created_at)} last />
                   </InfoCard>
                 </div>
+              </>
+            ) : activeSection === 'subscription' ? (
+              <>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', margin: '0 0 4px' }}>Subscription</h2>
+                <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>
+                  Your Virtual Workspace plan, billing details, and upgrade or plan-management options.
+                </p>
+                {/* Self-contained — fetches its own status, offers subscribe/switch-plan/cancel. Same component OrganizationProfilePage uses. */}
+                <VirtualWorkspaceSubscriptionCard />
               </>
             ) : null}
           </div>

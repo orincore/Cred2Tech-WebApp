@@ -57,8 +57,8 @@ const normalizeUser = (rawUser) => {
   }
   // Gates the DSA sidebar (see Sidebar.jsx) — only present once /auth/me has
   // returned the tenant's virtual_workspace relation, which the login/MFA
-  // response shapes don't carry yet; syncFromStorage's getMe() call on mount
-  // fills it in moments after login regardless.
+  // response shapes don't carry yet; persistSession's background getMe()
+  // call fills it in moments after login.
   finalUser.virtual_workspace_active = !!finalUser.tenant?.virtual_workspace?.is_active;
   if (finalUser && finalUser.role) {
     if (typeof finalUser.role === 'object' && finalUser.role.name) {
@@ -129,8 +129,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Persists a real session the same way every completed-auth path ends up
-  // (fresh login + MFA, or first-time MFA setup completion) — extracted so
-  // both call sites stay in sync instead of duplicating the storage logic.
+  // (fresh login + MFA, trusted-device skip, or first-time MFA setup
+  // completion) — extracted so every call site stays in sync instead of
+  // duplicating the storage logic.
   const persistSession = useCallback((newToken, rawUser) => {
     localStorage.setItem('token', newToken);
     // Clear any MSME-portal session marker so 401 handling routes to /login
@@ -139,6 +140,20 @@ export const AuthProvider = ({ children }) => {
     setToken(newToken);
     const finalUser = normalizeUser(rawUser);
     setUser(finalUser);
+
+    // virtual_workspace_active / virtual_workspace_free_nav_item_ids aren't
+    // on this login/MFA response shape (see normalizeUser's comment above)
+    // — without a follow-up, Sidebar.jsx's Virtual Workspace gate reads
+    // them as false/[], which for a restricted (Free-plan) DSA tenant means
+    // an entirely EMPTY sidebar right after login, correcting only on the
+    // next full page reload (syncFromStorage's mount-time getMe() call).
+    // React Router's client-side navigate() after login never triggers
+    // that reload, so without this the gap wasn't "moments" at all — it
+    // was the whole session. Fire-and-forget here so it's fixed within
+    // moments instead, without blocking the synchronous return below that
+    // callers use for their own immediate post-login redirect.
+    getMe().then((full) => setUser(normalizeUser(full))).catch(() => {});
+
     return finalUser;
   }, []);
 
