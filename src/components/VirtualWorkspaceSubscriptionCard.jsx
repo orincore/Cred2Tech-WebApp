@@ -125,8 +125,26 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
+  // "Free" isn't a priced plan — it's the restricted-access tier (limited
+  // dashboard nav, no wallet recharge, no paid features) you land on
+  // without an active subscription. Takes effect immediately, same as any
+  // other plan switch.
+  const handleDowngradeToFree = async () => {
+    setBusy(true);
+    try {
+      await api.post('/virtual-workspace/subscription/downgrade-to-free');
+      toast.success('Switched to the Free plan — restricted access until you upgrade again');
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to switch to the Free plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSwitchPlan = async () => {
     if (!switchPlanId) return toast.error('Select a plan');
+    if (switchPlanId === 'FREE') return handleDowngradeToFree();
     if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
     setBusy(true);
     try {
@@ -165,13 +183,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const handleCancel = async () => {
     const hasRunningCycle = ['ACTIVE', 'PAUSED'].includes(subscription.status) && subscription.current_period_end;
     const confirmMsg = hasRunningCycle
-      ? `Cancel your subscription? You won't be charged again — Virtual Workspace stays fully active until ${formatDateTime(subscription.current_period_end)}, then continues as free access.`
-      : `Cancel this subscription? You won't be charged.`;
+      ? `Cancel your subscription? You won't be charged again — full access stays as-is until ${formatDateTime(subscription.current_period_end)}, then you'll drop to the Free plan (restricted dashboard, no wallet recharge, no paid features) until you resubscribe.`
+      : `Cancel this subscription? You won't be charged, and you'll move to the Free plan (restricted access) right away.`;
     if (!window.confirm(confirmMsg)) return;
     setBusy(true);
     try {
       await api.post('/virtual-workspace/subscription/cancel');
-      toast.success('Subscription cancelled — no further charges. Your access continues uninterrupted.');
+      toast.success(hasRunningCycle ? 'Subscription cancelled — no further charges. Full access continues until your current period ends.' : 'Subscription cancelled — no further charges.');
       await fetchStatus();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
@@ -240,30 +258,33 @@ const VirtualWorkspaceSubscriptionCard = () => {
             )}
             <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>
               ₹{subscription.effective_amount_credits}/month
-              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : subscription.pending_cancellation ? 'access continues until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
+              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : subscription.pending_cancellation ? 'full access until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
             </p>
 
             {subscription.pending_cancellation && (
               <p style={{ fontSize: 12, color: 'var(--warning)', margin: '8px 0 0 0', fontWeight: 600 }}>
-                Cancellation scheduled — no further charges. Access continues as normal until the date above, then switches to free.
+                Cancellation scheduled — no further charges. Full access continues until the date above, then you'll drop to the Free plan (restricted).
               </p>
             )}
 
-            {plans?.length > 1 && !subscription.pending_cancellation && (
+            {!subscription.pending_cancellation && (
               <div style={{ borderTop: '1px solid var(--outline)', marginTop: 16, paddingTop: 16 }}>
                 <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 8 }}>Switch Plan</p>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <select className="form-control" value={switchPlanId} onChange={(e) => setSwitchPlanId(e.target.value)} style={{ maxWidth: 240 }}>
-                    {plans.map((p) => (
+                  <select className="form-control" value={switchPlanId} onChange={(e) => setSwitchPlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                    <option value="FREE">Free (Restricted Access)</option>
+                    {plans?.map((p) => (
                       <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/month</option>
                     ))}
                   </select>
                   <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy || String(switchPlanId) === String(subscription.plan_id)} style={{ borderRadius: 0 }}>
-                    {busy ? 'Switching…' : 'Switch Plan'}
+                    {busy ? 'Switching…' : switchPlanId === 'FREE' ? 'Switch to Free' : 'Switch Plan'}
                   </button>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6, marginBottom: 0 }}>
-                  Takes effect immediately — starts a fresh billing cycle at the new plan's price.
+                  {switchPlanId === 'FREE'
+                    ? 'Takes effect immediately — cancels billing right now and restricts your access (limited dashboard, no wallet recharge, no paid features) until you upgrade again.'
+                    : "Takes effect immediately — starts a fresh billing cycle at the new plan's price."}
                 </p>
               </div>
             )}

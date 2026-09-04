@@ -8,7 +8,7 @@ import {
 import {
   getTenantSummary, updateTenantStatus, updateTenantVirtualWorkspace,
   grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminUpgradeVirtualWorkspacePlan,
-  adminCancelVirtualWorkspace, adminExtendVirtualWorkspace,
+  adminCancelVirtualWorkspace, adminDowngradeToFree, adminExtendVirtualWorkspace,
   adminTopupTenantWallet, adminDeductTenantWallet,
   getTenantEmployees, allocateTenantEmployeeCredits, revokeTenantEmployeeCredits,
 } from '../api/tenantService';
@@ -145,14 +145,28 @@ const AdminTenantManagePage = () => {
     }
   };
 
+  // "Free" isn't a priced SubscriptionPlan — it's the restricted-access
+  // tier (limited dashboard nav, no wallet recharge, no paid pulls; see
+  // Sidebar.jsx's virtual_workspace_free_nav_item_ids gate and
+  // requireActiveWorkspace) a tenant lands on when they aren't paying.
+  // Deliberately NOT the same as "Grant Free Access" above (that's a full-
+  // access admin comp override) — this is the ordinary downgrade target.
+  const handleDowngradeToFree = async () => {
+    setBusy(true);
+    try {
+      await adminDowngradeToFree(id);
+      toast.success('Switched to the Free plan — restricted access (limited dashboard, no wallet recharge, no paid features) until upgraded again');
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to switch to the Free plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleAdminSubscribe = async () => {
     if (!subPlanId) return toast.error('Select a plan');
-    // "Free (No Charge)" isn't a priced SubscriptionPlan — it's the same
-    // no-subscription-at-all state grantFreeAccess already produces
-    // (access_plan reads FREE_GRANTED whenever there's no real billing
-    // behind an active workspace). Offered here too so an admin doesn't
-    // have to know that's a separate button above to get to it.
-    if (subPlanId === 'FREE') return handleGrantFree();
+    if (subPlanId === 'FREE') return handleDowngradeToFree();
     setBusy(true);
     try {
       const res = await adminSubscribeVirtualWorkspace(id, { planId: subPlanId, paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
@@ -180,6 +194,7 @@ const AdminTenantManagePage = () => {
   // VirtualWorkspaceSubscriptionCard.jsx.
   const handleAdminUpgradePlan = async () => {
     if (!upgradePlanId) return toast.error('Select a plan');
+    if (upgradePlanId === 'FREE') return handleDowngradeToFree();
     if (String(upgradePlanId) === String(subscription?.plan_id)) return toast.error('Tenant is already on this plan');
     setBusy(true);
     try {
@@ -206,11 +221,11 @@ const AdminTenantManagePage = () => {
   };
 
   const handleCancelSubscription = async () => {
-    if (!window.confirm("Cancel this tenant's subscription? No further auto-debit will happen — Virtual Workspace access stays fully active until the current billing period ends, then continues as free access (not locked). For an immediate cutoff instead, use \"Lock Access\" below.")) return;
+    if (!window.confirm("Cancel this tenant's subscription? No further auto-debit will happen — full Virtual Workspace access stays as-is until the current billing period ends, then the tenant drops to the Free plan (restricted access) rather than being locked out entirely. For an immediate downgrade right now instead, use the Free option in Switch Plan above.")) return;
     setBusy(true);
     try {
       await adminCancelVirtualWorkspace(id);
-      toast.success('Subscription cancelled — no further charges. Access continues uninterrupted until the current period ends, then becomes free.');
+      toast.success("Subscription cancelled — no further charges. Full access continues until the current period ends, then the tenant drops to the Free plan.");
       await fetchData();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
@@ -449,21 +464,24 @@ const AdminTenantManagePage = () => {
                 </div>
               )}
 
-              {isSubscribedLike && data.plans?.length > 1 && (
+              {isSubscribedLike && (
                 <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16, marginBottom: 20 }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Switch Plan</p>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 240 }}>
+                    <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                      <option value="FREE">Free (Restricted Access)</option>
                       {data.plans.map((p) => (
                         <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/mo</option>
                       ))}
                     </select>
                     <button onClick={handleAdminUpgradePlan} disabled={busy || String(upgradePlanId) === String(subscription.plan_id)} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
-                      Switch Plan
+                      {upgradePlanId === 'FREE' ? 'Switch to Free' : 'Switch Plan'}
                     </button>
                   </div>
                   <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8 }}>
-                    Takes effect immediately — cancels the current billing arrangement and starts a fresh cycle on the new plan's price.
+                    {upgradePlanId === 'FREE'
+                      ? 'Takes effect immediately — cancels billing right now and restricts access (limited dashboard nav, no wallet recharge, no paid features) until upgraded again.'
+                      : "Takes effect immediately — cancels the current billing arrangement and starts a fresh cycle on the new plan's price."}
                   </p>
                 </div>
               )}
@@ -474,7 +492,7 @@ const AdminTenantManagePage = () => {
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Plan</label>
                     <select className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
-                      <option value="FREE">Free (No Charge)</option>
+                      <option value="FREE">Free (Restricted Access)</option>
                       {data.plans?.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} — {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits
@@ -486,7 +504,7 @@ const AdminTenantManagePage = () => {
                   </div>
                   {subPlanId === 'FREE' ? (
                     <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
-                      Grant Free Access
+                      Switch to Free Plan
                     </button>
                   ) : (
                     <>

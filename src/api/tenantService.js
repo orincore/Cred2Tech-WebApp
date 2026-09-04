@@ -121,6 +121,13 @@ export const adminCancelVirtualWorkspace = async (tenantId) => {
   return response.data;
 };
 
+// Immediate downgrade to the Free plan (restricted access) — no waiting
+// for the current paid period to run out, unlike adminCancelVirtualWorkspace.
+export const adminDowngradeToFree = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/downgrade-to-free`);
+  return response.data;
+};
+
 // Public — DSA registration wizard's email/mobile OTP verification.
 export const sendDsaVerificationOtp = async ({ session_id, channel, destination }) => {
   const response = await axios.post(`${api.defaults.baseURL || ''}/tenants/verify/send-otp`, { session_id, channel, destination });
