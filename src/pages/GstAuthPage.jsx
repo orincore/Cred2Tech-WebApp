@@ -49,9 +49,18 @@ const GstAuthPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [authType, setAuthType] = useState('PASSWORD');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [authorized, setAuthorized] = useState(false);
+  // Set once the initial submission (OTP mode) puts the request into
+  // OTP_PENDING — either from this page's own submit, or from the details
+  // fetch on load/reload (see the effect below), so a page refresh mid-flow
+  // still lands on the OTP step instead of the credentials form again.
+  const [otpPending, setOtpPending] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [submittingOtp, setSubmittingOtp] = useState(false);
+  const [otpError, setOtpError] = useState('');
 
   useEffect(() => {
     document.title = 'Cred2Tech | Authorise GST Access';
@@ -64,6 +73,7 @@ const GstAuthPage = () => {
         const data = await gstAuthLinkService.getPublicDetails(token);
         setDetails(data);
         if (data.status === 'AUTHORIZED') setAuthorized(true);
+        if (data.status === 'OTP_PENDING') setOtpPending(true);
       } catch (err) {
         setLoadError(getErrorMessage(err) || 'This link is invalid or has expired.');
       } finally {
@@ -72,22 +82,49 @@ const GstAuthPage = () => {
     })();
   }, [token]);
 
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !submitting;
+  const canSubmit = username.trim().length > 0 && (authType === 'OTP' || password.length > 0) && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setSubmitError('');
     try {
-      await gstAuthLinkService.submit(token, { username: username.trim(), password });
-      setAuthorized(true);
+      const result = await gstAuthLinkService.submit(token, { username: username.trim(), password, authType });
       // Clear credentials from memory immediately — nothing about them is
-      // needed again once the submission has succeeded.
+      // needed again, whichever path this takes next.
       setPassword('');
+      if (result.status === 'OTP_PENDING') {
+        setOtpPending(true);
+      } else {
+        setAuthorized(true);
+      }
     } catch (err) {
-      setSubmitError(getErrorMessage(err) || 'Failed to submit your authorisation. Please check your details and try again.');
+      const message = getErrorMessage(err) || 'Failed to submit your authorisation. Please check your details and try again.';
+      // Signzy only knows whether this GSTIN's portal login actually
+      // supports OTP once we try it — there's no way to check ahead of time,
+      // so on an OTP-mode failure point the customer at the only real
+      // alternative instead of leaving them stuck.
+      setSubmitError(authType === 'OTP'
+        ? `${message} If OTP login isn't available for this GSTIN, switch to Password below and try again.`
+        : message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmitOtp = async () => {
+    if (!otp.trim() || submittingOtp) return;
+    setSubmittingOtp(true);
+    setOtpError('');
+    try {
+      await gstAuthLinkService.submitOtp(token, otp.trim());
+      setAuthorized(true);
+      setOtpPending(false);
+      setOtp('');
+    } catch (err) {
+      setOtpError(getErrorMessage(err) || 'Failed to submit OTP. Please check the code and try again.');
+    } finally {
+      setSubmittingOtp(false);
     }
   };
 
@@ -137,6 +174,61 @@ const GstAuthPage = () => {
           title="Authorisation Submitted"
           body="Thank you. Your GST portal access has been submitted and your representative will be notified once processing completes. You can close this page."
         />
+      </PageShell>
+    );
+  }
+
+  if (otpPending) {
+    return (
+      <PageShell>
+        <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
+          Enter Your OTP
+        </h1>
+        <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
+          The GST portal has sent a one-time password to the mobile number or email registered for{' '}
+          <span className="font-bold">{details?.gstin || 'this GSTIN'}</span>. Enter it below to complete your
+          authorisation.
+        </p>
+
+        {otpError && (
+          <div className="flex items-center gap-2 px-3 py-2.5 mb-5 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+            <span className="material-symbols-outlined text-[15px]">error</span>
+            {otpError}
+          </div>
+        )}
+
+        <div className="mb-6">
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
+            OTP
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+            placeholder="Enter OTP"
+            maxLength={8}
+            autoComplete="one-time-code"
+            disabled={submittingOtp}
+            className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+          />
+        </div>
+
+        <TravelingBorderButton
+          type="button"
+          size="sm"
+          disabled={!otp.trim() || submittingOtp}
+          onClick={handleSubmitOtp}
+          className="w-full rounded-none"
+        >
+          {submittingOtp ? (
+            <div className="flex justify-center items-center w-full h-full">
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          ) : (
+            <span>Submit OTP</span>
+          )}
+        </TravelingBorderButton>
       </PageShell>
     );
   }
@@ -211,6 +303,30 @@ const GstAuthPage = () => {
         </div>
       )}
 
+      {/* Not every GSTIN's GST-portal login has OTP enabled — the only way to
+          find out is to try (see the OTP error guidance in handleSubmit), so
+          this is a choice up front rather than a capability we can detect. */}
+      <div className="mb-5 inline-flex p-0.5 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
+        {[
+          { value: 'PASSWORD', label: 'Password' },
+          { value: 'OTP', label: 'OTP' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setAuthType(opt.value)}
+            disabled={submitting}
+            className={`px-3 py-1.5 text-[12px] font-bold transition-colors ${
+              authType === opt.value
+                ? 'bg-indigo-600 text-white'
+                : 'text-[#0a1628]/60 dark:text-[#e6edf7]/60'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-5">
         <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
           GST Portal Username
@@ -226,35 +342,45 @@ const GstAuthPage = () => {
         />
       </div>
 
-      <div className="mb-6">
-        <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
-          GST Portal Password
-        </label>
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your portal password"
-            autoComplete="new-password"
-            disabled={submitting}
-            className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((s) => !s)}
-            tabIndex={-1}
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-            className="absolute right-0 top-0 h-full w-10 flex items-center justify-center text-[#0a1628]/50 dark:text-[#e6edf7]/50 hover:text-indigo-600 dark:hover:text-indigo-400"
-          >
-            <span className="material-symbols-outlined text-[18px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
-          </button>
+      {authType === 'PASSWORD' ? (
+        <div className="mb-6">
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
+            GST Portal Password
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your portal password"
+              autoComplete="new-password"
+              disabled={submitting}
+              className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute right-0 top-0 h-full w-10 flex items-center justify-center text-[#0a1628]/50 dark:text-[#e6edf7]/50 hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
+              <span className="material-symbols-outlined text-[18px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
+            This is the same password you use to log in to the GST portal — it is sent directly to the portal and is
+            never stored.
+          </p>
         </div>
-        <p className="mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
-          This is the same password you use to log in to the GST portal — it is sent directly to the portal and is
-          never stored.
-        </p>
-      </div>
+      ) : (
+        <div className="mb-6">
+          <p className="text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
+            After you submit, the GST portal will send an OTP to the mobile/email registered for this username — you'll
+            enter it on the next step. If this GSTIN doesn't have OTP login enabled, the request will fail and you'll
+            need to switch to Password.
+          </p>
+        </div>
+      )}
 
       <TravelingBorderButton
         type="button"

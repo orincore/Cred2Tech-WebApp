@@ -33,7 +33,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
         return () => window.removeEventListener('resize', onResize);
     }, []);
     const [mode, setMode] = useState('IN_SYSTEM');
-    const authType = 'PASSWORD';
+    const [authType, setAuthType] = useState('PASSWORD');
     const [isManualGstin, setIsManualGstin] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -48,6 +48,8 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const [cancelling, setCancelling] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [otp, setOtp] = useState('');
+    const [submittingOtp, setSubmittingOtp] = useState(false);
 
     // Live status is pushed from the server (see hooks/useCasePullStatus) — no
     // client-side polling. The server keeps one sync loop per case, so this
@@ -76,8 +78,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // self-employed applicant), the overall phase would fire every
     // instance's onComplete/toast the moment ANY one applicant's pull
     // finished, not just this card's own.
-    const visibleRequests = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
-    const latestRequest = visibleRequests[0] || null;
+    const latestRequest = activeRequests[0] || null;
     // `phase` is only present on realtime snapshots; the REST fallback shape
     // has just the raw status, so derive from that when a push hasn't arrived yet.
     const phase = latestRequest && (latestRequest.phase
@@ -93,6 +94,10 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // isAuthLinkPending.
     const isAuthLinkPending = latestRequest?.is_auth_link_request && latestRequest?.status === 'AWAITING_CUSTOMER_ACTION';
     const authLinkId = latestRequest?.auth_link_id;
+    // GST portal sent the DSA/customer an OTP for this request — the create
+    // step already succeeded (Signzy accepted OTP as this GSTIN's login
+    // method), we're just waiting on the code itself now.
+    const isOtpPending = latestRequest?.auth_type === 'OTP' && latestRequest?.status === 'OTP_PENDING';
     const [sendingLink, setSendingLink] = useState(false);
     const [cancellingLink, setCancellingLink] = useState(false);
     // Optimistic flag: hides the "Send Auth Link" form the instant the send
@@ -205,9 +210,39 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
             setFormData(prev => ({...prev, password: ''}));
         } catch (error) {
             const message = error.response?.data?.error || error.message;
-            toast.error(`GST request failed: ${message}`, { duration: 8000 });
+            // OTP-based login is a portal-level setting on the GSTIN's own
+            // account — Signzy can only tell us it's unusable once we've
+            // actually tried it, at request-creation time. There's no
+            // separate "does this GSTIN support OTP" check to call first, so
+            // point the user at the only actual alternative instead of
+            // leaving them stuck on a generic failure.
+            if (authType === 'OTP') {
+                toast.error(`OTP request failed: ${message}. If OTP login isn't available for this GSTIN, switch to the Password method above and try again.`, { duration: 10000 });
+            } else {
+                toast.error(`GST request failed: ${message}`, { duration: 8000 });
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Submits the OTP the customer/DSA received on the GST portal for an
+    // OTP-mode request — the only way an OTP_PENDING request ever advances,
+    // no auto-fetch involved (mirrors handleSendAuthLink's "nothing happens
+    // until the human acts" shape for the AUTH_LINK flow).
+    const handleSubmitOtp = async () => {
+        if (!otp.trim() || !latestRequest) return;
+        setSubmittingOtp(true);
+        try {
+            await api.post(`/external/gst/submit-otp`, { request_id: latestRequest.id, otp: otp.trim() });
+            toast.success('OTP submitted — fetching your GST data');
+            setOtp('');
+            refresh();
+            await fetchRequests();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to submit OTP', { duration: 8000 });
+        } finally {
+            setSubmittingOtp(false);
         }
     };
 
@@ -307,7 +342,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 no visible name context at all when hidden by that state, so
                 duplicating a heading here would only show up in the cases
                 where it's least needed. */}
-            {!isSuccess && !isAuthLinkPending && !linkJustSent && (
+            {!isSuccess && !isAuthLinkPending && !isOtpPending && !linkJustSent && (
             <div style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg-surface)',
@@ -407,11 +442,38 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         sensitive-input block. */}
                     {mode === 'IN_SYSTEM' && (
                         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-                                <Lock size={13} color="#4f46e5" />
-                                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Portal Credentials</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Lock size={13} color="#4f46e5" />
+                                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Portal Credentials</span>
+                                </div>
+                                {/* Not every GSTIN's GST-portal login has OTP enabled — Signzy
+                                    only tells us that when we actually try (see the OTP error
+                                    handling in handleCreateRequest), so this is a choice up
+                                    front, not a capability we can detect ahead of time. */}
+                                <div style={{ display: 'inline-flex', padding: 2, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                                    {[
+                                        { value: 'PASSWORD', label: 'Password' },
+                                        { value: 'OTP', label: 'OTP' },
+                                    ].map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setAuthType(opt.value)}
+                                            style={{
+                                                padding: '4px 10px', fontSize: 11, fontWeight: 700,
+                                                border: 'none', cursor: 'pointer',
+                                                background: authType === opt.value ? '#4f46e5' : 'transparent',
+                                                color: authType === opt.value ? '#fff' : 'var(--text-secondary)',
+                                                transition: 'background 0.15s, color 0.15s',
+                                            }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile || authType === 'OTP' ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
                                 <FormField label="GST Username" required>
                                     <input
                                         type="text"
@@ -423,37 +485,41 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                         name="gst-username-no-autofill"
                                     />
                                 </FormField>
-                                <FormField label="GST Password" required>
-                                    <div style={{ position: 'relative' }}>
-                                        <input
-                                            type={showPassword ? 'text' : 'password'}
-                                            value={formData.password}
-                                            onChange={e => setFormData({...formData, password: e.target.value})}
-                                            className="form-control"
-                                            placeholder="GST portal password"
-                                            autoComplete="new-password"
-                                            name="gst-password-no-autofill"
-                                            style={{ paddingRight: 36 }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword((s) => !s)}
-                                            tabIndex={-1}
-                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                            style={{
-                                                position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                background: 'transparent', border: 'none', cursor: 'pointer',
-                                                color: 'var(--text-tertiary)',
-                                            }}
-                                        >
-                                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                        </button>
-                                    </div>
-                                </FormField>
+                                {authType === 'PASSWORD' && (
+                                    <FormField label="GST Password" required>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type={showPassword ? 'text' : 'password'}
+                                                value={formData.password}
+                                                onChange={e => setFormData({...formData, password: e.target.value})}
+                                                className="form-control"
+                                                placeholder="GST portal password"
+                                                autoComplete="new-password"
+                                                name="gst-password-no-autofill"
+                                                style={{ paddingRight: 36 }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword((s) => !s)}
+                                                tabIndex={-1}
+                                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                                style={{
+                                                    position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                                    color: 'var(--text-tertiary)',
+                                                }}
+                                            >
+                                                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                            </button>
+                                        </div>
+                                    </FormField>
+                                )}
                             </div>
                             <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
-                                Sent directly to the GST portal to pull the report — never stored.
+                                {authType === 'OTP'
+                                    ? "An OTP will be sent by the GST portal to this username's registered mobile/email — you'll enter it on the next step. If this GSTIN doesn't have OTP login enabled, the request will fail and you'll need to switch to Password."
+                                    : 'Sent directly to the GST portal to pull the report — never stored.'}
                             </p>
                         </div>
                     )}
@@ -529,8 +595,59 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
             )}
 
             {latestRequest && (
-                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : (isDead || isAuthLinkPending) ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
-                    {isAuthLinkPending ? (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : (isDead || isAuthLinkPending || isOtpPending) ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
+                    {isOtpPending ? (
+                        // Signzy accepted the OTP-mode request and the portal has (or
+                        // will shortly) send an OTP — nothing else happens until it's
+                        // submitted here. Cancel abandons this attempt entirely (same
+                        // generic /gst/cancel every other in-flight request uses) rather
+                        // than falling back to Password automatically, since only the
+                        // DSA/customer knows whether the OTP is actually on its way.
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                    <PullStatusTracker
+                                        variant="panel"
+                                        phase={phase}
+                                        label={latestRequest.label || 'Waiting for the GST portal OTP'}
+                                        progress={latestRequest.progress ?? 15}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCancelRequest(latestRequest.id)}
+                                    disabled={cancelling}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ color: 'var(--error)', border: '1px solid var(--error)' }}
+                                >
+                                    {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                <FormField label="OTP from GST Portal" required>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={otp}
+                                        onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                                        className="form-control"
+                                        placeholder="Enter OTP"
+                                        maxLength={8}
+                                        style={{ maxWidth: 160 }}
+                                        autoComplete="one-time-code"
+                                    />
+                                </FormField>
+                                <button
+                                    type="button"
+                                    onClick={handleSubmitOtp}
+                                    disabled={submittingOtp || !otp.trim()}
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    {submittingOtp ? 'Submitting…' : 'Submit OTP'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : isAuthLinkPending ? (
                         // Link sent, customer hasn't submitted it yet — no data has
                         // been touched, so the only actions available are re-sending
                         // it (e.g. the customer says they never got the email, or the

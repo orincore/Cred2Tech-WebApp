@@ -33,8 +33,15 @@ export const gstAuthLinkService = {
     return response.data;
   },
 
-  submit: async (token, { username, password }) => {
-    const response = await axios.post(`${API_BASE_URL}/gst-auth-link/${token}/submit`, { username, password });
+  submit: async (token, { username, password, authType }) => {
+    const response = await axios.post(`${API_BASE_URL}/gst-auth-link/${token}/submit`, { username, password, auth_type: authType });
+    return response.data;
+  },
+
+  // Public — the OTP step for an OTP-mode request already in OTP_PENDING
+  // (see getPublicDetails' 'OTP_PENDING' status), entered on the same page.
+  submitOtp: async (token, otp) => {
+    const response = await axios.post(`${API_BASE_URL}/gst-auth-link/${token}/submit-otp`, { otp });
     return response.data;
   },
 };
