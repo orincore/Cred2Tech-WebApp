@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { LayoutGrid, Wallet, CreditCard, Repeat, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
+import { LayoutGrid, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay } from '../utils/razorpay';
@@ -51,6 +51,42 @@ const StatTile = ({ label, value }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 16px', borderLeft: '1px solid var(--outline)' }}>
     <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{value}</span>
+  </div>
+);
+
+// Sharp-cornered on/off switch — the auto-renewal control. Built from a
+// plain button rather than a styled checkbox so it stays square, matching
+// the rest of this app's controls (nothing here uses a rounded native
+// input). `disabled` is used specifically for the "can't be turned back on"
+// RAZORPAY_AUTOPAY case, not just a generic busy-state lock.
+const ToggleSwitch = ({ checked, onChange, disabled, label, sublabel }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+    <div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)' }}>{label}</div>
+      {sublabel && <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{sublabel}</div>}
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      style={{
+        width: 40, height: 22, flexShrink: 0, padding: 0, position: 'relative',
+        border: `1px solid ${checked ? 'var(--primary)' : 'var(--outline)'}`,
+        background: checked ? 'var(--primary)' : 'var(--bg-surface)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        transition: 'background 0.2s cubic-bezier(0.32,0.72,0,1), border-color 0.2s cubic-bezier(0.32,0.72,0,1)',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 2, left: checked ? 20 : 2, width: 16, height: 16,
+        background: checked ? '#fff' : 'var(--on-muted)',
+        transition: 'left 0.2s cubic-bezier(0.32,0.72,0,1)',
+      }} />
+    </button>
   </div>
 );
 
@@ -139,26 +175,6 @@ const PlanCard = ({ plan, variant, selected, onSelect, scheduled = false }) => {
   );
 };
 
-// Payment-method selection tile, mirrors PlanCard's own selectable-card
-// language instead of a bare radio + inline icon + text row.
-const MethodTile = ({ icon: Icon, label, sublabel, selected, onSelect }) => (
-  <label
-    style={{
-      display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flex: '1 1 200px', cursor: 'pointer',
-      border: `1px solid ${selected ? 'var(--primary)' : 'var(--outline)'}`,
-      background: selected ? 'var(--primary-subtle)' : 'var(--bg-surface)',
-      transition: 'border-color 0.25s cubic-bezier(0.32,0.72,0,1), background 0.25s cubic-bezier(0.32,0.72,0,1)',
-    }}
-  >
-    <input type="radio" checked={selected} onChange={onSelect} style={{ margin: 0, accentColor: 'var(--primary)' }} />
-    <Icon size={16} strokeWidth={1.75} color={selected ? 'var(--primary)' : 'var(--on-muted)'} />
-    <div>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)' }}>{label}</div>
-      {sublabel && <div style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 1 }}>{sublabel}</div>}
-    </div>
-  </label>
-);
-
 // Self-contained, fetches/manages its own state so it can drop into
 // OrganizationProfilePage.jsx without threading into that page's own large
 // form/state. DSA_ADMIN only, matches the subscription routes' own gating.
@@ -180,7 +196,12 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const { hasRole, refreshUser } = useAuth();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('RAZORPAY_AUTOPAY');
+  // Only one payment method is offered for a new subscribe now: the
+  // ceiling-based recurring rail. RAZORPAY_AUTOPAY and WALLET_CREDITS still
+  // work fully for tenants already on them (see the rest of this file) —
+  // this is only what a NEW subscribe can choose, so there's nothing left
+  // to actually pick, just a fixed value.
+  const paymentMethod = 'RAZORPAY_RECURRING';
   const [promoCode, setPromoCode] = useState('');
   const [planId, setPlanId] = useState('');
   const [switchPlanId, setSwitchPlanId] = useState('');
@@ -213,7 +234,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
 
   if (!hasRole('DSA_ADMIN') || loading || !status) return null;
 
-  const { subscription, wallet_balance, plans, monthly_price_credits, is_currently_free, free_until, key_id, scheduled_downgrade_plan } = status;
+  const { subscription, plans, monthly_price_credits, is_currently_free, free_until, key_id, scheduled_downgrade_plan } = status;
   const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
   // Cheapest plan first (left), priciest last (right), in both the initial
   // "Choose a plan" grid and the already-subscribed "All Plans" grid, so the
@@ -480,11 +501,16 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
+  // Turning auto-renewal off IS cancelSubscription() — the confirm dialog
+  // leads with a nudge to keep it on (uninterrupted service), then gives
+  // the actual consequence, then leaves the choice to the tenant. OK turns
+  // it off; Cancel on the dialog just leaves auto-renewal on, untouched.
   const handleCancel = async () => {
     const hasRunningCycle = ['ACTIVE', 'PAUSED'].includes(subscription.status) && subscription.current_period_end;
-    const confirmMsg = hasRunningCycle
-      ? `Cancel your subscription? You won't be charged again. Full access stays as-is until ${formatDateTime(subscription.current_period_end)}, then you'll drop to the Free plan (restricted dashboard, no wallet recharge, no paid features) until you resubscribe.`
-      : `Cancel this subscription? You won't be charged, and you'll move to the Free plan (restricted access) right away.`;
+    const consequence = hasRunningCycle
+      ? `You won't be charged again. Full access stays as-is until ${formatDateTime(subscription.current_period_end)}, then you'll drop to the Free plan (restricted dashboard, no wallet recharge, no paid features) until you resubscribe.`
+      : `You won't be charged, and you'll move to the Free plan (restricted access) right away.`;
+    const confirmMsg = `For uninterrupted service, it's best to keep auto-renewal on.\n\nTurn it off anyway? ${consequence}`;
     if (!window.confirm(confirmMsg)) return;
     setBusy(true);
     try {
@@ -493,6 +519,19 @@ const VirtualWorkspaceSubscriptionCard = () => {
       await fetchStatus();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResumeAutoRenewal = async () => {
+    setBusy(true);
+    try {
+      await api.post('/virtual-workspace/subscription/resume-auto-renewal');
+      toast.success('Auto-renewal turned back on. Your subscription will keep renewing as normal.');
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to resume auto-renewal');
     } finally {
       setBusy(false);
     }
@@ -575,6 +614,28 @@ const VirtualWorkspaceSubscriptionCard = () => {
               </div>
             )}
 
+            {/* Auto-renewal toggle — the primary on/off control for future
+                charges. ON means the subscription keeps renewing as normal;
+                turning it OFF is exactly cancelSubscription() (full access
+                continues through the paid-for period, then drops to Free).
+                Turning it back ON before that happens undoes it on every
+                rail — RAZORPAY_AUTOPAY pauses (not cancels) the mandate
+                specifically so this stays reversible with no fresh
+                Checkout, see the backend's own doc comment for why. */}
+            <div style={{ border: '1px solid var(--outline)', padding: '14px 16px', marginBottom: 16 }}>
+              <ToggleSwitch
+                checked={!subscription.pending_cancellation}
+                disabled={busy}
+                onChange={subscription.pending_cancellation ? handleResumeAutoRenewal : handleCancel}
+                label="Auto-renewal"
+                sublabel={
+                  subscription.pending_cancellation
+                    ? 'Off. No further charges. Turn back on any time before your access ends.'
+                    : 'On. Renews automatically every cycle.'
+                }
+              />
+            </div>
+
             {subscription.pending_cancellation && (
               <Callout icon={XCircle} color="var(--warning)" bg="var(--warning-bg)">
                 <strong style={{ color: 'var(--warning)' }}>Cancellation scheduled.</strong> No further charges. Full access continues until the date above, then you'll drop to the Free plan (restricted).
@@ -646,13 +707,10 @@ const VirtualWorkspaceSubscriptionCard = () => {
             )}
 
             {!subscription.pending_cancellation && (
-              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 20, paddingTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 20, paddingTop: 20 }}>
                 <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: 0, maxWidth: 460 }}>
-                  Want to switch to a lower-priced plan? Select it above instead. Want to stop paying entirely (Free plan)? Cancel below. Either way, your current plan stays active until it expires, with no mid-cycle switch.
+                  Want to switch to a lower-priced plan? Select it above instead. Want to stop paying entirely (Free plan)? Turn off auto-renewal above. Either way, your current plan stays active until it expires, with no mid-cycle switch.
                 </p>
-                <button className="btn btn-ghost btn-sm" onClick={handleCancel} disabled={busy} style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <XCircle size={14} strokeWidth={1.75} /> Cancel Subscription
-                </button>
               </div>
             )}
           </div>
@@ -675,31 +733,6 @@ const VirtualWorkspaceSubscriptionCard = () => {
               </div>
             )}
 
-            <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>Payment method</label>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-              <MethodTile
-                icon={CreditCard}
-                label="Auto-pay"
-                sublabel="Default, via Razorpay"
-                selected={paymentMethod === 'RAZORPAY_AUTOPAY'}
-                onSelect={() => setPaymentMethod('RAZORPAY_AUTOPAY')}
-              />
-              <MethodTile
-                icon={Repeat}
-                label="Auto-pay (Recurring)"
-                sublabel="Alternative auto-pay method via Razorpay"
-                selected={paymentMethod === 'RAZORPAY_RECURRING'}
-                onSelect={() => setPaymentMethod('RAZORPAY_RECURRING')}
-              />
-              <MethodTile
-                icon={Wallet}
-                label="Wallet Credits"
-                sublabel={`Balance: ${wallet_balance}`}
-                selected={paymentMethod === 'WALLET_CREDITS'}
-                onSelect={() => setPaymentMethod('WALLET_CREDITS')}
-              />
-            </div>
-
             <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>Promo code (optional)</label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 18 }}>
               <Tag size={13} strokeWidth={1.75} color="var(--on-muted)" />
@@ -713,12 +746,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
               />
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '0 0 14px' }}>
-              {paymentMethod === 'RAZORPAY_AUTOPAY' &&
-                "You'll be charged right now, and auto-pay renews the same date every month."}
-              {paymentMethod === 'RAZORPAY_RECURRING' &&
-                "You'll be charged right now as part of authorizing auto-pay, and it renews the same date every month. Any upgrade will ask you to re-authorize at the new price, charged immediately the same way."}
-              {paymentMethod === 'WALLET_CREDITS' &&
-                "You'll be charged from your wallet right now, and it auto-renews the same date every month."}
+              You'll be charged right now as part of authorizing auto-pay, and it renews the same date every month. Any upgrade will ask you to re-authorize at the new price, charged immediately the same way.
             </p>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} strokeWidth={2} /> {busy ? 'Starting…' : 'Subscribe'}
