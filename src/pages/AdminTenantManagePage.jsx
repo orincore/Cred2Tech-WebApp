@@ -147,6 +147,12 @@ const AdminTenantManagePage = () => {
 
   const handleAdminSubscribe = async () => {
     if (!subPlanId) return toast.error('Select a plan');
+    // "Free (No Charge)" isn't a priced SubscriptionPlan — it's the same
+    // no-subscription-at-all state grantFreeAccess already produces
+    // (access_plan reads FREE_GRANTED whenever there's no real billing
+    // behind an active workspace). Offered here too so an admin doesn't
+    // have to know that's a separate button above to get to it.
+    if (subPlanId === 'FREE') return handleGrantFree();
     setBusy(true);
     try {
       const res = await adminSubscribeVirtualWorkspace(id, { planId: subPlanId, paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
@@ -465,35 +471,42 @@ const AdminTenantManagePage = () => {
               {access_plan !== 'SUBSCRIBED' && (
                 <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16 }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Start a Real Subscription</p>
-                  {data.plans?.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Plan</label>
-                      <select className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
-                        {data.plans.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} — {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits
-                              ? `₹${p.first_cycle_price_credits} first mo, then ₹${p.monthly_price_credits}/mo`
-                              : `₹${p.monthly_price_credits}/mo`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Plan</label>
+                    <select className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                      <option value="FREE">Free (No Charge)</option>
+                      {data.plans?.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits
+                            ? `₹${p.first_cycle_price_credits} first mo, then ₹${p.monthly_price_credits}/mo`
+                            : `₹${p.monthly_price_credits}/mo`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {subPlanId === 'FREE' ? (
+                    <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
+                      Grant Free Access
+                    </button>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                          <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
+                          <CreditCard size={13} /> Razorpay Auto-pay
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                          <input type="radio" checked={subPaymentMethod === 'WALLET_CREDITS'} onChange={() => setSubPaymentMethod('WALLET_CREDITS')} />
+                          <Wallet size={13} /> Wallet Credits (Balance: {data.wallet_balance})
+                        </label>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Tag size={13} color="var(--on-muted)" />
+                        <input type="text" value={subPromoCode} onChange={(e) => setSubPromoCode(e.target.value)} placeholder="Promo code (optional)" className="form-control" style={{ maxWidth: 200, textTransform: 'uppercase' }} />
+                        <button onClick={handleAdminSubscribe} disabled={busy || !subPlanId} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
+                      </div>
+                    </>
                   )}
-                  <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-                      <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
-                      <CreditCard size={13} /> Razorpay Auto-pay
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-                      <input type="radio" checked={subPaymentMethod === 'WALLET_CREDITS'} onChange={() => setSubPaymentMethod('WALLET_CREDITS')} />
-                      <Wallet size={13} /> Wallet Credits (Balance: {data.wallet_balance})
-                    </label>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <Tag size={13} color="var(--on-muted)" />
-                    <input type="text" value={subPromoCode} onChange={(e) => setSubPromoCode(e.target.value)} placeholder="Promo code (optional)" className="form-control" style={{ maxWidth: 200, textTransform: 'uppercase' }} />
-                    <button onClick={handleAdminSubscribe} disabled={busy || !subPlanId} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
-                  </div>
                 </div>
               )}
             </Card>
