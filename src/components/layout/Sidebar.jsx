@@ -61,19 +61,25 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [hasRole]);
 
-  // Virtual Workspace gate — an unsubscribed sourcing-partner tenant only
-  // sees whatever's in virtual_workspace_free_nav_item_ids (Dashboard/Wallet/
-  // Support/Profile by default, admin-editable on SuperadminPricingPage).
+  // Virtual Workspace gate — a DSA-role user only sees the nav items in
+  // virtual_workspace_restricted_nav_item_ids when it's a real array;
+  // null means unrestricted (sees everything their role allows). auth.
+  // controller.js#getMe computes which list this actually is: the
+  // platform-wide Free-tier list when the workspace isn't active at all,
+  // or the tenant's subscribed PLAN's own feature_nav_item_ids when it's
+  // active and that plan restricts something (a lower paid tier can limit
+  // features too, not just Free) — Sidebar.jsx itself doesn't need to know
+  // which case it is, just apply whatever list (or lack of one) it got.
   // Scoped explicitly to DSA roles so SUPER_ADMIN/CRED2TECH_MEMBER nav is
   // never affected by a tenant's VW flag, regardless of what it says.
   const isDsaRole = hasRole(['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']);
-  const isVirtualWorkspaceGated = isDsaRole && !user?.virtual_workspace_active;
-  const freeNavItemIds = user?.virtual_workspace_free_nav_item_ids || [];
+  const restrictedNavItemIds = isDsaRole ? user?.virtual_workspace_restricted_nav_item_ids : null;
+  const isVirtualWorkspaceGated = Array.isArray(restrictedNavItemIds);
 
   const visibleItems = NAV_ITEMS
     .filter((item) => {
       if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
-      if (isVirtualWorkspaceGated && !freeNavItemIds.includes(item.id)) return false;
+      if (isVirtualWorkspaceGated && !restrictedNavItemIds.includes(item.id)) return false;
       if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })

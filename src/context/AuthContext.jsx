@@ -141,12 +141,13 @@ export const AuthProvider = ({ children }) => {
     const finalUser = normalizeUser(rawUser);
     setUser(finalUser);
 
-    // virtual_workspace_active / virtual_workspace_free_nav_item_ids aren't
-    // on this login/MFA response shape (see normalizeUser's comment above)
-    // — without a follow-up, Sidebar.jsx's Virtual Workspace gate reads
-    // them as false/[], which for a restricted (Free-plan) DSA tenant means
-    // an entirely EMPTY sidebar right after login, correcting only on the
-    // next full page reload (syncFromStorage's mount-time getMe() call).
+    // virtual_workspace_active / virtual_workspace_restricted_nav_item_ids
+    // aren't on this login/MFA response shape (see normalizeUser's comment
+    // above) — without a follow-up, Sidebar.jsx's Virtual Workspace gate
+    // reads them as false/[], which for a restricted (Free-plan, or a
+    // limited-feature paid plan) DSA tenant means an entirely EMPTY sidebar
+    // right after login, correcting only on the next full page reload
+    // (syncFromStorage's mount-time getMe() call).
     // React Router's client-side navigate() after login never triggers
     // that reload, so without this the gap wasn't "moments" at all — it
     // was the whole session. Fire-and-forget here so it's fixed within

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle } from 'lucide-react';
+import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay } from '../utils/razorpay';
@@ -326,6 +326,16 @@ const VirtualWorkspaceSubscriptionCard = () => {
                         <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)' }}>₹{p.monthly_price_credits}/mo</span>
                       )}
                       {p.description && <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>{p.description}</span>}
+                      {p.included_features?.length > 0 && (
+                        <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {p.included_features.map((feature, i) => (
+                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 10.5, color: 'var(--on-muted)' }}>
+                              <Check size={11} color="var(--success)" style={{ flexShrink: 0, marginTop: 1 }} />
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </label>
                   ))}
                 </div>

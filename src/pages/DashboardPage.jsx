@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import EmptyState from '../components/ui/EmptyState';
 import PageHeader from '../components/ui/PageHeader';
+import FreeUntilBanner from '../components/FreeUntilBanner';
 import PlatformDashboardView from './dashboard/PlatformDashboardView';
 import DsaDashboardView from './dashboard/DsaDashboardView';
 import { RefreshCw, LayoutDashboard } from 'lucide-react';
@@ -69,6 +70,8 @@ const DashboardPage = () => {
           title="Dashboard"
           subtitle={isSuperAdmin ? 'Platform-wide analytics and performance overview' : "Your organization's pipeline and performance overview"}
         />
+
+        {isDsaSide && <FreeUntilBanner />}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>

@@ -283,3 +283,12 @@ export const NAV_ITEMS = [
     badge: 'Soon',
   },
 ];
+
+// The nav items Virtual Workspace can actually gate — DSA-role items only
+// (SUPER_ADMIN/CRED2TECH_MEMBER nav is never affected by a tenant's VW
+// flag, see Sidebar.jsx). Single source of truth shared by every feature-
+// list editor (SuperadminPricingPage's Free-tier list, AdminSubscriptionPlansPage's
+// per-plan list) so a newly added DSA nav item shows up in all of them
+// automatically instead of drifting.
+export const DSA_GATABLE_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+export const GATABLE_NAV_ITEMS = NAV_ITEMS.filter((item) => item.roles?.some((r) => DSA_GATABLE_ROLES.includes(r)));

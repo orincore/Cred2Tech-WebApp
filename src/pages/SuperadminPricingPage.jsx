@@ -5,15 +5,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
-import { NAV_ITEMS } from '../constants/navItems';
-
-// The nav items Virtual Workspace can actually gate — DSA-role items only
-// (SUPER_ADMIN/CRED2TECH_MEMBER nav is never affected by a tenant's VW flag,
-// see Sidebar.jsx). Pulled from the single source of truth in navItems.js
-// rather than duplicated here, so a newly added DSA nav item shows up in
-// this editor automatically.
-const DSA_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
-const GATABLE_NAV_ITEMS = NAV_ITEMS.filter((item) => item.roles?.some((r) => DSA_ROLES.includes(r)));
+import { GATABLE_NAV_ITEMS } from '../constants/navItems';
 
 // Responsive hook
 const useResponsive = () => {
