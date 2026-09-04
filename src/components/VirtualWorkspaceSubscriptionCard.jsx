@@ -196,12 +196,16 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const { hasRole, refreshUser } = useAuth();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Only one payment method is offered for a new subscribe now: the
-  // ceiling-based recurring rail. RAZORPAY_AUTOPAY and WALLET_CREDITS still
-  // work fully for tenants already on them (see the rest of this file) —
-  // this is only what a NEW subscribe can choose, so there's nothing left
-  // to actually pick, just a fixed value.
-  const paymentMethod = 'RAZORPAY_RECURRING';
+  // Only one payment method is offered for a new subscribe: Razorpay's
+  // Subscriptions API. It genuinely supports UPI Autopay (confirmed
+  // against Razorpay's own docs) — the newer ceiling-based RAZORPAY_
+  // RECURRING rail does not, on this account (verified live, card-only,
+  // across every Razorpay account tested including the live one), so this
+  // is the one that actually gets a UPI mandate in front of the tenant.
+  // WALLET_CREDITS still works fully for tenants already on it (see the
+  // rest of this file) — this is only what a NEW subscribe can choose, so
+  // there's nothing left to actually pick, just a fixed value.
+  const paymentMethod = 'RAZORPAY_AUTOPAY';
   const [promoCode, setPromoCode] = useState('');
   const [planId, setPlanId] = useState('');
   const [switchPlanId, setSwitchPlanId] = useState('');
@@ -733,7 +737,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
               />
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '0 0 14px' }}>
-              You'll be charged right now as part of authorizing auto-pay, and it renews the same date every month. Any upgrade will ask you to re-authorize at the new price, charged immediately the same way.
+              You'll be charged right now as part of authorizing auto-pay (card or UPI), and it renews the same date every month. An upgrade charges a prorated amount for your remaining days and raises the mandate in the same step.
             </p>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} strokeWidth={2} /> {busy ? 'Starting…' : 'Subscribe'}

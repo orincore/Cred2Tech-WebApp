@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
-  ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, CreditCard, Tag, Gift, XCircle,
+  ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
   Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock,
 } from 'lucide-react';
 import {
@@ -60,6 +60,11 @@ const AdminTenantManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // RAZORPAY_AUTOPAY (Subscriptions API) is the default here, matching the
+  // tenant's own self-service Subscription card — it genuinely supports
+  // UPI Autopay (confirmed against Razorpay's docs); the newer ceiling-
+  // based RAZORPAY_RECURRING rail is card-only on this account (verified
+  // live), so it's not the one that gets a tenant an actual UPI mandate.
   const [subPaymentMethod, setSubPaymentMethod] = useState('RAZORPAY_AUTOPAY');
   const [subPromoCode, setSubPromoCode] = useState('');
   const [subPlanId, setSubPlanId] = useState('');
@@ -177,6 +182,17 @@ const AdminTenantManagePage = () => {
       const res = await adminSubscribeVirtualWorkspace(id, { planId: subPlanId, paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
       if (res.payment_method === 'WALLET_CREDITS') {
         toast.success('Subscribed — paid from tenant wallet credits');
+      } else if (res.payment_method === 'RAZORPAY_RECURRING') {
+        // Unlike RAZORPAY_AUTOPAY's Subscriptions API, there's no Razorpay
+        // notify_info equivalent for this rail — a plain Order has no
+        // built-in notification mechanism. The tenant won't hear about
+        // this automatically; they need to be told directly (or just open
+        // their own Organization Profile page, which shows the same
+        // "payment authorization needed" banner and can complete it there).
+        toast.success(
+          'Auto-pay mandate registered — no automatic notification is sent for this payment method, so let the tenant know directly. They can complete authorization from their own Organization Profile page.',
+          { duration: 14000 }
+        );
       } else {
         toast.success(
           `Razorpay subscription created (${res.razorpay_subscription_id}) — Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page. Authorizing it charges the first month immediately.`
@@ -205,9 +221,20 @@ const AdminTenantManagePage = () => {
       const res = await adminUpgradeVirtualWorkspacePlan(id, { planId: upgradePlanId });
       if (res.payment_method === 'WALLET_CREDITS') {
         toast.success('Plan upgraded — the price difference was debited from the tenant\'s wallet immediately');
-      } else if (res.upgrade_payment_required) {
+      } else if (res.payment_method === 'RAZORPAY_RECURRING') {
+        // No notify_info equivalent for this rail — tell the admin
+        // directly rather than implying Razorpay already notified anyone.
         toast.success(
-          `Upgrade started — the tenant needs to open their Subscription page (Profile → Subscription) to pay the ₹${res.amount / 100} difference and apply it. Their subscription stays active in the meantime; no notification was sent automatically for this one-time charge.`,
+          'Upgrade started — a new auto-pay mandate was registered. No automatic notification is sent for this payment method, so let the tenant know directly, or have them open their own Organization Profile page to complete it.',
+          { duration: 14000 }
+        );
+      } else if (res.razorpay_subscription_id) {
+        // RAZORPAY_AUTOPAY — a single Checkout authorizes the new mandate
+        // AND charges the prorated amount owed today (see upgradePlan()'s
+        // own doc comment); Razorpay's notify_info already emailed/texted
+        // the tenant a link for it, same as a fresh subscribe.
+        toast.success(
+          `Upgrade started — a new auto-pay mandate was registered${res.charge_now_credits != null ? ` (₹${res.charge_now_credits} charged on authorization)` : ''}. Razorpay has emailed/texted the tenant a link to authorize it; they'll also see it from their own Organization Profile page.`,
           { duration: 14000 }
         );
       } else {
@@ -517,7 +544,7 @@ const AdminTenantManagePage = () => {
                       <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                           <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
-                          <CreditCard size={13} /> Razorpay Auto-pay
+                          <Repeat size={13} /> Razorpay Auto-pay (card or UPI)
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                           <input type="radio" checked={subPaymentMethod === 'WALLET_CREDITS'} onChange={() => setSubPaymentMethod('WALLET_CREDITS')} />
