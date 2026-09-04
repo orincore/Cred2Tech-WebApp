@@ -5,6 +5,15 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
+import { NAV_ITEMS } from '../constants/navItems';
+
+// The nav items Virtual Workspace can actually gate — DSA-role items only
+// (SUPER_ADMIN/CRED2TECH_MEMBER nav is never affected by a tenant's VW flag,
+// see Sidebar.jsx). Pulled from the single source of truth in navItems.js
+// rather than duplicated here, so a newly added DSA nav item shows up in
+// this editor automatically.
+const DSA_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+const GATABLE_NAV_ITEMS = NAV_ITEMS.filter((item) => item.roles?.some((r) => DSA_ROLES.includes(r)));
 
 // Responsive hook
 const useResponsive = () => {
@@ -123,6 +132,8 @@ const SuperadminPricingPage = () => {
   const [editForm, setEditForm] = useState({});
   const [msmeEditing, setMsmeEditing] = useState(false);
   const [msmeDraft, setMsmeDraft] = useState('');
+  const [freeNavItemIds, setFreeNavItemIds] = useState([]);
+  const [savingFreeTabs, setSavingFreeTabs] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -130,13 +141,35 @@ const SuperadminPricingPage = () => {
 
   const fetchData = async () => {
     try {
-      const res = await api.get(`/admin/wallet/api-pricing`);
-      setPricing(res.data.pricing || []);
-      setDiscounts(res.data.discounts || []);
+      const [pricingRes, vwRes] = await Promise.all([
+        api.get(`/admin/wallet/api-pricing`),
+        api.get(`/admin/wallet/virtual-workspace-config`),
+      ]);
+      setPricing(pricingRes.data.pricing || []);
+      setDiscounts(pricingRes.data.discounts || []);
+      setFreeNavItemIds(vwRes.data.free_nav_item_ids || []);
     } catch (err) {
       toast.error('Failed to load pricing configurations');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleFreeNavItem = (itemId) => {
+    setFreeNavItemIds((prev) => (
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    ));
+  };
+
+  const handleSaveFreeTabs = async () => {
+    setSavingFreeTabs(true);
+    try {
+      await api.put(`/admin/wallet/virtual-workspace-config`, { free_nav_item_ids: freeNavItemIds });
+      toast.success('Virtual Workspace free tabs updated');
+    } catch (err) {
+      toast.error('Failed to save Virtual Workspace config');
+    } finally {
+      setSavingFreeTabs(false);
     }
   };
 
@@ -785,6 +818,52 @@ const SuperadminPricingPage = () => {
         <div style={{ padding: isMobile ? '10px 12px' : '12px 16px', background: 'var(--bg-elevated)', borderRadius: 0, marginTop: isMobile ? 10 : 16, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Info size={14} color="var(--info)" style={{ flexShrink: 0 }} />
             <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: 0 }}>Discount applied as bonus credits at time of top-up. Discount slabs apply to wallet recharges — not individual API calls.</p>
+        </div>
+      </div>
+
+      {/* ─── Virtual Workspace — Free Tabs ───
+          Which nav items a DSA-role user still sees when their tenant's
+          Virtual Workspace isn't active (per-tenant toggle lives on
+          TenantsListPage.jsx) — everything unchecked here disappears from
+          their sidebar. Same header/save pattern as Volume Package
+          Discounts above. */}
+      <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
+        <div style={{
+          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+        }}>
+          <div>
+            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Tabs</h3>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Sidebar tabs a DSA still sees before subscribing — everything else here is unchecked = locked</p>
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSaveFreeTabs}
+            disabled={savingFreeTabs}
+            style={{ borderRadius: 0, fontSize: 11 }}
+          >
+            <Save size={14} /> Save
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+          {GATABLE_NAV_ITEMS.map((item) => {
+            const checked = freeNavItemIds.includes(item.id);
+            return (
+              <label
+                key={item.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                  borderRadius: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--on-surface)',
+                }}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggleFreeNavItem(item.id)} />
+                {item.label}
+              </label>
+            );
+          })}
         </div>
       </div>
       </div>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, X, MapPin, Hash, Wallet, Activity, Building2, ShieldCheck } from 'lucide-react';
-import { getTenants, getTenantSummary } from '../api/tenantService';
+import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, MapPin, Hash, Wallet, Activity, Building2, ShieldCheck } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { getTenants, updateTenantVirtualWorkspace } from '../api/tenantService';
 import { MOCK_TENANTS } from '../constants/mockData';
 import { STATUS_OPTIONS } from '../constants/roles';
 import Badge from '../components/ui/Badge';
@@ -40,9 +41,26 @@ const TenantsListPage = () => {
   const [filterType, setFilterType] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
-  const [selectedTenantId, setSelectedTenantId] = useState(null);
-  const [summaryData, setSummaryData] = useState(null);
-  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [togglingVwId, setTogglingVwId] = useState(null);
+
+  // Flips a DSA tenant's Virtual Workspace subscription — activating unlocks
+  // their full sidebar (Cases, Customers, ESR, pulls, etc.) beyond just
+  // Dashboard/Wallet/Support/Profile; see Sidebar.jsx's gate. Optimistic
+  // local update so the toggle doesn't wait on a full tenant list refetch.
+  const handleToggleVirtualWorkspace = async (tenantId, nextActive) => {
+    setTogglingVwId(tenantId);
+    try {
+      const updated = await updateTenantVirtualWorkspace(tenantId, nextActive);
+      setTenants((prev) => prev.map((t) => (
+        t.id === tenantId ? { ...t, virtual_workspace: updated } : t
+      )));
+      toast.success(nextActive ? 'Virtual Workspace activated' : 'Virtual Workspace deactivated');
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to update Virtual Workspace');
+    } finally {
+      setTogglingVwId(null);
+    }
+  };
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -59,20 +77,6 @@ const TenantsListPage = () => {
   };
 
   useEffect(() => { fetchTenants(); }, []);
-
-  const openSummary = async (id) => {
-    setSelectedTenantId(id);
-    setSummaryData(null);
-    setLoadingSummary(true);
-    try {
-      const data = await getTenantSummary(id);
-      setSummaryData(data);
-    } catch (err) {
-      console.error('Failed to load summary', err);
-    } finally {
-      setLoadingSummary(false);
-    }
-  };
 
   const filtered = useMemo(() => {
     return tenants.filter((t) => {
@@ -309,7 +313,7 @@ const TenantsListPage = () => {
 
                     {/* Action */}
                     <button
-                      onClick={() => openSummary(t.id)}
+                      onClick={() => navigate(`/tenants/${t.id}`)}
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                         width: '100%', marginTop: 12, padding: '8px 0',
@@ -373,9 +377,30 @@ const TenantsListPage = () => {
                   </div>
                 );
               }},
+              { key: 'virtual_workspace', label: 'Virtual Workspace', align: 'center', render: (t) => {
+                const isActive = !!t.virtual_workspace?.is_active;
+                const isToggling = togglingVwId === t.id;
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleToggleVirtualWorkspace(t.id, !isActive); }}
+                    disabled={isToggling}
+                    title={isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: isActive ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#334155' : '#f1f5f9'),
+                      color: isActive ? (isDark ? '#6ee7b7' : '#15803d') : 'var(--on-muted)',
+                      border: 'none', padding: '4px 10px', borderRadius: 4,
+                      fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap',
+                      cursor: isToggling ? 'wait' : 'pointer', opacity: isToggling ? 0.6 : 1,
+                    }}
+                  >
+                    {isToggling ? '…' : (isActive ? 'Active' : 'Inactive')}
+                  </button>
+                );
+              }},
               { key: 'action', label: 'Action', align: 'center', render: (t) => (
                 <button
-                  onClick={(e) => { e.stopPropagation(); openSummary(t.id); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/tenants/${t.id}`); }}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     background: 'transparent', border: 'none',
@@ -399,170 +424,6 @@ const TenantsListPage = () => {
         </>
       )}
 
-      {/* Slide-out Drawer for DSA Summary */}
-      {selectedTenantId && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }} onClick={() => setSelectedTenantId(null)}>
-          <div style={{ background: isDark ? '#1e293b' : '#fff', width: '500px', height: '100%', padding: '24px', boxShadow: '-4px 0 15px rgba(0,0,0,0.1)', overflowY: 'auto', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 8, background: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Building size={20} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>{summaryData?.tenant_name || 'DSA Details'}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>Detailed analytics and profile</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedTenantId(null)}
-                style={{ 
-                  width: 28, 
-                  height: 28, 
-                  border: '1px solid var(--outline)', 
-                  borderRadius: 6, 
-                  background: 'transparent', 
-                  cursor: 'pointer', 
-                  color: 'var(--on-muted)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  flexShrink: 0,
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#ef4444';
-                  e.currentTarget.style.color = '#ef4444';
-                  e.currentTarget.style.background = '#fef2f2';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--outline)';
-                  e.currentTarget.style.color = 'var(--on-muted)';
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {loadingSummary ? (
-              <div style={{ padding: 40, textAlign: 'center' }}><LoadingSpinner /></div>
-            ) : summaryData ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ padding: 20, background: isDark ? '#0f172a' : 'var(--bg-secondary)', borderRadius: 8 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                    <div>
-                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--on-muted)', margin: '0 0 4px 0' }}>Wallet Balance</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, color: '#4f46e5', margin: 0 }}>₹{Number(summaryData.wallet_balance).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--on-muted)', margin: '0 0 4px 0' }}>Total API Calls</p>
-                      <p style={{ fontSize: 20, fontWeight: 800, margin: 0, color: 'var(--on-surface)' }}>{summaryData.total_api_usage}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', color: 'var(--on-muted)' }}>Profile</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>PAN</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.pan_number || '—'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>GSTIN</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.gst_number || '—'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>Phone</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.mobile || '—'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>Email</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.email || '—'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '0 0 2px 0' }}>City</p>
-                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: 'var(--on-surface)' }}>{summaryData.city || '—'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                      <Activity size={16} color="#4f46e5" />
-                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Activity (MTD)</h4>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>ITR Calls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.itr_pulls}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>GST Calls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.gst_pulls}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Bureau Pulls</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.bureau_pulls}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: 16, background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                      <Building size={16} color="#4f46e5" />
-                      <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Portfolio</h4>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Customers</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.total_customers}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Total Cases</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.total_cases}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>Team Size</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)' }}>{summaryData.team_size}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ padding: 0, overflow: 'hidden', background: isDark ? '#0f172a' : '#fff', border: '1px solid var(--outline)', borderRadius: 8 }}>
-                  <div style={{ padding: '12px 16px', background: isDark ? '#1e293b' : 'var(--bg-secondary)', borderBottom: '1px solid var(--outline)' }}>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Recent Wallet Activity</h4>
-                  </div>
-                  {summaryData.recent_wallet_transactions?.length > 0 ? (
-                    <table style={{ margin: 0, border: 'none', width: '100%' }}>
-                      <tbody style={{ border: 'none' }}>
-                        {summaryData.recent_wallet_transactions.map(tx => (
-                          <tr key={tx.id} style={{ borderBottom: '1px solid var(--outline)' }}>
-                            <td style={{ padding: '10px 16px', fontSize: 12 }}>
-                              <p style={{ margin: 0, fontWeight: 500, color: 'var(--on-surface)' }}>{tx.remarks || tx.api_code || 'Wallet Update'}</p>
-                              <p style={{ margin: 0, fontSize: 10, color: 'var(--on-muted)' }}>{formatDate(tx.created_at)}</p>
-                            </td>
-                            <td style={{ padding: '10px 16px', fontSize: 12, textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
-                              {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
-                  )}
-                </div>
-
-              </div>
-            ) : (
-              <p style={{ color: 'var(--on-muted)', fontSize: 14 }}>Failed to load DSA metrics.</p>
-            )}
-          </div>
-        </div>
-      )}
 
     </div>
   );

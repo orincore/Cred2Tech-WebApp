@@ -8,6 +8,7 @@ import { getErrorMessage, formatDateTime } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
+import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
 
 // Same list CreateTenantPage offers — kept in sync there rather than shared,
 // same reasoning as EditUserPage's own local DSA_ROLE_NAMES copy.
@@ -575,6 +576,8 @@ const OrganizationProfilePage = () => {
             </TravelingBorderButton>
           </div>
         </form>
+
+        <VirtualWorkspaceSubscriptionCard />
       </div>
     </div>
   );

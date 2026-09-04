@@ -55,6 +55,11 @@ const normalizeUser = (rawUser) => {
   if (finalUser && finalUser.tenant && !finalUser.tenant_type) {
     finalUser.tenant_type = finalUser.tenant.type;
   }
+  // Gates the DSA sidebar (see Sidebar.jsx) — only present once /auth/me has
+  // returned the tenant's virtual_workspace relation, which the login/MFA
+  // response shapes don't carry yet; syncFromStorage's getMe() call on mount
+  // fills it in moments after login regardless.
+  finalUser.virtual_workspace_active = !!finalUser.tenant?.virtual_workspace?.is_active;
   if (finalUser && finalUser.role) {
     if (typeof finalUser.role === 'object' && finalUser.role.name) {
       finalUser.role = finalUser.role.name;

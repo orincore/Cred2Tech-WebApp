@@ -61,9 +61,19 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [hasRole]);
 
+  // Virtual Workspace gate — an unsubscribed sourcing-partner tenant only
+  // sees whatever's in virtual_workspace_free_nav_item_ids (Dashboard/Wallet/
+  // Support/Profile by default, admin-editable on SuperadminPricingPage).
+  // Scoped explicitly to DSA roles so SUPER_ADMIN/CRED2TECH_MEMBER nav is
+  // never affected by a tenant's VW flag, regardless of what it says.
+  const isDsaRole = hasRole(['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']);
+  const isVirtualWorkspaceGated = isDsaRole && !user?.virtual_workspace_active;
+  const freeNavItemIds = user?.virtual_workspace_free_nav_item_ids || [];
+
   const visibleItems = NAV_ITEMS
     .filter((item) => {
       if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
+      if (isVirtualWorkspaceGated && !freeNavItemIds.includes(item.id)) return false;
       if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })

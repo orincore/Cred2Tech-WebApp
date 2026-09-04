@@ -16,6 +16,11 @@ export const updateTenantStatus = async (id, status) => {
   return response.data;
 };
 
+export const updateTenantVirtualWorkspace = async (id, isActive) => {
+  const response = await api.patch(`/tenants/${id}/virtual-workspace`, { is_active: isActive });
+  return response.data;
+};
+
 export const getTenantById = async (id) => {
   const response = await api.get(`/tenants/${id}`);
   return response.data;
@@ -51,6 +56,21 @@ export const publicLookupPan = async (pan_number, turnstile_token) => {
 
 export const getTenantSummary = async (tenantId) => {
   const response = await api.get(`/admin/tenants/${tenantId}/summary`);
+  return response.data;
+};
+
+export const grantFreeVirtualWorkspace = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/grant-free`);
+  return response.data;
+};
+
+export const adminSubscribeVirtualWorkspace = async (tenantId, { paymentMethod, promoCode }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/subscribe`, { payment_method: paymentMethod, promo_code: promoCode });
+  return response.data;
+};
+
+export const adminCancelVirtualWorkspace = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/cancel`);
   return response.data;
 };
 

@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Receipt,
   Trash2,
+  Tag,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -79,6 +80,13 @@ export const NAV_ITEMS = [
     label: 'API Pricing',
     path: '/admin/pricing',
     icon: Settings,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-promo-codes',
+    label: 'Promo Codes',
+    path: '/admin/promo-codes',
+    icon: Tag,
     roles: ['SUPER_ADMIN'],
   },
   {
