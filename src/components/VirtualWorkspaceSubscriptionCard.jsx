@@ -279,34 +279,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
     rzp.open();
   };
 
-  // Opens Razorpay Checkout for a plain ONE-TIME payment (an Order, not a
-  // Subscription), the upgrade price-difference charge. onPaid runs
-  // after Razorpay confirms the payment client-side; the caller is
-  // responsible for verifying it server-side (confirm-upgrade-payment).
-  const openOneTimeCheckout = async ({ order_id, amount, currency, key_id: orderKeyId }, description, onPaid) => {
-    const Razorpay = await loadRazorpay();
-    const rzp = new Razorpay({
-      key: orderKeyId || key_id,
-      order_id,
-      amount,
-      currency,
-      name: 'Cred2Tech Virtual Workspace',
-      description,
-      handler: (response) => onPaid(response),
-      theme: { color: '#4F46E5' },
-    });
-    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
-    rzp.open();
-  };
-
   // Opens Razorpay Checkout in `recurring: true` mode against a mandate
   // registration order (RAZORPAY_RECURRING rail) — shared by a fresh
   // subscribe and an upgrade re-registration on this rail (every upgrade
   // on this rail re-registers a fresh mandate at the new plan's exact
-  // price, see the backend's registerRecurringMandate doc comment, so
-  // there is no separate "just pay the difference" Checkout for this rail
-  // the way RAZORPAY_AUTOPAY's openOneTimeCheckout is for). The order's own
-  // `amount` already IS whatever's owed right now (full price for a fresh
+  // price, see the backend's registerRecurringMandate doc comment). The
+  // order's own `amount` already IS whatever's owed right now (full price
+  // for a fresh
   // subscribe, the price difference for an upgrade) — Razorpay charges it
   // as part of this SAME authenticated Checkout session, so completing it
   // here is a real, instant, synchronous charge, not a "your first charge
@@ -397,6 +376,22 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const selectedSwitchPlan = plans?.find((p) => String(p.id) === String(switchPlanId));
   const upgradeDiff = selectedSwitchPlan ? selectedSwitchPlan.monthly_price_credits - subscription?.effective_amount_credits : 0;
 
+  // RAZORPAY_AUTOPAY charges a PRORATED amount today, not the flat
+  // new-minus-old difference — mirrors the backend's own formula exactly
+  // (upgradePlan()'s doc comment) so the preview shown here never
+  // disagrees with what actually gets charged. WALLET_CREDITS and
+  // RAZORPAY_RECURRING both still charge the flat difference, unaffected.
+  const estimatedProratedCharge = (() => {
+    if (!selectedSwitchPlan || subscription?.payment_method !== 'RAZORPAY_AUTOPAY') return upgradeDiff;
+    const now = Date.now();
+    const cycleStart = subscription.current_period_start ? new Date(subscription.current_period_start).getTime() : now;
+    const cycleEnd = subscription.current_period_end ? new Date(subscription.current_period_end).getTime() : cycleStart + 30 * 24 * 60 * 60 * 1000;
+    const cycleLengthMs = Math.max(1, cycleEnd - cycleStart);
+    const remainingMs = Math.max(0, cycleEnd - now);
+    const unusedCredit = (subscription.effective_amount_credits || 0) * (remainingMs / cycleLengthMs);
+    return Math.max(1, Math.round(selectedSwitchPlan.monthly_price_credits - unusedCredit));
+  })();
+
   const handleSwitchPlan = async () => {
     if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
     if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
@@ -423,41 +418,15 @@ const VirtualWorkspaceSubscriptionCard = () => {
         return;
       }
 
-      // RAZORPAY_AUTOPAY, a one-time Checkout for just the price
-      // difference; paying it is what applies the upgrade.
-      await openOneTimeCheckout(
-        res.data,
-        `Upgrade to ${selectedSwitchPlan.name}, price difference`,
-        async (response) => {
-          try {
-            const confirmRes = await api.post('/virtual-workspace/subscription/confirm-upgrade-payment', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-
-            if (confirmRes.data?.reauthorization_required) {
-              // The old mandate couldn't absorb the new (higher) price —
-              // the difference is already paid, but auto-pay itself needs a
-              // fresh authorization to actually bill the new amount going
-              // forward. Nothing is charged by this second Checkout —
-              // Razorpay defers the new mandate's first real charge to the
-              // date already paid through.
-              toast('Your previous auto-pay mandate could not be raised to the new plan price. Please authorize a new one to keep auto-pay active.', { duration: 9000 });
-              await openCheckout(
-                confirmRes.data.razorpay_subscription_id,
-                `Upgraded to ${selectedSwitchPlan.name}. Auto-pay is set up for the new price`,
-                '/virtual-workspace/subscription/confirm-upgrade-reauth'
-              );
-            } else {
-              toast.success(`Upgraded to ${selectedSwitchPlan.name}. Subscription stays active, auto-pay bills the new price from next cycle`);
-            }
-            await fetchStatus();
-          } catch (err) {
-            toast.error(getErrorMessage(err) || 'Payment succeeded, but applying the upgrade failed. Contact support with this payment reference.', { duration: 10000 });
-            await fetchStatus();
-          }
-        }
+      // RAZORPAY_AUTOPAY — a single Checkout, same helper subscribe() uses.
+      // Authorizing this new mandate IS the (prorated) charge; auto-pay
+      // then bills the plan's full price from the next cycle automatically
+      // (a plain server call right after confirmation, no further Checkout
+      // — see upgradePlan()'s own doc comment for the full design).
+      await openCheckout(
+        res.data.razorpay_subscription_id,
+        `Upgraded to ${selectedSwitchPlan.name}. Auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle`,
+        '/virtual-workspace/subscription/confirm-upgrade-payment'
       );
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to switch plan');
@@ -527,7 +496,23 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const handleResumeAutoRenewal = async () => {
     setBusy(true);
     try {
-      await api.post('/virtual-workspace/subscription/resume-auto-renewal');
+      const res = await api.post('/virtual-workspace/subscription/resume-auto-renewal');
+
+      if (res.data?.reauthorization_required) {
+        // Razorpay's own resume API couldn't pick this mandate back up
+        // (their docs warn of exactly this for some instruments) — a
+        // fresh mandate was re-authorized instead. One Checkout, no
+        // charge today (the new mandate's first real charge stays
+        // deferred to the same paid-through date as before).
+        toast('Your auto-pay mandate needs re-authorizing to turn back on. Nothing is charged today.', { duration: 8000 });
+        await openCheckout(
+          res.data.razorpay_subscription_id,
+          'Auto-renewal turned back on',
+          '/virtual-workspace/subscription/confirm-resume-auto-renewal'
+        );
+        return;
+      }
+
       toast.success('Auto-renewal turned back on. Your subscription will keep renewing as normal.');
       await fetchStatus();
     } catch (err) {
@@ -686,10 +671,12 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 {selectedSwitchPlan && String(switchPlanId) !== String(subscription.plan_id) && upgradeDiff > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', background: 'var(--primary-subtle)', borderLeft: '3px solid var(--primary)' }}>
                     <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy} style={{ borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <ArrowUpCircle size={14} strokeWidth={2} /> {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name}, pay ${money(upgradeDiff)} now`}
+                      <ArrowUpCircle size={14} strokeWidth={2} /> {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name}, pay ${money(estimatedProratedCharge)} now`}
                     </button>
                     <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>
-                      Your subscription stays active. This charges just the difference, and auto-pay bills {money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle.
+                      {subscription.payment_method === 'RAZORPAY_AUTOPAY'
+                        ? `This charges a prorated amount for your remaining days on the current plan, and auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from your next renewal.`
+                        : `Your subscription stays active. This charges just the difference, and auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle.`}
                     </span>
                   </div>
                 )}
