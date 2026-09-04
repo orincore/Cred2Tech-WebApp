@@ -21,6 +21,8 @@ const ItrAnalyticsForm = ({
     applicantType,
     applicantName,
     prefillPan,
+    prefillEmail,
+    prefillMobile,
     walletBalance,
     itrCost,
     existingRecord,
@@ -110,6 +112,24 @@ const ItrAnalyticsForm = ({
     const [deleting, setDeleting] = useState(false);
     const [sendingLink, setSendingLink] = useState(false);
     const [cancellingLink, setCancellingLink] = useState(false);
+    // Delivery channel for the auth link — defaults to Email (the original
+    // behaviour before SMS support existed). Whichever channel(s) are chosen
+    // must have the matching contact info on file; the backend re-validates
+    // this too (see itrAuthLink.service.js), this is just for a clear
+    // disabled state + hint instead of a raw 400 toast.
+    const [linkChannel, setLinkChannel] = useState('EMAIL');
+    // Manual override — sends this link to a contact other than what's on
+    // file for the customer/applicant (e.g. they asked it go to a spouse's
+    // email, or their number on file is out of date), without editing the
+    // customer record itself. Empty means "use what's on file".
+    const [useOtherContact, setUseOtherContact] = useState(false);
+    const [overrideEmail, setOverrideEmail] = useState('');
+    const [overrideMobile, setOverrideMobile] = useState('');
+    const effectiveEmail = (useOtherContact && overrideEmail.trim()) || prefillEmail;
+    const effectiveMobile = (useOtherContact && overrideMobile.trim()) || prefillMobile;
+    const channelNeedsEmail = linkChannel === 'EMAIL' || linkChannel === 'BOTH';
+    const channelNeedsSms = linkChannel === 'SMS' || linkChannel === 'BOTH';
+    const channelMissingContact = (channelNeedsEmail && !effectiveEmail) || (channelNeedsSms && !effectiveMobile);
 
     const incomePreview = livePull?.income_preview || null;
 
@@ -129,13 +149,25 @@ const ItrAnalyticsForm = ({
     // pulled by this call itself; it only sends the link and flips this row
     // to "Action needed — waiting for the customer" until they submit it.
     const handleSendAuthLink = async () => {
+        if (channelMissingContact) {
+            return toast.error(channelNeedsEmail && !effectiveEmail
+                ? 'No email address to send to — enter one, or switch to SMS.'
+                : 'No mobile number to send to — enter one, or switch to Email.');
+        }
         setSendingLink(true);
         try {
-            await itrAuthLinkService.requestLink({ customer_id: customerId, case_id: caseId, applicant_id: applicantId });
+            await itrAuthLinkService.requestLink({
+                customer_id: customerId, case_id: caseId, applicant_id: applicantId, channel: linkChannel,
+                override_email: useOtherContact ? overrideEmail.trim() : undefined,
+                override_mobile: useOtherContact ? overrideMobile.trim() : undefined,
+            });
             toast.success('ITR authorisation link sent to the customer');
             setIsOpen(false);
             refresh();
         } catch (error) {
+            // A 429 here is the server-side resend cooldown (5 minutes between
+            // sends per case+applicant) — the message already says how long to
+            // wait, so no separate countdown UI is needed.
             toast.error(error.response?.data?.error || 'Failed to send the ITR auth link');
         } finally {
             setSendingLink(false);
@@ -290,9 +322,9 @@ const ItrAnalyticsForm = ({
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{applicantName}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{roleLabel}</span>
-                    {isAuthLinkPending && livePull?.recipient_email && (
+                    {isAuthLinkPending && (livePull?.recipient_email || livePull?.recipient_mobile) && (
                         <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            Auth link sent to {livePull.recipient_email}
+                            Auth link sent to {[livePull.recipient_email, livePull.recipient_mobile].filter(Boolean).join(' / ')}
                         </span>
                     )}
                 </div>
@@ -310,13 +342,24 @@ const ItrAnalyticsForm = ({
                         // first one expired) or revoking it. Resend reuses the same
                         // requestItrAuthLink call Send Auth Link does — it already
                         // supersedes the still-pending link and issues a fresh one.
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <select
+                                value={linkChannel}
+                                onChange={(e) => setLinkChannel(e.target.value)}
+                                className="form-control"
+                                style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                title="Choose how to deliver the resent link"
+                            >
+                                <option value="EMAIL">Email</option>
+                                <option value="SMS">SMS</option>
+                                <option value="BOTH">Email + SMS</option>
+                            </select>
                             <button
                                 type="button"
                                 className="btn btn-secondary btn-sm"
                                 onClick={handleSendAuthLink}
-                                disabled={sendingLink}
-                                title="Send a fresh auth link — the current one will be revoked"
+                                disabled={sendingLink || channelMissingContact}
+                                title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                             >
                                 <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
@@ -405,21 +448,72 @@ const ItrAnalyticsForm = ({
                                 would be premature. The real balance check still happens
                                 server-side at submit time either way. */}
                             {!isMsme && (
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={handleSendAuthLink}
-                                    disabled={disabled || sendingLink}
-                                    title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Email the customer a link to enter their own ITR portal credentials")}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                >
-                                    <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
-                                </button>
+                                <>
+                                    <select
+                                        value={linkChannel}
+                                        onChange={(e) => setLinkChannel(e.target.value)}
+                                        className="form-control"
+                                        style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                        title="Choose how to deliver the auth link"
+                                    >
+                                        <option value="EMAIL">Email</option>
+                                        <option value="SMS">SMS</option>
+                                        <option value="BOTH">Email + SMS</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={handleSendAuthLink}
+                                        disabled={disabled || sendingLink || channelMissingContact}
+                                        title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'Missing contact info for the selected channel' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                        <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
+                                    </button>
+                                </>
                             )}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Manual contact override — send this link to someone other than
+                whatever's on file (a different email/mobile), without editing
+                the customer/applicant record itself. Visible whenever a Send/
+                Resend Auth Link action is on screen (never in MSME self-service
+                mode, which never shows the auth-link path at all). */}
+            {!isMsme && status !== 'PROCESSING' && status !== 'COMPLETED' && (
+                <div style={{ padding: isMobile ? '0 16px 14px' : '0 24px 16px' }}>
+                    <button
+                        type="button"
+                        onClick={() => setUseOtherContact((s) => !s)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                    >
+                        {useOtherContact ? 'Use contact on file' : 'Send to a different contact…'}
+                    </button>
+                    {useOtherContact && (
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8 }}>
+                            <input
+                                type="email"
+                                value={overrideEmail}
+                                onChange={(e) => setOverrideEmail(e.target.value)}
+                                className="form-control"
+                                placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                style={{ fontSize: 12.5 }}
+                            />
+                            <input
+                                type="tel"
+                                value={overrideMobile}
+                                onChange={(e) => setOverrideMobile(e.target.value)}
+                                className="form-control"
+                                placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                style={{ fontSize: 12.5 }}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Income preview — quick net profit / gross receipts figures right
                 here, so seeing the headline numbers doesn't require opening the

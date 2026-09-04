@@ -12,8 +12,8 @@ export const itrAuthLinkService = {
   // DSA-side (authenticated) — sends the customer an emailed link to
   // self-authorise the ITR pull instead of the DSA keying in the portal
   // password themselves.
-  requestLink: async ({ customer_id, case_id, applicant_id }) => {
-    const response = await api.post('/itr-auth-link/request', { customer_id, case_id, applicant_id });
+  requestLink: async ({ customer_id, case_id, applicant_id, channel, override_email, override_mobile }) => {
+    const response = await api.post('/itr-auth-link/request', { customer_id, case_id, applicant_id, channel, override_email, override_mobile });
     return response.data;
   },
 

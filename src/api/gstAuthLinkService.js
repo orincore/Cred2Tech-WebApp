@@ -15,8 +15,8 @@ export const gstAuthLinkService = {
   // the date window is fixed/auto-computed server-side (see
   // gstAuthLink.service.js's computeGstDateWindow), same as the DSA-direct
   // form already hides it.
-  requestLink: async ({ customer_id, case_id, applicant_id, gstin }) => {
-    const response = await api.post('/gst-auth-link/request', { customer_id, case_id, applicant_id, gstin });
+  requestLink: async ({ customer_id, case_id, applicant_id, gstin, channel, override_email, override_mobile }) => {
+    const response = await api.post('/gst-auth-link/request', { customer_id, case_id, applicant_id, gstin, channel, override_email, override_mobile });
     return response.data;
   },
 

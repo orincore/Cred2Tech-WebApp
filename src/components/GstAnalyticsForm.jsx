@@ -100,6 +100,22 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     const isOtpPending = latestRequest?.auth_type === 'OTP' && latestRequest?.status === 'OTP_PENDING';
     const [sendingLink, setSendingLink] = useState(false);
     const [cancellingLink, setCancellingLink] = useState(false);
+    // Delivery channel for the auth link — defaults to Email (the original
+    // behaviour before SMS support existed). Mirrors ItrAnalyticsForm's own
+    // linkChannel state; the backend re-validates contact info too (see
+    // gstAuthLink.service.js).
+    const [linkChannel, setLinkChannel] = useState('EMAIL');
+    // Manual override — mirrors ItrAnalyticsForm's own useOtherContact: send
+    // this link to a contact other than what's on file, without editing the
+    // customer/applicant record.
+    const [useOtherContact, setUseOtherContact] = useState(false);
+    const [overrideEmail, setOverrideEmail] = useState('');
+    const [overrideMobile, setOverrideMobile] = useState('');
+    const effectiveEmail = (useOtherContact && overrideEmail.trim()) || prefillEmail;
+    const effectiveMobile = (useOtherContact && overrideMobile.trim()) || prefillMobile;
+    const channelNeedsEmail = linkChannel === 'EMAIL' || linkChannel === 'BOTH';
+    const channelNeedsSms = linkChannel === 'SMS' || linkChannel === 'BOTH';
+    const channelMissingContact = (channelNeedsEmail && !effectiveEmail) || (channelNeedsSms && !effectiveMobile);
     // Optimistic flag: hides the "Send Auth Link" form the instant the send
     // succeeds, without waiting on the realtime snapshot's own round trip
     // (refresh() -> server rebroadcast -> socket push) to flip
@@ -254,13 +270,25 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // Mirrors ItrAnalyticsForm.jsx's own handleSendAuthLink.
     const handleSendAuthLink = async () => {
         if (!formData.gstin) return toast.error("Select or enter a GSTIN first");
+        if (channelMissingContact) {
+            return toast.error(channelNeedsEmail && !effectiveEmail
+                ? 'No email address to send to — enter one, or switch to SMS.'
+                : 'No mobile number to send to — enter one, or switch to Email.');
+        }
         setSendingLink(true);
         try {
-            await gstAuthLinkService.requestLink({ customer_id: customerId, case_id: caseId, applicant_id: applicantId, gstin: formData.gstin });
+            await gstAuthLinkService.requestLink({
+                customer_id: customerId, case_id: caseId, applicant_id: applicantId, gstin: formData.gstin, channel: linkChannel,
+                override_email: useOtherContact ? overrideEmail.trim() : undefined,
+                override_mobile: useOtherContact ? overrideMobile.trim() : undefined,
+            });
             toast.success('GST authorisation link sent to the customer');
             setLinkJustSent(true);
             refresh();
         } catch (error) {
+            // A 429 here is the server-side resend cooldown (5 minutes between
+            // sends per case+applicant) — the message already says how long to
+            // wait, so no separate countdown UI is needed.
             toast.error(error.response?.data?.error || 'Failed to send the GST auth link');
         } finally {
             setSendingLink(false);
@@ -526,20 +554,75 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
 
                     {mode === 'AUTH_LINK' && (
                         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-                                <Mail size={13} color="#4f46e5" />
-                                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link To</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Mail size={13} color="#4f46e5" />
+                                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link Via</span>
+                                </div>
+                                <select
+                                    value={linkChannel}
+                                    onChange={(e) => setLinkChannel(e.target.value)}
+                                    className="form-control"
+                                    style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                >
+                                    <option value="EMAIL">Email</option>
+                                    <option value="SMS">SMS</option>
+                                    <option value="BOTH">Email + SMS</option>
+                                </select>
                             </div>
-                            <div style={{ padding: 16 }}>
-                                {prefillEmail ? (
-                                    <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
-                                        The customer will receive a link at <strong>{prefillEmail}</strong> to enter their own GST portal username and password.
-                                    </p>
-                                ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
-                                        <AlertCircle size={15} /> No email address on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one before sending the auth link.
-                                    </div>
+                            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {channelNeedsEmail && (
+                                    effectiveEmail ? (
+                                        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                                            Email: the customer will receive a link at <strong>{effectiveEmail}</strong>.
+                                        </p>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
+                                            <AlertCircle size={15} /> No email address on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one below, or switch to SMS.
+                                        </div>
+                                    )
                                 )}
+                                {channelNeedsSms && (
+                                    effectiveMobile ? (
+                                        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                                            SMS: the customer will receive a link at <strong>{effectiveMobile}</strong>.
+                                        </p>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
+                                            <AlertCircle size={15} /> No mobile number on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one below, or switch to Email.
+                                        </div>
+                                    )
+                                )}
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUseOtherContact((s) => !s)}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                                    >
+                                        {useOtherContact ? 'Use contact on file' : 'Send to a different contact…'}
+                                    </button>
+                                    {useOtherContact && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8 }}>
+                                            <input
+                                                type="email"
+                                                value={overrideEmail}
+                                                onChange={(e) => setOverrideEmail(e.target.value)}
+                                                className="form-control"
+                                                placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                                style={{ fontSize: 12.5 }}
+                                            />
+                                            <input
+                                                type="tel"
+                                                value={overrideMobile}
+                                                onChange={(e) => setOverrideMobile(e.target.value)}
+                                                className="form-control"
+                                                placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                                style={{ fontSize: 12.5 }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
                                 Nothing is pulled until the customer submits their own credentials — this only sends the link.
@@ -557,7 +640,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         type="button"
                         onClick={handleCreateRequest}
                         disabled={disabled || loading || sendingLink || !formData.gstin
-                            || (mode === 'AUTH_LINK' && !prefillEmail)
+                            || (mode === 'AUTH_LINK' && channelMissingContact)
                             || (!isMsme && gstCost != null && walletBalance < gstCost)}
                         className="btn btn-primary"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
@@ -655,40 +738,83 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         // own isAuthLinkPending branch. Resend reuses the same
                         // handleSendAuthLink call the Send Auth Link button does — it
                         // already supersedes the still-pending link and issues a fresh one.
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                <PullStatusTracker
-                                    variant="panel"
-                                    phase={phase}
-                                    label={latestRequest.label || 'Waiting for the customer to authorise'}
-                                    progress={latestRequest.progress ?? 12}
-                                />
-                                {latestRequest.recipient_email && (
-                                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                                        Auth link sent to {latestRequest.recipient_email}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                    <PullStatusTracker
+                                        variant="panel"
+                                        phase={phase}
+                                        label={latestRequest.label || 'Waiting for the customer to authorise'}
+                                        progress={latestRequest.progress ?? 12}
+                                    />
+                                    {latestRequest.recipient_email && (
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                            Auth link sent to {latestRequest.recipient_email}{latestRequest.recipient_mobile ? ` / ${latestRequest.recipient_mobile}` : ''}
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <select
+                                        value={linkChannel}
+                                        onChange={(e) => setLinkChannel(e.target.value)}
+                                        className="form-control"
+                                        style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                        title="Choose how to deliver the resent link"
+                                    >
+                                        <option value="EMAIL">Email</option>
+                                        <option value="SMS">SMS</option>
+                                        <option value="BOTH">Email + SMS</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={handleSendAuthLink}
+                                        disabled={sendingLink || channelMissingContact}
+                                        title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                        <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={handleCancelAuthLink}
+                                        disabled={cancellingLink}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                                    >
+                                        <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setUseOtherContact((s) => !s)}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                                >
+                                    {useOtherContact ? 'Use contact on file' : 'Resend to a different contact…'}
+                                </button>
+                                {useOtherContact && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8, maxWidth: 480 }}>
+                                        <input
+                                            type="email"
+                                            value={overrideEmail}
+                                            onChange={(e) => setOverrideEmail(e.target.value)}
+                                            className="form-control"
+                                            placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                            style={{ fontSize: 12.5 }}
+                                        />
+                                        <input
+                                            type="tel"
+                                            value={overrideMobile}
+                                            onChange={(e) => setOverrideMobile(e.target.value)}
+                                            className="form-control"
+                                            placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                            style={{ fontSize: 12.5 }}
+                                        />
                                     </div>
                                 )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={handleSendAuthLink}
-                                    disabled={sendingLink}
-                                    title="Send a fresh auth link — the current one will be revoked"
-                                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                >
-                                    <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={handleCancelAuthLink}
-                                    disabled={cancellingLink}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
-                                >
-                                    <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
-                                </button>
                             </div>
                         </div>
                     ) : isDead ? (

@@ -2107,6 +2107,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       applicantType="PRIMARY"
                       applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                       prefillPan={formData.business_pan}
+                      prefillEmail={formData.business_email}
+                      prefillMobile={formData.business_mobile}
                       walletBalance={walletBalance}
                       itrCost={costs.ITR_ANALYTICS}
                       existingRecord={formData.customer_itr_profile}
@@ -2125,6 +2127,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           applicantType="CO_APPLICANT"
                           applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           prefillPan={coApp.pan_number || ''}
+                          prefillEmail={coApp.email}
+                          prefillMobile={coApp.mobile}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
                           existingRecord={coApp.itr_analytics?.[0] || null}
