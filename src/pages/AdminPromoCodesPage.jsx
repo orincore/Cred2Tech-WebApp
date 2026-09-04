@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { Tag, Plus, X, Save } from 'lucide-react';
+import { Tag, Plus, X, Save, History } from 'lucide-react';
 import api from '../api/axiosInstance';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useTheme } from '../context/ThemeContext';
@@ -28,17 +28,36 @@ const EMPTY_FORM = {
 };
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmtDateTime = (d) => d ? new Date(d).toLocaleString('en-IN') : '—';
+
+const STATUS_COLOR = { CONFIRMED: { bg: '#dcfce7', fg: '#15803d', bgDark: '#064e3b', fgDark: '#6ee7b7' }, PENDING: { bg: '#fef9c3', fg: '#a16207', bgDark: '#422006', fgDark: '#fde047' }, CANCELLED: { bg: '#f1f5f9', fg: '#64748b', bgDark: '#334155', fgDark: '#94a3b8' } };
 
 const AdminPromoCodesPage = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const [tab, setTab] = useState('codes'); // 'codes' | 'usage'
   const [codes, setCodes] = useState([]);
+  const [redemptions, setRedemptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUsage, setLoadingUsage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null); // null = closed, {} = create, {...} = edit
   const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => { fetchCodes(); }, []);
+  useEffect(() => { if (tab === 'usage' && redemptions.length === 0) fetchRedemptions(); }, [tab]);
+
+  const fetchRedemptions = async () => {
+    setLoadingUsage(true);
+    try {
+      const res = await api.get('/admin/promo-codes/redemptions');
+      setRedemptions(res.data.redemptions || []);
+    } catch (err) {
+      toast.error('Failed to load promo code usage');
+    } finally {
+      setLoadingUsage(false);
+    }
+  };
 
   const fetchCodes = async () => {
     try {
@@ -143,12 +162,74 @@ const AdminPromoCodesPage = () => {
             <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>Discount codes for Direct MSME and Virtual Workspace</p>
           </div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openCreate} style={{ borderRadius: 0 }}>
-          <Plus size={14} /> New Promo Code
-        </button>
+        {tab === 'codes' && (
+          <button className="btn btn-primary btn-sm" onClick={openCreate} style={{ borderRadius: 0 }}>
+            <Plus size={14} /> New Promo Code
+          </button>
+        )}
+      </div>
+
+      <div style={{ padding: '10px 20px 0', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: 4 }}>
+        {[{ id: 'codes', label: 'Codes', icon: Tag }, { id: 'usage', label: 'Usage', icon: History }].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '9px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+              background: 'transparent', border: 'none',
+              borderBottom: tab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
+              color: tab === t.id ? 'var(--primary)' : 'var(--on-muted)',
+            }}
+          >
+            <t.icon size={13} /> {t.label}
+          </button>
+        ))}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+        {tab === 'usage' ? (
+          loadingUsage ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><LoadingSpinner size={28} /></div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid var(--outline)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
+                    {['Code', 'Used By', 'Purpose', 'Discount', 'Status', 'When'].map((h) => (
+                      <th key={h} style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '0.04em' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {redemptions.map((r) => {
+                    const sc = STATUS_COLOR[r.status] || STATUS_COLOR.PENDING;
+                    return (
+                      <tr key={r.id} style={{ borderTop: '1px solid var(--outline)' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 700 }}>{r.promo_code?.code}</td>
+                        <td style={{ padding: '10px 12px' }}>{r.tenant_name || r.user_name || '—'}</td>
+                        <td style={{ padding: '10px 12px' }}>{PRODUCT_LABELS[r.product] || r.product}</td>
+                        <td style={{ padding: '10px 12px' }}>₹{r.discount_amount}</td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span style={{
+                            padding: '3px 9px', fontSize: 10.5, fontWeight: 800,
+                            background: isDark ? sc.bgDark : sc.bg, color: isDark ? sc.fgDark : sc.fg,
+                          }}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--on-muted)' }}>{fmtDateTime(r.confirmed_at || r.created_at)}</td>
+                      </tr>
+                    );
+                  })}
+                  {redemptions.length === 0 && (
+                    <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--on-muted)' }}>No promo code usage yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
         <div style={{ overflowX: 'auto', border: '1px solid var(--outline)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
@@ -193,6 +274,7 @@ const AdminPromoCodesPage = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {editing !== null && (

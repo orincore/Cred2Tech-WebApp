@@ -54,6 +54,12 @@ export const publicLookupPan = async (pan_number, turnstile_token) => {
   return response.data;
 };
 
+// Global cross-tenant listing for the dedicated admin Subscriptions page.
+export const listAllVirtualWorkspaceSubscriptions = async () => {
+  const response = await api.get(`/admin/virtual-workspace/subscriptions`);
+  return response.data;
+};
+
 export const getTenantSummary = async (tenantId) => {
   const response = await api.get(`/admin/tenants/${tenantId}/summary`);
   return response.data;
@@ -66,6 +72,40 @@ export const grantFreeVirtualWorkspace = async (tenantId) => {
 
 export const adminSubscribeVirtualWorkspace = async (tenantId, { paymentMethod, promoCode }) => {
   const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/subscribe`, { payment_method: paymentMethod, promo_code: promoCode });
+  return response.data;
+};
+
+export const adminExtendVirtualWorkspace = async (tenantId, newEndDate) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/extend`, { new_end_date: newEndDate });
+  return response.data;
+};
+
+// Free admin credit allocation directly to a tenant's own wallet.
+export const adminTopupTenantWallet = async (tenantId, credits, remarks) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/wallet/topup`, { credits, remarks });
+  return response.data;
+};
+export const adminDeductTenantWallet = async (tenantId, credits, remarks) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/wallet/deduct`, { credits, remarks });
+  return response.data;
+};
+
+// Team/employee credit management — allocate or revoke credits between the
+// tenant's own wallet and one member's (sub-DSA/employee) wallet.
+export const getTenantEmployees = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/employees`);
+  return response.data;
+};
+export const allocateTenantEmployeeCredits = async (tenantId, userId, credits, note) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/employees/${userId}/allocate`, { credits, note });
+  return response.data;
+};
+export const revokeTenantEmployeeCredits = async (tenantId, userId, credits, note) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/employees/${userId}/revoke`, { credits, note });
+  return response.data;
+};
+export const getTenantEmployeeTransactions = async (tenantId, userId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/employees/${userId}/transactions`);
   return response.data;
 };
 

@@ -90,6 +90,13 @@ export const NAV_ITEMS = [
     roles: ['SUPER_ADMIN'],
   },
   {
+    id: 'admin-virtual-workspace',
+    label: 'Virtual Workspace',
+    path: '/admin/virtual-workspace',
+    icon: LayoutDashboard,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
     id: 'admin-wallets',
     label: 'Wallet Management',
     path: '/admin/wallets',

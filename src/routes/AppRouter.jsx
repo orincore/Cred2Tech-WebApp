@@ -37,6 +37,7 @@ const CustomerProfilePage = lazy(() => import('../pages/CustomerProfilePage'));
 const SuperadminPricingPage = lazy(() => import('../pages/SuperadminPricingPage'));
 const AdminPromoCodesPage = lazy(() => import('../pages/AdminPromoCodesPage'));
 const AdminTenantManagePage = lazy(() => import('../pages/AdminTenantManagePage'));
+const AdminVirtualWorkspaceSubscriptionsPage = lazy(() => import('../pages/AdminVirtualWorkspaceSubscriptionsPage'));
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
 const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetail'));
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
@@ -222,6 +223,14 @@ const AppRouter = () => (
               element={
                 <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
                   <AdminTenantManagePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/virtual-workspace"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                  <AdminVirtualWorkspaceSubscriptionsPage />
                 </ProtectedRoute>
               }
             />

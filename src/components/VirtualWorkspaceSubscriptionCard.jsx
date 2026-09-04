@@ -44,7 +44,8 @@ const VirtualWorkspaceSubscriptionCard = () => {
 
   if (!hasRole('DSA_ADMIN') || loading || !status) return null;
 
-  const { subscription, wallet_balance, monthly_price_credits, billing_enabled } = status;
+  const { subscription, wallet_balance, monthly_price_credits, billing_enabled, is_currently_free, free_until } = status;
+  const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
   const handleSubscribe = async () => {
     setBusy(true);
@@ -53,6 +54,15 @@ const VirtualWorkspaceSubscriptionCard = () => {
         payment_method: paymentMethod,
         promo_code: promoCode.trim() || null,
       });
+
+      if (res.data.free) {
+        // During the platform-wide free window, subscribe() never touches
+        // Razorpay at all — no razorpay_subscription_id to open Checkout
+        // against, regardless of which payment_method was chosen.
+        toast.success(res.data.message || 'Activated — free for now, no payment required');
+        await fetchStatus();
+        return;
+      }
 
       if (res.data.payment_method === 'WALLET_CREDITS') {
         toast.success('Subscribed — paid from wallet credits');
@@ -91,7 +101,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
-  const activeLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD'].includes(subscription.status);
+  const activeLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD', 'PAUSED'].includes(subscription.status);
 
   return (
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', marginTop: 24 }}>
@@ -100,12 +110,20 @@ const VirtualWorkspaceSubscriptionCard = () => {
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace Subscription</h3>
           <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>
-            {billing_enabled ? `₹${monthly_price_credits}/month — auto-renews` : `Free until 2027-09-30 — ₹${monthly_price_credits}/month afterward`}
+            {freeUntilLabel ? `Free until ${freeUntilLabel} — ₹${monthly_price_credits}/month afterward` : `₹${monthly_price_credits}/month — auto-renews`}
           </p>
         </div>
       </div>
 
       <div style={{ padding: 20 }}>
+        {is_currently_free && (
+          <div style={{ padding: '12px 14px', marginBottom: 16, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)', fontSize: 12.5, lineHeight: 1.6 }}>
+            🎉 <strong>Congrats — Virtual Workspace is free until {freeUntilLabel}!</strong> This period will not charge your account.
+            {activeLike && (
+              <> Your existing subscription has been extended till {freeUntilLabel} — your next renewal will be on {freeUntilLabel}.</>
+            )}
+          </div>
+        )}
         {activeLike ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -120,9 +138,14 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 {subscription.payment_method === 'WALLET_CREDITS' ? 'Paid from wallet credits' : 'Auto-pay via Razorpay'}
               </span>
             </div>
+            {subscription.current_period_start && (
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 4px 0' }}>
+                Started {formatDateTime(subscription.current_period_start)}
+              </p>
+            )}
             <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>
               ₹{subscription.effective_amount_credits}/month
-              {subscription.current_period_end && ` — next charge ${formatDateTime(subscription.current_period_end)}`}
+              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
             </p>
           </div>
         ) : (
@@ -149,7 +172,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
               />
             </div>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy} style={{ borderRadius: 0 }}>
-              {busy ? 'Starting…' : `Subscribe — ₹${monthly_price_credits}/month`}
+              {busy ? 'Starting…' : is_currently_free ? `Activate — Free until ${freeUntilLabel}` : `Subscribe — ₹${monthly_price_credits}/month`}
             </button>
           </>
         )}

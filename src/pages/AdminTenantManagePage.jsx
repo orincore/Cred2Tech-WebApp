@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, CreditCard, Tag, Gift, XCircle } from 'lucide-react';
+import {
+  ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, CreditCard, Tag, Gift, XCircle,
+  Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock,
+} from 'lucide-react';
 import {
   getTenantSummary, updateTenantStatus, updateTenantVirtualWorkspace,
-  grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminCancelVirtualWorkspace,
+  grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminCancelVirtualWorkspace, adminExtendVirtualWorkspace,
+  adminTopupTenantWallet, adminDeductTenantWallet,
+  getTenantEmployees, allocateTenantEmployeeCredits, revokeTenantEmployeeCredits,
 } from '../api/tenantService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDate, formatDateTime, getErrorMessage } from '../utils/helpers';
@@ -17,10 +22,30 @@ const ACCESS_PLAN_LABEL = {
 };
 const ACCESS_PLAN_COLOR = { NO_ACCESS: 'var(--error)', FREE_GRANTED: 'var(--info)', SUBSCRIBED: 'var(--success)' };
 
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'workspace', label: 'Virtual Workspace', icon: LayoutGrid },
+  { id: 'wallet', label: 'Wallet & Credits', icon: Wallet },
+  { id: 'team', label: 'Team & Allocation', icon: Users },
+];
+
 const StatCard = ({ label, value }) => (
   <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', padding: 14 }}>
     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', marginTop: 4 }}>{value}</div>
+  </div>
+);
+
+const Card = ({ icon: Icon, title, subtitle, children }) => (
+  <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', marginBottom: 20 }}>
+    <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Icon size={16} color="var(--primary)" />
+      <div>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>{title}</h3>
+        {subtitle && <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>{subtitle}</p>}
+      </div>
+    </div>
+    <div style={{ padding: 20 }}>{children}</div>
   </div>
 );
 
@@ -29,11 +54,22 @@ const AdminTenantManagePage = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const [tab, setTab] = useState('overview');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
   const [subPaymentMethod, setSubPaymentMethod] = useState('RAZORPAY_AUTOPAY');
   const [subPromoCode, setSubPromoCode] = useState('');
+  const [extendDate, setExtendDate] = useState('');
+
+  const [topupAmount, setTopupAmount] = useState('');
+  const [deductAmount, setDeductAmount] = useState('');
+  const [deductRemarks, setDeductRemarks] = useState('');
+
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [allocations, setAllocations] = useState({}); // { [userId]: { amount, note } }
 
   const fetchData = useCallback(async () => {
     try {
@@ -46,7 +82,20 @@ const AdminTenantManagePage = () => {
     }
   }, [id]);
 
+  const fetchEmployees = useCallback(async () => {
+    setLoadingEmployees(true);
+    try {
+      const res = await getTenantEmployees(id);
+      setEmployees(res || []);
+    } catch (err) {
+      toast.error('Failed to load team members');
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }, [id]);
+
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (tab === 'team' && employees.length === 0) fetchEmployees(); }, [tab, employees.length, fetchEmployees]);
 
   const handleToggleStatus = async () => {
     setBusy(true);
@@ -92,13 +141,14 @@ const AdminTenantManagePage = () => {
     setBusy(true);
     try {
       const res = await adminSubscribeVirtualWorkspace(id, { paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
-      if (res.payment_method === 'WALLET_CREDITS') {
-        toast.success('Subscribed — charged from tenant wallet credits');
-        await fetchData();
+      if (res.free) {
+        toast.success(res.message || 'Activated — free for now, no payment required');
+      } else if (res.payment_method === 'WALLET_CREDITS') {
+        toast.success('Subscribed — paid from tenant wallet credits');
       } else {
-        toast.success(`Razorpay subscription created (${res.razorpay_subscription_id}) — the tenant still needs to complete Checkout authorization themselves from their own Organization Profile page, or you can complete it now with a card you control.`, { duration: 10000 });
-        await fetchData();
+        toast.success(`Razorpay subscription created (${res.razorpay_subscription_id}) — the tenant completes Checkout authorization from their own Organization Profile page.`, { duration: 10000 });
       }
+      await fetchData();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to start subscription');
     } finally {
@@ -120,26 +170,114 @@ const AdminTenantManagePage = () => {
     }
   };
 
+  const handleExtendSubscription = async () => {
+    if (!extendDate) return toast.error('Pick a new end date');
+    setBusy(true);
+    try {
+      const result = await adminExtendVirtualWorkspace(id, extendDate);
+      toast.success(
+        result.status === 'PAUSED'
+          ? 'Extended — the live Razorpay subscription is paused and will auto-resume on the new date, so autopay won\'t charge again until then'
+          : 'Subscription extended',
+        { duration: 8000 }
+      );
+      setExtendDate('');
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to extend subscription');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleTopup = async () => {
+    const credits = parseInt(topupAmount, 10);
+    if (!credits || credits <= 0) return toast.error('Enter a valid credit amount');
+    setBusy(true);
+    try {
+      await adminTopupTenantWallet(id, credits);
+      toast.success(`${credits} free credits added to wallet`);
+      setTopupAmount('');
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to top up wallet');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeduct = async () => {
+    const credits = parseInt(deductAmount, 10);
+    if (!credits || credits <= 0) return toast.error('Enter a valid credit amount');
+    setBusy(true);
+    try {
+      await adminDeductTenantWallet(id, credits, deductRemarks.trim() || undefined);
+      toast.success(`${credits} credits deducted from wallet`);
+      setDeductAmount(''); setDeductRemarks('');
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to deduct from wallet');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateAllocationField = (userId, field, value) => {
+    setAllocations((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }));
+  };
+
+  const handleAllocate = async (userId) => {
+    const amount = parseInt(allocations[userId]?.amount, 10);
+    if (!amount || amount <= 0) return toast.error('Enter a valid credit amount');
+    setBusy(true);
+    try {
+      await allocateTenantEmployeeCredits(id, userId, amount, allocations[userId]?.note || undefined);
+      toast.success(`${amount} credits allocated`);
+      setAllocations((prev) => ({ ...prev, [userId]: { amount: '', note: '' } }));
+      await Promise.all([fetchEmployees(), fetchData()]);
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to allocate credits');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRevoke = async (userId) => {
+    const amount = parseInt(allocations[userId]?.amount, 10);
+    if (!amount || amount <= 0) return toast.error('Enter a valid credit amount');
+    setBusy(true);
+    try {
+      await revokeTenantEmployeeCredits(id, userId, amount, allocations[userId]?.note || undefined);
+      toast.success(`${amount} credits revoked back to tenant wallet`);
+      setAllocations((prev) => ({ ...prev, [userId]: { amount: '', note: '' } }));
+      await Promise.all([fetchEmployees(), fetchData()]);
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to revoke credits');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><LoadingSpinner size={32} /></div>;
   if (!data) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)' }}>Tenant not found</div>;
 
-  const { subscription, virtual_workspace, access_plan } = data;
+  const { subscription, access_plan } = data;
+  const isSubscribedLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD'].includes(subscription.status);
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-        <button onClick={() => navigate('/tenants')} className="btn btn-ghost btn-sm" style={{ marginBottom: 16, borderRadius: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg-elevated)' }}>
+        <button onClick={() => navigate('/tenants')} className="btn btn-ghost btn-sm" style={{ marginBottom: 10, borderRadius: 0 }}>
           <ArrowLeft size={14} /> Back to DSA List
         </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Building2 size={20} color="var(--primary)" />
+            <div style={{ width: 40, height: 40, background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Building2 size={18} color="var(--primary)" />
             </div>
             <div>
-              <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'var(--on-surface)' }}>{data.tenant_name}</h1>
-              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>{data.email} · {data.city || '—'} · {data.type}</p>
+              <h1 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'var(--on-surface)' }}>{data.tenant_name}</h1>
+              <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>{data.email} · {data.city || '—'} · {data.type}</p>
             </div>
           </div>
           <button onClick={handleToggleStatus} disabled={busy} className="btn btn-sm" style={{
@@ -150,97 +288,248 @@ const AdminTenantManagePage = () => {
             {data.status === 'ACTIVE' ? <><ShieldOff size={14} /> Deactivate Account</> : <><ShieldCheck size={14} /> Activate Account</>}
           </button>
         </div>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-          <StatCard label="Wallet Balance" value={data.wallet_balance} />
-          <StatCard label="Customers" value={data.total_customers} />
-          <StatCard label="Cases" value={data.total_cases} />
-          <StatCard label="Team Size" value={data.team_size} />
-          <StatCard label="Last Activity" value={data.last_activity ? formatDate(data.last_activity) : '—'} />
-        </div>
+      <div style={{ padding: '0 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: 4, flexShrink: 0, overflowX: 'auto' }}>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+              padding: '10px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+              background: 'transparent', border: 'none',
+              borderBottom: tab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
+              color: tab === t.id ? 'var(--primary)' : 'var(--on-muted)',
+            }}
+          >
+            <t.icon size={14} /> {t.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Virtual Workspace management */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', marginBottom: 24 }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <LayoutGrid size={16} color="var(--primary)" />
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace</h3>
-              <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>Gates the full case-management sidebar for this DSA</p>
-            </div>
-          </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
 
-          <div style={{ padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', background: 'var(--bg-elevated)', color: ACCESS_PLAN_COLOR[access_plan] }}>
-                {ACCESS_PLAN_LABEL[access_plan]}
-              </span>
-              {subscription && (
-                <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>
-                  {subscription.payment_method === 'WALLET_CREDITS' ? 'Wallet Credits' : 'Razorpay Auto-pay'} — ₹{subscription.effective_amount_credits}/mo
-                  {subscription.current_period_end && ` — next charge ${formatDateTime(subscription.current_period_end)}`}
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-              <button onClick={handleGrantFree} disabled={busy || access_plan === 'FREE_GRANTED'} className="btn btn-secondary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Gift size={13} /> Grant Free Access (No Charge)
-              </button>
-              <button onClick={handleLockAccess} disabled={busy || access_plan === 'NO_ACCESS'} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}>
-                <XCircle size={13} /> Lock Access
-              </button>
-              {subscription && ['ACTIVE', 'CREATED', 'AUTHENTICATED', 'PENDING', 'HALTED', 'GRACE_PERIOD'].includes(subscription.status) && (
-                <button onClick={handleCancelSubscription} disabled={busy} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)' }}>
-                  Cancel Subscription
-                </button>
-              )}
-            </div>
-
-            {access_plan !== 'SUBSCRIBED' && (
-              <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Start a Real Subscription</p>
-                <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-                    <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
-                    <CreditCard size={13} /> Razorpay Auto-pay
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-                    <input type="radio" checked={subPaymentMethod === 'WALLET_CREDITS'} onChange={() => setSubPaymentMethod('WALLET_CREDITS')} />
-                    <Wallet size={13} /> Wallet Credits (Balance: {data.wallet_balance})
-                  </label>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Tag size={13} color="var(--on-muted)" />
-                  <input type="text" value={subPromoCode} onChange={(e) => setSubPromoCode(e.target.value)} placeholder="Promo code (optional)" className="form-control" style={{ maxWidth: 200, textTransform: 'uppercase' }} />
-                  <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
-                </div>
+          {tab === 'overview' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
+                <StatCard label="Wallet Balance" value={data.wallet_balance} />
+                <StatCard label="Customers" value={data.total_customers} />
+                <StatCard label="Cases" value={data.total_cases} />
+                <StatCard label="Team Size" value={data.team_size} />
+                <StatCard label="Last Activity" value={data.last_activity ? formatDate(data.last_activity) : '—'} />
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Recent wallet transactions */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Recent Wallet Transactions</h3>
-          </div>
-          {data.recent_wallet_transactions?.length > 0 ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <tbody>
-                {data.recent_wallet_transactions.map((tx) => (
-                  <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)' }}>
-                    <td style={{ padding: '10px 16px', color: 'var(--on-muted)' }}>{formatDateTime(tx.created_at)}</td>
-                    <td style={{ padding: '10px 16px' }}>{tx.reference_type}</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
-                      {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
+              <Card icon={Wallet} title="Recent Wallet Transactions">
+                {data.recent_wallet_transactions?.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <tbody>
+                      {data.recent_wallet_transactions.map((tx) => (
+                        <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)' }}>
+                          <td style={{ padding: '10px 0', color: 'var(--on-muted)' }}>{formatDateTime(tx.created_at)}</td>
+                          <td style={{ padding: '10px 0' }}>{tx.reference_type}</td>
+                          <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
+                            {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
+                )}
+              </Card>
+            </>
           )}
+
+          {tab === 'workspace' && (
+            <Card icon={LayoutGrid} title="Virtual Workspace" subtitle="Gates the full case-management sidebar for this DSA">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', background: 'var(--bg-elevated)', color: ACCESS_PLAN_COLOR[access_plan] }}>
+                  {ACCESS_PLAN_LABEL[access_plan]}
+                </span>
+                {subscription && (
+                  <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>
+                    {subscription.payment_method === 'WALLET_CREDITS' ? 'Wallet Credits' : 'Razorpay Auto-pay'} — ₹{subscription.effective_amount_credits}/mo
+                    {subscription.status === 'PAUSED' && ' — paused (admin-extended)'}
+                  </span>
+                )}
+              </div>
+
+              {subscription && (subscription.current_period_start || subscription.current_period_end) && (
+                <div style={{ display: 'flex', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Started</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{subscription.current_period_start ? formatDateTime(subscription.current_period_start) : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>
+                      {subscription.status === 'PAUSED' ? 'Covered / Resumes' : 'Ends / Next Charge'}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{subscription.current_period_end ? formatDateTime(subscription.current_period_end) : '—'}</div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+                <button onClick={handleGrantFree} disabled={busy || access_plan === 'FREE_GRANTED'} className="btn btn-secondary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Gift size={13} /> Grant Free Access (No Charge)
+                </button>
+                <button onClick={handleLockAccess} disabled={busy || access_plan === 'NO_ACCESS'} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}>
+                  <XCircle size={13} /> Lock Access
+                </button>
+                {isSubscribedLike && (
+                  <button onClick={handleCancelSubscription} disabled={busy} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)' }}>
+                    Cancel Subscription
+                  </button>
+                )}
+              </div>
+
+              {isSubscribedLike && (
+                <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16, marginBottom: 20 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CalendarClock size={13} /> Extend Subscription (Compensation)
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--on-muted)', marginBottom: 10 }}>
+                    Pushes the covered-through date out — for Razorpay auto-pay this pauses the live subscription so it won't charge again until the new date, then resumes automatically.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="date" className="form-control" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} style={{ maxWidth: 180 }} />
+                    <button onClick={handleExtendSubscription} disabled={busy || !extendDate} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Extend</button>
+                  </div>
+                </div>
+              )}
+
+              {access_plan !== 'SUBSCRIBED' && (
+                <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Start a Real Subscription</p>
+                  <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                      <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
+                      <CreditCard size={13} /> Razorpay Auto-pay
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                      <input type="radio" checked={subPaymentMethod === 'WALLET_CREDITS'} onChange={() => setSubPaymentMethod('WALLET_CREDITS')} />
+                      <Wallet size={13} /> Wallet Credits (Balance: {data.wallet_balance})
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Tag size={13} color="var(--on-muted)" />
+                    <input type="text" value={subPromoCode} onChange={(e) => setSubPromoCode(e.target.value)} placeholder="Promo code (optional)" className="form-control" style={{ maxWidth: 200, textTransform: 'uppercase' }} />
+                    <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {tab === 'wallet' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 20 }}>
+                <StatCard label="Wallet Balance" value={data.wallet_balance} />
+              </div>
+
+              <Card icon={Gift} title="Free Admin Credit Allocation" subtitle="Add credits to this tenant's wallet at no cost, or correct a balance">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Add Free Credits</label>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <input type="number" className="form-control" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="e.g. 500" />
+                      <button onClick={handleTopup} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0, whiteSpace: 'nowrap' }}>
+                        <PlusCircle size={13} /> Add
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Deduct Credits</label>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <input type="number" className="form-control" value={deductAmount} onChange={(e) => setDeductAmount(e.target.value)} placeholder="e.g. 100" />
+                      <button onClick={handleDeduct} disabled={busy} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, whiteSpace: 'nowrap', color: 'var(--error)', border: '1px solid var(--error)' }}>
+                        <MinusCircle size={13} /> Deduct
+                      </button>
+                    </div>
+                    <input type="text" className="form-control" value={deductRemarks} onChange={(e) => setDeductRemarks(e.target.value)} placeholder="Reason (optional)" style={{ marginTop: 8 }} />
+                  </div>
+                </div>
+              </Card>
+
+              <Card icon={Wallet} title="Recent Wallet Transactions">
+                {data.recent_wallet_transactions?.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <tbody>
+                      {data.recent_wallet_transactions.map((tx) => (
+                        <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)' }}>
+                          <td style={{ padding: '10px 0', color: 'var(--on-muted)' }}>{formatDateTime(tx.created_at)}</td>
+                          <td style={{ padding: '10px 0' }}>{tx.reference_type}</td>
+                          <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
+                            {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
+                )}
+              </Card>
+            </>
+          )}
+
+          {tab === 'team' && (
+            <Card icon={Users} title="Team & Credit Allocation" subtitle="Move credits between this tenant's own wallet and a member's (sub-DSA/employee) wallet">
+              {loadingEmployees ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
+              ) : employees.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No team members yet</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {employees.map((emp) => {
+                    const alloc = allocations[emp.id] || { amount: '', note: '' };
+                    const ew = emp.EmployeeWallet?.[0];
+                    return (
+                      <div key={emp.id} style={{ border: '1px solid var(--outline)', padding: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{emp.name || emp.email}</div>
+                            <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{emp.role?.name} · {emp.email}</div>
+                          </div>
+                          <div style={{ textAlign: 'right', fontSize: 12 }}>
+                            <div style={{ fontWeight: 800, color: 'var(--on-surface)' }}>{ew?.allocated_balance ?? 0} allocated</div>
+                            <div style={{ color: 'var(--on-muted)' }}>{ew?.consumed_credits ?? 0} used</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            className="form-control"
+                            value={alloc.amount}
+                            onChange={(e) => updateAllocationField(emp.id, 'amount', e.target.value)}
+                            placeholder="Credits"
+                            style={{ maxWidth: 110 }}
+                          />
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={alloc.note}
+                            onChange={(e) => updateAllocationField(emp.id, 'note', e.target.value)}
+                            placeholder="Note (optional)"
+                            style={{ maxWidth: 200 }}
+                          />
+                          <button onClick={() => handleAllocate(emp.id)} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
+                            <PlusCircle size={13} /> Allocate from Tenant Wallet
+                          </button>
+                          <button onClick={() => handleRevoke(emp.id)} disabled={busy} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)' }}>
+                            <MinusCircle size={13} /> Revoke
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          )}
+
         </div>
       </div>
     </div>
