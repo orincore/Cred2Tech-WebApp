@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { LayoutGrid, Wallet, CreditCard, Tag } from 'lucide-react';
+import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay } from '../utils/razorpay';
@@ -27,12 +27,17 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('RAZORPAY_AUTOPAY');
   const [promoCode, setPromoCode] = useState('');
+  const [planId, setPlanId] = useState('');
+  const [switchPlanId, setSwitchPlanId] = useState('');
   const [busy, setBusy] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await api.get('/virtual-workspace/subscription');
       setStatus(res.data);
+      const defaultPlanId = res.data.subscription?.plan_id || res.data.plans?.[0]?.id || '';
+      setPlanId(String(defaultPlanId));
+      setSwitchPlanId(String(defaultPlanId));
     } catch {
       // Non-fatal — card just shows nothing actionable.
     } finally {
@@ -44,13 +49,45 @@ const VirtualWorkspaceSubscriptionCard = () => {
 
   if (!hasRole('DSA_ADMIN') || loading || !status) return null;
 
-  const { subscription, wallet_balance, monthly_price_credits, billing_enabled, is_currently_free, free_until } = status;
+  const { subscription, wallet_balance, plans, monthly_price_credits, billing_enabled, is_currently_free, free_until, key_id } = status;
   const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
+  // Opens Razorpay Checkout against an already-created subscription — shared
+  // by a fresh subscribe and by "Complete Payment Setup" for a subscription
+  // stuck at CREATED/AUTHENTICATED (e.g. one an admin started on this
+  // tenant's behalf, or a Checkout the tenant closed before finishing).
+  const openCheckout = async (razorpaySubscriptionId) => {
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({
+      key: key_id,
+      subscription_id: razorpaySubscriptionId,
+      name: 'Cred2Tech Virtual Workspace',
+      description: 'Monthly subscription',
+      handler: async (response) => {
+        try {
+          await api.post('/virtual-workspace/subscription/confirm', {
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          toast.success('Subscribed to Virtual Workspace');
+          fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
+        }
+      },
+      theme: { color: '#4F46E5' },
+    });
+    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
+    rzp.open();
+  };
+
   const handleSubscribe = async () => {
+    if (!planId) return toast.error('Select a plan');
     setBusy(true);
     try {
       const res = await api.post('/virtual-workspace/subscription/subscribe', {
+        plan_id: planId,
         payment_method: paymentMethod,
         promo_code: promoCode.trim() || null,
       });
@@ -71,29 +108,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
       }
 
       // RAZORPAY_AUTOPAY — open Checkout against the created subscription.
-      const Razorpay = await loadRazorpay();
-      const rzp = new Razorpay({
-        key: res.data.key_id,
-        subscription_id: res.data.razorpay_subscription_id,
-        name: 'Cred2Tech Virtual Workspace',
-        description: 'Monthly subscription',
-        handler: async (response) => {
-          try {
-            await api.post('/virtual-workspace/subscription/confirm', {
-              razorpay_subscription_id: response.razorpay_subscription_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-            toast.success('Subscribed to Virtual Workspace');
-            fetchStatus();
-          } catch (err) {
-            toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
-          }
-        },
-        theme: { color: '#4F46E5' },
-      });
-      rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
-      rzp.open();
+      await openCheckout(res.data.razorpay_subscription_id);
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to start subscription');
     } finally {
@@ -101,7 +116,72 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
+  const handleCompletePayment = async () => {
+    setBusy(true);
+    try {
+      await openCheckout(subscription.razorpay_subscription_id);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSwitchPlan = async () => {
+    if (!switchPlanId) return toast.error('Select a plan');
+    if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
+    setBusy(true);
+    try {
+      const res = await api.post('/virtual-workspace/subscription/upgrade', {
+        plan_id: switchPlanId,
+        promo_code: promoCode.trim() || null,
+      });
+
+      if (res.data.free) {
+        toast.success(res.data.message || 'Plan switched — free for now, no payment required');
+        await fetchStatus();
+        return;
+      }
+      if (res.data.payment_method === 'WALLET_CREDITS') {
+        toast.success('Plan switched — paid from wallet credits');
+        await fetchStatus();
+        return;
+      }
+      if (res.data.updated_in_place) {
+        // Razorpay changed the renewal price on the same mandate directly —
+        // no fresh Checkout needed.
+        toast.success('Plan switched');
+        await fetchStatus();
+        return;
+      }
+      toast.success('Plan switched — complete the new payment authorization below to activate it');
+      await openCheckout(res.data.razorpay_subscription_id);
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to switch plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    const hasRunningCycle = ['ACTIVE', 'PAUSED'].includes(subscription.status) && subscription.current_period_end;
+    const confirmMsg = hasRunningCycle
+      ? `Cancel your subscription? You won't be charged again — Virtual Workspace stays fully active until ${formatDateTime(subscription.current_period_end)}, then continues as free access.`
+      : `Cancel this subscription? You won't be charged.`;
+    if (!window.confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      await api.post('/virtual-workspace/subscription/cancel');
+      toast.success('Subscription cancelled — no further charges. Your access continues uninterrupted.');
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const activeLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD', 'PAUSED'].includes(subscription.status);
+  const needsCheckout = subscription && ['CREATED', 'AUTHENTICATED'].includes(subscription.status) && subscription.payment_method === 'RAZORPAY_AUTOPAY';
 
   return (
     <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', marginTop: 24 }}>
@@ -110,7 +190,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace Subscription</h3>
           <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>
-            {freeUntilLabel ? `Free until ${freeUntilLabel} — ₹${monthly_price_credits}/month afterward` : `₹${monthly_price_credits}/month — auto-renews`}
+            {freeUntilLabel ? `Free until ${freeUntilLabel} — from ₹${monthly_price_credits}/month afterward` : `From ₹${monthly_price_credits}/month — auto-renews`}
           </p>
         </div>
       </div>
@@ -124,9 +204,23 @@ const VirtualWorkspaceSubscriptionCard = () => {
             )}
           </div>
         )}
+        {needsCheckout && (
+          <div style={{ padding: '12px 14px', marginBottom: 16, background: 'var(--warning-bg)', border: '1px solid var(--warning)', color: 'var(--warning)', fontSize: 12.5, lineHeight: 1.6, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong>Payment authorization needed</strong> — your subscription was started but not yet paid.
+              Razorpay has also emailed/texted you a link; you can complete it right here instead.
+              <div style={{ marginTop: 8 }}>
+                <button className="btn btn-primary btn-sm" onClick={handleCompletePayment} disabled={busy} style={{ borderRadius: 0 }}>
+                  {busy ? 'Opening…' : 'Complete Payment Setup'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {activeLike ? (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
               <span style={{
                 fontSize: 11, fontWeight: 800, padding: '3px 10px',
                 background: subscription.status === 'ACTIVE' ? 'var(--success-bg)' : 'var(--error-bg)',
@@ -135,6 +229,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 {STATUS_LABEL[subscription.status] || subscription.status}
               </span>
               <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>
+                {subscription.plan?.name ? `${subscription.plan.name} — ` : ''}
                 {subscription.payment_method === 'WALLET_CREDITS' ? 'Paid from wallet credits' : 'Auto-pay via Razorpay'}
               </span>
             </div>
@@ -145,11 +240,76 @@ const VirtualWorkspaceSubscriptionCard = () => {
             )}
             <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: 0 }}>
               ₹{subscription.effective_amount_credits}/month
-              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
+              {subscription.current_period_end && ` — ${is_currently_free ? 'covered until' : subscription.pending_cancellation ? 'access continues until' : 'next charge'} ${formatDateTime(subscription.current_period_end)}`}
             </p>
+
+            {subscription.pending_cancellation && (
+              <p style={{ fontSize: 12, color: 'var(--warning)', margin: '8px 0 0 0', fontWeight: 600 }}>
+                Cancellation scheduled — no further charges. Access continues as normal until the date above, then switches to free.
+              </p>
+            )}
+
+            {plans?.length > 1 && !subscription.pending_cancellation && (
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 16, paddingTop: 16 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 8 }}>Switch Plan</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select className="form-control" value={switchPlanId} onChange={(e) => setSwitchPlanId(e.target.value)} style={{ maxWidth: 240 }}>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/month</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy || String(switchPlanId) === String(subscription.plan_id)} style={{ borderRadius: 0 }}>
+                    {busy ? 'Switching…' : 'Switch Plan'}
+                  </button>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6, marginBottom: 0 }}>
+                  Takes effect immediately — starts a fresh billing cycle at the new plan's price.
+                </p>
+              </div>
+            )}
+
+            {!subscription.pending_cancellation && (
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 16, paddingTop: 16 }}>
+                <button className="btn btn-ghost btn-sm" onClick={handleCancel} disabled={busy} style={{ borderRadius: 0, color: 'var(--error)', border: '1px solid var(--error)' }}>
+                  Cancel Subscription
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
+            {plans?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Choose a plan</label>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {plans.map((p) => (
+                    <label
+                      key={p.id}
+                      style={{
+                        display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 14px', cursor: 'pointer',
+                        border: `1px solid ${String(planId) === String(p.id) ? 'var(--primary)' : 'var(--outline)'}`,
+                        background: String(planId) === String(p.id) ? 'var(--primary-subtle)' : 'transparent',
+                        minWidth: 140,
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700 }}>
+                        <input type="radio" checked={String(planId) === String(p.id)} onChange={() => setPlanId(String(p.id))} />
+                        {p.name}
+                      </span>
+                      {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits ? (
+                        <>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)' }}>₹{p.first_cycle_price_credits} first month</span>
+                          <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>then ₹{p.monthly_price_credits}/mo</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)' }}>₹{p.monthly_price_credits}/mo</span>
+                      )}
+                      {p.description && <span style={{ fontSize: 10.5, color: 'var(--on-muted)' }}>{p.description}</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 20, marginBottom: 16, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                 <input type="radio" checked={paymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setPaymentMethod('RAZORPAY_AUTOPAY')} />
@@ -171,8 +331,8 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 style={{ maxWidth: 220, textTransform: 'uppercase' }}
               />
             </div>
-            <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy} style={{ borderRadius: 0 }}>
-              {busy ? 'Starting…' : is_currently_free ? `Activate — Free until ${freeUntilLabel}` : `Subscribe — ₹${monthly_price_credits}/month`}
+            <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0 }}>
+              {busy ? 'Starting…' : is_currently_free ? `Activate — Free until ${freeUntilLabel}` : 'Subscribe'}
             </button>
           </>
         )}

@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import {
   getTenantSummary, updateTenantStatus, updateTenantVirtualWorkspace,
-  grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminCancelVirtualWorkspace, adminExtendVirtualWorkspace,
+  grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminUpgradeVirtualWorkspacePlan,
+  adminCancelVirtualWorkspace, adminExtendVirtualWorkspace,
   adminTopupTenantWallet, adminDeductTenantWallet,
   getTenantEmployees, allocateTenantEmployeeCredits, revokeTenantEmployeeCredits,
 } from '../api/tenantService';
@@ -61,6 +62,8 @@ const AdminTenantManagePage = () => {
 
   const [subPaymentMethod, setSubPaymentMethod] = useState('RAZORPAY_AUTOPAY');
   const [subPromoCode, setSubPromoCode] = useState('');
+  const [subPlanId, setSubPlanId] = useState('');
+  const [upgradePlanId, setUpgradePlanId] = useState('');
   const [extendDate, setExtendDate] = useState('');
 
   const [topupAmount, setTopupAmount] = useState('');
@@ -75,6 +78,11 @@ const AdminTenantManagePage = () => {
     try {
       const res = await getTenantSummary(id);
       setData(res);
+      // Default both selectors to the tenant's current plan (once subscribed)
+      // or the cheapest active plan, so the dropdown never opens empty.
+      const defaultPlanId = res.subscription?.plan_id || res.plans?.[0]?.id || '';
+      setSubPlanId(String(defaultPlanId));
+      setUpgradePlanId(String(defaultPlanId));
     } catch (err) {
       toast.error('Failed to load tenant details');
     } finally {
@@ -138,15 +146,20 @@ const AdminTenantManagePage = () => {
   };
 
   const handleAdminSubscribe = async () => {
+    if (!subPlanId) return toast.error('Select a plan');
     setBusy(true);
     try {
-      const res = await adminSubscribeVirtualWorkspace(id, { paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
+      const res = await adminSubscribeVirtualWorkspace(id, { planId: subPlanId, paymentMethod: subPaymentMethod, promoCode: subPromoCode.trim() || null });
       if (res.free) {
         toast.success(res.message || 'Activated — free for now, no payment required');
       } else if (res.payment_method === 'WALLET_CREDITS') {
         toast.success('Subscribed — paid from tenant wallet credits');
       } else {
-        toast.success(`Razorpay subscription created (${res.razorpay_subscription_id}) — the tenant completes Checkout authorization from their own Organization Profile page.`, { duration: 10000 });
+        toast.success(
+          `Razorpay subscription created (${res.razorpay_subscription_id}) — Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page.`
+          + (res.short_url ? ` Backup link: ${res.short_url}` : ''),
+          { duration: 12000 }
+        );
       }
       await fetchData();
     } catch (err) {
@@ -156,12 +169,42 @@ const AdminTenantManagePage = () => {
     }
   };
 
+  // Switches an already-subscribed tenant to a different plan, effective
+  // immediately — mirrors the DSA's own self-service upgrade in
+  // VirtualWorkspaceSubscriptionCard.jsx.
+  const handleAdminUpgradePlan = async () => {
+    if (!upgradePlanId) return toast.error('Select a plan');
+    if (String(upgradePlanId) === String(subscription?.plan_id)) return toast.error('Tenant is already on this plan');
+    setBusy(true);
+    try {
+      const res = await adminUpgradeVirtualWorkspacePlan(id, { planId: upgradePlanId, promoCode: subPromoCode.trim() || null });
+      if (res.free) {
+        toast.success(res.message || 'Plan switched — free for now, no payment required');
+      } else if (res.payment_method === 'WALLET_CREDITS') {
+        toast.success('Plan switched — paid from tenant wallet credits');
+      } else if (res.updated_in_place) {
+        toast.success('Plan switched — Razorpay changed the renewal price on the tenant\'s existing mandate directly, no re-authorization needed');
+      } else {
+        toast.success(
+          `Plan switched — Razorpay subscription created (${res.razorpay_subscription_id}); Razorpay has emailed/texted the tenant an authorization link, and they'll also see it from their own Organization Profile page.`
+          + (res.short_url ? ` Backup link: ${res.short_url}` : ''),
+          { duration: 12000 }
+        );
+      }
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to switch plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
-    if (!window.confirm('Cancel this subscription and lock Virtual Workspace access?')) return;
+    if (!window.confirm("Cancel this tenant's subscription? No further auto-debit will happen — Virtual Workspace access stays fully active until the current billing period ends, then continues as free access (not locked). For an immediate cutoff instead, use \"Lock Access\" below.")) return;
     setBusy(true);
     try {
       await adminCancelVirtualWorkspace(id);
-      toast.success('Subscription cancelled and access locked');
+      toast.success('Subscription cancelled — no further charges. Access continues uninterrupted until the current period ends, then becomes free.');
       await fetchData();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
@@ -400,9 +443,42 @@ const AdminTenantManagePage = () => {
                 </div>
               )}
 
+              {isSubscribedLike && data.plans?.length > 1 && (
+                <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16, marginBottom: 20 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Switch Plan</p>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 240 }}>
+                      {data.plans.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/mo</option>
+                      ))}
+                    </select>
+                    <button onClick={handleAdminUpgradePlan} disabled={busy || String(upgradePlanId) === String(subscription.plan_id)} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
+                      Switch Plan
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8 }}>
+                    Takes effect immediately — cancels the current billing arrangement and starts a fresh cycle on the new plan's price.
+                  </p>
+                </div>
+              )}
+
               {access_plan !== 'SUBSCRIBED' && (
                 <div style={{ borderTop: '1px solid var(--outline)', paddingTop: 16 }}>
                   <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Start a Real Subscription</p>
+                  {data.plans?.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Plan</label>
+                      <select className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                        {data.plans.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — {p.first_cycle_price_credits != null && p.first_cycle_price_credits !== p.monthly_price_credits
+                              ? `₹${p.first_cycle_price_credits} first mo, then ₹${p.monthly_price_credits}/mo`
+                              : `₹${p.monthly_price_credits}/mo`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
                       <input type="radio" checked={subPaymentMethod === 'RAZORPAY_AUTOPAY'} onChange={() => setSubPaymentMethod('RAZORPAY_AUTOPAY')} />
@@ -416,7 +492,7 @@ const AdminTenantManagePage = () => {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <Tag size={13} color="var(--on-muted)" />
                     <input type="text" value={subPromoCode} onChange={(e) => setSubPromoCode(e.target.value)} placeholder="Promo code (optional)" className="form-control" style={{ maxWidth: 200, textTransform: 'uppercase' }} />
-                    <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
+                    <button onClick={handleAdminSubscribe} disabled={busy || !subPlanId} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>Subscribe</button>
                   </div>
                 </div>
               )}

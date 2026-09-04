@@ -70,8 +70,15 @@ export const grantFreeVirtualWorkspace = async (tenantId) => {
   return response.data;
 };
 
-export const adminSubscribeVirtualWorkspace = async (tenantId, { paymentMethod, promoCode }) => {
-  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/subscribe`, { payment_method: paymentMethod, promo_code: promoCode });
+export const adminSubscribeVirtualWorkspace = async (tenantId, { planId, paymentMethod, promoCode }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/subscribe`, { plan_id: planId, payment_method: paymentMethod, promo_code: promoCode });
+  return response.data;
+};
+
+// Switches an already-subscribed tenant to a different plan — takes effect
+// immediately (see upgradePlan() in virtualWorkspaceSubscription.service.js).
+export const adminUpgradeVirtualWorkspacePlan = async (tenantId, { planId, promoCode }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/upgrade`, { plan_id: planId, promo_code: promoCode });
   return response.data;
 };
 

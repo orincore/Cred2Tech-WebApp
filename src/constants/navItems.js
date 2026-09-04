@@ -91,7 +91,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'admin-virtual-workspace',
-    label: 'Virtual Workspace',
+    label: 'Subscription Plans',
     path: '/admin/virtual-workspace',
     icon: LayoutDashboard,
     roles: ['SUPER_ADMIN'],
