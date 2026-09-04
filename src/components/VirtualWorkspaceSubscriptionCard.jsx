@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { LayoutGrid, Wallet, CreditCard, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
+import { LayoutGrid, Wallet, CreditCard, Repeat, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay } from '../utils/razorpay';
@@ -221,12 +221,18 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const sortedPlans = plans ? [...plans].sort((a, b) => a.monthly_price_credits - b.monthly_price_credits) : plans;
 
   // Opens Razorpay Checkout for mandate authorization against an
-  // already-created subscription, shared by a fresh subscribe and by
+  // already-created subscription, shared by a fresh subscribe, by
   // "Complete Payment Setup" for one stuck at CREATED/AUTHENTICATED (e.g.
   // one an admin started on this tenant's behalf, or a Checkout the tenant
-  // closed before finishing). The authorization itself IS the charge,
-  // Razorpay bills immediately on success.
-  const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace') => {
+  // closed before finishing), and by the upgrade-reauthorization fallback
+  // (confirmEndpoint override) when an upgrade's old mandate couldn't
+  // absorb the new price and a fresh one had to be issued (see
+  // handleSwitchPlan below). For a plain subscribe/complete-payment,
+  // authorization itself IS the charge; for the reauth case the new
+  // mandate's first real charge is deferred server-side, so nothing is
+  // charged here beyond whatever token verification the payment method
+  // itself requires.
+  const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace', confirmEndpoint = '/virtual-workspace/subscription/confirm') => {
     const Razorpay = await loadRazorpay();
     const rzp = new Razorpay({
       key: key_id,
@@ -235,7 +241,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
       description: 'Monthly subscription',
       handler: async (response) => {
         try {
-          await api.post('/virtual-workspace/subscription/confirm', {
+          await api.post(confirmEndpoint, {
             razorpay_subscription_id: response.razorpay_subscription_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
@@ -272,6 +278,50 @@ const VirtualWorkspaceSubscriptionCard = () => {
     rzp.open();
   };
 
+  // Opens Razorpay Checkout in `recurring: true` mode against a mandate
+  // registration order (RAZORPAY_RECURRING rail) — shared by a fresh
+  // subscribe and an upgrade re-registration on this rail (every upgrade
+  // on this rail re-registers a fresh mandate at the new plan's exact
+  // price, see the backend's registerRecurringMandate doc comment, so
+  // there is no separate "just pay the difference" Checkout for this rail
+  // the way RAZORPAY_AUTOPAY's openOneTimeCheckout is for). The order's own
+  // `amount` already IS whatever's owed right now (full price for a fresh
+  // subscribe, the price difference for an upgrade) — Razorpay charges it
+  // as part of this SAME authenticated Checkout session, so completing it
+  // here is a real, instant, synchronous charge, not a "your first charge
+  // is being processed" placeholder. Only ONGOING renewals (fired later
+  // with no customer present) go through the ~24h bank confirmation delay
+  // — see the backend's RAZORPAY_RECURRING section header for why.
+  const openRecurringAuthCheckout = async ({ razorpay_order_id, razorpay_customer_id, amount, currency }, successMessage) => {
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({
+      key: key_id,
+      order_id: razorpay_order_id,
+      customer_id: razorpay_customer_id,
+      recurring: true,
+      amount,
+      currency,
+      name: 'Cred2Tech Virtual Workspace',
+      description: 'Recurring payment authorization',
+      handler: async (response) => {
+        try {
+          await api.post('/virtual-workspace/subscription/confirm-recurring-mandate', {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          toast.success(successMessage);
+          fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to confirm the auto-pay mandate');
+        }
+      },
+      theme: { color: '#4F46E5' },
+    });
+    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
+    rzp.open();
+  };
+
   const handleSubscribe = async () => {
     if (!planId) return toast.error('Select a plan');
     setBusy(true);
@@ -288,6 +338,11 @@ const VirtualWorkspaceSubscriptionCard = () => {
         return;
       }
 
+      if (res.data.payment_method === 'RAZORPAY_RECURRING') {
+        await openRecurringAuthCheckout(res.data, 'Subscribed to Virtual Workspace. Auto-pay is set up and active');
+        return;
+      }
+
       // RAZORPAY_AUTOPAY, open Checkout against the created subscription;
       // authorizing it is what charges the first month, right now.
       await openCheckout(res.data.razorpay_subscription_id);
@@ -301,7 +356,18 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const handleCompletePayment = async () => {
     setBusy(true);
     try {
-      await openCheckout(subscription.razorpay_subscription_id);
+      if (subscription.payment_method === 'RAZORPAY_RECURRING') {
+        // Resuming a mandate registration whose Checkout tab was closed
+        // before completion — the auth order already exists (razorpay_
+        // order_id/razorpay_customer_id are still on the record), just
+        // reopen Checkout against it rather than registering a new one.
+        await openRecurringAuthCheckout(
+          { razorpay_order_id: subscription.razorpay_order_id, razorpay_customer_id: subscription.razorpay_customer_id },
+          'Auto-pay is set up and active'
+        );
+      } else {
+        await openCheckout(subscription.razorpay_subscription_id);
+      }
     } finally {
       setBusy(false);
     }
@@ -324,6 +390,18 @@ const VirtualWorkspaceSubscriptionCard = () => {
         return;
       }
 
+      if (res.data.payment_method === 'RAZORPAY_RECURRING') {
+        // This rail always re-registers a fresh mandate for an upgrade
+        // (the ceiling is always exactly the current plan's price, so any
+        // upgrade exceeds it by definition) — never a plain one-time-order
+        // top-up the way RAZORPAY_AUTOPAY's fallback below is.
+        await openRecurringAuthCheckout(
+          res.data,
+          `Upgraded to ${selectedSwitchPlan.name}. The price difference has been charged and auto-pay is updated`
+        );
+        return;
+      }
+
       // RAZORPAY_AUTOPAY, a one-time Checkout for just the price
       // difference; paying it is what applies the upgrade.
       await openOneTimeCheckout(
@@ -331,12 +409,28 @@ const VirtualWorkspaceSubscriptionCard = () => {
         `Upgrade to ${selectedSwitchPlan.name}, price difference`,
         async (response) => {
           try {
-            await api.post('/virtual-workspace/subscription/confirm-upgrade-payment', {
+            const confirmRes = await api.post('/virtual-workspace/subscription/confirm-upgrade-payment', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             });
-            toast.success(`Upgraded to ${selectedSwitchPlan.name}. Subscription stays active, auto-pay bills the new price from next cycle`);
+
+            if (confirmRes.data?.reauthorization_required) {
+              // The old mandate couldn't absorb the new (higher) price —
+              // the difference is already paid, but auto-pay itself needs a
+              // fresh authorization to actually bill the new amount going
+              // forward. Nothing is charged by this second Checkout —
+              // Razorpay defers the new mandate's first real charge to the
+              // date already paid through.
+              toast('Your previous auto-pay mandate could not be raised to the new plan price. Please authorize a new one to keep auto-pay active.', { duration: 9000 });
+              await openCheckout(
+                confirmRes.data.razorpay_subscription_id,
+                `Upgraded to ${selectedSwitchPlan.name}. Auto-pay is set up for the new price`,
+                '/virtual-workspace/subscription/confirm-upgrade-reauth'
+              );
+            } else {
+              toast.success(`Upgraded to ${selectedSwitchPlan.name}. Subscription stays active, auto-pay bills the new price from next cycle`);
+            }
             await fetchStatus();
           } catch (err) {
             toast.error(getErrorMessage(err) || 'Payment succeeded, but applying the upgrade failed. Contact support with this payment reference.', { duration: 10000 });
@@ -405,7 +499,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
   };
 
   const activeLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD', 'PAUSED'].includes(subscription.status);
-  const needsCheckout = subscription && ['CREATED', 'AUTHENTICATED'].includes(subscription.status) && subscription.payment_method === 'RAZORPAY_AUTOPAY';
+  const needsCheckout = subscription && ['CREATED', 'AUTHENTICATED'].includes(subscription.status) && ['RAZORPAY_AUTOPAY', 'RAZORPAY_RECURRING'].includes(subscription.payment_method);
   const isHealthy = subscription?.status === 'ACTIVE';
 
   return (
@@ -452,7 +546,11 @@ const VirtualWorkspaceSubscriptionCard = () => {
               </span>
               <span style={{ fontSize: 12.5, color: 'var(--on-muted)' }}>
                 {subscription.plan?.name ? `${subscription.plan.name} · ` : ''}
-                {subscription.payment_method === 'WALLET_CREDITS' ? 'Paid from wallet credits' : 'Auto-pay via Razorpay'}
+                {subscription.payment_method === 'WALLET_CREDITS'
+                  ? 'Paid from wallet credits'
+                  : subscription.payment_method === 'RAZORPAY_RECURRING'
+                    ? 'Auto-pay via Razorpay (Recurring)'
+                    : 'Auto-pay via Razorpay'}
               </span>
             </div>
 
@@ -587,6 +685,13 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 onSelect={() => setPaymentMethod('RAZORPAY_AUTOPAY')}
               />
               <MethodTile
+                icon={Repeat}
+                label="Auto-pay (Recurring)"
+                sublabel="Alternative auto-pay method via Razorpay"
+                selected={paymentMethod === 'RAZORPAY_RECURRING'}
+                onSelect={() => setPaymentMethod('RAZORPAY_RECURRING')}
+              />
+              <MethodTile
                 icon={Wallet}
                 label="Wallet Credits"
                 sublabel={`Balance: ${wallet_balance}`}
@@ -608,9 +713,12 @@ const VirtualWorkspaceSubscriptionCard = () => {
               />
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '0 0 14px' }}>
-              {paymentMethod === 'RAZORPAY_AUTOPAY'
-                ? "You'll be charged right now, and auto-pay renews the same date every month."
-                : "You'll be charged from your wallet right now, and it auto-renews the same date every month."}
+              {paymentMethod === 'RAZORPAY_AUTOPAY' &&
+                "You'll be charged right now, and auto-pay renews the same date every month."}
+              {paymentMethod === 'RAZORPAY_RECURRING' &&
+                "You'll be charged right now as part of authorizing auto-pay, and it renews the same date every month. Any upgrade will ask you to re-authorize at the new price, charged immediately the same way."}
+              {paymentMethod === 'WALLET_CREDITS' &&
+                "You'll be charged from your wallet right now, and it auto-renews the same date every month."}
             </p>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} strokeWidth={2} /> {busy ? 'Starting…' : 'Subscribe'}
