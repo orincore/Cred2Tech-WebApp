@@ -45,6 +45,49 @@ const Callout = ({ icon, color, bg, children }) => (
   </div>
 );
 
+// Themed confirmation modal — replaces window.confirm()'s browser-native
+// dialog with the app's own sharp-cornered, CSS-variable-driven look.
+// `open` gates rendering entirely (no hidden-but-mounted overlay). Backdrop
+// click and the secondary button both just close it without acting, same
+// as dismissing a native confirm — only the primary button runs onConfirm.
+const ConfirmModal = ({ open, title, message, confirmLabel, dismissLabel = 'Cancel', tone = 'warning', busy, onConfirm, onDismiss }) => {
+  if (!open) return null;
+  const accent = tone === 'error' ? 'var(--error)' : 'var(--warning)';
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+      onClick={onDismiss}
+    >
+      <div
+        style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderTop: `3px solid ${accent}`,
+          maxWidth: 440, width: '100%', padding: 24,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 12px', color: 'var(--on-surface)' }}>{title}</h3>
+        <p style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--on-muted)', margin: '0 0 22px', whiteSpace: 'pre-line' }}>{message}</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onDismiss} disabled={busy} style={{ borderRadius: 0 }}>
+            {dismissLabel}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={onConfirm}
+            disabled={busy}
+            style={{ borderRadius: 0, background: accent, borderColor: accent }}
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Label-above-value stat pair — replaces run-on sentences like "Started X,
 // next charge Y" with a scannable pair of small metric cells.
 const StatTile = ({ label, value }) => (
@@ -210,6 +253,12 @@ const VirtualWorkspaceSubscriptionCard = () => {
   const [planId, setPlanId] = useState('');
   const [switchPlanId, setSwitchPlanId] = useState('');
   const [busy, setBusy] = useState(false);
+  // Holds the confirm-modal's content while it's open (null = closed) — the
+  // app's own themed replacement for window.confirm(), shared by every
+  // "confirm before this takes effect" action on this card (turning off
+  // auto-renewal, scheduling a downgrade). { title, message, confirmLabel,
+  // onConfirm } — onConfirm is the async action the primary button runs.
+  const [confirmModal, setConfirmModal] = useState(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -369,6 +418,16 @@ const VirtualWorkspaceSubscriptionCard = () => {
           { razorpay_order_id: subscription.razorpay_order_id, razorpay_customer_id: subscription.razorpay_customer_id },
           'Auto-pay is set up and active'
         );
+      } else if (subscription.scheduled_downgrade_plan_id && subscription.pending_razorpay_subscription_id) {
+        // A scheduled downgrade's cycle boundary arrived — the worker
+        // already issued a fresh mandate for the lower plan (see
+        // applyCycleEndDowngrades' own doc comment); this Checkout is
+        // against THAT new mandate, not the old (already-cancelled) one.
+        await openCheckout(
+          subscription.pending_razorpay_subscription_id,
+          `Downgraded to ${scheduled_downgrade_plan?.name || 'your new plan'}. Auto-pay is now active at the lower price`,
+          '/virtual-workspace/subscription/confirm-downgrade'
+        );
       } else {
         await openCheckout(subscription.razorpay_subscription_id);
       }
@@ -442,29 +501,52 @@ const VirtualWorkspaceSubscriptionCard = () => {
   // Schedules a switch to a LOWER-priced plan, effective at the end of the
   // current cycle, never mid-cycle. Nothing is charged now — this only
   // changes what the NEXT renewal bills and switches to.
-  const handleScheduleDowngrade = async () => {
+  const handleScheduleDowngrade = () => {
     if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
     if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
     const downgradeDiff = subscription.effective_amount_credits - selectedSwitchPlan.monthly_price_credits;
     if (downgradeDiff <= 0) return toast.error('Select a lower-priced plan to downgrade, or use Upgrade for a higher-priced one');
     const periodEndLabel = subscription.current_period_end ? formatDateTime(subscription.current_period_end) : 'the end of your current cycle';
-    if (!window.confirm(`Switch to ${selectedSwitchPlan.name} (${money(selectedSwitchPlan.monthly_price_credits)}/mo)? This will not take effect until your current plan ends on ${periodEndLabel}. You keep full access at today's price until then, and auto-pay will renew at the new, lower price from your next cycle.`)) return;
-    setBusy(true);
-    try {
-      await api.post('/virtual-workspace/subscription/downgrade', { plan_id: switchPlanId });
-      toast.success(`Downgrade to ${selectedSwitchPlan.name} scheduled. It takes effect at your next renewal on ${periodEndLabel}.`);
-      await fetchStatus();
-    } catch (err) {
-      toast.error(getErrorMessage(err) || 'Failed to schedule the downgrade');
-    } finally {
-      setBusy(false);
-    }
+    setConfirmModal({
+      title: 'Schedule this downgrade?',
+      message: `Switch to ${selectedSwitchPlan.name} (${money(selectedSwitchPlan.monthly_price_credits)}/mo)? This will not take effect until your current plan ends on ${periodEndLabel}. You keep full access at today's price until then, and auto-pay will renew at the new, lower price from your next cycle.`,
+      confirmLabel: 'Schedule Downgrade',
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api.post('/virtual-workspace/subscription/downgrade', { plan_id: switchPlanId });
+          toast.success(`Downgrade to ${selectedSwitchPlan.name} scheduled. It takes effect at your next renewal on ${periodEndLabel}.`);
+          await fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to schedule the downgrade');
+        } finally {
+          setBusy(false);
+          setConfirmModal(null);
+        }
+      },
+    });
   };
 
   const handleCancelScheduledDowngrade = async () => {
     setBusy(true);
     try {
-      await api.post('/virtual-workspace/subscription/cancel-downgrade');
+      const res = await api.post('/virtual-workspace/subscription/cancel-downgrade');
+
+      if (res.data?.reauthorization_required) {
+        // Razorpay's own resume API couldn't pick the paused mandate back
+        // up (their docs warn of exactly this for some instruments) — a
+        // fresh mandate was re-authorized instead, at the SAME plan/price.
+        // One Checkout, no charge today (deferred to the same paid-through
+        // date as before).
+        toast('Your auto-pay mandate needs re-authorizing to stay on this plan. Nothing is charged today.', { duration: 8000 });
+        await openCheckout(
+          res.data.razorpay_subscription_id,
+          'Scheduled downgrade cancelled. You will stay on your current plan.',
+          '/virtual-workspace/subscription/confirm-cancel-downgrade'
+        );
+        return;
+      }
+
       toast.success('Scheduled downgrade cancelled. You will stay on your current plan.');
       await fetchStatus();
     } catch (err) {
@@ -474,27 +556,37 @@ const VirtualWorkspaceSubscriptionCard = () => {
     }
   };
 
-  // Turning auto-renewal off IS cancelSubscription() — the confirm dialog
-  // leads with a nudge to keep it on (uninterrupted service), then gives
-  // the actual consequence, then leaves the choice to the tenant. OK turns
-  // it off; Cancel on the dialog just leaves auto-renewal on, untouched.
-  const handleCancel = async () => {
+  // Turning auto-renewal off IS cancelSubscription() — opens the app's own
+  // confirm modal (see ConfirmModal below) rather than a browser alert. It
+  // leads with a nudge to keep auto-renewal on (uninterrupted service),
+  // then the actual consequence, then leaves the choice to the tenant.
+  // "Turn Off Anyway" runs the cancel itself (below); dismissing the modal
+  // any other way just leaves auto-renewal on, untouched.
+  const handleCancel = () => {
     const hasRunningCycle = ['ACTIVE', 'PAUSED'].includes(subscription.status) && subscription.current_period_end;
     const consequence = hasRunningCycle
       ? `You won't be charged again. Full access stays as-is until ${formatDateTime(subscription.current_period_end)}, then you'll drop to the Free plan (restricted dashboard, no wallet recharge, no paid features) until you resubscribe.`
       : `You won't be charged, and you'll move to the Free plan (restricted access) right away.`;
-    const confirmMsg = `For uninterrupted service, it's best to keep auto-renewal on.\n\nTurn it off anyway? ${consequence}`;
-    if (!window.confirm(confirmMsg)) return;
-    setBusy(true);
-    try {
-      await api.post('/virtual-workspace/subscription/cancel');
-      toast.success(hasRunningCycle ? 'Subscription cancelled. No further charges. Full access continues until your current period ends.' : 'Subscription cancelled. No further charges.');
-      await fetchStatus();
-    } catch (err) {
-      toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
-    } finally {
-      setBusy(false);
-    }
+    setConfirmModal({
+      title: 'Turn off auto-renewal?',
+      message: `For uninterrupted service, it's best to keep auto-renewal on.\n\nTurn it off anyway? ${consequence}`,
+      confirmLabel: 'Turn Off Anyway',
+      dismissLabel: 'Keep Auto-renewal On',
+      tone: 'error',
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api.post('/virtual-workspace/subscription/cancel');
+          toast.success(hasRunningCycle ? 'Subscription cancelled. No further charges. Full access continues until your current period ends.' : 'Subscription cancelled. No further charges.');
+          await fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
+        } finally {
+          setBusy(false);
+          setConfirmModal(null);
+        }
+      },
+    });
   };
 
   const handleResumeAutoRenewal = async () => {
@@ -550,8 +642,17 @@ const VirtualWorkspaceSubscriptionCard = () => {
         )}
         {needsCheckout && (
           <Callout icon={AlertCircle} color="var(--warning)" bg="var(--warning-bg)">
-            <strong style={{ color: 'var(--warning)' }}>Payment authorization needed.</strong> Your subscription was started but not yet paid.
-            Razorpay has also emailed and texted you a link; you can complete it right here instead.
+            {subscription.scheduled_downgrade_plan_id && subscription.pending_razorpay_subscription_id ? (
+              <>
+                <strong style={{ color: 'var(--warning)' }}>Your scheduled downgrade is ready.</strong> Your previous billing cycle has ended, and auto-pay needs re-authorizing at the new, lower price to continue.
+                Razorpay has also emailed and texted you a link; you can complete it right here instead.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: 'var(--warning)' }}>Payment authorization needed.</strong> Your subscription was started but not yet paid.
+                Razorpay has also emailed and texted you a link; you can complete it right here instead.
+              </>
+            )}
             <div style={{ marginTop: 10 }}>
               <button className="btn btn-primary btn-sm" onClick={handleCompletePayment} disabled={busy} style={{ borderRadius: 0 }}>
                 {busy ? 'Opening…' : 'Complete Payment Setup'}
@@ -745,6 +846,17 @@ const VirtualWorkspaceSubscriptionCard = () => {
           </>
         )}
       </div>
+      <ConfirmModal
+        open={!!confirmModal}
+        title={confirmModal?.title}
+        message={confirmModal?.message}
+        confirmLabel={confirmModal?.confirmLabel}
+        dismissLabel={confirmModal?.dismissLabel}
+        tone={confirmModal?.tone}
+        busy={busy}
+        onConfirm={confirmModal?.onConfirm}
+        onDismiss={() => setConfirmModal(null)}
+      />
     </div>
   );
 };
