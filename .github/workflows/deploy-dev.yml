@@ -45,7 +45,19 @@ jobs:
           node-version: "20"
           cache: npm
 
+      # Caches the fully-installed node_modules itself (not just npm's
+      # download cache, which "Setup Node" above already handles) keyed by
+      # the lockfile hash — a cache hit skips `npm ci` entirely below. Same
+      # pattern as Cred2Tech's backend workflows.
+      - name: Cache node_modules
+        id: npm-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install
+        if: steps.npm-cache.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Build
