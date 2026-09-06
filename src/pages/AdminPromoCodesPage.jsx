@@ -8,6 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 const PRODUCT_LABELS = {
   DIRECT_MSME_ELIGIBILITY: 'Direct MSME Eligibility Fee',
   VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace Subscription',
+  WALLET_TOPUP: 'Wallet Recharge (Buy Credits)',
 };
 
 const EMPTY_FORM = {

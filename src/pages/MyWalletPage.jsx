@@ -126,10 +126,85 @@ const RechargeModal = ({ onClose, onSuccess }) => {
   const { user } = useAuth();
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  const [preview, setPreview] = useState(null); // { credits_to_add, bonus_credits, gst_amount_inr, total_amount_inr, discount_amount_inr, discounted_amount_inr, ... }
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const base = Number(amount) || 0;
+  // Fallback figures (no bonus/promo) shown instantly while the live
+  // preview call is in flight, or if it hasn't fired yet — same GST math
+  // the backend uses, so there's never a flash of a wrong number.
   const gst = Math.round(base * GST_RATE * 100) / 100;
   const total = base + gst;
+
+  // Re-fetches the preview (volume-discount bonus + promo discount, both
+  // computed server-side) whenever the amount changes, and whenever a
+  // successfully-applied promo code is present — debounced so typing a
+  // 4-digit amount doesn't fire a request per keystroke. A promo code is
+  // only sent once actually "Applied"; editing the amount after that keeps
+  // it re-validated against the new amount (e.g. a min_order_amount code).
+  useEffect(() => {
+    if (!base || base <= 0) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await walletService.getTopupPreview(base, promoApplied ? promoCode.trim() : null);
+        if (cancelled) return;
+        setPreview(data);
+        if (promoApplied && data.promo_valid === false) {
+          setPromoError(data.promo_error || 'This promo code is not valid');
+          setPromoApplied(false);
+        }
+      } catch (err) {
+        if (!cancelled) setPreview(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [base, promoApplied]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim() || !base) return;
+    setPromoChecking(true);
+    setPromoError('');
+    try {
+      const data = await walletService.getTopupPreview(base, promoCode.trim());
+      if (data.promo_valid === false) {
+        setPromoError(data.promo_error || 'This promo code is not valid');
+        setPromoApplied(false);
+        setPreview(data);
+      } else {
+        setPromoApplied(true);
+        setPreview(data);
+      }
+    } catch (err) {
+      setPromoError(getErrorMessage(err) || 'Failed to check promo code');
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const clearPromo = () => {
+    setPromoApplied(false);
+    setPromoCode('');
+    setPromoError('');
+  };
+
+  // credits_to_add already folds in any volume-discount bonus tier; the
+  // amount actually charged is preview.total_amount_inr (net of any promo
+  // discount) once the preview has loaded, falling back to the plain
+  // no-bonus/no-promo GST math above until it does.
+  const creditsToReceive = preview?.credits_to_add ?? base;
+  const bonusCredits = preview?.bonus_credits || 0;
+  const amountPayable = preview?.total_amount_inr ?? total;
 
   const handleRecharge = async () => {
     if (!base || base <= 0) {
@@ -138,7 +213,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
     }
     setSubmitting(true);
     try {
-      const order = await walletService.createTopupOrder(base);
+      const order = await walletService.createTopupOrder(base, promoApplied ? promoCode.trim() : null);
       const Razorpay = await loadRazorpay();
 
       const options = {
@@ -146,7 +221,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
         amount: order.amount,
         currency: order.currency,
         name: 'Cred2Tech',
-        description: `Wallet Recharge — ${base.toLocaleString('en-IN')} credits`,
+        description: `Wallet Recharge — ${order.credits_to_add.toLocaleString('en-IN')} credits`,
         order_id: order.order_id,
         handler: async (response) => {
           const verifyData = {
@@ -160,7 +235,11 @@ const RechargeModal = ({ onClose, onSuccess }) => {
             try {
               const result = await walletService.verifyTopupCheckout(verifyData);
               if (result.status === 'CREDITED' || result.status === 'ALREADY_CREDITED' || result.status === 'ALREADY_CREDITED_IN_LEDGER') {
-                toast.success(`Wallet recharged with ${base.toLocaleString('en-IN')} credits!`);
+                // order.credits_to_add is the real, backend-computed figure
+                // (base + volume-discount bonus) — never the raw entered
+                // amount, so this can't under-report a bonus that was
+                // actually credited.
+                toast.success(`Wallet recharged with ${order.credits_to_add.toLocaleString('en-IN')} credits!`);
                 setSubmitting(false);
                 onSuccess();
                 return;
@@ -223,16 +302,60 @@ const RechargeModal = ({ onClose, onSuccess }) => {
             autoFocus
           />
 
+          {bonusCredits > 0 && (
+            <p style={{ fontSize: 11, color: 'var(--success)', marginTop: 8, marginBottom: 0, fontWeight: 700 }}>
+              🎉 Volume bonus applied — you'll receive {bonusCredits.toLocaleString('en-IN')} extra credits free.
+            </p>
+          )}
+
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', marginBottom: 6, display: 'block' }}>Promo code (optional)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); if (promoApplied) setPromoApplied(false); }}
+                placeholder="e.g. WELCOME10"
+                disabled={promoChecking || submitting}
+                className="form-control"
+                style={{ ...compactField, flex: 1, textTransform: 'uppercase' }}
+              />
+              {promoApplied ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={clearPromo} style={{ borderRadius: 0 }}>Remove</button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleApplyPromo}
+                  disabled={!promoCode.trim() || !base || promoChecking}
+                  style={{ borderRadius: 0, whiteSpace: 'nowrap' }}
+                >
+                  {promoChecking ? 'Checking…' : 'Apply'}
+                </button>
+              )}
+            </div>
+            {promoError && <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 6 }}>{promoError}</p>}
+            {promoApplied && preview?.promo_valid && <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>Promo code applied — you save {formatINR(preview.discount_amount_inr)}!</p>}
+          </div>
+
           {base > 0 && (
             <div style={{ marginTop: 16, background: 'var(--bg)', border: '1px solid var(--outline)', padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
                 <span>Credits value</span><span>{formatINR(base)}</span>
               </div>
+              {promoApplied && preview?.discount_amount_inr > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>
+                  <span>Promo discount</span><span>−{formatINR(preview.discount_amount_inr)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
-                <span>GST (18%)</span><span>{formatINR(gst)}</span>
+                <span>GST (18%)</span><span>{formatINR(preview?.gst_amount_inr ?? gst)}</span>
               </div>
               <div style={{ borderTop: '1px solid var(--outline)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>
-                <span>Amount payable</span><span>{formatINR(total)}</span>
+                <span>Amount payable</span><span>{previewLoading ? '…' : formatINR(amountPayable)}</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
+                <span>Credits you'll receive</span><span>{creditsToReceive.toLocaleString('en-IN')}</span>
               </div>
             </div>
           )}
@@ -243,7 +366,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
 
           <button
             onClick={handleRecharge}
-            disabled={submitting || !base}
+            disabled={submitting || !base || previewLoading}
             style={{
               width: '100%', marginTop: 16, padding: '12px', background: 'var(--primary)', color: '#fff',
               border: 'none', fontSize: 14, fontWeight: 700, cursor: submitting || !base ? 'not-allowed' : 'pointer',
@@ -251,7 +374,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
             }}
           >
             {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
-            {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(total) : ''}`}
+            {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(amountPayable) : ''}`}
           </button>
         </div>
       </div>

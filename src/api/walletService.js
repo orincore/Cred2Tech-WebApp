@@ -49,8 +49,18 @@ export const walletService = {
   },
 
   // ── Recharge (Razorpay top-up) ─────────────────────────────────────────
-  createTopupOrder: async (amountInr) => {
-    const response = await api.post('/wallet/topups/create-order', { amount_inr: amountInr });
+  // Read-only preview (dryRun promo check) — used to show the volume-
+  // discount bonus tier and, once a code is typed in, the promo discount,
+  // before the DSA commits to Checkout.
+  getTopupPreview: async (amountInr, promoCode = null) => {
+    const params = { amount_inr: amountInr };
+    if (promoCode) params.promo_code = promoCode;
+    const response = await api.get('/wallet/topups/preview', { params });
+    return response.data;
+  },
+
+  createTopupOrder: async (amountInr, promoCode = null) => {
+    const response = await api.post('/wallet/topups/create-order', { amount_inr: amountInr, promo_code: promoCode });
     return response.data;
   },
 
