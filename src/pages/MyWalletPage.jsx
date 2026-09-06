@@ -335,7 +335,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
               )}
             </div>
             {promoError && <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 6 }}>{promoError}</p>}
-            {promoApplied && preview?.promo_valid && <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>Promo code applied — you save {formatINR(preview.discount_amount_inr)}!</p>}
+            {promoApplied && preview?.promo_valid && <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>Promo code applied - you save ₹{Number(preview.discount_amount_inr || 0).toLocaleString('en-IN')}!</p>}
           </div>
 
           {base > 0 && (

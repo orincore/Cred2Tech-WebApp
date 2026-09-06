@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { Tag, Plus, X, Save, History } from 'lucide-react';
+import { Tag, Plus, X, Save, History, Trash2 } from 'lucide-react';
 import api from '../api/axiosInstance';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useTheme } from '../context/ThemeContext';
@@ -145,6 +145,17 @@ const AdminPromoCodesPage = () => {
     }
   };
 
+  const handleDelete = async (code) => {
+    if (!confirm(`Are you sure you want to delete promo code "${code.code}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/admin/promo-codes/${code.id}`);
+      await fetchCodes();
+      toast.success('Promo code deleted');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete promo code');
+    }
+  };
+
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><LoadingSpinner size={32} /></div>;
   }
@@ -235,7 +246,7 @@ const AdminPromoCodesPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-                {['Code', 'Discount', 'Products', 'Redemptions', 'Valid', 'Status', ''].map((h) => (
+                {['Code', 'Discount', 'Products', 'Redemptions', 'Valid', 'Status', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '0.04em' }}>{h}</th>
                 ))}
               </tr>
@@ -266,6 +277,7 @@ const AdminPromoCodesPage = () => {
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)} style={{ borderRadius: 0 }}>Edit</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c)} style={{ borderRadius: 0 }}>Delete</button>
                   </td>
                 </tr>
               ))}
