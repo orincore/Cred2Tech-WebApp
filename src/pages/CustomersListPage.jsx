@@ -13,6 +13,16 @@ import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
 import { subscribeToCasePulls } from '../lib/realtime';
+import PageTour from '../components/tour/PageTour';
+
+const PIPELINE_TOUR_STEPS = [
+  { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
+  { target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' },
+  { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, or PAN.' },
+  { target: '[data-tour="pipeline-filters"]', title: 'Filter your pipeline', description: 'Narrow the list down by entity type, lender, or open alerts (like a pending PDD), and sort it however is most useful to you.' },
+  { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Tap a stage to see only the cases sitting there right now, from Lead Created all the way through to Disbursed.' },
+  { target: '[data-tour="pipeline-results"]', title: 'Your cases', description: 'Every case in your pipeline, with its bureau score, amounts, and current stage. Tap a row any time to resume, view, or continue a case.' },
+];
 
 // Responsive hook
 const useResponsive = () => {
@@ -406,16 +416,19 @@ const CustomersListPage = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 type="button"
+                data-tour="pipeline-bulk-upload"
                 className="btn btn-secondary btn-sm"
                 onClick={() => setIsBulkUploadModalOpen(true)}
               >
                 <Upload size={13} /> Bulk Upload
               </button>
-              <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <UserPlus size={13} /> Add New Customer
-                </div>
-              </TravelingBorderButton>
+              <div data-tour="pipeline-add-customer" style={{ display: 'inline-flex' }}>
+                <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <UserPlus size={13} /> Add New Customer
+                  </div>
+                </TravelingBorderButton>
+              </div>
             </div>
           }
         />
@@ -430,7 +443,7 @@ const CustomersListPage = () => {
 
       {/* ─── Filter row ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
-        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+        <div data-tour="pipeline-search" style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
           <span style={labelSm(isDark)}>Search</span>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: isDark ? '#fff' : '#94a3b8' }} />
@@ -444,6 +457,7 @@ const CustomersListPage = () => {
           </div>
         </div>
 
+        <div data-tour="pipeline-filters" style={{ display: 'flex', gap: 32, flexWrap: 'wrap', flex: 3 }}>
         <div style={{ flex: 1, minWidth: 160 }}>
           <MultiSelectFilter
             label="Entity Type" allLabel="All Entity Types" isDark={isDark}
@@ -475,10 +489,11 @@ const CustomersListPage = () => {
             {SORT_OPTIONS.map((opt, i) => <option key={i} value={i}>{opt.label}</option>)}
           </select>
         </div>
+        </div>
       </div>
 
       {/* ─── Stage tabs (multi-select, compact) ─── */}
-      <div className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
+      <div data-tour="pipeline-stage-tabs" className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
         <button
           onClick={() => { setSelectedStages([]); setPage(1); }}
           style={{
@@ -524,7 +539,7 @@ const CustomersListPage = () => {
         </div>
       ) : isMobile ? (
         /* ─── Mobile: stacked cards — never scrolls horizontally ─── */
-        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <div data-tour="pipeline-results" className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {pagedCases.map((c) => {
             const stageColors = STAGE_COLORS[c.stage] || STAGE_COLORS.DRAFT;
             const [stageBg, stageColor] = isDark ? stageColors.dark : stageColors.light;
@@ -603,7 +618,7 @@ const CustomersListPage = () => {
         </div>
       ) : (
         /* ─── Tablet / Desktop: fixed-layout table, wraps instead of overflowing — never scrolls horizontally ─── */
-        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+        <div data-tour="pipeline-results" className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <colgroup>
               <col style={{ width: '9%' }} /><col style={{ width: '18%' }} /><col style={{ width: '14%' }} />
@@ -728,6 +743,7 @@ const CustomersListPage = () => {
           )}
         </>
       )}
+      <PageTour pageKey="pipeline" steps={PIPELINE_TOUR_STEPS} />
     </div>
   );
 };

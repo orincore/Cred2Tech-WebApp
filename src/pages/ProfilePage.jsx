@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone, Bell, Loader2 } from 'lucide-react';
 import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
@@ -14,6 +14,13 @@ import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
 import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
+import {
+  isPushSupported,
+  getNotificationPermission,
+  getLocalPushPreference,
+  enablePush,
+  disablePush,
+} from '../lib/pushNotifications';
 
 // Responsive hook
 const useResponsive = () => {
@@ -261,6 +268,7 @@ const ProfilePage = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { isMobile } = useResponsive();
+  const [searchParams] = useSearchParams();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState('profile');
@@ -288,6 +296,39 @@ const ProfilePage = () => {
   // existing home on OrganizationProfilePage) — DSA_MEMBER/SUB_DSA staff
   // don't manage tenant billing, so the tab doesn't appear for them.
   const canManageSubscription = hasRole('DSA_ADMIN');
+
+  // ─── Push notification preferences ──────────────────────────────────────────
+  const pushSupported = isPushSupported();
+  const notifPermission = getNotificationPermission();
+  // Initialise from the local cache (server truth is fetched below).
+  const [pushEnabled, setPushEnabled] = useState(
+    pushSupported && notifPermission === 'granted' ? (getLocalPushPreference() ?? false) : false
+  );
+  const [pushLoading, setPushLoading] = useState(false);
+
+  const handleTogglePush = async (e) => {
+    const enable = e.target.checked;
+    setPushLoading(true);
+    try {
+      if (enable) {
+        const ok = await enablePush(true);
+        setPushEnabled(ok);
+        if (!ok) {
+          e.target.checked = false;
+          const message = getNotificationPermission() === 'denied'
+            ? 'Push notifications are blocked in your browser settings. Please allow notifications for this site.'
+            : 'Unable to enable browser notifications. Check the VAPID configuration and try again.';
+          toast.error(message);
+        }
+      } else {
+        await disablePush(true);
+        setPushEnabled(false);
+      }
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
   const sidebarItems = isMsmeUser
     ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' }]
     : [
@@ -295,8 +336,16 @@ const ProfilePage = () => {
         { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
         { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'Manage your MFA methods' },
         { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
+        { id: 'notifications', icon: Bell, label: 'Notifications', subtitle: 'Push and in-app preferences' },
         ...(canManageSubscription ? [{ id: 'subscription', icon: LayoutGrid, label: 'Subscription', subtitle: 'Plan, billing, and upgrades' }] : []),
       ];
+
+  useEffect(() => {
+    const requestedSection = searchParams.get('tab') || searchParams.get('section');
+    if (requestedSection && sidebarItems.some((item) => item.id === requestedSection)) {
+      setActiveSection(requestedSection);
+    }
+  }, [searchParams, sidebarItems]);
 
   useEffect(() => {
     const fetch = async () => {
@@ -818,7 +867,6 @@ const ProfilePage = () => {
               <SectionEnter sectionKey={activeSection}>
               {activeSection === 'profile' ? (
                 <>
-                  <Eyebrow>Account Information</Eyebrow>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 26px' }}>Personal Information</h2>
 
                   {/* Form Fields */}
@@ -949,7 +997,6 @@ const ProfilePage = () => {
                 </>
               ) : activeSection === 'password' ? (
                 <>
-                  <Eyebrow>Security</Eyebrow>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 26px' }}>Change Password</h2>
 
                   {passwordError && (
@@ -1042,7 +1089,6 @@ const ProfilePage = () => {
                 </>
               ) : activeSection === 'mfa' ? (
                 <>
-                  <Eyebrow>Security</Eyebrow>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 8px' }}>Two-Factor Authentication</h2>
                   <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 26px' }}>
                     Required for every account. At least one method must always stay enabled.
@@ -1271,7 +1317,6 @@ const ProfilePage = () => {
                 <>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
                     <div>
-                      <Eyebrow>Overview</Eyebrow>
                       <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Additional Information</h2>
                     </div>
                     {canSelfEdit && (
@@ -1324,6 +1369,108 @@ const ProfilePage = () => {
                   </p>
                   {/* Self-contained — fetches its own status, offers subscribe/switch-plan/cancel. Same component OrganizationProfilePage uses. */}
                   <VirtualWorkspaceSubscriptionCard />
+                </>
+              ) : activeSection === 'notifications' ? (
+                <>
+                  <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Push Notifications</h2>
+                  <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 24px' }}>
+                    Receive browser push notifications for in-app alerts. You can change this in your browser settings at any time.
+                  </p>
+
+                  <Shell isDark={isDark}>
+                    <Core isDark={isDark} style={{ padding: 24 }}>
+                      {!pushSupported ? (
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                          <Bell size={18} color="var(--text-muted)" style={{ marginTop: 2, flexShrink: 0 }} />
+                          <div>
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>
+                              Push notifications not supported
+                            </p>
+                            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--on-muted)' }}>
+                              Your browser or device doesn't support push notifications. Try a modern browser like Chrome or Firefox.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                            <Bell size={18} color="var(--primary)" style={{ marginTop: 3, flexShrink: 0 }} />
+                            <div>
+                              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>
+                                Browser Push Notifications
+                              </p>
+                              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--on-muted)' }}>
+                                {pushEnabled
+                                  ? 'You will receive push notifications even when this tab is in the background.'
+                                  : notifPermission === 'denied'
+                                  ? 'Notifications are blocked in your browser. Allow them in your browser site settings to enable push.'
+                                  : 'Enable to receive push notifications when you are not viewing this tab.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <label
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              cursor: pushLoading ? 'wait' : 'pointer',
+                              opacity: pushLoading ? 0.6 : 1,
+                              flexShrink: 0,
+                            }}
+                            aria-busy={pushLoading}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={pushEnabled}
+                              onChange={handleTogglePush}
+                              disabled={pushLoading || notifPermission === 'denied'}
+                              style={{ display: 'none' }}
+                            />
+                            <div
+                              style={{
+                                width: 42,
+                                height: 24,
+                                borderRadius: 12,
+                                background: pushEnabled ? 'var(--primary)' : 'var(--border)',
+                                border: `1px solid ${pushEnabled ? 'var(--primary)' : 'var(--border)'}`,
+                                position: 'relative',
+                                transition: 'background 0.2s',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {pushLoading ? (
+                                <Loader2
+                                  size={16}
+                                  color="#fff"
+                                  style={{ position: 'absolute', top: 3, left: 13, animation: 'spin 1s linear infinite' }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: '50%',
+                                    background: '#fff',
+                                    position: 'absolute',
+                                    top: 2,
+                                    left: pushEnabled ? 20 : 2,
+                                    transition: 'left 0.2s',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                                  }}
+                                />
+                              )}
+                            </div>
+                            {pushLoading && <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Updating...</span>}
+                          </label>
+                        </div>
+                      )}
+                    </Core>
+                  </Shell>
+
+                  <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--on-muted)', opacity: 0.65 }}>
+                    In-app notifications (the bell icon in the top bar) are always active when you are signed in.
+                  </p>
                 </>
               ) : null}
               </SectionEnter>

@@ -54,6 +54,16 @@ export const TENANT_TYPES = ['CRED2TECH', 'DSA'];
 // trigger next to the logo for DSA roles) so the two stay in sync.
 export const FEEDBACK_SUBMITTER_ROLES = ['MSME_CUSTOMER', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 
+// First-time-visit onboarding overlay (see components/tour/PageTour.jsx) —
+// a spotlighted walkthrough that auto-plays the first time one of these
+// roles lands on a page that mounts it, then never again (per browser, per
+// user, per screen) once "Next" is walked to the end or "Skip" is clicked.
+// Deliberately DSA-only, same shape as FEEDBACK_SUBMITTER_ROLES above but a
+// narrower list — SUB_DSA/DSA_MEMBER/DSA_ADMIN only, not MSME_CUSTOMER (the
+// MSME portal has its own separate onboarding flow) and not SUPER_ADMIN/
+// CRED2TECH_MEMBER (internal staff, not the audience this feature is for).
+export const DSA_TOUR_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+
 // Hierarchy levels used by employees
 export const HIERARCHY_LEVELS = ['L1', 'L2', 'L3', 'L4'];
 

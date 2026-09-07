@@ -13,6 +13,11 @@ import api from '../api/axiosInstance';
  * The connection is lazy — nothing opens until a component actually asks to
  * watch a case — and reference-counted per case, so the room is left only when
  * the last interested component unmounts.
+ *
+ * Notification channel: persistent, separate from case rooms so
+ * disconnectIfIdle() never tears it down. The server auto-joins user:X on
+ * connect (no client emit needed). The client reports focus state so the server
+ * can suppress push notifications when the app is open.
  */
 
 // VITE_API_BASE_URL points at the REST mount ("https://host/api"). Socket.IO
@@ -28,6 +33,14 @@ let socket = null;
 /** caseId -> { count, listeners:Set<fn>, joined:boolean, lastSnapshot:object|null } */
 const rooms = new Map();
 const statusListeners = new Set();
+
+/** Persistent notification channel listeners — keep socket alive even when no case rooms are open. */
+const notificationListeners = new Set();
+const notificationUnreadCountListeners = new Set();
+
+/** Tracks whether this browser tab is considered "focused" for push suppression. */
+let focusState = null; // 'focused' | 'blurred' | null before the first report
+let focusReportingTimer = null; // debounce for the 1.5s grace period
 
 function emitConnectionStatus(status) {
   statusListeners.forEach((fn) => {
@@ -61,6 +74,8 @@ function getSocket() {
       room.joined = false;
       joinRoom(caseId);
     });
+    // Re-report focus so the server updates its per-process remoteFocus map.
+    reportFocus(getFocusState() || (document.visibilityState === 'visible' ? 'focused' : 'blurred'));
   });
 
   socket.on('disconnect', () => emitConnectionStatus('disconnected'));
@@ -72,6 +87,18 @@ function getSocket() {
     room.lastSnapshot = snapshot;
     room.listeners.forEach((fn) => {
       try { fn(snapshot); } catch (err) { console.error('[realtime] snapshot listener failed', err); }
+    });
+  });
+
+  // Notification events arrive on the persistent user:X room.
+  socket.on('notification:new', (data) => {
+    notificationListeners.forEach((fn) => {
+      try { fn(data); } catch (err) { console.error('[realtime] notification listener failed', err); }
+    });
+  });
+  socket.on('notification:unread_count', (count) => {
+    notificationUnreadCountListeners.forEach((fn) => {
+      try { fn(count); } catch (err) { console.error('[realtime] unread count listener failed', err); }
     });
   });
 
@@ -221,9 +248,9 @@ export function subscribeToConsentRequest(requestId, onUpdate) {
 // Nothing left to watch anywhere — drop the connection rather than hold an
 // idle socket (and its server-side supervisor) open app-wide. Consent
 // polling never opens this connection in the first place, so it plays no
-// part here.
+// part here. The notification channel is always kept alive separately.
 function disconnectIfIdle() {
-  if (rooms.size === 0 && socket) {
+  if (rooms.size === 0 && notificationListeners.size === 0 && socket) {
     socket.disconnect();
     socket = null;
   }
@@ -245,4 +272,81 @@ export function subscribeToConnectionStatus(fn) {
   statusListeners.add(fn);
   if (socket) fn(socket.connected ? 'connected' : 'disconnected');
   return () => statusListeners.delete(fn);
+}
+
+// --- Persistent notification channel -----------------------------------------
+
+/**
+ * Subscribe to in-app notifications arriving via socket.
+ * Unlike case rooms, this channel stays open as long as any listener is registered,
+ * regardless of whether case rooms are active.
+ *
+ * @param {(notification: object) => void} listener
+ * @returns {() => void} unsubscribe
+ */
+export function listenToNotifications(listener) {
+  notificationListeners.add(listener);
+  // Trigger lazy connection open (subscribeToConnectionStatus doesn't open the
+  // socket on its own; a real emit does — joining the user:X room auto-happens
+  // server-side on connect).
+  const s = getSocket();
+  if (s.connected) reportFocus(getFocusState());
+
+  return () => {
+    notificationListeners.delete(listener);
+    disconnectIfIdle();
+  };
+}
+
+/** Subscribe to the server's authoritative unread notification count. */
+export function listenToNotificationUnreadCount(listener) {
+  notificationUnreadCountListeners.add(listener);
+  getSocket();
+  return () => notificationUnreadCountListeners.delete(listener);
+}
+
+// --- Focus tracking for push-suppression -------------------------------------
+
+/**
+ * Returns the current focus state: 'focused' when the tab is visible,
+ * 'blurred' when hidden or unfocused.
+ */
+export function getFocusState() {
+  return focusState;
+}
+
+/**
+ * Reports focus state to the server via the `notification:focus` socket event.
+ * Debounced to avoid hammering on rapid blur/focus toggles.
+ */
+function reportFocus(state) {
+  if (!socket?.connected || !state) return;
+  if (focusState === state) return; // no change — skip
+
+  focusState = state;
+  socket.emit('notification:focus', { focused: state === 'focused' });
+}
+
+/**
+ * Sets up browser visibilitychange, focus, and blur listeners to report
+ * focus state to the server. Call once at app startup (NotificationContext
+ * initialises this).
+ */
+export function initFocusTracking() {
+  const update = (state) => {
+    // 1.5 s grace period: if we flip back to focused within the window, cancel.
+    clearTimeout(focusReportingTimer);
+    focusReportingTimer = setTimeout(() => {
+      reportFocus(state);
+    }, 1500);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    update(document.visibilityState === 'visible' ? 'focused' : 'blurred');
+  });
+  window.addEventListener('focus', () => update('focused'));
+  window.addEventListener('blur', () => update('blurred'));
+
+  // Report initial state on open/reconnect.
+  update('focused');
 }

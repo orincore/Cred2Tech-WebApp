@@ -11,9 +11,22 @@ const PRODUCT_LABELS = {
   WALLET_TOPUP: 'Wallet Recharge (Buy Credits)',
 };
 
+// CASHBACK/FREEBIE only make sense against a wallet-credit purchase (there's
+// no "credits granted" concept for a one-time fee or a subscription) — the
+// backend enforces this too (admin.promoCode.controller.js), this just
+// keeps the form from ever offering an invalid combination in the first
+// place.
+const WALLET_ONLY_BENEFIT_TYPES = ['CASHBACK', 'FREEBIE'];
+const BENEFIT_TYPE_LABELS = {
+  DISCOUNT: 'Discount — reduces the price paid',
+  CASHBACK: 'Cashback — bonus credits on top of a real recharge',
+  FREEBIE: 'Freebie — fixed free credits, no payment needed',
+};
+
 const EMPTY_FORM = {
   code: '',
   description: '',
+  benefit_type: 'DISCOUNT',
   discount_type: 'PERCENTAGE',
   discount_value: '',
   max_discount_amount: '',
@@ -30,6 +43,22 @@ const EMPTY_FORM = {
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
 const fmtDateTime = (d) => d ? new Date(d).toLocaleString('en-IN') : '—';
+
+const BENEFIT_BADGE_COLOR = {
+  DISCOUNT: { bg: '#e0e7ff', fg: '#4338ca', bgDark: '#312e81', fgDark: '#c7d2fe' },
+  CASHBACK: { bg: '#dcfce7', fg: '#15803d', bgDark: '#064e3b', fgDark: '#6ee7b7' },
+  FREEBIE: { bg: '#fef3c7', fg: '#b45309', bgDark: '#451a03', fgDark: '#fcd34d' },
+};
+
+// "20% off" / "10% cashback (cap 500 credits)" / "₹100 free credits" — the
+// same discount_type/discount_value/max_discount_amount fields mean a
+// different thing depending on benefit_type (see promoCode.service.js).
+const formatBenefit = (c) => {
+  const value = c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%` : `₹${c.discount_value}`;
+  if (c.benefit_type === 'FREEBIE') return `₹${c.discount_value} free credits`;
+  if (c.benefit_type === 'CASHBACK') return `${value} cashback${c.max_discount_amount ? ` (cap ${c.max_discount_amount} credits)` : ''}`;
+  return `${value}${c.discount_type === 'PERCENTAGE' && c.max_discount_amount ? ` (cap ₹${c.max_discount_amount})` : ''} off`;
+};
 
 const STATUS_COLOR = { CONFIRMED: { bg: '#dcfce7', fg: '#15803d', bgDark: '#064e3b', fgDark: '#6ee7b7' }, PENDING: { bg: '#fef9c3', fg: '#a16207', bgDark: '#422006', fgDark: '#fde047' }, CANCELLED: { bg: '#f1f5f9', fg: '#64748b', bgDark: '#334155', fgDark: '#94a3b8' } };
 
@@ -76,6 +105,7 @@ const AdminPromoCodesPage = () => {
     setForm({
       code: code.code,
       description: code.description || '',
+      benefit_type: code.benefit_type || 'DISCOUNT',
       discount_type: code.discount_type,
       discount_value: String(code.discount_value),
       max_discount_amount: code.max_discount_amount != null ? String(code.max_discount_amount) : '',
@@ -101,10 +131,29 @@ const AdminPromoCodesPage = () => {
     }));
   };
 
+  // Switching TO a wallet-only benefit type locks applicable_products down
+  // to just Wallet Recharge (a CASHBACK/FREEBIE code combined with the MSME
+  // fee or a subscription is rejected server-side anyway — this just keeps
+  // the form from ever showing that invalid combination). Switching to
+  // FREEBIE also forces discount_type to FLAT — there's no "percentage of
+  // the purchase" for a code with no purchase.
+  const handleBenefitTypeChange = (benefit_type) => {
+    setForm((f) => ({
+      ...f,
+      benefit_type,
+      applicable_products: WALLET_ONLY_BENEFIT_TYPES.includes(benefit_type) ? ['WALLET_TOPUP'] : f.applicable_products,
+      discount_type: benefit_type === 'FREEBIE' ? 'FLAT' : f.discount_type,
+    }));
+  };
+
   const handleSave = async () => {
     if (!form.code.trim()) return toast.error('Code is required');
-    if (!form.discount_value) return toast.error('Discount value is required');
+    if (!form.discount_value) return toast.error(form.benefit_type === 'FREEBIE' ? 'Free credits amount is required' : 'Discount value is required');
     if (form.applicable_products.length === 0) return toast.error('Select at least one applicable product');
+    if (WALLET_ONLY_BENEFIT_TYPES.includes(form.benefit_type)
+      && (form.applicable_products.length !== 1 || form.applicable_products[0] !== 'WALLET_TOPUP')) {
+      return toast.error(`A ${form.benefit_type} code can only apply to Wallet Recharge`);
+    }
 
     const payload = {
       ...form,
@@ -246,18 +295,24 @@ const AdminPromoCodesPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-                {['Code', 'Discount', 'Products', 'Redemptions', 'Valid', 'Status', 'Actions'].map((h) => (
+                {['Code', 'Type', 'Benefit', 'Products', 'Redemptions', 'Valid', 'Status', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '0.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {codes.map((c) => (
+              {codes.map((c) => {
+                const benefitType = c.benefit_type || 'DISCOUNT';
+                const bc = BENEFIT_BADGE_COLOR[benefitType];
+                return (
                 <tr key={c.id} style={{ borderTop: '1px solid var(--outline)' }}>
                   <td style={{ padding: '10px 12px', fontWeight: 700 }}>{c.code}</td>
                   <td style={{ padding: '10px 12px' }}>
-                    {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%${c.max_discount_amount ? ` (cap ₹${c.max_discount_amount})` : ''}` : `₹${c.discount_value} flat`}
+                    <span style={{ padding: '3px 9px', fontSize: 10.5, fontWeight: 800, background: isDark ? bc.bgDark : bc.bg, color: isDark ? bc.fgDark : bc.fg }}>
+                      {benefitType}
+                    </span>
                   </td>
+                  <td style={{ padding: '10px 12px' }}>{formatBenefit(c)}</td>
                   <td style={{ padding: '10px 12px' }}>{c.applicable_products.map((p) => PRODUCT_LABELS[p] || p).join(', ')}</td>
                   <td style={{ padding: '10px 12px' }}>
                     {c._count?.redemptions || 0}{c.max_redemptions != null ? ` / ${c.max_redemptions}` : ''}
@@ -280,9 +335,10 @@ const AdminPromoCodesPage = () => {
                     <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c)} style={{ borderRadius: 0 }}>Delete</button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {codes.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--on-muted)' }}>No promo codes yet</td></tr>
+                <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: 'var(--on-muted)' }}>No promo codes yet</td></tr>
               )}
             </tbody>
           </table>
@@ -318,36 +374,62 @@ const AdminPromoCodesPage = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Applicable Products</label>
-                <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                  {Object.entries(PRODUCT_LABELS).map(([key, label]) => (
-                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
-                      <input type="checkbox" checked={form.applicable_products.includes(key)} onChange={() => toggleProduct(key)} />
-                      {label}
-                    </label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Benefit Type</label>
+                <select className="form-control" value={form.benefit_type} onChange={(e) => handleBenefitTypeChange(e.target.value)}>
+                  {Object.entries(BENEFIT_TYPE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Discount Type</label>
-                  <select className="form-control" value={form.discount_type} onChange={(e) => setForm({ ...form, discount_type: e.target.value })}>
-                    <option value="PERCENTAGE">Percentage</option>
-                    <option value="FLAT">Flat (₹)</option>
-                  </select>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Applicable Products</label>
+                <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                  {Object.entries(PRODUCT_LABELS).map(([key, label]) => {
+                    const walletOnly = WALLET_ONLY_BENEFIT_TYPES.includes(form.benefit_type);
+                    const disabled = walletOnly && key !== 'WALLET_TOPUP';
+                    return (
+                      <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, opacity: disabled ? 0.4 : 1 }}>
+                        <input type="checkbox" checked={form.applicable_products.includes(key)} onChange={() => toggleProduct(key)} disabled={disabled} />
+                        {label}
+                      </label>
+                    );
+                  })}
                 </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Value</label>
-                  <input type="number" className="form-control" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder={form.discount_type === 'PERCENTAGE' ? '20' : '100'} />
-                </div>
-                {form.discount_type === 'PERCENTAGE' && (
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Max Discount (₹)</label>
-                    <input type="number" className="form-control" value={form.max_discount_amount} onChange={(e) => setForm({ ...form, max_discount_amount: e.target.value })} placeholder="Optional cap" />
-                  </div>
+                {WALLET_ONLY_BENEFIT_TYPES.includes(form.benefit_type) && (
+                  <p style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 6 }}>{form.benefit_type} codes only ever apply to Wallet Recharge — there's no "credits granted" concept for a one-time fee or a subscription.</p>
                 )}
               </div>
+
+              {form.benefit_type === 'FREEBIE' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Free Credits Amount (₹)</label>
+                    <input type="number" className="form-control" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder="e.g. 100" />
+                    <p style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 4 }}>A fixed number of credits, granted directly to the wallet — never a percentage, never influenced by anything the DSA enters.</p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>{form.benefit_type === 'CASHBACK' ? 'Bonus Type' : 'Discount Type'}</label>
+                    <select className="form-control" value={form.discount_type} onChange={(e) => setForm({ ...form, discount_type: e.target.value })}>
+                      <option value="PERCENTAGE">Percentage</option>
+                      <option value="FLAT">Flat (₹ / credits)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>{form.benefit_type === 'CASHBACK' ? 'Bonus Value' : 'Value'}</label>
+                    <input type="number" className="form-control" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder={form.discount_type === 'PERCENTAGE' ? '20' : '100'} />
+                  </div>
+                  {form.discount_type === 'PERCENTAGE' && (
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>{form.benefit_type === 'CASHBACK' ? 'Max Bonus Credits' : 'Max Discount (₹)'}</label>
+                      <input type="number" className="form-control" value={form.max_discount_amount} onChange={(e) => setForm({ ...form, max_discount_amount: e.target.value })} placeholder="Optional cap" />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -366,11 +448,13 @@ const AdminPromoCodesPage = () => {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Min Order (₹)</label>
-                  <input type="number" className="form-control" value={form.min_order_amount} onChange={(e) => setForm({ ...form, min_order_amount: e.target.value })} placeholder="Optional" />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: form.benefit_type === 'FREEBIE' ? '1fr 1fr' : '1fr 1fr 1fr', gap: 12 }}>
+                {form.benefit_type !== 'FREEBIE' && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Min Order (₹)</label>
+                    <input type="number" className="form-control" value={form.min_order_amount} onChange={(e) => setForm({ ...form, min_order_amount: e.target.value })} placeholder="Optional" />
+                  </div>
+                )}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Max Total Uses</label>
                   <input type="number" className="form-control" value={form.max_redemptions} onChange={(e) => setForm({ ...form, max_redemptions: e.target.value })} placeholder="Unlimited" />

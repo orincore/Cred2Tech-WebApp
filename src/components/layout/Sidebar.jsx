@@ -124,10 +124,12 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 8,
       }}>
         <Logo size="medium" />
         {canSubmitFeedback && (
           <button
+            data-tour="sidebar-feedback"
             onClick={() => setIsFeedbackOpen(true)}
             title="Submit feedback or report an issue"
             aria-label="Submit feedback or report an issue"
@@ -151,7 +153,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </div>
 
       {/* Search Bar & Theme Toggle */}
-      <div style={{ padding: '0 12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div data-tour="sidebar-search" style={{ padding: '0 12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -197,6 +199,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
 
         {/* Theme Toggle */}
         <button
+          data-tour="sidebar-theme-toggle"
           onClick={toggleTheme}
           style={{
             width: 34,
@@ -233,7 +236,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }} className="custom-scrollbar">
+      <nav data-tour="sidebar-nav-list" style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }} className="custom-scrollbar">
         {visibleItems.map((item) => {
           const Icon = item.icon;
           // NavLink's default matching is prefix-based, so a parent path like
@@ -281,7 +284,9 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </nav>
 
       {/* User section */}
-      <div style={{
+      <div
+        data-tour="sidebar-profile"
+        style={{
         padding: '16px 20px',
         borderTop: '1px solid var(--sidebar-border)',
         display: 'flex',

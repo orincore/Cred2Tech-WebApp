@@ -27,12 +27,14 @@ const PAGE_SIZE = 25;
 const TYPE_OPTIONS = [
   { value: 'CASE_PAYMENT', label: 'MSME Eligibility Fee' },
   { value: 'WALLET_TOPUP', label: 'DSA Wallet Top-up' },
+  { value: 'TENANT_SUBSCRIPTION', label: 'Virtual Workspace Subscription' },
 ];
 const STATUS_OPTIONS = [
   { value: 'SUCCESS', label: 'Success' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'FAILED', label: 'Failed' },
   { value: 'REVIEW', label: 'Needs Review' },
+  { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
 const STATUS_STYLE = {
@@ -40,6 +42,7 @@ const STATUS_STYLE = {
   PENDING: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
   FAILED: { color: 'var(--error)', bg: 'var(--error-bg)' },
   REVIEW: { color: 'var(--info)', bg: 'var(--info-bg)' },
+  CANCELLED: { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' },
 };
 
 const RECONCILIATION_LABEL = {
@@ -231,7 +234,7 @@ const AdminTransactionsPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Transactions"
-          subtitle="Every real-money payment on the platform — MSME eligibility fees and DSA wallet top-ups — in one place, cross-checked against Razorpay's own webhook log."
+          subtitle="A complete record of every payment made on the platform, including MSME eligibility fees, DSA wallet top-ups, and Virtual Workspace subscriptions, verified against Razorpay for accuracy."
           compact={isMobile}
         />
       </div>
@@ -325,7 +328,7 @@ const AdminTransactionsPage = () => {
           {loading ? (
             <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
           ) : rows.length === 0 ? (
-            <EmptyState icon={Receipt} title="No transactions found" description="No MSME eligibility payments or DSA wallet top-ups match the applied filters." />
+            <EmptyState icon={Receipt} title="No transactions found" description="No MSME eligibility payments, DSA wallet top-ups, or subscription charges match the applied filters." />
           ) : isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
               {rows.map((t) => {

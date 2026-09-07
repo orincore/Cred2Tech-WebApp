@@ -23,6 +23,7 @@ import {
   Receipt,
   Trash2,
   Tag,
+  Bell,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -122,6 +123,20 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-notifications-send',
+    label: 'Send Notification',
+    path: '/admin/notifications/send',
+    icon: Bell,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-notifications-analytics',
+    label: 'Notification Analytics',
+    path: '/admin/notifications/analytics',
+    icon: Bell,
     roles: ['SUPER_ADMIN'],
   },
   {

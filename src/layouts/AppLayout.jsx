@@ -9,6 +9,27 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
+import PageTour from '../components/tour/PageTour';
+
+// First-time-visit walkthrough of the app shell itself (nav, search, theme
+// toggle, profile row) — separate step lists for desktop (sidebar is always
+// open, so every nav element is addressable directly) and mobile (the
+// sidebar starts off-canvas, so this instead points at the header controls
+// that are always on screen rather than at individual nav links).
+const DESKTOP_NAV_STEPS = [
+  { target: '[data-tour="sidebar-search"]', title: 'Search the menu', description: 'Type here to instantly filter the navigation list below down to matching sections, handy once your sidebar has a lot of items.' },
+  { target: '[data-tour="sidebar-nav-list"]', title: 'Your navigation', description: 'Every screen you have access to lives here. What you see is based on your role, so your list may look different from a teammate’s.' },
+  { target: '[data-tour="sidebar-theme-toggle"]', title: 'Light / dark mode', description: 'Switch the whole app between light and dark themes. Your choice is remembered on this device.' },
+  { target: '[data-tour="sidebar-feedback"]', title: 'Report an issue', description: 'Spotted a bug or have feedback? Tap here to send it straight to the Cred2Tech team from any screen.' },
+  { target: '[data-tour="sidebar-profile"]', title: 'Your account', description: 'Your name and email are shown here. Tap this row any time to open your Profile and manage your account, password, and security settings.' },
+  { target: '[data-tour="sidebar-collapse-toggle"]', title: 'Collapse the sidebar', description: 'Use this handle to hide the sidebar and get more room for the page content. Click it again any time to bring the navigation back.' },
+];
+
+const MOBILE_NAV_STEPS = [
+  { target: '[data-tour="mobile-menu-button"]', title: 'Open the menu', description: 'Tap this icon any time to open your navigation. Every screen you have access to is listed there, based on your role.', placement: 'bottom' },
+  { target: '[data-tour="mobile-theme-toggle"]', title: 'Light / dark mode', description: 'Switch between light and dark themes. Your choice is remembered on this device.', placement: 'bottom' },
+  { target: '[data-tour="mobile-avatar"]', title: 'Your account', description: 'Open the menu and tap your avatar at the bottom any time to reach your Profile, password, and security settings.', placement: 'bottom' },
+];
 
 const AppLayout = () => {
   const { user } = useAuth();
@@ -99,6 +120,7 @@ const AppLayout = () => {
         {/* Sidebar Toggle Button - Desktop */}
         {!isMobile && (
           <button
+            data-tour="sidebar-collapse-toggle"
             onClick={toggleSidebar}
             style={{
               position: 'fixed',
@@ -152,6 +174,7 @@ const AppLayout = () => {
           }}>
             {/* Menu Button */}
             <button
+              data-tour="mobile-menu-button"
               onClick={toggleSidebar}
               style={{
                 width: '40px',
@@ -173,6 +196,7 @@ const AppLayout = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {/* Theme Toggle */}
               <button
+                data-tour="mobile-theme-toggle"
                 onClick={toggleTheme}
                 title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
                 style={{
@@ -192,7 +216,7 @@ const AppLayout = () => {
               </button>
 
               {/* User Avatar */}
-              <div style={{
+              <div data-tour="mobile-avatar" style={{
                 width: '36px',
                 height: '36px',
                 borderRadius: '50%',
@@ -220,6 +244,16 @@ const AppLayout = () => {
           sidebar header (next to the logo) — DSA roles in Sidebar.jsx, MSME
           customers in MsmeSidebar.jsx — so no floating overlay is needed here. */}
       <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
+      {/* First-time app-shell walkthrough — PageTour itself already gates on
+          DSA_ADMIN/DSA_MEMBER/SUB_DSA (see DSA_TOUR_ROLES), so this never
+          shows for the MSME sidebar rendered above. */}
+      {/* Deliberately a shorter delay than a page-specific PageTour's default
+          (900ms) — both this and e.g. DashboardPage's own tour mount at
+          roughly the same instant on first load, and whichever's timer fires
+          first claims the single-tour lock (see PageTour.jsx). Firing this
+          one first makes the order deterministic and sensible (orient to
+          the app shell, then the page you're on) instead of a race. */}
+      {!isMsme && <PageTour pageKey="global-nav" steps={isMobile ? MOBILE_NAV_STEPS : DESKTOP_NAV_STEPS} delay={450} />}
     </div>
   );
 };

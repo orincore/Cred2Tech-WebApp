@@ -12,11 +12,11 @@
 // build once the user is back online. This worker only ever knows about
 // offline.html and the couple of images it needs to render.
 
-const CACHE_VERSION = 'c2t-offline-v1';
+const CACHE_VERSION = 'c2t-offline-v2';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE_URLS = [
   OFFLINE_URL,
-  '/logos/black-logo.png',
+  '/logos/favicon.png',
   '/logos/white-logo.png',
 ];
 
@@ -69,4 +69,62 @@ self.addEventListener('fetch', (event) => {
       fetch(request).catch(() => caches.match(request))
     );
   }
+});
+
+// ─── Push notifications ─────────────────────────────────────────────────────────
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    // Fall back to plain text if the payload isn't JSON.
+    data = { title: 'Cred2Tech', body: event.data.text() };
+  }
+
+  const title = String(data.title || 'New Notification').trim();
+  const body = String(data.body || '').trim();
+  const { action_url: actionUrl, notification_type: notificationType = 'ALERT' } = data;
+
+  const options = {
+    body,
+    icon: '/logos/favicon.png',
+    badge: '/logos/favicon.png',
+    data: { action_url: actionUrl, notification_type: notificationType },
+    dir: 'auto',
+    lang: 'en-IN',
+    vibrate: [100, 50, 100],
+    tag: `notif-${data.notification_id || Date.now()}`,
+    requireInteraction: false,
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const { action_url: actionUrl } = event.notification.data || {};
+  const isExternalUrl = /^https?:\/\//i.test(actionUrl || '');
+
+  event.waitUntil(
+    // Try to focus an open window/tab of this app first.
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      if (isExternalUrl) return self.clients.openWindow(actionUrl);
+      // Find a window that isn't already navigating.
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && !client.url.includes('/login')) {
+          client.focus();
+          if (actionUrl) client.navigate(actionUrl);
+          return;
+        }
+      }
+      // No open window — open a new one.
+      return self.clients.openWindow(actionUrl || '/');
+    })
+  );
 });

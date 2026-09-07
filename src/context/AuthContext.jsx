@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { login as loginApi, getMe } from '../api/authService';
+import { login as loginApi, getMe, updateTourFlag as updateTourFlagApi } from '../api/authService';
 import * as mfaApi from '../api/mfaService';
 import api, { setSuppressAuthRedirect } from '../api/axiosInstance';
 
@@ -72,6 +72,11 @@ const normalizeUser = (rawUser) => {
   // customers use a separate context/login entirely) — ProtectedRoute reads
   // this flag to force the setup screen for accounts that don't have it yet.
   finalUser.mfaEnabled = !!(finalUser.mfa_email_enabled || finalUser.mfa_totp_enabled);
+  // Gates PageTour.jsx's first-time-visit overlay — defaults to {} so every
+  // read site can do a plain `user.tour_flags[pageKey]` without a null check,
+  // whether this came from a fresh account (column default) or an older
+  // response shape that predates the field entirely.
+  finalUser.tour_flags = finalUser.tour_flags || {};
   return finalUser;
 };
 
@@ -214,6 +219,20 @@ export const AuthProvider = ({ children }) => {
     return finalUser;
   }, []);
 
+  // Called by PageTour.jsx once a screen's walkthrough is finished/skipped.
+  // Updates the in-memory user immediately (every PageTour instance reads
+  // `user.tour_flags` straight from this context, so this alone is enough
+  // to stop any other mounted tour for the same pageKey from starting) and
+  // fires the tiny PATCH in the background — a failed request just means
+  // this one completion doesn't sync to other devices; it still won't
+  // re-show on THIS device since the in-memory/next-getMe state already has
+  // it, and the next successful call elsewhere corrects the account either
+  // way, so there's nothing to retry or surface an error for here.
+  const markTourSeen = useCallback((pageKey, value = true) => {
+    setUser((prev) => (prev ? { ...prev, tour_flags: { ...prev.tour_flags, [pageKey]: value } } : prev));
+    updateTourFlagApi(pageKey, value).catch(() => {});
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -305,6 +324,7 @@ export const AuthProvider = ({ children }) => {
     applyTrustedDeviceLogin,
     refreshUser,
     syncFromStorage,
+    markTourSeen,
     logout,
     sessionRevoked,
     acknowledgeSessionRevoked,

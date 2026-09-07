@@ -6,6 +6,16 @@ import FreeUntilBanner from '../components/FreeUntilBanner';
 import PlatformDashboardView from './dashboard/PlatformDashboardView';
 import DsaDashboardView from './dashboard/DsaDashboardView';
 import { RefreshCw, LayoutDashboard } from 'lucide-react';
+import PageTour from '../components/tour/PageTour';
+
+const DASHBOARD_TOUR_STEPS = [
+  { target: '[data-tour="dashboard-period"]', title: 'Choose a time period', description: 'Switch the numbers below between Today, Month-to-Date, and Year-to-Date to see your pipeline over a different window.' },
+  { target: '[data-tour="dashboard-refresh"]', title: 'Refresh the data', description: 'Dashboard figures auto-refresh every 60 seconds on their own, but you can tap here to pull the latest numbers immediately.' },
+  { target: '[data-tour="dsa-kpi-cards"]', title: 'Your key numbers', description: 'Leads created, eligibility checks, sanctions, and disbursements for the period you selected above, each with the trend versus the previous period.' },
+  { target: '[data-tour="dsa-cases-table"]', title: 'Recent cases', description: 'Your most recent cases for this period. Tap "View All" to open the full Pipeline & Customers list, or tap any row to jump straight into that case.' },
+  { target: '[data-tour="dsa-quick-actions"]', title: 'Quick actions', description: 'Shortcuts to the things you\'ll do most often: add a new customer, browse your customer list, view your profile, or explore your team\'s hierarchy.' },
+  { target: '[data-tour="dsa-stage-summary"]', title: 'Stage summary', description: 'A breakdown of how many of your cases sit at each stage of the loan pipeline, from lead creation through to disbursement.' },
+];
 
 const DSA_SIDE_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 const PERIODS = [
@@ -78,7 +88,7 @@ const DashboardPage = () => {
             Last updated {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · Auto-refreshes every 60s
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', border: '1px solid var(--outline)', borderRadius: 0, overflow: 'hidden' }}>
+            <div data-tour="dashboard-period" style={{ display: 'flex', border: '1px solid var(--outline)', borderRadius: 0, overflow: 'hidden' }}>
               {PERIODS.map((p) => (
                 <button
                   key={p.value}
@@ -99,6 +109,7 @@ const DashboardPage = () => {
               ))}
             </div>
             <button
+              data-tour="dashboard-refresh"
               onClick={handleRefresh}
               title="Refresh"
               style={{
@@ -132,6 +143,7 @@ const DashboardPage = () => {
           />
         )}
       </div>
+      {isDsaSide && <PageTour pageKey="dashboard" steps={DASHBOARD_TOUR_STEPS} />}
     </div>
   );
 };

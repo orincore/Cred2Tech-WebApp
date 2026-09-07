@@ -146,6 +146,20 @@ const AdminSubscriptionPlansPage = () => {
     }
   };
 
+  // Soft delete server-side — every tenant that ever subscribed to this
+  // plan keeps their subscription history/invoices intact, this just
+  // removes it from here and from new subscribes/upgrades.
+  const handleDelete = async (plan) => {
+    if (!confirm(`Delete plan "${plan.name}"? Tenants who already subscribed to it keep their billing history — this only removes it from the list and stops new subscribes.`)) return;
+    try {
+      await api.delete(`/admin/subscription-plans/${plan.id}`);
+      await fetchPlans();
+      toast.success('Plan deleted');
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to delete plan');
+    }
+  };
+
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><LoadingSpinner size={32} /></div>;
   }
@@ -230,6 +244,7 @@ const AdminSubscriptionPlansPage = () => {
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p)} style={{ borderRadius: 0 }}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(p)} style={{ borderRadius: 0 }}>Delete</button>
                     </td>
                   </tr>
                 );

@@ -1,6 +1,8 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
+import { NotificationProvider } from '../context/NotificationContext';
+import NotificationPanel from '../components/notifications/NotificationPanel';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
@@ -61,6 +63,8 @@ const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
 const AdminDataPurgePage = lazy(() => import('../pages/AdminDataPurgePage'));
+const AdminSendNotificationPage = lazy(() => import('../pages/AdminSendNotificationPage'));
+const AdminNotificationAnalyticsPage = lazy(() => import('../pages/AdminNotificationAnalyticsPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -114,7 +118,13 @@ const AppRouter = () => (
     <AuthProvider>
       <RouteTitle />
       <SessionRevokedModal />
-      <Suspense fallback={<PageLoader />}>
+      {/* NotificationProvider is inside AuthProvider so it can read auth.user;
+          NotificationPanel is rendered here so it overlays all routes. */}
+      <NotificationProvider>
+        {/* Fixed overlay — renders outside the route tree so it doesn't
+            navigate away when the user clicks a notification. */}
+        <NotificationPanel />
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
@@ -296,6 +306,12 @@ const AppRouter = () => (
             <Route path="/admin/ticket-recipients" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketRecipientsPage /></ProtectedRoute>
             } />
+            <Route path="/admin/notifications/send" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminSendNotificationPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/notifications/analytics" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminNotificationAnalyticsPage /></ProtectedRoute>
+            } />
 
             {/* Feedback/support tickets — shared path for MSME + DSA/staff
                 submitters (see navItems.js#msme-tickets for why this isn't
@@ -421,6 +437,7 @@ const AppRouter = () => (
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
+      </NotificationProvider>
     </AuthProvider>
   </BrowserRouter>
 );

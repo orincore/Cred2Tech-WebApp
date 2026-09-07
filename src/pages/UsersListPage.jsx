@@ -10,6 +10,14 @@ import PageHeader from '../components/ui/PageHeader';
 import { formatDateTime, getInitials } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
+import PageTour from '../components/tour/PageTour';
+
+const USERS_TOUR_STEPS = [
+  { target: '[data-tour="users-add"]', title: 'Add someone to your team', description: 'Bring on a new employee or Sub-DSA partner from here. They\'ll get an OTP by mobile and email to activate their own account.' },
+  { target: '[data-tour="users-tabs"]', title: 'Employees vs Sub-DSA', description: 'Your internal employees and your external Sub-DSA referral partners are kept in separate tabs, since they\'re managed a little differently.' },
+  { target: '[data-tour="users-filters"]', title: 'Search & filter your team', description: 'Search by name, email, or mobile, and filter by role, status, or hierarchy level to zero in on the person you need.' },
+  { target: '[data-tour="users-results"]', title: 'Your team', description: 'Everyone on your team, with their role, status, and last login. Tap "Edit" on any row to update their details.' },
+];
 
 // Responsive hook
 const useResponsive = () => {
@@ -132,22 +140,24 @@ const UsersListPage = () => {
           subtitle={activeTab === 'subDsa' ? 'Manage Your Sub-DSA Partners Easily' : 'Manage Your Employees Easily'}
           compact={isMobile}
           actions={
-            <TravelingBorderButton
-              onClick={() => navigate(activeTab === 'subDsa' ? '/users/create?role=SUB_DSA' : '/users/create')}
-              size="sm"
-              solid
-              showIcon={false}
-              className={isMobile ? 'px-4 py-2 text-xs' : ''}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-                <UserPlus size={isMobile ? 12 : 14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
-              </div>
-            </TravelingBorderButton>
+            <div data-tour="users-add" style={{ display: 'inline-flex' }}>
+              <TravelingBorderButton
+                onClick={() => navigate(activeTab === 'subDsa' ? '/users/create?role=SUB_DSA' : '/users/create')}
+                size="sm"
+                solid
+                showIcon={false}
+                className={isMobile ? 'px-4 py-2 text-xs' : ''}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
+                  <UserPlus size={isMobile ? 12 : 14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
+                </div>
+              </TravelingBorderButton>
+            </div>
           }
         />
 
         {/* Employees / Sub-DSA tab switcher */}
-        <div style={{ display: 'flex', gap: 8, marginTop: isMobile ? 12 : 16 }}>
+        <div data-tour="users-tabs" style={{ display: 'flex', gap: 8, marginTop: isMobile ? 12 : 16 }}>
           {[
             { key: 'employees', label: 'Employees', count: employees.length },
             { key: 'subDsa', label: 'Sub-DSA', count: subDsaUsers.length },
@@ -206,7 +216,7 @@ const UsersListPage = () => {
           label+input pairs plus Clear-all, always rendered, before a single
           employee row was visible. Desktop is untouched — all four fields
           stay inline exactly as before. */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '12px 16px' : '20px 20px', display: 'flex', gap: isMobile ? 10 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+      <div data-tour="users-filters" style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '12px 16px' : '20px 20px', display: 'flex', gap: isMobile ? 10 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
 
         {/* Search */}
         <div style={{ flex: isMobile ? '1 1 auto' : 2, minWidth: isMobile ? 140 : 200, maxWidth: isMobile ? 'none' : 360 }}>
@@ -337,7 +347,7 @@ const UsersListPage = () => {
             // full-screen route (SubDsaPayoutSetupPage) rather than
             // expanding inline, so it has room for its multi-column tables
             // on both desktop and mobile.
-            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+            <div data-tour="users-results" style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
               {filtered.map((u) => {
                 const [avatarBg, avatarClr] = avatarColors(u.name);
                 const pill = getRolePill(u.role?.name);
@@ -411,7 +421,7 @@ const UsersListPage = () => {
               })}
             </div>
           ) : isMobile ? (
-            <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+            <div data-tour="users-results" style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
               {filtered.map((u) => {
                 const [avatarBg, avatarClr] = avatarColors(u.name);
                 const pill = getRolePill(u.role?.name);
@@ -499,6 +509,7 @@ const UsersListPage = () => {
               })}
             </div>
           ) : (
+          <div data-tour="users-results">
           <DataTable
             columns={[
               { key: 'name', label: 'Name', width: '19%', render: (u) => {
@@ -573,9 +584,11 @@ const UsersListPage = () => {
             isMobile={isMobile}
             hoverRows={true}
           />
+          </div>
           )}
         </>
       )}
+      <PageTour pageKey="users-list" steps={USERS_TOUR_STEPS} />
     </div>
   );
 };
