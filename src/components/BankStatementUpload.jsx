@@ -16,7 +16,10 @@ import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '.
 // misses the deployed dev server (still a production Vite build).
 const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
-const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+// Rounded off for the preview grid — these are summary figures, not inputs
+// (ESR pulls the unrounded values directly from the backend), so the
+// paise-level decimals just added noise to a quick-glance amount.
+const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString('en-IN')}` : '—';
 
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)

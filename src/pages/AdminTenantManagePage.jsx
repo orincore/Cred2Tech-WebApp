@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
   ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
-  Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock,
+  Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock, Trash2, Ban, MonitorSmartphone,
 } from 'lucide-react';
 import {
   getTenantSummary, updateTenantStatus, updateTenantVirtualWorkspace,
@@ -11,8 +11,11 @@ import {
   adminCancelVirtualWorkspace, adminDowngradeToFree, adminExtendVirtualWorkspace,
   adminTopupTenantWallet, adminDeductTenantWallet,
   getTenantEmployees, allocateTenantEmployeeCredits, revokeTenantEmployeeCredits,
+  getTenantSessions, revokeTenantSession, banTenantDevice,
+  getTenantBlockedDevices, unbanTenantDevice,
 } from '../api/tenantService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import OsIcon from '../components/OsIcon';
 import { formatDate, formatDateTime, getErrorMessage } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 
@@ -28,6 +31,7 @@ const TABS = [
   { id: 'workspace', label: 'Virtual Workspace', icon: LayoutGrid },
   { id: 'wallet', label: 'Wallet & Credits', icon: Wallet },
   { id: 'team', label: 'Team & Allocation', icon: Users },
+  { id: 'sessions', label: 'Sessions & Devices', icon: MonitorSmartphone },
 ];
 
 const StatCard = ({ label, value }) => (
@@ -35,6 +39,49 @@ const StatCard = ({ label, value }) => (
     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--on-surface)', marginTop: 4 }}>{value}</div>
   </div>
+);
+
+// Session/blocked-device row — same shape as ProfilePage's own DeviceRow
+// (Active Sessions / Blocked Devices cards) so this admin view reads as the
+// same feature, just scoped to every user in the tenant instead of one —
+// hence the extra "user" line identifying whose device each row is.
+const DeviceRow = ({ icon, user, subtitle, actions }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    padding: '13px 16px', background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+      <div style={{
+        width: 34, height: 34, flexShrink: 0, background: 'var(--bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>{user}</p>
+        <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>{subtitle}</p>
+      </div>
+    </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>{actions}</div>
+  </div>
+);
+
+const IconAction = ({ icon: Icon, color, onClick, title, disabled }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    disabled={disabled}
+    style={{
+      width: 30, height: 30, border: 'none', background: 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: disabled ? 'var(--on-muted)' : color, opacity: disabled ? 0.4 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+    }}
+    onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = `${color}14`; }}
+    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+  >
+    <Icon size={14} strokeWidth={1.75} />
+  </button>
 );
 
 const Card = ({ icon: Icon, title, subtitle, children }) => (
@@ -79,6 +126,11 @@ const AdminTenantManagePage = () => {
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [allocations, setAllocations] = useState({}); // { [userId]: { amount, note } }
 
+  const [sessions, setSessions] = useState([]);
+  const [blockedDevices, setBlockedDevices] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionActionId, setSessionActionId] = useState(null); // id of the row currently being revoked/banned/unbanned
+
   const fetchData = useCallback(async () => {
     try {
       const res = await getTenantSummary(id);
@@ -112,8 +164,25 @@ const AdminTenantManagePage = () => {
     }
   }, [id]);
 
+  const fetchSessions = useCallback(async () => {
+    setLoadingSessions(true);
+    try {
+      const [sessionsRes, blockedRes] = await Promise.all([
+        getTenantSessions(id),
+        getTenantBlockedDevices(id),
+      ]);
+      setSessions(sessionsRes?.sessions || []);
+      setBlockedDevices(blockedRes?.blockedDevices || []);
+    } catch (err) {
+      toast.error('Failed to load sessions & devices');
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, [id]);
+
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (tab === 'team' && employees.length === 0) fetchEmployees(); }, [tab, employees.length, fetchEmployees]);
+  useEffect(() => { if (tab === 'sessions') fetchSessions(); }, [tab, fetchSessions]);
 
   const handleToggleStatus = async () => {
     setBusy(true);
@@ -347,6 +416,49 @@ const AdminTenantManagePage = () => {
       toast.error(getErrorMessage(err) || 'Failed to revoke credits');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleRevokeSession = async (session) => {
+    if (!window.confirm(`Sign out ${session.user_name || session.user_email || 'this user'}'s "${session.device_label || 'Unknown device'}" session right now?`)) return;
+    setSessionActionId(session.id);
+    try {
+      await revokeTenantSession(id, session.id);
+      toast.success('Session revoked');
+      await fetchSessions();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to revoke session');
+    } finally {
+      setSessionActionId(null);
+    }
+  };
+
+  const handleBanDevice = async (session) => {
+    if (!session.ip_address) return; // IconAction is disabled in this case too — belt and suspenders
+    if (!window.confirm(`Sign out AND block IP ${session.ip_address} from logging back in to ${session.user_name || session.user_email || 'this user'}'s account?`)) return;
+    setSessionActionId(session.id);
+    try {
+      await banTenantDevice(id, session.id);
+      toast.success('Device signed out and blocked');
+      await fetchSessions();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to ban device');
+    } finally {
+      setSessionActionId(null);
+    }
+  };
+
+  const handleUnbanDevice = async (blocked) => {
+    if (!window.confirm(`Unblock IP ${blocked.ip_address} for ${blocked.user_name || blocked.user_email || 'this user'}? They'll be able to sign in from it again.`)) return;
+    setSessionActionId(blocked.id);
+    try {
+      await unbanTenantDevice(id, blocked.id);
+      toast.success('Device unblocked');
+      await fetchSessions();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to unban device');
+    } finally {
+      setSessionActionId(null);
     }
   };
 
@@ -668,6 +780,84 @@ const AdminTenantManagePage = () => {
                 </div>
               )}
             </Card>
+          )}
+
+          {tab === 'sessions' && (
+            <>
+              <Card icon={MonitorSmartphone} title="Active Sessions" subtitle="Every device currently signed in across this Sourcing Partner's team. Revoking a session signs that device out right away.">
+                {loadingSessions ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
+                ) : sessions.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No active sessions found.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {sessions.map((s) => (
+                      <DeviceRow
+                        key={s.id}
+                        icon={<OsIcon userAgent={s.user_agent} size={17} color="var(--on-muted)" />}
+                        user={`${s.user_name || 'Unknown user'} · ${s.device_label || 'Unknown device'}`}
+                        subtitle={[
+                          s.user_email,
+                          `Last active ${formatDateTime(s.last_activity_at)}`,
+                          s.location,
+                          s.ip_address,
+                        ].filter(Boolean).join(' · ')}
+                        actions={
+                          <>
+                            <IconAction
+                              icon={Trash2}
+                              color="var(--error)"
+                              onClick={() => handleRevokeSession(s)}
+                              title="Sign out this device"
+                              disabled={sessionActionId === s.id}
+                            />
+                            <IconAction
+                              icon={Ban}
+                              color="#b91c1c"
+                              onClick={() => handleBanDevice(s)}
+                              title="Sign out and block this device's IP from ever logging in to this account again"
+                              disabled={sessionActionId === s.id || !s.ip_address}
+                            />
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              <Card icon={Ban} title="Blocked Devices" subtitle="Devices banned from Active Sessions above — banned by IP, per user. Unbanning lets that IP sign in again (it does not restore the old session).">
+                {loadingSessions ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
+                ) : blockedDevices.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No blocked devices.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {blockedDevices.map((b) => (
+                      <DeviceRow
+                        key={b.id}
+                        icon={<Ban size={16} color="var(--error)" />}
+                        user={`${b.user_name || 'Unknown user'} · ${b.ip_address}`}
+                        subtitle={[
+                          b.user_email,
+                          `Blocked ${formatDateTime(b.created_at)}`,
+                        ].filter(Boolean).join(' · ')}
+                        actions={
+                          <button
+                            onClick={() => handleUnbanDevice(b)}
+                            disabled={sessionActionId === b.id}
+                            className="btn btn-ghost btn-sm"
+                            style={{ borderRadius: 0, whiteSpace: 'nowrap' }}
+                          >
+                            Unban
+                          </button>
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </>
           )}
 
         </div>

@@ -116,6 +116,29 @@ export const getTenantEmployeeTransactions = async (tenantId, userId) => {
   return response.data;
 };
 
+// Sessions & Devices — admin equivalent of ProfilePage's own self-service
+// Active Sessions / Blocked Devices cards, scoped to every user in this tenant.
+export const getTenantSessions = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/sessions`);
+  return response.data;
+};
+export const revokeTenantSession = async (tenantId, sessionId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/sessions/${sessionId}/revoke`);
+  return response.data;
+};
+export const banTenantDevice = async (tenantId, sessionId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/sessions/${sessionId}/ban`);
+  return response.data;
+};
+export const getTenantBlockedDevices = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/blocked-devices`);
+  return response.data;
+};
+export const unbanTenantDevice = async (tenantId, blockedIpId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/blocked-devices/${blockedIpId}/unban`);
+  return response.data;
+};
+
 export const adminCancelVirtualWorkspace = async (tenantId) => {
   const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/cancel`);
   return response.data;

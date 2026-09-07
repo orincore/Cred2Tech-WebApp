@@ -112,20 +112,25 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
   const [adding, setAdding] = useState(false);
   const isSalariedApp = String(app.employment_type || '').toUpperCase() === 'SALARIED';
 
+  // Each row carries its OWN fyLatest/fyPrev — GST, ITR and Bank each come
+  // from a separate pull and can genuinely have different periods (e.g. GST's
+  // latest figure is a trailing-12-month window like "Sep 2025 – Aug 2026"
+  // while ITR's is a clean "FY 2024-25"). A single period blended across all
+  // three rows (picking whichever metric's fy_latest happened to be non-null
+  // first) showed the wrong period next to at least two of the three values
+  // whenever their real periods didn't match.
   const apiRows = isSalariedApp
     ? [{
         label: 'Salary (Annual)', latest: app.salary?.latest, prev: null,
+        fyLatest: app.salary?.fy_latest, fyPrev: app.salary?.fy_prev,
         source: app.salary?.source === 'OCR' ? 'Salary OCR' : (app.salary?.source === 'MANUAL' ? 'Manual' : '—'),
         color: 'var(--success)', bg: 'var(--success-bg)'
       }]
     : [
-        { label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev, source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)' },
-        { label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev, source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)' },
-        { label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev, source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)' }
+        { label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev, fyLatest: app.gst_turnover?.fy_latest, fyPrev: app.gst_turnover?.fy_prev, source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)' },
+        { label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev, fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev, source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)' },
+        { label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev, fyLatest: app.avg_bank_balance?.fy_latest, fyPrev: app.avg_bank_balance?.fy_prev, source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)' }
       ];
-
-  const fyLatestLabel = app.gst_turnover?.fy_latest || app.net_profit?.fy_latest || app.avg_bank_balance?.fy_latest || 'Latest Year';
-  const fyPrevLabel   = app.gst_turnover?.fy_prev   || app.net_profit?.fy_prev   || app.avg_bank_balance?.fy_prev   || 'Previous Year';
 
   const manualEntries = app.manual_entries || [];
 
@@ -155,13 +160,13 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</span>
                   <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  <span>Latest Year ({fyLatestLabel})</span>
-                  <strong style={{ color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  <div style={{ marginBottom: 2 }}>Latest Year ({row.fyLatest || '—'})</div>
+                  <strong style={{ fontSize: 14, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  <span>Previous Year ({fyPrevLabel})</span>
-                  <strong>{fmt(row.prev)}</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <div style={{ marginBottom: 2 }}>Previous Year ({row.fyPrev || '—'})</div>
+                  <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
                 </div>
               </div>
             ))}
@@ -171,7 +176,7 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)' }}>
-                  {['Item', `Latest Year (${fyLatestLabel})`, `Previous Year (${fyPrevLabel})`, 'Source'].map(h => (
+                  {['Item', 'Latest Year', 'Previous Year', 'Source'].map(h => (
                     <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
                   ))}
                 </tr>
@@ -180,8 +185,17 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                 {apiRows.map((row, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>{fmt(row.prev)}</td>
+                    {/* Period shown above its own value — each row's period
+                        comes from that row's own source (GST/ITR/Bank), not a
+                        single period shared across every row. */}
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.fyLatest || '—'}</div>
+                      <strong style={{ fontSize: 13, fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.fyPrev || '—'}</div>
+                      <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
+                    </td>
                     <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
                   </tr>
                 ))}

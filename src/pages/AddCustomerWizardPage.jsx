@@ -15,6 +15,7 @@ import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import api from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
 import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
+import NotificationBell from '../components/notifications/NotificationBell';
 import GstPullStatusBanner from '../components/case/GstPullStatusBanner';
 import ItrPullStatusBanner from '../components/case/ItrPullStatusBanner';
 import Panel from '../components/ui/Panel';
@@ -1321,6 +1322,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           </h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {/* Bell sits left of the wallet chip, same order as the shared
+              PageHeader component uses elsewhere — gated the same way the
+              wallet chip already is: NotificationContext reads DSA staff's
+              own AuthContext, which an MSME_SELF_SERVICE session (this same
+              wizard, mounted under /msme/*) never populates, so the bell
+              would just be inert/broken there rather than truly hidden. */}
+          {!isMsme && <NotificationBell />}
           {/* One fixed spot in the wizard's own header — rendered here once,
               so it reads identically (same place, same look) on every one of
               the 7 steps rather than being repeated per-step. Polled (see the
