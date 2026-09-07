@@ -225,7 +225,7 @@ const SuperadminApiLogsPage = () => {
             <Search size={isMobile ? 12 : 13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
             <input
               type="text"
-              placeholder="DSA name, API code…"
+              placeholder="Sourcing Partner name, API code…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20, fontSize: isMobile ? 13 : 13 }}
@@ -379,7 +379,7 @@ const SuperadminApiLogsPage = () => {
           <DataTable
             columns={[
               { key: 'timestamp', label: 'Timestamp', render: (l) => formatDateTime(l.timestamp) },
-              { key: 'tenant_name', label: 'DSA', render: (l) => l.tenant_name || '—' },
+              { key: 'tenant_name', label: 'SP', render: (l) => l.tenant_name || '—' },
               { key: 'api_code', label: 'API Triggered', render: (l) => (
                 <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{l.api_code}</span>
               )},

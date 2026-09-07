@@ -360,7 +360,7 @@ const AdminTenantManagePage = () => {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg-elevated)' }}>
         <button onClick={() => navigate('/tenants')} className="btn btn-ghost btn-sm" style={{ marginBottom: 10, borderRadius: 0 }}>
-          <ArrowLeft size={14} /> Back to DSA List
+          <ArrowLeft size={14} /> Back to Sourcing Partner List
         </button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -435,7 +435,7 @@ const AdminTenantManagePage = () => {
           )}
 
           {tab === 'workspace' && (
-            <Card icon={LayoutGrid} title="Virtual Workspace" subtitle="Gates the full case-management sidebar for this DSA">
+            <Card icon={LayoutGrid} title="Virtual Workspace" subtitle="Gates the full case-management sidebar for this Sourcing Partner">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', background: 'var(--bg-elevated)', color: ACCESS_PLAN_COLOR[access_plan] }}>
                   {ACCESS_PLAN_LABEL[access_plan]}
@@ -616,7 +616,7 @@ const AdminTenantManagePage = () => {
           )}
 
           {tab === 'team' && (
-            <Card icon={Users} title="Team & Credit Allocation" subtitle="Move credits between this tenant's own wallet and a member's (sub-DSA/employee) wallet">
+            <Card icon={Users} title="Team & Credit Allocation" subtitle="Move credits between this tenant's own wallet and a member's (Sub-Sourcing Partner/employee) wallet">
               {loadingEmployees ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
               ) : employees.length === 0 ? (

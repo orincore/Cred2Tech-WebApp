@@ -57,7 +57,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'tenants',
-    label: 'Manage DSAs',
+    label: 'Manage Sourcing Partners',
     path: '/tenants',
     icon: Building,
     roles: ['SUPER_ADMIN'],
@@ -252,7 +252,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'sub-dsa-payout',
-    label: 'Sub DSA Payout',
+    label: 'Sub-Sourcing Partner Payout',
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
     roles: ['DSA_ADMIN', 'SUB_DSA'],
@@ -280,13 +280,6 @@ export const NAV_ITEMS = [
     path: '/profile',
     icon: User,
     roles: ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER', 'SUB_DSA'],
-  },
-  {
-    id: 'my-manager',
-    label: 'My Manager',
-    path: '/manager',
-    icon: Users,
-    roles: ['DSA_MEMBER'],
   },
   {
     id: 'settings',

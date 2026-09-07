@@ -21,9 +21,9 @@ const useResponsive = () => {
  */
 const TARGET_OPTIONS = [
   { value: 'ALL', label: 'All active users', audience: 'ALL', targetRole: null },
-  { value: 'DSA_ADMIN', label: 'DSA Admins only', audience: 'ROLE', targetRole: 'DSA_ADMIN' },
-  { value: 'DSA_MEMBER', label: 'DSA Members only', audience: 'ROLE', targetRole: 'DSA_MEMBER' },
-  { value: 'SUB_DSA', label: 'Sub-DSAs only', audience: 'ROLE', targetRole: 'SUB_DSA' },
+  { value: 'DSA_ADMIN', label: 'Sourcing Partner Admins only', audience: 'ROLE', targetRole: 'DSA_ADMIN' },
+  { value: 'DSA_MEMBER', label: 'Sourcing Partner Members only', audience: 'ROLE', targetRole: 'DSA_MEMBER' },
+  { value: 'SUB_DSA', label: 'Sub-Sourcing Partners only', audience: 'ROLE', targetRole: 'SUB_DSA' },
   { value: 'MSME_CUSTOMER', label: 'MSME Customers only', audience: 'ROLE', targetRole: 'MSME_CUSTOMER' },
   { value: 'USER', label: 'A specific user', audience: 'USER', targetRole: null },
 ];

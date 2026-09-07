@@ -176,7 +176,7 @@ const AdminSubscriptionPlansPage = () => {
           <div>
             <h1 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'var(--on-surface)' }}>Subscription Plans</h1>
             <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 0 0' }}>
-              Virtual Workspace pricing tiers — DSA tenants pick one of these to subscribe or upgrade
+              Virtual Workspace pricing tiers — Sourcing Partner tenants pick one of these to subscribe or upgrade
             </p>
           </div>
         </div>

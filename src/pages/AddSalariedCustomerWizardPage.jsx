@@ -1356,7 +1356,7 @@ const AddSalariedCustomerWizardPage = () => {
                       <FormField label="Market Value (₹)" name="market_value" required>
                         <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
                       </FormField>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Sourcing Partner estimate — lender does independent valuation</div>
                     </div>
                   </>
                 )}

@@ -164,7 +164,7 @@ const AdminMsmeCasesPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Direct MSME Leads"
-          subtitle="Manage and allocate self-onboarded MSME customers to DSA partners."
+          subtitle="Manage and allocate self-onboarded MSME customers to Sourcing Partners."
           compact={isMobile}
         />
       </div>
@@ -215,7 +215,7 @@ const AdminMsmeCasesPage = () => {
               <Search size={14} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input
                 type="text"
-                placeholder="Search by Business Name, PAN, or DSA Name..."
+                placeholder="Search by Business Name, PAN, or Sourcing Partner Name..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 style={{

@@ -251,7 +251,7 @@ const MsmeDashboardPage = () => {
                 </div>
               </SectionCard>
 
-              <SectionCard title="Your Allocated DSA" delay={0.36}>
+              <SectionCard title="Your Allocated Sourcing Partner" delay={0.36}>
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {cases.length === 0 ? (
                     <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>No cases yet.</div>

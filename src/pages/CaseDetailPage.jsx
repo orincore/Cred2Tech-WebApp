@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
@@ -320,7 +321,7 @@ export default function CaseDetailPage() {
 
     try {
       if (isBackward) {
-        if (!hasRole('DSA_ADMIN')) return toast.error('Only DSA Admin can rollback financial stages.');
+        if (!hasRole('DSA_ADMIN')) return toast.error('Only Sourcing Partner Admin can rollback financial stages.');
         if (!rollbackReason) return toast.error('Rollback reason is required.');
         if (!rollbackConfirmation) return toast.error('Please confirm the rollback action.');
         await caseService.rollbackCaseStage(id, { target_stage: selectedStage, reason: rollbackReason, confirmation: rollbackConfirmation });
@@ -552,7 +553,7 @@ export default function CaseDetailPage() {
               <DataRow label="Bureau Score" value={caseData.cibil_score || 'Pending'} valueColor={caseData.cibil_score >= 700 ? 'var(--success)' : 'var(--warning)'} />
               <DataRow label="Lender" value={caseData.lender_name || 'Not Selected'} />
               <DataRow label="Loan Amount" value={formatCurrency(caseData.loan_amount || caseData.sanctioned_amount || 0)} />
-              <DataRow label="DSA Notes" value={caseData.dsa_notes || '—'} />
+              <DataRow label="Sourcing Partner Notes" value={caseData.dsa_notes || '—'} />
             </div>
           </div>
 
@@ -570,7 +571,7 @@ export default function CaseDetailPage() {
                 <DataRow label="LTV Ratio" value={((caseData.loan_amount || caseData.sanctioned_amount) && caseData.property?.market_value) ? `${(((caseData.loan_amount || caseData.sanctioned_amount) / caseData.property.market_value) * 100).toFixed(1)}%` : '—'} />
               </div>
               <div className="notice" style={{ background: 'var(--primary-subtle)', color: 'var(--primary-dark)', border: '1px solid var(--primary-light)' }}>
-                Property value entered by DSA. Lender will conduct independent property valuation during underwriting.
+                Property value entered by Sourcing Partner. Lender will conduct independent property valuation during underwriting.
               </div>
             </div>
           </div>
@@ -769,7 +770,7 @@ export default function CaseDetailPage() {
                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Backward Stage Rollback</h4>
                   </div>
                   {!hasRole('DSA_ADMIN') ? (
-                    <div style={{ fontWeight: 600 }}>Only DSA Admin can perform a backward stage rollback. Please contact your administrator.</div>
+                    <div style={{ fontWeight: 600 }}>Only Sourcing Partner Admin can perform a backward stage rollback. Please contact your administrator.</div>
                   ) : (
                     <>
                       <p style={{ margin: '0 0 16px 0', lineHeight: 1.5 }}>
@@ -980,7 +981,7 @@ export default function CaseDetailPage() {
               {loadingUsers ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading users...</p> : (
                 <select className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
                   <option value="">- Select -</option>
-                  {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role?.name})</option>)}
+                  {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name)})</option>)}
                 </select>
               )}
             </div>

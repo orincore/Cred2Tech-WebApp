@@ -4,7 +4,7 @@ import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, MapPin, Hash
 import { toast } from 'react-hot-toast';
 import { getTenants, updateTenantVirtualWorkspace } from '../api/tenantService';
 import { MOCK_TENANTS } from '../constants/mockData';
-import { STATUS_OPTIONS } from '../constants/roles';
+import { STATUS_OPTIONS, formatTenantType } from '../constants/roles';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDate, getInitials } from '../utils/helpers';
@@ -69,7 +69,7 @@ const TenantsListPage = () => {
       const data = await getTenants();
       setTenants(Array.isArray(data) ? data : data.tenants || []);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to load DSAs.');
+      setError(err?.response?.data?.error || 'Failed to load Sourcing Partners.');
       setTenants([]);
     } finally {
       setLoading(false);
@@ -114,10 +114,10 @@ const TenantsListPage = () => {
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-            Manage DSAs
+            Manage Sourcing Partners
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
-            All registered DSA entities
+            All registered Sourcing Partner entities
           </p>
         </div>
 
@@ -129,7 +129,7 @@ const TenantsListPage = () => {
           className={isMobile ? 'px-4 py-2 text-xs' : ''}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-            <Building size={isMobile ? 12 : 14} /> Create DSA
+            <Building size={isMobile ? 12 : 14} /> Create Sourcing Partner
           </div>
         </TravelingBorderButton>
       </div>
@@ -138,8 +138,8 @@ const TenantsListPage = () => {
       <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <ShieldCheck size={16} color="#4f46e5" />
         <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit, or deactivate DSAs.
-          DSAs receive wallet balance and API access upon registration.
+          <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit, or deactivate Sourcing Partners.
+          Sourcing Partners receive wallet balance and API access upon registration.
         </p>
       </div>
 
@@ -161,7 +161,7 @@ const TenantsListPage = () => {
             <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
             <input
               type="text"
-              placeholder="DSA name or PAN…"
+              placeholder="Sourcing Partner name or PAN…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20 }}
@@ -177,7 +177,7 @@ const TenantsListPage = () => {
           <select value={filterType} onChange={e => setFilterType(e.target.value)}
             style={{ ...underlineInput(!!filterType), appearance: 'none', cursor: 'pointer', borderBottomColor: filterType ? '#4f46e5' : 'var(--outline)', color: filterType ? '#4f46e5' : 'var(--on-surface)' }}>
             <option value="">All Types</option>
-            <option value="DSA">DSA</option>
+            <option value="DSA">Sourcing Partner</option>
             <option value="INTERNAL">INTERNAL</option>
           </select>
         </div>
@@ -212,8 +212,8 @@ const TenantsListPage = () => {
       ) : filtered.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
           <Building2 size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No DSAs found</h3>
-          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>Try adjusting your filters or create a new DSA.</p>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No Sourcing Partners found</h3>
+          <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>Try adjusting your filters or create a new Sourcing Partner.</p>
           <TravelingBorderButton
             onClick={() => navigate('/tenants/create')}
             size="sm"
@@ -221,7 +221,7 @@ const TenantsListPage = () => {
             showIcon={false}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <Building size={14} /> Create DSA
+              <Building size={14} /> Create Sourcing Partner
             </div>
           </TravelingBorderButton>
         </div>
@@ -229,15 +229,15 @@ const TenantsListPage = () => {
         <>
           {/* Sub-header */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>DSA Information</span>
-            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tenants.length} DSAs</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Sourcing Partner Information</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tenants.length} Sourcing Partners</span>
           </div>
 
           {/* Mobile: card list instead of a table. A table forced into a small
               viewport either truncates every column into illegibility or
               becomes horizontally scrollable — a scrollable table on a phone
               hides columns off-screen and needs a second gesture just to read
-              a row. A card puts every field for one DSA in a single vertical
+              a row. A card puts every field for one Sourcing Partner in a single vertical
               read, needing only the scroll the user is already doing. */}
           {isMobile ? (
             <div style={{ flex: 1, overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
@@ -257,7 +257,7 @@ const TenantsListPage = () => {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                         <div style={{
-                          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                          width: 36, height: 36, borderRadius: 0, flexShrink: 0,
                           background: avatarBg, color: avatarClr,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 12, fontWeight: 800,
@@ -274,7 +274,7 @@ const TenantsListPage = () => {
                             color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : 'var(--on-muted)',
                             padding: '2px 7px', borderRadius: 0, fontSize: 9, fontWeight: 800,
                           }}>
-                            {t.type || 'DSA'}
+                            {formatTenantType(t.type) || 'Sourcing Partner'}
                           </span>
                         </div>
                       </div>
@@ -330,12 +330,12 @@ const TenantsListPage = () => {
           ) : (
           <DataTable
             columns={[
-              { key: 'name', label: 'DSA Name', render: (t) => {
+              { key: 'name', label: 'Sourcing Partner Name', render: (t) => {
                 const [avatarBg, avatarClr] = avatarColors(t.name);
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <div style={{
-                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                      width: 32, height: 32, borderRadius: 0, flexShrink: 0,
                       background: avatarBg, color: avatarClr,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 11, fontWeight: 800,
@@ -363,7 +363,7 @@ const TenantsListPage = () => {
                   padding: '3px 8px', borderRadius: 4,
                   fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
                 }}>
-                  {t.type || 'DSA'}
+                  {formatTenantType(t.type) || 'Sourcing Partner'}
                 </span>
               )},
               { key: 'status', label: 'Status', render: (t) => {

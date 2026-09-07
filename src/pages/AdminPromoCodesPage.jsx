@@ -406,7 +406,7 @@ const AdminPromoCodesPage = () => {
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Free Credits Amount (₹)</label>
                     <input type="number" className="form-control" value={form.discount_value} onChange={(e) => setForm({ ...form, discount_value: e.target.value })} placeholder="e.g. 100" />
-                    <p style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 4 }}>A fixed number of credits, granted directly to the wallet — never a percentage, never influenced by anything the DSA enters.</p>
+                    <p style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 4 }}>A fixed number of credits, granted directly to the wallet — never a percentage, never influenced by anything the Sourcing Partner enters.</p>
                   </div>
                 </div>
               ) : (

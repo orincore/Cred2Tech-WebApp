@@ -1058,12 +1058,12 @@ const MyWalletPage = () => {
           <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
             <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--outline)' }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Employee Wallet Allocation</h3>
-              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>Allocate or revoke credits for your DSA team members</p>
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>Allocate or revoke credits for your Sourcing Partner team members</p>
             </div>
             {employeesLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
             ) : employees.length === 0 ? (
-              <EmptyState icon={Wallet} title="No team members found" description="Add DSA team members from Team Management to allocate credits to them." />
+              <EmptyState icon={Wallet} title="No team members found" description="Add Sourcing Partner team members from Team Management to allocate credits to them." />
             ) : isMobile ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
                 {employees.map((emp) => {

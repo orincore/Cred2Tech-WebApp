@@ -323,7 +323,7 @@ export default function DSALenderContactsPage() {
       }}>
         <Lock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
         <div>
-          <strong>DSA Admin only.</strong> Commission rules <strong>must be explicitly configured per lender-product combination.</strong> Lender name cannot be edited once added. Subvention is recorded at the time of disbursement entry.
+          <strong>Sourcing Partner Admin only.</strong> Commission rules <strong>must be explicitly configured per lender-product combination.</strong> Lender name cannot be edited once added. Subvention is recorded at the time of disbursement entry.
         </div>
       </div>
 

@@ -435,7 +435,7 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `DSA_Payouts.${type === 'excel' ? 'xlsx' : 'pdf'}`);
+      link.setAttribute('download', `Sourcing_Partner_Payouts.${type === 'excel' ? 'xlsx' : 'pdf'}`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);

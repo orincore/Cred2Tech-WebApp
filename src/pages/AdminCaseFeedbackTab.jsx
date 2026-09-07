@@ -163,7 +163,7 @@ const AdminCaseFeedbackTab = () => {
         {loading ? (
           <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
         ) : rows.length === 0 ? (
-          <EmptyState icon={Star} title="No case feedback yet" description="Ratings collected from DSAs when a case reaches full/partial disbursement will show up here." />
+          <EmptyState icon={Star} title="No case feedback yet" description="Ratings collected from Sourcing Partners when a case reaches full/partial disbursement will show up here." />
         ) : isMobile ? (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((f, idx) => (

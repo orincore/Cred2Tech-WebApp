@@ -301,7 +301,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         <div style={{
           width: 32,
           height: 32,
-          borderRadius: '50%',
+          borderRadius: 0,
           background: 'var(--on-surface)',
           display: 'flex',
           alignItems: 'center',

@@ -153,11 +153,11 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
         <div>
           <label style={labelStyle}>Payout Trigger</label>
           <select value={payoutTrigger} onChange={(e) => setPayoutTrigger(e.target.value)} style={fieldStyle}>
-            <option value="ON_DSA_RECEIPT">On DSA receipt from lender</option>
+            <option value="ON_DSA_RECEIPT">On Sourcing Partner receipt from lender</option>
             <option value="ON_DISBURSEMENT">On disbursement</option>
             <option value="MANUAL">Manual trigger</option>
           </select>
-          <div style={sectionHint}>When Sub-DSA receives their share</div>
+          <div style={sectionHint}>When Sub-Sourcing Partner receives their share</div>
         </div>
         <div>
           <label style={labelStyle}>TDS Applicable</label>
@@ -314,11 +314,11 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{mtd.cases}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>DSA Earned (MTD)</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Sourcing Partner Earned (MTD)</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success)' }}>₹{mtd.dsa_earned.toLocaleString('en-IN')}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Sub-DSA Share ({defaultRate}%)</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Sub-Sourcing Partner Share ({defaultRate}%)</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--info)' }}>₹{Math.round(mtd.dsa_earned * defaultRate / 100).toLocaleString('en-IN')}</div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import SectionCard from '../components/ui/SectionCard';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
+import { roleLabel } from '../constants/roles';
 import { getTenantSummary } from '../api/tenantService';
 import {
   getDirectMsmeCaseDetail,
@@ -141,13 +142,13 @@ const AdminMsmeCaseAllocatePage = () => {
 
   const handleAllocate = async () => {
     if (!selectedUser) {
-      toast.error('Please select a DSA and an agent');
+      toast.error('Please select a Sourcing Partner and an agent');
       return;
     }
     setAllocating(true);
     try {
       await allocateDirectMsmeCase(caseId, { dsa_tenant_id: selectedUser.tenant_id, dsa_user_id: selectedUser.user_id });
-      toast.success(`Case successfully ${caseData.assigned_dsa_tenant_id ? 're-allocated' : 'allocated'} to DSA`);
+      toast.success(`Case successfully ${caseData.assigned_dsa_tenant_id ? 're-allocated' : 'allocated'} to Sourcing Partner`);
       navigate('/admin/msme-cases');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to allocate case');
@@ -203,7 +204,7 @@ const AdminMsmeCaseAllocatePage = () => {
             <div style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
               <CheckCircle2 size={18} color="var(--success)" />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{caseData.assigned_dsa_user?.tenant?.name || 'Unknown DSA'}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{caseData.assigned_dsa_user?.tenant?.name || 'Unknown Sourcing Partner'}</div>
                 <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>
                   Agent: {caseData.assigned_dsa_user?.name || 'Unknown'} · Allocated {caseData.allocated_at ? formatDate(caseData.allocated_at) : '—'}
                 </div>
@@ -213,10 +214,10 @@ const AdminMsmeCaseAllocatePage = () => {
         )}
 
         <SectionCard
-          title={isReallocation ? 'Search & Select New DSA' : 'Search & Select DSA'}
+          title={isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
           subtitle={caseState
-            ? `DSAs serving ${caseState} are recommended first — narrow further by name or state below.`
-            : 'Type a DSA company or agent name, or filter by state — narrows as you type.'}
+            ? `Sourcing Partners serving ${caseState} are recommended first — narrow further by name or state below.`
+            : 'Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.'}
         >
           <div style={{ padding: 20 }}>
             {selectedUser ? (
@@ -228,7 +229,7 @@ const AdminMsmeCaseAllocatePage = () => {
                   <CheckCircle2 size={18} color="var(--success)" />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{tenant?.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {agent?.name} ({agent?.role?.name})</div>
+                    <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {agent?.name} ({roleLabel(agent?.role?.name)})</div>
                   </div>
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedUser(null); setTenantSummary(null); }}>Change</button>
@@ -237,14 +238,14 @@ const AdminMsmeCaseAllocatePage = () => {
               <div style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                   <div style={{ position: 'relative', flex: 2, minWidth: 220 }}>
-                    <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>DSA or Agent Name</label>
+                    <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Sourcing Partner or Agent Name</label>
                     <div style={{ position: 'relative' }}>
                       <Search size={15} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
                       <input
                         type="text"
                         className="form-control"
                         style={{ paddingLeft: 36 }}
-                        placeholder="Type DSA or agent name..."
+                        placeholder="Type Sourcing Partner or agent name..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         autoFocus
@@ -296,7 +297,7 @@ const AdminMsmeCaseAllocatePage = () => {
                     </div>
                   ))}
                   {filteredUsers.length === 0 && (
-                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching DSA found</div>
+                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching Sourcing Partner found</div>
                   )}
                 </div>
               </div>
@@ -307,7 +308,7 @@ const AdminMsmeCaseAllocatePage = () => {
         {selectedUser && (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
             <SectionCard
-              title="DSA Agent Details"
+              title="Sourcing Partner Agent Details"
               actions={<User size={16} color="var(--on-muted)" />}
             >
               <div style={{ padding: 20 }}>

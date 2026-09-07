@@ -523,7 +523,7 @@ const DSARegisterPage = () => {
   const [step, setStep] = useState(1);
 
   useEffect(() => {
-    document.title = 'Cred2Tech | DSA Registration';
+    document.title = 'Cred2Tech | Sourcing Partner Registration';
   }, []);
 
   const handleChange = (e) => {
@@ -1082,7 +1082,7 @@ const DSARegisterPage = () => {
               <p className="text-[15px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
                 {step === 1 && 'Start with your PAN — we\'ll auto-fill your business details from it.'}
                 {step === 2 && 'Confirm your registered address and pick the states you service.'}
-                {step === 3 && 'This will be your DSA Admin login, using the business email and mobile above. You can add team members later.'}
+                {step === 3 && 'This will be your Sourcing Partner Admin login, using the business email and mobile above. You can add team members later.'}
               </p>
             </div>
 
@@ -1271,7 +1271,7 @@ const DSARegisterPage = () => {
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Operational States *</label>
-                        <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">States you provide DSA service in — used to match you with leads in the admin panel.</p>
+                        <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">States you provide Sourcing Partner service in — used to match you with leads in the admin panel.</p>
                         <MultiSelectDropdown
                           value={form.operational_states}
                           onChange={(vals) => { setForm((p) => ({ ...p, operational_states: vals })); setErrors((p) => ({ ...p, operational_states: '' })); }}

@@ -22,7 +22,7 @@ const Topbar = () => {
     // Match /users/:id/edit or /users/:id
     if (/^\/users\/\d+\/edit$/.test(location.pathname)) return 'Edit User';
     if (/^\/users\/\d+$/.test(location.pathname)) return 'User Details';
-    return PAGE_TITLES[location.pathname] || 'DSA CRM Admin';
+    return PAGE_TITLES[location.pathname] || 'Sourcing Partner CRM Admin';
   };
 
   const [walletBalance, setWalletBalance] = React.useState(null);

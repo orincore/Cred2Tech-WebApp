@@ -554,9 +554,9 @@ const AdminDataPurgePage = () => {
                   <InfoField label="Lead Source" value={status.case.lead_source || '—'} />
                   <InfoField label="Customer" value={status.case.customer?.business_name || status.case.customer?.legal_business_name || status.case.customer_name || '—'} />
                   <InfoField label="Entity Type" value={status.case.entity_type || '—'} />
-                  <InfoField label="Tenant (DSA)" value={status.case.tenant ? `${status.case.tenant.name} (${status.case.tenant.type})` : '—'} />
-                  <InfoField label="DSA (Created By)" value={status.case.created_by?.name || '—'} />
-                  <InfoField label="DSA (Assigned)" value={status.case.assigned_dsa_user?.name || '—'} />
+                  <InfoField label="Tenant (Sourcing Partner)" value={status.case.tenant ? `${status.case.tenant.name} (${status.case.tenant.type})` : '—'} />
+                  <InfoField label="Sourcing Partner (Created By)" value={status.case.created_by?.name || '—'} />
+                  <InfoField label="Sourcing Partner (Assigned)" value={status.case.assigned_dsa_user?.name || '—'} />
                   <InfoField label="Lead Date" value={status.case.lead_date ? formatDateTime(status.case.lead_date) : '—'} />
                   <InfoField label="Case Created" value={formatDateTime(status.case.created_at)} />
                   <InfoField label="Last Updated" value={formatDateTime(status.case.updated_at)} />

@@ -26,7 +26,7 @@ const PAGE_SIZE = 25;
 
 const TYPE_OPTIONS = [
   { value: 'CASE_PAYMENT', label: 'MSME Eligibility Fee' },
-  { value: 'WALLET_TOPUP', label: 'DSA Wallet Top-up' },
+  { value: 'WALLET_TOPUP', label: 'Sourcing Partner Wallet Top-up' },
   { value: 'TENANT_SUBSCRIPTION', label: 'Virtual Workspace Subscription' },
 ];
 const STATUS_OPTIONS = [
@@ -234,7 +234,7 @@ const AdminTransactionsPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Transactions"
-          subtitle="A complete record of every payment made on the platform, including MSME eligibility fees, DSA wallet top-ups, and Virtual Workspace subscriptions, verified against Razorpay for accuracy."
+          subtitle="A complete record of every payment made on the platform, including MSME eligibility fees, Sourcing Partner wallet top-ups, and Virtual Workspace subscriptions, verified against Razorpay for accuracy."
           compact={isMobile}
         />
       </div>
@@ -328,7 +328,7 @@ const AdminTransactionsPage = () => {
           {loading ? (
             <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
           ) : rows.length === 0 ? (
-            <EmptyState icon={Receipt} title="No transactions found" description="No MSME eligibility payments, DSA wallet top-ups, or subscription charges match the applied filters." />
+            <EmptyState icon={Receipt} title="No transactions found" description="No MSME eligibility payments, Sourcing Partner wallet top-ups, or subscription charges match the applied filters." />
           ) : isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
               {rows.map((t) => {

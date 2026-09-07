@@ -72,10 +72,10 @@ const SuperadminWalletManager = () => {
          <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '80px 16px 16px' : '24px 20px 24px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
             <div>
                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-                  DSA Wallets Management
+                  Sourcing Partner Wallets Management
                </h1>
                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--on-muted)' }}>
-                  Search a DSA to view wallet, transactions, API usage & allocate credit
+                  Search a Sourcing Partner to view wallet, transactions, API usage & allocate credit
                </p>
             </div>
          </div>
@@ -84,7 +84,7 @@ const SuperadminWalletManager = () => {
          <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <ShieldAlert size={16} color="#4f46e5" />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Search by DSA name or mobile number to view wallet details and allocate credits.
+               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Search by Sourcing Partner name or mobile number to view wallet details and allocate credits.
             </p>
          </div>
 
@@ -92,12 +92,12 @@ const SuperadminWalletManager = () => {
          <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
             {/* Search */}
             <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
-               <span style={labelSm}>Search DSA</span>
+               <span style={labelSm}>Search Sourcing Partner</span>
                <div style={{ position: 'relative' }}>
                   <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
                   <input
                      type="text"
-                     placeholder="DSA name or mobile number…"
+                     placeholder="Sourcing Partner name or mobile number…"
                      value={searchTerm}
                      onChange={e => setSearchTerm(e.target.value)}
                      style={{ ...underlineInput(false), paddingLeft: 20 }}
@@ -116,14 +116,14 @@ const SuperadminWalletManager = () => {
          ) : filtered.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
                <Briefcase size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
-               <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No DSA wallets found</h3>
+               <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No Sourcing Partner wallets found</h3>
                <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: 0 }}>Try adjusting your search.</p>
             </div>
          ) : (
             <>
                {/* Sub-header */}
                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>All DSA Wallets</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>All Sourcing Partner Wallets</span>
                   <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} wallets</span>
                </div>
 
@@ -194,7 +194,7 @@ const SuperadminWalletManager = () => {
                ) : (
                <DataTable
                   columns={[
-                     { key: 'tenant_name', label: 'DSA Name', render: (t) => (
+                     { key: 'tenant_name', label: 'Sourcing Partner Name', render: (t) => (
                         <span style={{ fontWeight: 700, fontSize: 13, color: '#4f46e5', cursor: 'pointer' }}>{t.tenant_name}</span>
                      )},
                      { key: 'code', label: 'Code', render: (t) => t.code },

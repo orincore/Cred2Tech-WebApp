@@ -484,7 +484,7 @@ const OrganizationProfilePage = () => {
             <div style={{ marginTop: isMobile ? 16 : 24 }}>
               <label style={labelStyle}>Operational States *</label>
               <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 8px' }}>
-                States you provide DSA service in — used to match you with leads in the admin panel.
+                States you provide Sourcing Partner service in — used to match you with leads in the admin panel.
               </p>
               <StatesMultiSelect
                 value={form.operational_states}

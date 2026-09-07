@@ -13,8 +13,8 @@ import DataTable from '../components/DataTable';
 import PageTour from '../components/tour/PageTour';
 
 const USERS_TOUR_STEPS = [
-  { target: '[data-tour="users-add"]', title: 'Add someone to your team', description: 'Bring on a new employee or Sub-DSA partner from here. They\'ll get an OTP by mobile and email to activate their own account.' },
-  { target: '[data-tour="users-tabs"]', title: 'Employees vs Sub-DSA', description: 'Your internal employees and your external Sub-DSA referral partners are kept in separate tabs, since they\'re managed a little differently.' },
+  { target: '[data-tour="users-add"]', title: 'Add someone to your team', description: 'Bring on a new employee or Sub-Sourcing Partner from here. They\'ll get an OTP by mobile and email to activate their own account.' },
+  { target: '[data-tour="users-tabs"]', title: 'Employees vs Sub-Sourcing Partner', description: 'Your internal employees and your external Sub-Sourcing Partner referral partners are kept in separate tabs, since they\'re managed a little differently.' },
   { target: '[data-tour="users-filters"]', title: 'Search & filter your team', description: 'Search by name, email, or mobile, and filter by role, status, or hierarchy level to zero in on the person you need.' },
   { target: '[data-tour="users-results"]', title: 'Your team', description: 'Everyone on your team, with their role, status, and last login. Tap "Edit" on any row to update their details.' },
 ];
@@ -137,7 +137,7 @@ const UsersListPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 10px' : '24px 24px 16px', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Team Management"
-          subtitle={activeTab === 'subDsa' ? 'Manage Your Sub-DSA Partners Easily' : 'Manage Your Employees Easily'}
+          subtitle={activeTab === 'subDsa' ? 'Manage Your Sub-Sourcing Partners Easily' : 'Manage Your Employees Easily'}
           compact={isMobile}
           actions={
             <div data-tour="users-add" style={{ display: 'inline-flex' }}>
@@ -149,7 +149,7 @@ const UsersListPage = () => {
                 className={isMobile ? 'px-4 py-2 text-xs' : ''}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 7 }}>
-                  <UserPlus size={isMobile ? 12 : 14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
+                  <UserPlus size={isMobile ? 12 : 14} /> {activeTab === 'subDsa' ? 'Add Sub-Sourcing Partner' : 'Add Employee'}
                 </div>
               </TravelingBorderButton>
             </div>
@@ -160,7 +160,7 @@ const UsersListPage = () => {
         <div data-tour="users-tabs" style={{ display: 'flex', gap: 8, marginTop: isMobile ? 12 : 16 }}>
           {[
             { key: 'employees', label: 'Employees', count: employees.length },
-            { key: 'subDsa', label: 'Sub-DSA', count: subDsaUsers.length },
+            { key: 'subDsa', label: 'Sub-Sourcing Partner', count: subDsaUsers.length },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -191,11 +191,11 @@ const UsersListPage = () => {
         <ShieldCheck size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
         {isMobile ? (
           <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> — add, edit or deactivate {activeTab === 'subDsa' ? 'Sub-DSA partners' : 'employees'}.
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> — add, edit or deactivate {activeTab === 'subDsa' ? 'Sub-Sourcing Partners' : 'employees'}.
           </p>
         ) : (
           <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate {activeTab === 'subDsa' ? 'Sub-DSA partners' : 'employees'}.
+            <strong style={{ color: 'var(--on-surface)' }}>Super Admin only</strong> can add, edit roles, or deactivate {activeTab === 'subDsa' ? 'Sub-Sourcing Partners' : 'employees'}.
             {activeTab === 'subDsa' ? ' Partners receive OTP to mobile and email on account creation to activate access.' : ' Employees receive OTP to mobile and email on account creation to activate access.'}
           </p>
         )}
@@ -311,10 +311,10 @@ const UsersListPage = () => {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
           <Users size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>
-            {activeTab === 'subDsa' ? 'No Sub-DSA partners found' : 'No employees found'}
+            {activeTab === 'subDsa' ? 'No Sub-Sourcing Partners found' : 'No employees found'}
           </h3>
           <p style={{ fontSize: 13, color: 'var(--on-muted)', margin: '0 0 24px' }}>
-            {activeTab === 'subDsa' ? 'Try adjusting your filters or add a new Sub-DSA partner.' : 'Try adjusting your filters or add a new employee.'}
+            {activeTab === 'subDsa' ? 'Try adjusting your filters or add a new Sub-Sourcing Partner.' : 'Try adjusting your filters or add a new employee.'}
           </p>
           <TravelingBorderButton
             onClick={() => navigate(activeTab === 'subDsa' ? '/users/create?role=SUB_DSA' : '/users/create')}
@@ -323,7 +323,7 @@ const UsersListPage = () => {
             showIcon={false}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <UserPlus size={14} /> {activeTab === 'subDsa' ? 'Add Sub-DSA Partner' : 'Add Employee'}
+              <UserPlus size={14} /> {activeTab === 'subDsa' ? 'Add Sub-Sourcing Partner' : 'Add Employee'}
             </div>
           </TravelingBorderButton>
         </div>
@@ -331,7 +331,7 @@ const UsersListPage = () => {
         <>
           {/* Sub-header */}
           <div style={{ padding: isMobile ? '8px 16px' : '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{activeTab === 'subDsa' ? 'Sub-DSA Partners' : 'Team Information'}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{activeTab === 'subDsa' ? 'Sub-Sourcing Partners' : 'Team Information'}</span>
             <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} of {tabUsers.length} {activeTab === 'subDsa' ? 'partners' : 'employees'}</span>
           </div>
 
@@ -358,7 +358,7 @@ const UsersListPage = () => {
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                           <div style={{
-                            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                            width: 36, height: 36, borderRadius: 0, flexShrink: 0,
                             background: avatarBg, color: avatarClr,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: 12, fontWeight: 800,
@@ -439,7 +439,7 @@ const UsersListPage = () => {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                         <div style={{
-                          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                          width: 36, height: 36, borderRadius: 0, flexShrink: 0,
                           background: avatarBg, color: avatarClr,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 12, fontWeight: 800,
@@ -517,7 +517,7 @@ const UsersListPage = () => {
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <div style={{
-                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                      width: 32, height: 32, borderRadius: 0, flexShrink: 0,
                       background: avatarBg, color: avatarClr,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 11, fontWeight: 800,

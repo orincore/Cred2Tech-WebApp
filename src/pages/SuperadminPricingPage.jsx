@@ -333,7 +333,7 @@ const SuperadminPricingPage = () => {
             API Pricing & Credit Rules
           </h1>
           <p style={{ margin: isMobile ? '2px 0 0' : '2px 0 0', fontSize: isMobile ? 11 : 12, color: 'var(--on-muted)' }}>
-            DSA charges & discount tiers
+            Sourcing Partner charges & discount tiers
           </p>
         </div>
       </div>
@@ -363,7 +363,7 @@ const SuperadminPricingPage = () => {
           {showInfo && (
             <div style={{ padding: '0 16px 10px' }}>
               <p style={{ margin: '0 0 10px 26px', fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-                <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
+                <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                 <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" isMobile />
@@ -383,7 +383,7 @@ const SuperadminPricingPage = () => {
           <div style={{ borderBottom: '1px solid var(--outline)', padding: '5px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <ShieldAlert size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
             <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-              <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
+              <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
             </p>
           </div>
 
@@ -471,7 +471,7 @@ const SuperadminPricingPage = () => {
         <>
         {/* Sub-header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — DSA Pricing</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — Sourcing Partner Pricing</span>
           <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} APIs</span>
         </div>
 
@@ -749,7 +749,7 @@ const SuperadminPricingPage = () => {
         }}>
           <div>
             <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Volume Package Discounts</h3>
-            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when DSA top-up crosses threshold</p>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when Sourcing Partner top-up crosses threshold</p>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -908,7 +908,7 @@ const SuperadminPricingPage = () => {
         }}>
           <div>
             <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Tabs</h3>
-            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Sidebar tabs a DSA still sees before subscribing — everything else here is unchecked = locked</p>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Sidebar tabs a Sourcing Partner still sees before subscribing — everything else here is unchecked = locked</p>
           </div>
           <button
             className="btn btn-primary btn-sm"
