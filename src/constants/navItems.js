@@ -252,7 +252,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'sub-dsa-payout',
-    label: 'Sub-Sourcing Partner Payout',
+    label: 'Sub-SP Payout',
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
     roles: ['DSA_ADMIN', 'SUB_DSA'],
@@ -280,15 +280,6 @@ export const NAV_ITEMS = [
     path: '/profile',
     icon: User,
     roles: ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER', 'SUB_DSA'],
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    path: '/settings',
-    icon: Settings,
-    roles: ['SUPER_ADMIN'],
-    disabled: true,
-    badge: 'Soon',
   },
 ];
 
