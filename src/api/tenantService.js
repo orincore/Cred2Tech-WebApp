@@ -97,6 +97,15 @@ export const adminDeductTenantWallet = async (tenantId, credits, remarks) => {
   return response.data;
 };
 
+// Full paginated transaction history — same endpoint SuperadminWalletDetail
+// already uses (admin.wallet.controller.js#getLedger), reused here for
+// AdminTenantManagePage's Wallet & Credits tab instead of the summary
+// endpoint's fixed "last 5" recent_wallet_transactions snapshot.
+export const getTenantWalletLedger = async (tenantId, page = 1, limit = 20) => {
+  const response = await api.get(`/admin/wallet/tenants/${tenantId}/wallet/ledger`, { params: { page, limit } });
+  return response.data;
+};
+
 // Team/employee credit management — allocate or revoke credits between the
 // tenant's own wallet and one member's (sub-DSA/employee) wallet.
 export const getTenantEmployees = async (tenantId) => {

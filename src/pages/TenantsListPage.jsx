@@ -292,10 +292,6 @@ const TenantsListPage = () => {
                       marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
                     }}>
                       <div>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>PAN</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.pan_number || '—'}</div>
-                      </div>
-                      <div>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>City</div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.city || '—'}</div>
                       </div>
@@ -330,7 +326,7 @@ const TenantsListPage = () => {
           ) : (
           <DataTable
             columns={[
-              { key: 'name', label: 'Sourcing Partner Name', render: (t) => {
+              { key: 'name', label: 'Sourcing Partner Name', width: '22%', render: (t) => {
                 const [avatarBg, avatarClr] = avatarColors(t.name);
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -348,15 +344,14 @@ const TenantsListPage = () => {
                   </div>
                 );
               }},
-              { key: 'pan_number', label: 'PAN', render: (t) => t.pan_number || '—' },
               { key: 'city', label: 'City', render: (t) => t.city || '—' },
               { key: 'wallet_balance', label: 'Wallet', render: (t) => (
                 <span style={{ fontSize: 12, fontWeight: 700, color: (t.wallet_balance || 0) < 500 ? '#f43f5e' : '#10b981' }}>
                   ₹{Number(t.wallet_balance || 0).toLocaleString()}
                 </span>
               )},
-              { key: 'api_calls_mtd', label: 'API Calls', render: (t) => t.api_calls_mtd || 0 },
-              { key: 'type', label: 'Type', render: (t) => (
+              { key: 'api_calls_mtd', label: 'API Calls', align: 'center', render: (t) => t.api_calls_mtd || 0 },
+              { key: 'type', label: 'Type', align: 'center', render: (t) => (
                 <span style={{
                   background: t.type === 'DSA' ? (isDark ? '#064e3b' : '#dcfce7') : (isDark ? '#334155' : '#f1f5f9'),
                   color: t.type === 'DSA' ? (isDark ? '#6ee7b7' : '#15803d') : ('var(--on-muted)'),

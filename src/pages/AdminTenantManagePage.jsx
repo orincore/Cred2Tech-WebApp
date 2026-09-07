@@ -4,15 +4,17 @@ import { toast } from 'react-hot-toast';
 import {
   ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
   Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock, Trash2, Ban, MonitorSmartphone,
+  ChevronLeft, ChevronRight, Pencil, Save,
 } from 'lucide-react';
 import {
-  getTenantSummary, updateTenantStatus, updateTenantVirtualWorkspace,
+  getTenantSummary, updateTenant, updateTenantStatus, updateTenantVirtualWorkspace,
   grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminUpgradeVirtualWorkspacePlan,
   adminCancelVirtualWorkspace, adminDowngradeToFree, adminExtendVirtualWorkspace,
   adminTopupTenantWallet, adminDeductTenantWallet,
   getTenantEmployees, allocateTenantEmployeeCredits, revokeTenantEmployeeCredits,
   getTenantSessions, revokeTenantSession, banTenantDevice,
   getTenantBlockedDevices, unbanTenantDevice,
+  getTenantWalletLedger,
 } from '../api/tenantService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import OsIcon from '../components/OsIcon';
@@ -26,13 +28,94 @@ const ACCESS_PLAN_LABEL = {
 };
 const ACCESS_PLAN_COLOR = { NO_ACCESS: 'var(--error)', FREE_GRANTED: 'var(--info)', SUBSCRIBED: 'var(--success)' };
 
+// Wallet-ledger reference_type — raw enum values (see prisma schema's
+// TransactionReferenceType) shown as clean labels + a color-coded pill
+// instead of literal "PROMO_FREEBIE"/"RAZORPAY_TOPUP" text.
+const REFERENCE_TYPE_META = {
+  API_CALL: { label: 'API Usage', color: '#475569', bg: 'rgba(71,85,105,0.12)' },
+  ADMIN_TOPUP: { label: 'Admin Credit', color: '#059669', bg: 'rgba(5,150,105,0.12)' },
+  REFUND: { label: 'Refund', color: '#0284c7', bg: 'rgba(2,132,199,0.12)' },
+  MANUAL_ADJUSTMENT: { label: 'Manual Adjustment', color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
+  RAZORPAY_TOPUP: { label: 'Razorpay Recharge', color: '#0f766e', bg: 'rgba(15,118,110,0.12)' },
+  EMPLOYEE_ALLOCATION: { label: 'Allocated to Employee', color: '#b45309', bg: 'rgba(180,83,9,0.12)' },
+  EMPLOYEE_REVOCATION: { label: 'Revoked from Employee', color: '#b45309', bg: 'rgba(180,83,9,0.12)' },
+  VIRTUAL_WORKSPACE_RENEWAL: { label: 'Virtual Workspace Renewal', color: '#4338ca', bg: 'rgba(67,56,202,0.12)' },
+  PROMO_FREEBIE: { label: 'Promotional Credit', color: '#be185d', bg: 'rgba(190,24,93,0.12)' },
+};
+const referenceTypeMeta = (type) => REFERENCE_TYPE_META[type] || { label: type || '—', color: 'var(--on-muted)', bg: 'var(--bg-elevated)' };
+
+const ReferenceTypeBadge = ({ type }) => {
+  const meta = referenceTypeMeta(type);
+  return (
+    <span style={{
+      display: 'inline-block', padding: '3px 9px', borderRadius: 4,
+      fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap',
+      background: meta.bg, color: meta.color,
+    }}>
+      {meta.label}
+    </span>
+  );
+};
+
+// A real reason for the row, same resolution order MyWalletPage.jsx's own
+// transactionReferenceLabel() uses for a tenant's self-service ledger:
+// explicit remarks first (already a full sentence — Razorpay payment id,
+// admin remark, refund reason, ...), then for an API_CALL row the real
+// service name (admin.wallet.controller.js#getLedger resolves this from
+// api_pricing server-side, same table the Pricing admin page reads — never
+// a raw code like "GST_FETCH") plus who it ran for, finally the reference-
+// type label as a last resort so this is never a bare "—".
+const transactionReasonLabel = (t) => {
+  if (t.remarks) return t.remarks;
+  if (t.service_name) {
+    const who = t.customer_name ? `${t.customer_name}${t.case_id ? ` · Case ${t.case_id}` : ''}` : null;
+    return who ? `${t.service_name} — ${who}` : t.service_name;
+  }
+  return referenceTypeMeta(t.reference_type).label;
+};
+
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'details', label: 'Details', icon: Pencil },
   { id: 'workspace', label: 'Virtual Workspace', icon: LayoutGrid },
   { id: 'wallet', label: 'Wallet & Credits', icon: Wallet },
   { id: 'team', label: 'Team & Allocation', icon: Users },
   { id: 'sessions', label: 'Sessions & Devices', icon: MonitorSmartphone },
 ];
+
+// Same lists CreateTenantPage.jsx / OrganizationProfilePage.jsx use for
+// these two fields — kept local rather than shared, matching this
+// codebase's existing convention for these exact lists (see
+// OrganizationProfilePage.jsx's own comment on why).
+const COMPANY_TYPE_OPTIONS = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
+// Same PAN/GST/pincode/mobile rules OrganizationProfilePage.jsx's self-
+// service edit form enforces — kept in sync manually rather than shared,
+// same reasoning as the two lists above.
+const validateTenantDetails = (form) => {
+  const e = {};
+  if (!form.name.trim()) e.name = 'Organization name is required';
+  if (!form.email.trim()) e.email = 'Email is required';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Invalid email address';
+  if (!form.pan_number.trim()) e.pan_number = 'PAN required for compliance';
+  else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.pan_number.toUpperCase())) e.pan_number = 'Invalid PAN format (e.g. ABCDE1234F)';
+  if (form.gst_number && form.gst_number.trim()) {
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(form.gst_number.toUpperCase())) e.gst_number = 'Invalid GST format (e.g. 27AAACR5055K1Z7)';
+  }
+  if (form.mobile && form.mobile.length !== 10) e.mobile = 'Must be 10 digits';
+  if (form.pincode && !/^[1-9][0-9]{5}$/.test(form.pincode)) e.pincode = 'Invalid 6-digit pincode';
+  return e;
+};
+
+const detailsLabelStyle = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 5 };
+const detailsErrorStyle = { color: 'var(--error)', fontSize: 11, marginTop: 4 };
 
 const StatCard = ({ label, value }) => (
   <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', padding: 14 }}>
@@ -131,6 +214,20 @@ const AdminTenantManagePage = () => {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionActionId, setSessionActionId] = useState(null); // id of the row currently being revoked/banned/unbanned
 
+  const LEDGER_PAGE_SIZE = 20;
+  const [ledger, setLedger] = useState([]);
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerTotalPages, setLedgerTotalPages] = useState(1);
+  const [loadingLedger, setLoadingLedger] = useState(false);
+
+  // Details tab — full tenant profile edit. Seeded from `data` the first
+  // time it loads (see the effect below), not on every fetchData() refresh,
+  // so an admin's in-progress edits never get silently clobbered by a
+  // background refresh (e.g. the periodic ones other actions trigger).
+  const [detailsForm, setDetailsForm] = useState(null);
+  const [detailsErrors, setDetailsErrors] = useState({});
+  const [savingDetails, setSavingDetails] = useState(false);
+
   const fetchData = useCallback(async () => {
     try {
       const res = await getTenantSummary(id);
@@ -180,9 +277,48 @@ const AdminTenantManagePage = () => {
     }
   }, [id]);
 
+  const fetchLedger = useCallback(async (page) => {
+    setLoadingLedger(true);
+    try {
+      const res = await getTenantWalletLedger(id, page, LEDGER_PAGE_SIZE);
+      setLedger(res?.ledger || []);
+      setLedgerTotalPages(res?.totalPages || 1);
+      setLedgerPage(res?.page || page);
+    } catch (err) {
+      toast.error('Failed to load wallet transactions');
+    } finally {
+      setLoadingLedger(false);
+    }
+  }, [id]);
+
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { if (tab === 'team' && employees.length === 0) fetchEmployees(); }, [tab, employees.length, fetchEmployees]);
   useEffect(() => { if (tab === 'sessions') fetchSessions(); }, [tab, fetchSessions]);
+  useEffect(() => { if (tab === 'wallet') fetchLedger(1); }, [tab, fetchLedger]);
+  useEffect(() => {
+    if (data && !detailsForm) {
+      setDetailsForm({
+        name: data.tenant_name || '',
+        email: data.email || '',
+        mobile: data.mobile || '',
+        pan_number: data.pan_number || '',
+        gst_number: data.gst_number || '',
+        company_type: data.company_type || '',
+        state: data.state || '',
+        city: data.city || '',
+        pincode: data.pincode || '',
+        address_line: data.address_line || '',
+        operational_states: Array.isArray(data.operational_states) ? data.operational_states : [],
+      });
+    }
+    // Re-seed after a genuinely different tenant loads (id changed) — the
+    // page never remounts on an in-app "back to list, open another tenant"
+    // navigation, so without this an admin who edits tenant A, then opens
+    // tenant B from the list, would see A's old detailsForm state instead
+    // of a fresh one seeded from B's actual data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  useEffect(() => { setDetailsForm(null); setDetailsErrors({}); }, [id]);
 
   const handleToggleStatus = async () => {
     setBusy(true);
@@ -359,7 +495,7 @@ const AdminTenantManagePage = () => {
       await adminTopupTenantWallet(id, credits);
       toast.success(`${credits} free credits added to wallet`);
       setTopupAmount('');
-      await fetchData();
+      await Promise.all([fetchData(), fetchLedger(1)]);
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to top up wallet');
     } finally {
@@ -375,7 +511,7 @@ const AdminTenantManagePage = () => {
       await adminDeductTenantWallet(id, credits, deductRemarks.trim() || undefined);
       toast.success(`${credits} credits deducted from wallet`);
       setDeductAmount(''); setDeductRemarks('');
-      await fetchData();
+      await Promise.all([fetchData(), fetchLedger(1)]);
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to deduct from wallet');
     } finally {
@@ -462,6 +598,52 @@ const AdminTenantManagePage = () => {
     }
   };
 
+  const updateDetailsField = (field, value) => {
+    setDetailsForm((prev) => ({ ...prev, [field]: value }));
+    setDetailsErrors((prev) => (prev[field] ? { ...prev, [field]: '' } : prev));
+  };
+
+  const toggleOperationalState = (stateName) => {
+    setDetailsForm((prev) => ({
+      ...prev,
+      operational_states: prev.operational_states.includes(stateName)
+        ? prev.operational_states.filter((s) => s !== stateName)
+        : [...prev.operational_states, stateName],
+    }));
+  };
+
+  const handleSaveDetails = async () => {
+    const errs = validateTenantDetails(detailsForm);
+    if (Object.keys(errs).length) { setDetailsErrors(errs); return; }
+
+    setSavingDetails(true);
+    try {
+      await updateTenant(id, {
+        name: detailsForm.name.trim(),
+        email: detailsForm.email.trim(),
+        mobile: detailsForm.mobile.trim() || undefined,
+        pan_number: detailsForm.pan_number.toUpperCase(),
+        gst_number: detailsForm.gst_number ? detailsForm.gst_number.toUpperCase() : undefined,
+        company_type: detailsForm.company_type || undefined,
+        state: detailsForm.state.trim() || undefined,
+        city: detailsForm.city.trim() || undefined,
+        pincode: detailsForm.pincode || undefined,
+        // Always sent, even empty — the backend only treats this key as
+        // "leave untouched" when it's absent from the body entirely (see
+        // tenant.controller.js#updateTenant), not when it's an explicit
+        // empty string, so this form can actually clear the address.
+        address_line: detailsForm.address_line.trim(),
+        operational_states: detailsForm.operational_states,
+      });
+      toast.success('Sourcing Partner details updated');
+      await fetchData();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to update details');
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><LoadingSpinner size={32} /></div>;
   if (!data) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)' }}>Tenant not found</div>;
 
@@ -513,7 +695,7 @@ const AdminTenantManagePage = () => {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
+        <div style={{ width: '100%', padding: 24 }}>
 
           {tab === 'overview' && (
             <>
@@ -524,26 +706,116 @@ const AdminTenantManagePage = () => {
                 <StatCard label="Team Size" value={data.team_size} />
                 <StatCard label="Last Activity" value={data.last_activity ? formatDate(data.last_activity) : '—'} />
               </div>
-              <Card icon={Wallet} title="Recent Wallet Transactions">
+              <Card icon={Wallet} title="Recent Wallet Transactions" subtitle="Last 5 — see the Wallet & Credits tab for the full history">
                 {data.recent_wallet_transactions?.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                    <tbody>
-                      {data.recent_wallet_transactions.map((tx) => (
-                        <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)' }}>
-                          <td style={{ padding: '10px 0', color: 'var(--on-muted)' }}>{formatDateTime(tx.created_at)}</td>
-                          <td style={{ padding: '10px 0' }}>{tx.reference_type}</td>
-                          <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
-                            {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
-                          </td>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: 12.5 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--outline)' }}>
+                          <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date</th>
+                          <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Type</th>
+                          <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Remarks</th>
+                          <th style={{ padding: '8px 0', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {data.recent_wallet_transactions.map((tx, i) => (
+                          <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)', background: i % 2 === 1 ? 'var(--bg-surface)' : 'transparent' }}>
+                            <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>{formatDateTime(tx.created_at)}</td>
+                            <td style={{ padding: '10px 12px 10px 0' }}><ReferenceTypeBadge type={tx.reference_type} /></td>
+                            <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}>{transactionReasonLabel(tx)}</td>
+                            <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
+                              {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
                 )}
               </Card>
             </>
+          )}
+
+          {tab === 'details' && detailsForm && (
+            <Card icon={Pencil} title="Organization Details" subtitle="Every field here is editable — saving notifies this Sourcing Partner's admin(s) that an administrator updated their profile.">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
+                <div>
+                  <label style={detailsLabelStyle}>Organization Name *</label>
+                  <input type="text" className="form-control" value={detailsForm.name} onChange={(e) => updateDetailsField('name', e.target.value)} />
+                  {detailsErrors.name && <div style={detailsErrorStyle}>{detailsErrors.name}</div>}
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>Email *</label>
+                  <input type="email" className="form-control" value={detailsForm.email} onChange={(e) => updateDetailsField('email', e.target.value)} />
+                  {detailsErrors.email && <div style={detailsErrorStyle}>{detailsErrors.email}</div>}
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>Mobile</label>
+                  <input type="text" className="form-control" value={detailsForm.mobile} onChange={(e) => updateDetailsField('mobile', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile" />
+                  {detailsErrors.mobile && <div style={detailsErrorStyle}>{detailsErrors.mobile}</div>}
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>PAN Number *</label>
+                  <input type="text" className="form-control" value={detailsForm.pan_number} onChange={(e) => updateDetailsField('pan_number', e.target.value.toUpperCase())} placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
+                  {detailsErrors.pan_number && <div style={detailsErrorStyle}>{detailsErrors.pan_number}</div>}
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>GST Number</label>
+                  <input type="text" className="form-control" value={detailsForm.gst_number} onChange={(e) => updateDetailsField('gst_number', e.target.value.toUpperCase())} placeholder="27AAACR5055K1Z7" style={{ textTransform: 'uppercase' }} />
+                  {detailsErrors.gst_number && <div style={detailsErrorStyle}>{detailsErrors.gst_number}</div>}
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>Company Type</label>
+                  <select className="form-control" value={detailsForm.company_type} onChange={(e) => updateDetailsField('company_type', e.target.value)}>
+                    <option value="">— Select —</option>
+                    {COMPANY_TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>State</label>
+                  <input type="text" className="form-control" value={detailsForm.state} onChange={(e) => updateDetailsField('state', e.target.value)} />
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>City</label>
+                  <input type="text" className="form-control" value={detailsForm.city} onChange={(e) => updateDetailsField('city', e.target.value)} />
+                </div>
+                <div>
+                  <label style={detailsLabelStyle}>Pincode</label>
+                  <input type="text" className="form-control" value={detailsForm.pincode} onChange={(e) => updateDetailsField('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                  {detailsErrors.pincode && <div style={detailsErrorStyle}>{detailsErrors.pincode}</div>}
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={detailsLabelStyle}>Address</label>
+                  <input type="text" className="form-control" value={detailsForm.address_line} onChange={(e) => updateDetailsField('address_line', e.target.value)} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 20 }}>
+                <label style={detailsLabelStyle}>Operational States ({detailsForm.operational_states.length} selected)</label>
+                <p style={{ fontSize: 11, color: 'var(--on-muted)', margin: '2px 0 8px' }}>States this Sourcing Partner services — used to match Direct MSME leads to them.</p>
+                <div style={{
+                  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6,
+                  maxHeight: 220, overflowY: 'auto', border: '1px solid var(--outline)', padding: 12,
+                  background: 'var(--bg)',
+                }}>
+                  {INDIAN_STATES.map((stateName) => (
+                    <label key={stateName} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--on-surface)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={detailsForm.operational_states.includes(stateName)} onChange={() => toggleOperationalState(stateName)} />
+                      {stateName}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={handleSaveDetails} disabled={savingDetails} className="btn btn-primary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Save size={13} /> {savingDetails ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </Card>
           )}
 
           {tab === 'workspace' && (
@@ -705,23 +977,61 @@ const AdminTenantManagePage = () => {
                 </div>
               </Card>
 
-              <Card icon={Wallet} title="Recent Wallet Transactions">
-                {data.recent_wallet_transactions?.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                    <tbody>
-                      {data.recent_wallet_transactions.map((tx) => (
-                        <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)' }}>
-                          <td style={{ padding: '10px 0', color: 'var(--on-muted)' }}>{formatDateTime(tx.created_at)}</td>
-                          <td style={{ padding: '10px 0' }}>{tx.reference_type}</td>
-                          <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
-                            {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <Card icon={Wallet} title="Wallet Transactions" subtitle="Full transaction history for this Sourcing Partner's wallet.">
+                {loadingLedger ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
+                ) : ledger.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No transactions found.</div>
                 ) : (
-                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No recent transactions</div>
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--outline)' }}>
+                            <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date</th>
+                            <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Type</th>
+                            <th style={{ padding: '8px 0', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Remarks</th>
+                            <th style={{ padding: '8px 0', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Amount</th>
+                            <th style={{ padding: '8px 0', textAlign: 'right', fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ledger.map((tx, i) => (
+                            <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)', background: i % 2 === 1 ? 'var(--bg-surface)' : 'transparent' }}>
+                              <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>{formatDateTime(tx.created_at)}</td>
+                              <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}><ReferenceTypeBadge type={tx.reference_type} /></td>
+                              <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}>{transactionReasonLabel(tx)}</td>
+                              <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
+                                {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
+                              </td>
+                              <td style={{ padding: '10px 0 10px 12px', textAlign: 'right', color: 'var(--on-surface)', fontWeight: 600, whiteSpace: 'nowrap' }}>{tx.balance_after}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {ledgerTotalPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--outline)' }}>
+                        <button
+                          onClick={() => fetchLedger(ledgerPage - 1)}
+                          disabled={ledgerPage <= 1 || loadingLedger}
+                          className="btn btn-ghost btn-sm"
+                          style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <ChevronLeft size={14} /> Prev
+                        </button>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 600 }}>Page {ledgerPage} of {ledgerTotalPages}</span>
+                        <button
+                          onClick={() => fetchLedger(ledgerPage + 1)}
+                          disabled={ledgerPage >= ledgerTotalPages || loadingLedger}
+                          className="btn btn-ghost btn-sm"
+                          style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                        >
+                          Next <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </Card>
             </>
