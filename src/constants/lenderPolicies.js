@@ -21,6 +21,24 @@ const BAJAJ_NAMES = [
   'BAJAJ HOUSING FINANCE NEAR PRIME & AFFORDABLE',
 ];
 
+// Keep lender-specific method availability consistent with the ESR engine.
+// This is a defensive UI filter for reports generated before the backend was
+// updated; current reports are filtered by the backend before evaluation.
+export const isSchemeDisabledForLender = (lenderPolicyKey, schemeName) => {
+  const lenderKey = String(lenderPolicyKey || '').trim().toUpperCase();
+  const method = String(schemeName || '').trim().toUpperCase();
+
+  if (lenderKey === 'IIFL') {
+    return /\bGRP\b|GROSS\s+RECEIPT|\bGST\b|GROSS\s+MARGIN|NET\s+WORTH|\bNWM\b|ASSESSED\s+INCOME|\bAIP\b/.test(method);
+  }
+
+  if (lenderKey === 'ICICI') {
+    return /\bLIP\b|\bLOW\s+LTV\b/.test(method);
+  }
+
+  return false;
+};
+
 export const getLenderDisplayName = (lender = {}) => {
   const code = String(lender.code || lender.lender_code || '').toUpperCase();
   const name = String(lender.name || lender.lender_name || '').trim();

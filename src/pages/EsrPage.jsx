@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import MetricTile from '../components/ui/MetricTile';
-import { getLenderDisplayName } from '../constants/lenderPolicies';
+import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -571,6 +571,10 @@ const CalcBreakdownPanel = ({ evaluations }) => {
   const orderedEvaluations = useMemo(() => {
     if (!evaluations || evaluations.length === 0) return [];
 
+    const availableEvaluations = evaluations.filter((evaluation) =>
+      !isSchemeDisabledForLender(evaluation.lender_policy_key, evaluation.scheme_name)
+    );
+
     const compare = (a, b) => {
       if (a.is_eligible !== b.is_eligible) return a.is_eligible ? -1 : 1;
 
@@ -586,7 +590,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
     };
 
     const bestByScheme = new Map();
-    for (const e of evaluations) {
+    for (const e of availableEvaluations) {
       const key = String(e.scheme_name || '').trim().toUpperCase();
       const existing = bestByScheme.get(key);
       if (!existing || compare(e, existing) < 0) {
