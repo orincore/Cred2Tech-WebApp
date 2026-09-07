@@ -18,7 +18,7 @@ import PageTour from '../components/tour/PageTour';
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
   { target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' },
-  { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, or PAN.' },
+  { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, PAN, phone, or email.' },
   { target: '[data-tour="pipeline-filters"]', title: 'Filter your pipeline', description: 'Narrow the list down by entity type, lender, or open alerts (like a pending PDD), and sort it however is most useful to you.' },
   { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Tap a stage to see only the cases sitting there right now, from Lead Created all the way through to Disbursed.' },
   { target: '[data-tour="pipeline-results"]', title: 'Your cases', description: 'Every case in your pipeline, with its bureau score, amounts, and current stage. Tap a row any time to resume, view, or continue a case.' },
@@ -82,6 +82,10 @@ const STAGE_COLORS = {
 };
 
 const ENTITY_TYPE_OPTIONS = ['Partnership', 'Pvt Ltd', 'LLP', 'Proprietorship', 'Public Ltd'].map(v => ({ value: v, label: v }));
+const CUSTOMER_TYPE_OPTIONS = [
+  { value: 'MSME', label: 'Business / MSME' },
+  { value: 'SALARIED', label: 'Salaried' },
+];
 const LENDER_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
 const ALERT_OPTIONS = [{ value: 'PDD_PENDING', label: 'PDD Pending' }];
 const SORT_OPTIONS = [
@@ -314,6 +318,7 @@ const CustomersListPage = () => {
   // Each of these holds zero or more selected values — empty means "All".
   const [selectedStages, setSelectedStages] = useState([]);
   const [selectedEntityTypes, setSelectedEntityTypes] = useState([]);
+  const [selectedCustomerTypes, setSelectedCustomerTypes] = useState([]);
   const [selectedLenders, setSelectedLenders] = useState([]);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
   const [sortIndex, setSortIndex] = useState(0);
@@ -337,6 +342,7 @@ const CustomersListPage = () => {
         stage: selectedStages.join(','),
         lender: selectedLenders.join(','),
         entity_type: selectedEntityTypes.join(','),
+        category: selectedCustomerTypes.join(','),
         alert: selectedAlerts.join(','),
         sort_by: SORT_OPTIONS[sortIndex].by,
         sort_order: SORT_OPTIONS[sortIndex].order,
@@ -353,7 +359,7 @@ const CustomersListPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, sortIndex, page, selectedStages, selectedLenders, selectedEntityTypes, selectedAlerts]);
+  }, [search, sortIndex, page, selectedStages, selectedLenders, selectedEntityTypes, selectedCustomerTypes, selectedAlerts]);
 
   useEffect(() => { fetchPipeline(); }, [fetchPipeline]);
 
@@ -442,14 +448,14 @@ const CustomersListPage = () => {
       />
 
       {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
-        <div data-tour="pipeline-search" style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 24, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+        <div data-tour="pipeline-search" style={{ flex: '0 1 240px', minWidth: isMobile ? '100%' : 180, maxWidth: isMobile ? '100%' : 240 }}>
           <span style={labelSm(isDark)}>Search</span>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: isDark ? '#fff' : '#94a3b8' }} />
             <input
               type="text"
-              placeholder="Name, Case ID, lender, PAN…"
+              placeholder="Name, Case ID, lender, PAN, phone, email…"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20 }}
@@ -457,8 +463,16 @@ const CustomersListPage = () => {
           </div>
         </div>
 
-        <div data-tour="pipeline-filters" style={{ display: 'flex', gap: 32, flexWrap: 'wrap', flex: 3 }}>
-        <div style={{ flex: 1, minWidth: 160 }}>
+        <div data-tour="pipeline-filters" style={{ display: 'flex', gap: isMobile ? 16 : 20, flexWrap: 'wrap', flex: '1 1 0', minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 145 }}>
+          <MultiSelectFilter
+            label="Customer type" allLabel="All customer types" isDark={isDark}
+            options={CUSTOMER_TYPE_OPTIONS} selected={selectedCustomerTypes}
+            onChange={handleFacetChange(setSelectedCustomerTypes)}
+          />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 145 }}>
           <MultiSelectFilter
             label="Entity Type" allLabel="All Entity Types" isDark={isDark}
             options={ENTITY_TYPE_OPTIONS} selected={selectedEntityTypes}
@@ -466,7 +480,7 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 150 }}>
+        <div style={{ flex: 1, minWidth: 135 }}>
           <MultiSelectFilter
             label="Lender" allLabel="All Lenders" isDark={isDark}
             options={LENDER_OPTIONS} selected={selectedLenders}
@@ -474,7 +488,7 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 140 }}>
+        <div style={{ flex: 1, minWidth: 120 }}>
           <MultiSelectFilter
             label="Alert" allLabel="All Alerts" isDark={isDark}
             options={ALERT_OPTIONS} selected={selectedAlerts}
@@ -482,7 +496,7 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ flex: 1, minWidth: 145 }}>
           <span style={labelSm(isDark)}>Sort</span>
           <select value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
             style={{ ...underlineInput(sortIndex !== 0), appearance: 'none', cursor: 'pointer' }}>
