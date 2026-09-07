@@ -7,6 +7,20 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
+// Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
+// download-report entitlement gap (confirmed broken on both preprod — bad
+// credentials — and production — 403 not entitled — 2026-09-02). Never shown
+// in a real production build; exists so the raw provider error is visible
+// on-screen for a Signzy support escalation instead of only in server logs.
+// Same pattern as EsrPage.jsx's IS_DEV_BUILD — import.meta.env.DEV alone
+// misses the deployed dev server (still a production Vite build).
+const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
+
+// Rounded off for the preview grid — these are summary figures, not inputs
+// (ESR pulls the unrounded values directly from the backend), so the
+// paise-level decimals just added noise to a quick-glance amount.
+const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString('en-IN')}` : '—';
+
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
@@ -35,6 +49,23 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     const [localSourceUrls, setLocalSourceUrls] = useState({
         excel: existingStatus?.report_excel_url || null,
         json: existingStatus?.report_json_url || null,
+    });
+    // Preview figures — same idea as GstAnalyticsForm's turnover_preview, but
+    // sourced from `existingStatus` only (case.service.js#getCaseById), not
+    // the realtime socket snapshot: unlike GST's turnover (backed by a
+    // pre-parsed FY summary table, cheap to look up on every tick),
+    // avg_monthly_credit/total_credits only exist by parsing the raw vendor
+    // JSON, which casePullSnapshot.service.js deliberately never selects on
+    // every socket tick (see its own BANK_SELECT comment on why). These are
+    // static once a pull completes, so a snapshot-per-poll isn't needed —
+    // one read at page load is enough.
+    const [localPreview, setLocalPreview] = useState({
+        avg_bank_balance_latest_year: existingStatus?.avg_bank_balance_latest_year ?? null,
+        avg_bank_balance_previous_year: existingStatus?.avg_bank_balance_previous_year ?? null,
+        financial_year_latest: existingStatus?.financial_year_latest ?? null,
+        financial_year_previous: existingStatus?.financial_year_previous ?? null,
+        avg_monthly_credit: existingStatus?.avg_monthly_credit ?? null,
+        total_credits: existingStatus?.total_credits ?? null,
     });
 
     const status = livePull?.status || localStatus;
@@ -71,6 +102,14 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             excel: existingStatus.report_excel_url || null,
             json: existingStatus.report_json_url || null,
         });
+        setLocalPreview({
+            avg_bank_balance_latest_year: existingStatus.avg_bank_balance_latest_year ?? null,
+            avg_bank_balance_previous_year: existingStatus.avg_bank_balance_previous_year ?? null,
+            financial_year_latest: existingStatus.financial_year_latest ?? null,
+            financial_year_previous: existingStatus.financial_year_previous ?? null,
+            avg_monthly_credit: existingStatus.avg_monthly_credit ?? null,
+            total_credits: existingStatus.total_credits ?? null,
+        });
     }, [existingStatus, localReportId]);
 
     usePhaseTransition(livePull ? phase : null, {
@@ -93,6 +132,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // UI state
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // Dev-only — raw Signzy error from the last failed retrieve-work-order/
+    // download-report call, kept on screen (not just a transient toast) for
+    // a Signzy support escalation. See IS_DEV_BUILD above.
+    const [providerError, setProviderError] = useState(null);
 
     const handleFileChange = (index, field, value) => {
         const newFiles = [...files];
@@ -184,12 +227,20 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 return;
             }
 
+            setProviderError(null);
             setLocalDocumentIds(data.documentIds || { excel: null, json: null });
             setLocalSourceUrls(data.sourceUrls || { excel: null, json: null });
             setLocalStatus('COMPLETED');
             refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || error.message);
+            if (IS_DEV_BUILD) {
+                setProviderError({
+                    endpoint: 'POST /external/bank/download → Signzy statementanalysis/retrieve-work-order + download-report',
+                    status: error.response?.status,
+                    message: error.response?.data?.error || error.message,
+                });
+            }
         }
     };
 
@@ -274,6 +325,42 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                     )}
                 </div>
             </div>
+
+            {/* Turnover-preview-style summary — same idea and layout as
+                GstAnalyticsForm's own preview grid, so GST and Bank read as
+                one consistent design instead of GST alone having a preview.
+                Sourced from `existingStatus` (see localPreview above), so it
+                appears the instant the pull is COMPLETED without waiting on
+                a live socket field that doesn't carry this. */}
+            {status === 'COMPLETED' && (localPreview.avg_bank_balance_latest_year != null || localPreview.total_credits != null) && (
+                <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14,
+                    padding: isMobile ? '14px 16px' : '16px 24px', borderTop: '1px solid var(--border)',
+                }}>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Daily Average Balance</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.avg_bank_balance_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{localPreview.financial_year_latest || '—'}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Bank Credit</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.total_credits)}</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Dev-only diagnostic — Signzy retrieve-work-order/download-report
+                entitlement gap, kept visible (not just a toast) for a vendor
+                escalation. Never renders in a production build. */}
+            {IS_DEV_BUILD && providerError && (
+                <div style={{ margin: '0 16px 16px', padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 12, fontFamily: 'monospace', border: '1px dashed var(--error)' }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                        [DEV ONLY] Signzy provider call failed (manual "Check now"){providerError.status ? ` — HTTP ${providerError.status}` : ''}
+                    </div>
+                    <div>{providerError.endpoint}</div>
+                    <div style={{ marginTop: 4 }}>{providerError.message}</div>
+                </div>
+            )}
 
             {/* Expando File UI (Only visible when isUploadOpen is true) */}
             {isUploadOpen && (

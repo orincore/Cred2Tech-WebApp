@@ -447,7 +447,7 @@ export default function SalesIncentivePage() {
                   <select value={ruleForm.calculation_base} onChange={e => setRuleForm({ ...ruleForm, calculation_base: e.target.value })} className="form-control">
                     <option value="DISBURSED_AMOUNT">Disbursed Amount</option>
                     <option value="LENDER_COMMISSION">Lender Commission</option>
-                    <option value="DSA_NET_COMMISSION">DSA Net Commission</option>
+                    <option value="DSA_NET_COMMISSION">Sourcing Partner Net Commission</option>
                     <option value="PROCESSING_FEE">Processing Fee</option>
                     <option value="FIXED_PER_CASE">Fixed Per Case</option>
                   </select>

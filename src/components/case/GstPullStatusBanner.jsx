@@ -4,13 +4,25 @@ import { useCasePullStatus } from '../../hooks/useCasePullStatus';
 import PullStatusTracker from '../ui/PullStatusTracker';
 
 const LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATING_REPORT', 'FINALIZING'];
+// A completed/failed pull auto-hides after this long, so it doesn't sit on
+// screen indefinitely once the DSA has had a chance to notice it.
+const AUTO_HIDE_MS = 5 * 60 * 1000;
 
-const dismissedKey = (caseId) => `gst_pull_banner_dismissed_${caseId}`;
+const seenKey = (caseId) => `gst_pull_banner_seen_${caseId}`;
 
-const readDismissedTotal = (caseId) => {
+const readSeen = (caseId) => {
   if (!caseId) return null;
-  const raw = localStorage.getItem(dismissedKey(caseId));
-  return raw != null ? Number(raw) : null;
+  try {
+    const raw = localStorage.getItem(seenKey(caseId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeSeen = (caseId, total) => {
+  if (!caseId) return;
+  try { localStorage.setItem(seenKey(caseId), JSON.stringify({ total, shownAt: Date.now() })); } catch { /* ignore quota/privacy errors */ }
 };
 
 /**
@@ -22,36 +34,63 @@ const readDismissedTotal = (caseId) => {
  * (useCasePullStatus → snapshot.gst.overall), just the case-level aggregate
  * instead of a single request, so it reflects "the case's GST situation"
  * rather than any one journey.
+ *
+ * Once a pull for a given `total` reaches a terminal state (done or
+ * failed), it is a strictly one-time notification: it's marked "seen" in
+ * localStorage the instant it first displays — not just when the DSA closes
+ * it — so even a page refresh a second later won't bring it back. While
+ * still on screen for that one viewing, it auto-hides after 5 minutes, or
+ * sooner if closed manually. A later, genuinely new pull (a different
+ * `total`) gets its own fresh one-time showing.
  */
 const GstPullStatusBanner = ({ caseId }) => {
   const { snapshot } = useCasePullStatus(caseId);
   const overall = snapshot?.gst?.overall;
 
-  // Dismissing only hides *this* pull's banner — persisted to localStorage so
-  // it survives a page refresh, but keyed to the request total so if the
-  // total changes afterward (a new pull started, e.g. after "Remove" +
-  // re-submit), the banner comes back rather than staying silently hidden
-  // forever.
-  const [dismissedAtTotal, setDismissedAtTotal] = useState(() => readDismissedTotal(caseId));
+  // Snapshot of whatever was already marked "seen" as of this mount —
+  // deliberately never updated again for the rest of this component's
+  // lifetime (the marking effect below writes straight to localStorage, not
+  // to this state), so persisting a fresh seen-mark while this banner is
+  // actively on screen doesn't immediately hide itself. It only prevents
+  // the *next* mount (a refresh, or navigating back into this case) from
+  // showing it again.
+  const [persistedSeen, setPersistedSeen] = useState(() => readSeen(caseId));
   useEffect(() => {
-    setDismissedAtTotal(readDismissedTotal(caseId));
+    setPersistedSeen(readSeen(caseId));
   }, [caseId]);
 
-  const dismissed = overall != null && dismissedAtTotal === overall.total;
+  const alreadySeenBefore = overall != null && persistedSeen?.total === overall.total;
+
+  const isDone = overall?.phase === 'COMPLETED';
+  const isFailed = overall?.phase === 'FAILED';
+  const isLive = overall ? LIVE_PHASES.includes(overall.phase) : false;
+
+  const [autoHidden, setAutoHidden] = useState(false);
+  // A new pull (different total) always gets a fresh showing, regardless of
+  // whether a previous pull's banner was auto-hidden or closed.
+  useEffect(() => {
+    setAutoHidden(false);
+  }, [overall?.total]);
+
+  // The moment a pull reaches a terminal state for the first time (i.e. it
+  // wasn't already marked seen from an earlier mount), record that it has
+  // now been shown and arm the 5-minute auto-hide.
+  useEffect(() => {
+    if (!overall || isLive || alreadySeenBefore) return;
+    writeSeen(caseId, overall.total);
+    const timer = setTimeout(() => setAutoHidden(true), AUTO_HIDE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId, overall?.total, isLive, alreadySeenBefore]);
 
   const handleDismiss = () => {
     if (!overall) return;
-    setDismissedAtTotal(overall.total);
-    if (caseId) {
-      try { localStorage.setItem(dismissedKey(caseId), String(overall.total)); } catch { /* ignore quota/privacy errors */ }
-    }
+    writeSeen(caseId, overall.total);
+    setAutoHidden(true);
   };
 
-  if (!overall || overall.total === 0 || overall.phase === 'NOT_STARTED' || dismissed) return null;
-
-  const isDone = overall.phase === 'COMPLETED';
-  const isFailed = overall.phase === 'FAILED';
-  const isLive = LIVE_PHASES.includes(overall.phase);
+  if (!overall || overall.total === 0 || overall.phase === 'NOT_STARTED') return null;
+  if (alreadySeenBefore || autoHidden) return null;
 
   return (
     <div

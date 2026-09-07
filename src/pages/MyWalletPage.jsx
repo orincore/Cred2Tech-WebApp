@@ -15,6 +15,14 @@ import { getErrorMessage } from '../utils/helpers';
 import { walletService } from '../api/walletService';
 import { loadRazorpay } from '../utils/razorpay';
 import { useAuth } from '../context/AuthContext';
+import PageTour from '../components/tour/PageTour';
+
+const WALLET_TOUR_STEPS = [
+  { target: '[data-tour="wallet-stats"]', title: 'Your credit balance', description: 'Your current wallet balance, plus how many credits were added and used in the selected date range.' },
+  { target: '[data-tour="wallet-recharge"]', title: 'Recharge your wallet', description: 'Top up your credits here any time. Pay by card, UPI, or netbanking, or redeem a promo code, and a GST invoice is generated automatically.' },
+  { target: '[data-tour="wallet-tabs"]', title: 'Browse your wallet', description: 'Switch between your Transaction History, your Recharge History with downloadable invoices, and (if you manage a team) Employee Credits.' },
+  { target: '[data-tour="wallet-filters"]', title: 'Search & filter', description: 'Search your transactions, filter by credit/debit and date range, or export the whole log to Excel.' },
+];
 
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -72,8 +80,44 @@ const PRESETS = [
   },
 ];
 
-const REFERENCE_TYPE_LABEL = { RAZORPAY_TOPUP: 'Credits Recharge' };
+// Clean, underscore-free labels for the "Type" badge — reference_type comes
+// straight off the wallet_transactions enum (API_CALL, RAZORPAY_TOPUP, ...),
+// which reads as raw code in a customer-facing log otherwise.
+const REFERENCE_TYPE_LABEL = {
+  API_CALL: 'Debit',
+  RAZORPAY_TOPUP: 'Credits Recharge',
+  ADMIN_TOPUP: 'Admin Topup',
+  REFUND: 'Refund',
+  MANUAL_ADJUSTMENT: 'Manual Adjustment',
+  EMPLOYEE_ALLOCATION: 'Employee Allocation',
+  EMPLOYEE_REVOCATION: 'Employee Revocation',
+};
 const referenceTypeLabel = (type) => REFERENCE_TYPE_LABEL[type] || type;
+
+// Falls back for an api_code the backend couldn't resolve a customer/case for
+// (older rows, or a call that never carried one) — still underscore-free.
+const API_CODE_FALLBACK_LABEL = {
+  GST_FETCH: 'GST Fetch',
+  BUREAU_OBLIGATIONS: 'Bureau Obligations',
+  ITR_ANALYTICS: 'ITR Analytics',
+};
+
+// The Reference column for an API-call debit: GST_FETCH / BUREAU_OBLIGATIONS /
+// ITR_ANALYTICS etc. are internal api_codes, meaningless to a DSA reading
+// their own usage log on their own — shown as "<Service> — <Customer> ·
+// Case <id>" so it's clear BOTH which service ran AND who it ran for. The
+// customer/case half comes from the backend (customer_name/case_id),
+// attached by joining the api_usage_log the deduction was logged against;
+// it's appended to, never a replacement for, the service name below.
+const transactionReferenceLabel = (t) => {
+  if (t.remarks) return t.remarks;
+  if (t.api_code) {
+    const service = API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
+    const who = t.customer_name ? `${t.customer_name}${t.case_id ? ` · Case ${t.case_id}` : ''}` : null;
+    return who ? `${service} — ${who}` : service;
+  }
+  return '—';
+};
 
 const formatCredits = (n) => `${Number(n || 0).toLocaleString('en-IN')}`;
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -90,10 +134,136 @@ const RechargeModal = ({ onClose, onSuccess }) => {
   const { user } = useAuth();
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  const [preview, setPreview] = useState(null); // { credits_to_add, bonus_credits, gst_amount_inr, total_amount_inr, discount_amount_inr, discounted_amount_inr, promo_bonus_credits, promo_benefit_type, ... }
+  const [previewLoading, setPreviewLoading] = useState(false);
+  // FREEBIE codes replace the whole amount-entry flow below with a fixed,
+  // server-defined credit grant — freebieAmount is never derived from
+  // anything the DSA typed, only from getPromoInfo's server response, so
+  // there's nothing client-side to tamper with (see redeemFreebie).
+  const [freebieAmount, setFreebieAmount] = useState(null);
+  const [redeemingFreebie, setRedeemingFreebie] = useState(false);
 
   const base = Number(amount) || 0;
+  const isFreebieMode = promoApplied && freebieAmount != null;
+  // Fallback figures (no bonus/promo) shown instantly while the live
+  // preview call is in flight, or if it hasn't fired yet — same GST math
+  // the backend uses, so there's never a flash of a wrong number.
   const gst = Math.round(base * GST_RATE * 100) / 100;
   const total = base + gst;
+
+  // Re-fetches the preview (volume-discount bonus + promo discount/cashback,
+  // both computed server-side) whenever the amount changes, and whenever a
+  // successfully-applied DISCOUNT/CASHBACK promo code is present — debounced
+  // so typing a 4-digit amount doesn't fire a request per keystroke. Never
+  // runs in freebie mode — there's no amount for a FREEBIE code to preview
+  // against.
+  useEffect(() => {
+    if (isFreebieMode) return;
+    if (!base || base <= 0) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await walletService.getTopupPreview(base, promoApplied ? promoCode.trim() : null);
+        if (cancelled) return;
+        setPreview(data);
+        if (promoApplied && data.promo_valid === false) {
+          setPromoError(data.promo_error || 'This promo code is not valid');
+          setPromoApplied(false);
+        }
+      } catch (err) {
+        if (!cancelled) setPreview(null);
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [base, promoApplied, isFreebieMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Applying is amount-independent — a FREEBIE code needs no amount typed
+  // at all, so this checks the code's benefit_type FIRST (getPromoInfo,
+  // no reservation, no amount) before deciding whether to enter freebie
+  // mode or fall back to the normal amount-aware preview flow.
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoChecking(true);
+    setPromoError('');
+    try {
+      const info = await walletService.getPromoInfo(promoCode.trim());
+      if (info.valid === false) {
+        setPromoError(info.error || 'This promo code is not valid');
+        return;
+      }
+      if (info.benefit_type === 'FREEBIE') {
+        setFreebieAmount(info.free_credits_amount);
+        setPromoApplied(true);
+        setPreview(null);
+        return;
+      }
+      // DISCOUNT / CASHBACK — same as before: needs a real amount to show
+      // a meaningful preview against.
+      setFreebieAmount(null);
+      if (!base) {
+        // Still mark it applied so the amount-effect above picks it up the
+        // moment an amount is typed — nothing to preview yet either way.
+        setPromoApplied(true);
+        return;
+      }
+      const data = await walletService.getTopupPreview(base, promoCode.trim());
+      if (data.promo_valid === false) {
+        setPromoError(data.promo_error || 'This promo code is not valid');
+        setPromoApplied(false);
+        setPreview(data);
+      } else {
+        setPromoApplied(true);
+        setPreview(data);
+      }
+    } catch (err) {
+      setPromoError(getErrorMessage(err) || 'Failed to check promo code');
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const clearPromo = () => {
+    setPromoApplied(false);
+    setPromoCode('');
+    setPromoError('');
+    setFreebieAmount(null);
+    setPreview(null);
+  };
+
+  // FREEBIE: no amount, no Razorpay — the server resolves the exact credit
+  // amount from the code itself (never from anything typed here) and
+  // credits the wallet directly in one call.
+  const handleRedeemFreebie = async () => {
+    setRedeemingFreebie(true);
+    try {
+      const result = await walletService.redeemFreebiePromo(promoCode.trim());
+      toast.success(result.message || `${result.credits_added.toLocaleString('en-IN')} free credits added to your wallet!`);
+      onSuccess();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to redeem promo code');
+    } finally {
+      setRedeemingFreebie(false);
+    }
+  };
+
+  // credits_to_add already folds in any volume-discount bonus tier; the
+  // amount actually charged is preview.total_amount_inr (net of any promo
+  // discount) once the preview has loaded, falling back to the plain
+  // no-bonus/no-promo GST math above until it does.
+  const creditsToReceive = preview?.credits_to_add ?? base;
+  const volumeBonusCredits = preview?.volume_bonus_credits ?? preview?.bonus_credits ?? 0;
+  const cashbackBonusCredits = preview?.promo_bonus_credits || 0;
+  const amountPayable = preview?.total_amount_inr ?? total;
 
   const handleRecharge = async () => {
     if (!base || base <= 0) {
@@ -102,7 +272,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
     }
     setSubmitting(true);
     try {
-      const order = await walletService.createTopupOrder(base);
+      const order = await walletService.createTopupOrder(base, promoApplied ? promoCode.trim() : null);
       const Razorpay = await loadRazorpay();
 
       const options = {
@@ -110,7 +280,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
         amount: order.amount,
         currency: order.currency,
         name: 'Cred2Tech',
-        description: `Wallet Recharge — ${base.toLocaleString('en-IN')} credits`,
+        description: `Wallet Recharge — ${order.credits_to_add.toLocaleString('en-IN')} credits`,
         order_id: order.order_id,
         handler: async (response) => {
           const verifyData = {
@@ -124,7 +294,11 @@ const RechargeModal = ({ onClose, onSuccess }) => {
             try {
               const result = await walletService.verifyTopupCheckout(verifyData);
               if (result.status === 'CREDITED' || result.status === 'ALREADY_CREDITED' || result.status === 'ALREADY_CREDITED_IN_LEDGER') {
-                toast.success(`Wallet recharged with ${base.toLocaleString('en-IN')} credits!`);
+                // order.credits_to_add is the real, backend-computed figure
+                // (base + volume-discount bonus) — never the raw entered
+                // amount, so this can't under-report a bonus that was
+                // actually credited.
+                toast.success(`Wallet recharged with ${order.credits_to_add.toLocaleString('en-IN')} credits!`);
                 setSubmitting(false);
                 onSuccess();
                 return;
@@ -183,40 +357,123 @@ const RechargeModal = ({ onClose, onSuccess }) => {
             placeholder="e.g. 1000"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            style={{ ...compactField, width: '100%', boxSizing: 'border-box', fontSize: 16, padding: '10px 12px' }}
+            disabled={isFreebieMode}
+            style={{ ...compactField, width: '100%', boxSizing: 'border-box', fontSize: 16, padding: '10px 12px', opacity: isFreebieMode ? 0.5 : 1 }}
             autoFocus
           />
+          {isFreebieMode && (
+            <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6, marginBottom: 0 }}>
+              This code grants a fixed amount of free credits — no purchase amount needed.
+            </p>
+          )}
 
-          {base > 0 && (
+          {!isFreebieMode && volumeBonusCredits > 0 && (
+            <p style={{ fontSize: 11, color: 'var(--success)', marginTop: 8, marginBottom: 0, fontWeight: 700 }}>
+              🎉 Volume bonus applied — you'll receive {volumeBonusCredits.toLocaleString('en-IN')} extra credits free.
+            </p>
+          )}
+
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', marginBottom: 6, display: 'block' }}>Promo code (optional)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); if (promoApplied) { setPromoApplied(false); setFreebieAmount(null); } }}
+                placeholder="e.g. WELCOME10"
+                disabled={promoChecking || submitting || redeemingFreebie}
+                className="form-control"
+                style={{ ...compactField, flex: 1, textTransform: 'uppercase' }}
+              />
+              {promoApplied ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={clearPromo} disabled={redeemingFreebie} style={{ borderRadius: 0 }}>Remove</button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleApplyPromo}
+                  disabled={!promoCode.trim() || promoChecking}
+                  style={{ borderRadius: 0, whiteSpace: 'nowrap' }}
+                >
+                  {promoChecking ? 'Checking…' : 'Apply'}
+                </button>
+              )}
+            </div>
+            {promoError && <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 6 }}>{promoError}</p>}
+            {promoApplied && !isFreebieMode && preview?.promo_valid && preview.promo_benefit_type === 'CASHBACK' && (
+              <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>🎉 Cashback applied — {cashbackBonusCredits.toLocaleString('en-IN')} extra credits on top of your recharge!</p>
+            )}
+            {promoApplied && !isFreebieMode && preview?.promo_valid && preview.promo_benefit_type !== 'CASHBACK' && (
+              <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>Promo code applied - you save ₹{Number(preview.discount_amount_inr || 0).toLocaleString('en-IN')}!</p>
+            )}
+          </div>
+
+          {isFreebieMode ? (
+            <div style={{ marginTop: 16, background: 'var(--success-bg, var(--bg))', border: '1px solid var(--success)', padding: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--on-muted)', marginBottom: 4 }}>This code grants you</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--success)' }}>{freebieAmount.toLocaleString('en-IN')} credits</div>
+              <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>completely free — no payment required</div>
+            </div>
+          ) : base > 0 && (
             <div style={{ marginTop: 16, background: 'var(--bg)', border: '1px solid var(--outline)', padding: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
                 <span>Credits value</span><span>{formatINR(base)}</span>
               </div>
+              {promoApplied && preview?.discount_amount_inr > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>
+                  <span>Promo discount</span><span>−{formatINR(preview.discount_amount_inr)}</span>
+                </div>
+              )}
+              {promoApplied && cashbackBonusCredits > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>
+                  <span>Promo cashback bonus</span><span>+{cashbackBonusCredits.toLocaleString('en-IN')} credits</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--on-muted)', marginBottom: 6 }}>
-                <span>GST (18%)</span><span>{formatINR(gst)}</span>
+                <span>GST (18%)</span><span>{formatINR(preview?.gst_amount_inr ?? gst)}</span>
               </div>
               <div style={{ borderTop: '1px solid var(--outline)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>
-                <span>Amount payable</span><span>{formatINR(total)}</span>
+                <span>Amount payable</span><span>{previewLoading ? '…' : formatINR(amountPayable)}</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
+                <span>Credits you'll receive</span><span>{creditsToReceive.toLocaleString('en-IN')}</span>
               </div>
             </div>
           )}
 
-          <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 12, marginBottom: 0 }}>
-            A GST tax invoice will be emailed to you and available for download from Recharge History once payment is confirmed.
-          </p>
+          {!isFreebieMode && (
+            <p style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 12, marginBottom: 0 }}>
+              A GST tax invoice will be emailed to you and available for download from Recharge History once payment is confirmed.
+            </p>
+          )}
 
-          <button
-            onClick={handleRecharge}
-            disabled={submitting || !base}
-            style={{
-              width: '100%', marginTop: 16, padding: '12px', background: 'var(--primary)', color: '#fff',
-              border: 'none', fontSize: 14, fontWeight: 700, cursor: submitting || !base ? 'not-allowed' : 'pointer',
-              opacity: submitting || !base ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
-            {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(total) : ''}`}
-          </button>
+          {isFreebieMode ? (
+            <button
+              onClick={handleRedeemFreebie}
+              disabled={redeemingFreebie}
+              style={{
+                width: '100%', marginTop: 16, padding: '12px', background: 'var(--success)', color: '#fff',
+                border: 'none', fontSize: 14, fontWeight: 700, cursor: redeemingFreebie ? 'not-allowed' : 'pointer',
+                opacity: redeemingFreebie ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {redeemingFreebie ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {redeemingFreebie ? 'Redeeming…' : `Redeem ${freebieAmount.toLocaleString('en-IN')} Free Credits`}
+            </button>
+          ) : (
+            <button
+              onClick={handleRecharge}
+              disabled={submitting || !base || previewLoading}
+              style={{
+                width: '100%', marginTop: 16, padding: '12px', background: 'var(--primary)', color: '#fff',
+                border: 'none', fontSize: 14, fontWeight: 700, cursor: submitting || !base ? 'not-allowed' : 'pointer',
+                opacity: submitting || !base ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(amountPayable) : ''}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -491,7 +748,7 @@ const MyWalletPage = () => {
     },
     {
       key: 'reference', label: 'Reference', width: '30%', padding: '16px 12px',
-      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{t.remarks || t.api_code || '—'}</span>,
+      render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{transactionReferenceLabel(t)}</span>,
     },
     {
       key: 'balance_after', label: 'Balance After', align: 'right', width: '20%', padding: '16px 12px',
@@ -589,12 +846,13 @@ const MyWalletPage = () => {
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
         {/* ─── Summary stat cards + Recharge button ─── */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 8 : 16, marginBottom: 16, alignItems: 'stretch' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 8 : 16, flex: 1 }}>
+          <div data-tour="wallet-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 8 : 16, flex: 1 }}>
             <StatCard title="Current Balance" value={balanceLoading ? '—' : (balance !== null ? formatCredits(balance) : '—')} icon={Wallet} color="var(--primary)" loading={balanceLoading} />
             <StatCard title="Credited (in range)" value={summary ? `+${formatCredits(summary.total_credit)}` : '—'} icon={TrendingUp} color="var(--success)" loading={!summary} />
             <StatCard title="Used (in range)" value={summary ? `-${formatCredits(summary.total_debit)}` : '—'} icon={TrendingDown} color="var(--error)" loading={!summary} />
           </div>
           <button
+            data-tour="wallet-recharge"
             onClick={() => setShowRechargeModal(true)}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -607,7 +865,7 @@ const MyWalletPage = () => {
         </div>
 
         {/* ─── Tabs ─── */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 0, borderBottom: '1px solid var(--outline)' }}>
+        <div data-tour="wallet-tabs" style={{ display: 'flex', gap: 4, marginBottom: 0, borderBottom: '1px solid var(--outline)' }}>
           {[
             { key: 'transactions', label: 'Transaction History' },
             { key: 'recharges', label: 'Recharge History' },
@@ -632,7 +890,7 @@ const MyWalletPage = () => {
           <>
             <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
               {/* ─── Filter toolbar ─── */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--outline)' }}>
+              <div data-tour="wallet-filters" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--outline)' }}>
                 <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 140, maxWidth: 260 }}>
                   <Search size={13} color="var(--on-muted)" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   <input
@@ -729,7 +987,7 @@ const MyWalletPage = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
-                        <span style={{ fontSize: 12, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.remarks || t.api_code || '—'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transactionReferenceLabel(t)}</span>
                         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', flexShrink: 0 }}>Bal: {formatCredits(t.balance_after)}</span>
                       </div>
                     </div>
@@ -800,12 +1058,12 @@ const MyWalletPage = () => {
           <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
             <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--outline)' }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-surface)', margin: 0 }}>Employee Wallet Allocation</h3>
-              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>Allocate or revoke credits for your DSA team members</p>
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '4px 0 0' }}>Allocate or revoke credits for your Sourcing Partner team members</p>
             </div>
             {employeesLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>Loading…</div>
             ) : employees.length === 0 ? (
-              <EmptyState icon={Wallet} title="No team members found" description="Add DSA team members from Team Management to allocate credits to them." />
+              <EmptyState icon={Wallet} title="No team members found" description="Add Sourcing Partner team members from Team Management to allocate credits to them." />
             ) : isMobile ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
                 {employees.map((emp) => {
@@ -850,6 +1108,7 @@ const MyWalletPage = () => {
           onSuccess={handleAllocationSuccess}
         />
       )}
+      <PageTour pageKey="wallet" steps={WALLET_TOUR_STEPS} />
     </div>
   );
 };

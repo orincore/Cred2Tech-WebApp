@@ -69,7 +69,7 @@ function UpdateStatusModal({ entry, onClose, onSuccess }) {
     } finally { setSaving(false); }
   };
 
-  const caseLabel = `${entry.case_display_id || `CASE-${entry.case_id}`} · ${entry.customer_name || 'Customer'} · ${entry.user?.name || 'SubDSA'}`;
+  const caseLabel = `${entry.case_display_id || `CASE-${entry.case_id}`} · ${entry.customer_name || 'Customer'} · ${entry.user?.name || 'Sourcing Partner'}`;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -159,7 +159,7 @@ function GenerateInvoiceModal({ selectedIds, allLedgers, onClose, onSuccess }) {
 
   const handleGenerate = async () => {
     if (!validSelection) {
-      toast.error('Select only DRAFT entries for one Sub-DSA and one payout month.');
+      toast.error('Select only DRAFT entries for one Sub-Sourcing Partner and one payout month.');
       return;
     }
     setSaving(true);
@@ -176,7 +176,7 @@ function GenerateInvoiceModal({ selectedIds, allLedgers, onClose, onSuccess }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Generate SubDSA Invoice</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Generate Sourcing Partner Invoice</h3>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -185,7 +185,7 @@ function GenerateInvoiceModal({ selectedIds, allLedgers, onClose, onSuccess }) {
             {selectedIds.length} entry(ies) selected. All must be in DRAFT status.
           </div>
           <div style={{ fontSize: 13, color: validSelection ? 'var(--text-secondary)' : 'var(--error)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: '10px 14px' }}>
-            {validSelection ? `Invoice will be generated for ${selectedRows[0]?.user?.name || 'selected Sub-DSA'} / ${monthYear}.` : 'Selection must contain only DRAFT entries for one Sub-DSA and one payout month.'}
+            {validSelection ? `Invoice will be generated for ${selectedRows[0]?.user?.name || 'selected Sub-Sourcing Partner'} / ${monthYear}.` : 'Selection must contain only DRAFT entries for one Sub-Sourcing Partner and one payout month.'}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
@@ -364,7 +364,7 @@ export default function SubDsaPayoutPage() {
       const samePartner = currentRows.every(l => l.sub_dsa_user_id === row?.sub_dsa_user_id);
       const sameMonth = currentRows.every(l => (l.payout_period || l.calculation_metadata?.payout_period) === rowMonth);
       if (currentRows.length && (!samePartner || !sameMonth)) {
-        toast.error('Invoice selection must stay within one Sub-DSA and one payout month.');
+        toast.error('Invoice selection must stay within one Sub-Sourcing Partner and one payout month.');
         return prev;
       }
       return [...prev, id];
@@ -409,7 +409,7 @@ export default function SubDsaPayoutPage() {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-      <PageHeader title="Sub DSA Payout" subtitle="Commission payable to Sub-DSA partners — case-wise tracking & payout status" />
+      <PageHeader title="Sub-Sourcing Partner Payout" subtitle="Commission payable to Sub-Sourcing Partners — case-wise tracking & payout status" />
 
       <div className="card summary-card" style={{ overflow: 'hidden', marginBottom: 20 }}>
         {/* Compact filter toolbar — merged into the same card as the summary table below */}
@@ -424,9 +424,9 @@ export default function SubDsaPayoutPage() {
           </div>
           {isAdmin && (
             <div style={{ minWidth: 130 }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Sub-DSA</label>
+              <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Sub-Sourcing Partner</label>
               <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.sub_dsa_user_id} onChange={e => setFilters(p => ({ ...p, sub_dsa_user_id: e.target.value }))}>
-                <option value="">All Sub-DSAs</option>
+                <option value="">All Sub-Sourcing Partners</option>
                 {subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
@@ -483,7 +483,7 @@ export default function SubDsaPayoutPage() {
             <EmptyState
               icon={Users2}
               title="No payout records found"
-              description="Payout entries are created automatically when a Sub-DSA's case is disbursed and commission is recorded."
+              description="Payout entries are created automatically when a Sub-Sourcing Partner's case is disbursed and commission is recorded."
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12 }}>

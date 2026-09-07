@@ -39,7 +39,7 @@ const SubDsaPayoutSetupPage = () => {
         setLenders(Array.isArray(lenderData) ? lenderData : lenderData?.lenders || []);
       })
       .catch(() => {
-        toast.error('Failed to load Sub-DSA partner');
+        toast.error('Failed to load Sub-Sourcing Partner');
         navigate('/users');
       })
       .finally(() => setLoading(false));
@@ -53,7 +53,7 @@ const SubDsaPayoutSetupPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', maxWidth: 1000, margin: '0 auto' }}>
         <PageHeader
           title={`Payout Setup — ${partner.name}`}
-          subtitle="Configure how much of the DSA's commission this Sub-DSA partner earns."
+          subtitle="Configure how much of the Sourcing Partner's commission this Sub-Sourcing Partner earns."
           breadcrumbs={[{ label: 'Team Management', path: '/users' }, { label: partner.name }]}
           compact={isMobile}
         />

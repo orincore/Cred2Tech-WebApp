@@ -16,6 +16,11 @@ export const updateTenantStatus = async (id, status) => {
   return response.data;
 };
 
+export const updateTenantVirtualWorkspace = async (id, isActive) => {
+  const response = await api.patch(`/tenants/${id}/virtual-workspace`, { is_active: isActive });
+  return response.data;
+};
+
 export const getTenantById = async (id) => {
   const response = await api.get(`/tenants/${id}`);
   return response.data;
@@ -49,8 +54,109 @@ export const publicLookupPan = async (pan_number, turnstile_token) => {
   return response.data;
 };
 
+// Global cross-tenant listing for the dedicated admin Subscriptions page.
+export const listAllVirtualWorkspaceSubscriptions = async () => {
+  const response = await api.get(`/admin/virtual-workspace/subscriptions`);
+  return response.data;
+};
+
 export const getTenantSummary = async (tenantId) => {
   const response = await api.get(`/admin/tenants/${tenantId}/summary`);
+  return response.data;
+};
+
+export const grantFreeVirtualWorkspace = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/grant-free`);
+  return response.data;
+};
+
+export const adminSubscribeVirtualWorkspace = async (tenantId, { planId, paymentMethod, promoCode }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/subscribe`, { plan_id: planId, payment_method: paymentMethod, promo_code: promoCode });
+  return response.data;
+};
+
+// Switches an already-subscribed tenant to a different plan — takes effect
+// immediately (see upgradePlan() in virtualWorkspaceSubscription.service.js).
+export const adminUpgradeVirtualWorkspacePlan = async (tenantId, { planId }) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/upgrade`, { plan_id: planId });
+  return response.data;
+};
+
+export const adminExtendVirtualWorkspace = async (tenantId, newEndDate) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/extend`, { new_end_date: newEndDate });
+  return response.data;
+};
+
+// Free admin credit allocation directly to a tenant's own wallet.
+export const adminTopupTenantWallet = async (tenantId, credits, remarks) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/wallet/topup`, { credits, remarks });
+  return response.data;
+};
+export const adminDeductTenantWallet = async (tenantId, credits, remarks) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/wallet/deduct`, { credits, remarks });
+  return response.data;
+};
+
+// Full paginated transaction history — same endpoint SuperadminWalletDetail
+// already uses (admin.wallet.controller.js#getLedger), reused here for
+// AdminTenantManagePage's Wallet & Credits tab instead of the summary
+// endpoint's fixed "last 5" recent_wallet_transactions snapshot.
+export const getTenantWalletLedger = async (tenantId, page = 1, limit = 20) => {
+  const response = await api.get(`/admin/wallet/tenants/${tenantId}/wallet/ledger`, { params: { page, limit } });
+  return response.data;
+};
+
+// Team/employee credit management — allocate or revoke credits between the
+// tenant's own wallet and one member's (sub-DSA/employee) wallet.
+export const getTenantEmployees = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/employees`);
+  return response.data;
+};
+export const allocateTenantEmployeeCredits = async (tenantId, userId, credits, note) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/employees/${userId}/allocate`, { credits, note });
+  return response.data;
+};
+export const revokeTenantEmployeeCredits = async (tenantId, userId, credits, note) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/employees/${userId}/revoke`, { credits, note });
+  return response.data;
+};
+export const getTenantEmployeeTransactions = async (tenantId, userId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/employees/${userId}/transactions`);
+  return response.data;
+};
+
+// Sessions & Devices — admin equivalent of ProfilePage's own self-service
+// Active Sessions / Blocked Devices cards, scoped to every user in this tenant.
+export const getTenantSessions = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/sessions`);
+  return response.data;
+};
+export const revokeTenantSession = async (tenantId, sessionId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/sessions/${sessionId}/revoke`);
+  return response.data;
+};
+export const banTenantDevice = async (tenantId, sessionId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/sessions/${sessionId}/ban`);
+  return response.data;
+};
+export const getTenantBlockedDevices = async (tenantId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/blocked-devices`);
+  return response.data;
+};
+export const unbanTenantDevice = async (tenantId, blockedIpId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/blocked-devices/${blockedIpId}/unban`);
+  return response.data;
+};
+
+export const adminCancelVirtualWorkspace = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/cancel`);
+  return response.data;
+};
+
+// Immediate downgrade to the Free plan (restricted access) — no waiting
+// for the current paid period to run out, unlike adminCancelVirtualWorkspace.
+export const adminDowngradeToFree = async (tenantId) => {
+  const response = await api.post(`/admin/tenants/${tenantId}/virtual-workspace/downgrade-to-free`);
   return response.data;
 };
 

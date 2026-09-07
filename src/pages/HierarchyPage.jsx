@@ -8,6 +8,14 @@ import OrgCard from '../components/OrgCard';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import UserSidePanel from '../components/UserSidePanel';
 import PageHeader from '../components/ui/PageHeader';
+import PageTour from '../components/tour/PageTour';
+
+const HIERARCHY_TOUR_STEPS = [
+  { target: '[data-tour="hierarchy-view-toggle"]', title: 'Tree or list view', description: 'Switch between an org-chart Tree view and a flat, sortable List view of your whole team, whichever is easier to scan.' },
+  { target: '[data-tour="hierarchy-add-member"]', title: 'Add a team member', description: 'Bring a new employee onto your team from here. They\'ll be added directly under you in the hierarchy.' },
+  { target: '[data-tour="hierarchy-canvas"]', title: 'Explore the org chart', description: 'Drag to pan around, scroll to zoom, and tap any card to see that person\'s details. Tap the +/− badge on a card to expand or collapse their team.' },
+  { target: '[data-tour="hierarchy-zoom"]', title: 'Zoom controls', description: 'Use these buttons to zoom in, zoom out, or reset the view back to its default position and scale.' },
+];
 
 // Responsive hook
 const useResponsive = () => {
@@ -25,6 +33,8 @@ const NODE_W = 230;
 const NODE_H = 130;
 const H_GAP  = 60;
 const V_GAP  = 70;
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 2.5;
 
 const buildTree = (users) => {
   const map = {};
@@ -225,6 +235,8 @@ const HierarchyPage = () => {
   const dragRef = useRef(false);
   const panRef = useRef(pan);
   panRef.current = pan;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   // Toggle expand/collapse for a node
   const toggleExpand = useCallback((nodeId) => {
@@ -367,40 +379,37 @@ const HierarchyPage = () => {
     setPan({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
   }, [dragStart]);
 
-  // ── Zoom wheel (smooth zoom toward cursor) ──
-  const onWheel = useCallback((e) => {
-    e.preventDefault();
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    // Smoother zoom factor
-    const delta = -e.deltaY * 0.001;
-    
-    requestAnimationFrame(() => {
-      setZoom(z => {
-        // Smoother exponential zoom
-        const zoomFactor = Math.exp(delta);
-        const newZoom = Math.min(2.5, Math.max(0.2, z * zoomFactor));
-        const scale = newZoom / z;
-        
-        // Zoom toward mouse position
-        setPan(p => ({
-          x: mouseX - scale * (mouseX - p.x),
-          y: mouseY - scale * (mouseY - p.y),
-        }));
-        
-        return newZoom;
-      });
-    });
+  // ── Zoom toward the pointer (mouse wheel and trackpad pinch) ──
+  const zoomAtPoint = useCallback((targetZoom, pointer) => {
+    const currentZoom = zoomRef.current;
+    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, targetZoom));
+    const scale = nextZoom / currentZoom;
+
+    setPan(currentPan => ({
+      x: pointer.x - scale * (pointer.x - currentPan.x),
+      y: pointer.y - scale * (pointer.y - currentPan.y),
+    }));
+    setZoom(nextZoom);
   }, []);
 
+  const onWheel = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const deltaMultiplier = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1;
+    const delta = e.deltaY * deltaMultiplier;
+    const zoomFactor = Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.001));
+    zoomAtPoint(zoomRef.current * zoomFactor, pointer);
+  }, [zoomAtPoint]);
+
   useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
   }, [onWheel]);
 
   // Minimap scale
@@ -421,7 +430,7 @@ const HierarchyPage = () => {
           actions={
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {/* View toggle */}
-              <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', padding: 3, borderRadius: 8, border: '1px solid var(--outline)' }}>
+              <div data-tour="hierarchy-view-toggle" style={{ display: 'flex', gap: 2, background: 'var(--surface)', padding: 3, borderRadius: 8, border: '1px solid var(--outline)' }}>
                 <button
                   onClick={() => setViewMode('tree')}
                   style={{
@@ -446,6 +455,7 @@ const HierarchyPage = () => {
               <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>{users.length} members</span>
               {canManageUsers && (
                 <button
+                  data-tour="hierarchy-add-member"
                   onClick={() => navigate('/users/create')}
                   style={{ padding: '7px 16px', fontSize: 12, fontWeight: 700, background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
                 >
@@ -470,6 +480,7 @@ const HierarchyPage = () => {
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
           {/* Canvas */}
           <div
+            data-tour="hierarchy-canvas"
             ref={canvasRef}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
@@ -479,7 +490,7 @@ const HierarchyPage = () => {
             onTouchMove={onTouchMove}
             onTouchEnd={() => { dragRef.current = false; }}
             onClick={() => setSelected(null)}
-            style={{ flex: 1, overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab', position: 'relative', background: isDark ? '#0f172a' : '#f8fafc' }}
+            style={{ flex: 1, overflow: 'hidden', cursor: dragging ? 'grabbing' : 'grab', position: 'relative', background: isDark ? '#0f172a' : '#f8fafc', touchAction: 'none', userSelect: 'none', overscrollBehavior: 'contain' }}
           >
             <svg
               width="100%" height="100%"
@@ -514,10 +525,10 @@ const HierarchyPage = () => {
           </div>
 
           {/* ── Zoom controls ── */}
-          <div style={{ position: 'absolute', bottom: 96, right: 24, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 8, overflow: 'hidden' }}>
-            <button onClick={() => setZoom(z => Math.min(2, z + 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          <div data-tour="hierarchy-zoom" style={{ position: 'absolute', bottom: 96, right: 24, display: 'flex', flexDirection: 'column', gap: 4, background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 8, overflow: 'hidden' }}>
+            <button onClick={() => setZoom(z => Math.min(MAX_ZOOM, z + 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
             <div style={{ height: 1, background: 'var(--outline)' }} />
-            <button onClick={() => setZoom(z => Math.max(0.3, z - 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 22, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>−</button>
+            <button onClick={() => setZoom(z => Math.max(MIN_ZOOM, z - 0.15))} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 22, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>−</button>
             <div style={{ height: 1, background: 'var(--outline)' }} />
             <button onClick={() => { setZoom(1); setPan({ x: 80, y: 60 }); }} style={{ width: 36, height: 36, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 10, color: 'var(--on-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{Math.round(zoom * 100)}%</button>
           </div>
@@ -672,6 +683,7 @@ const HierarchyPage = () => {
           />
         </div>
       )}
+      <PageTour pageKey="hierarchy" steps={HIERARCHY_TOUR_STEPS} />
     </div>
   );
 };

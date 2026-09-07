@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, FileText, Download, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileText, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send, RefreshCw, XCircle } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
@@ -8,6 +8,7 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
 import { useCasePullStatus, usePhaseTransition } from '../hooks/useCasePullStatus';
+import { gstAuthLinkService } from '../api/gstAuthLinkService';
 
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
@@ -22,7 +23,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false }) => {
+const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -32,7 +33,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         return () => window.removeEventListener('resize', onResize);
     }, []);
     const [mode, setMode] = useState('IN_SYSTEM');
-    const authType = 'PASSWORD';
+    const [authType, setAuthType] = useState('PASSWORD');
     const [isManualGstin, setIsManualGstin] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -41,13 +42,14 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         password: '',
         from_date: `${AUTO_FROM_MONTH}${AUTO_FROM_YEAR}`,
         to_date: `${AUTO_TO_MONTH}${AUTO_TO_YEAR}`,
-        emails: '',
-        mobile_numbers: ''
     });
 
     const [loading, setLoading] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [otp, setOtp] = useState('');
+    const [submittingOtp, setSubmittingOtp] = useState(false);
 
     // Live status is pushed from the server (see hooks/useCasePullStatus) — no
     // client-side polling. The server keeps one sync loop per case, so this
@@ -59,7 +61,71 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
     // Websockets can be blocked by corporate proxies; this one-shot REST read
     // keeps the component usable in that case until/unless a push arrives.
     const [fallbackRequests, setFallbackRequests] = useState([]);
-    const activeRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
+    // One case can render several of these — one per self-employed applicant
+    // (primary + co-applicants) — so every request list must be scoped to
+    // THIS applicant, the same way ItrAnalyticsForm's selectPullForApplicant
+    // does; both snapshot.gst.requests and the REST fallback already carry
+    // applicant_id per row (see casePullSnapshot.service.js's serializeGst
+    // and external.gst.controller.js's getRequestDetails applicant_id filter).
+    const wantedApplicantId = applicantId == null ? null : Number(applicantId);
+    const allRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
+    const activeRequests = allRequests.filter(r => (r.applicant_id ?? null) === wantedApplicantId);
+
+    // Hoisted above the effects below (moved from further down the file) so
+    // gstPhase can be derived from THIS applicant's own latest request
+    // instead of snapshot.gst.overall.phase, which is a case-wide rollup —
+    // with multiple GstAnalyticsForm instances rendered per case (one per
+    // self-employed applicant), the overall phase would fire every
+    // instance's onComplete/toast the moment ANY one applicant's pull
+    // finished, not just this card's own.
+    const latestRequest = activeRequests[0] || null;
+    // `phase` is only present on realtime snapshots; the REST fallback shape
+    // has just the raw status, so derive from that when a push hasn't arrived yet.
+    const phase = latestRequest && (latestRequest.phase
+        || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
+            : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
+
+    // A link created but never yet used by the customer — see
+    // casePullSnapshot.service.js's serializeGstAuthLink. This is the only
+    // state where the "Send Auth Link" form should be replaced by a
+    // Resend/Cancel action: once the customer submits, latestRequest becomes
+    // the real GstrAnalyticsRequest row and the ordinary PROCESSING branch
+    // below takes back over automatically. Mirrors ItrAnalyticsForm's own
+    // isAuthLinkPending.
+    const isAuthLinkPending = latestRequest?.is_auth_link_request && latestRequest?.status === 'AWAITING_CUSTOMER_ACTION';
+    const authLinkId = latestRequest?.auth_link_id;
+    // GST portal sent the DSA/customer an OTP for this request — the create
+    // step already succeeded (Signzy accepted OTP as this GSTIN's login
+    // method), we're just waiting on the code itself now.
+    const isOtpPending = latestRequest?.auth_type === 'OTP' && latestRequest?.status === 'OTP_PENDING';
+    const [sendingLink, setSendingLink] = useState(false);
+    const [cancellingLink, setCancellingLink] = useState(false);
+    // Delivery channel for the auth link — defaults to Email (the original
+    // behaviour before SMS support existed). Mirrors ItrAnalyticsForm's own
+    // linkChannel state; the backend re-validates contact info too (see
+    // gstAuthLink.service.js).
+    const [linkChannel, setLinkChannel] = useState('EMAIL');
+    // Manual override — mirrors ItrAnalyticsForm's own useOtherContact: send
+    // this link to a contact other than what's on file, without editing the
+    // customer/applicant record.
+    const [useOtherContact, setUseOtherContact] = useState(false);
+    const [overrideEmail, setOverrideEmail] = useState('');
+    const [overrideMobile, setOverrideMobile] = useState('');
+    const effectiveEmail = (useOtherContact && overrideEmail.trim()) || prefillEmail;
+    const effectiveMobile = (useOtherContact && overrideMobile.trim()) || prefillMobile;
+    const channelNeedsEmail = linkChannel === 'EMAIL' || linkChannel === 'BOTH';
+    const channelNeedsSms = linkChannel === 'SMS' || linkChannel === 'BOTH';
+    const channelMissingContact = (channelNeedsEmail && !effectiveEmail) || (channelNeedsSms && !effectiveMobile);
+    // Optimistic flag: hides the "Send Auth Link" form the instant the send
+    // succeeds, without waiting on the realtime snapshot's own round trip
+    // (refresh() -> server rebroadcast -> socket push) to flip
+    // isAuthLinkPending. Dropped again once the snapshot actually catches up
+    // (whatever it then shows — pending link or, if the customer was
+    // implausibly fast, a real submitted pull — takes over from there).
+    const [linkJustSent, setLinkJustSent] = useState(false);
+    useEffect(() => {
+        setLinkJustSent(false);
+    }, [latestRequest?.id, latestRequest?.status]);
 
     // Neither `snapshot` (starts null until the socket delivers its first
     // push) nor `fallbackRequests` (starts []) carry any synchronous "has
@@ -80,7 +146,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
     // Announce completion exactly once per transition — snapshots arrive every
     // couple of seconds while a pull is live, so reacting to the raw value
     // would re-toast continuously.
-    const gstPhase = snapshot?.gst?.overall?.phase;
+    const gstPhase = phase;
     usePhaseTransition(gstPhase, {
         COMPLETED: () => toast.success('GST report ready!'),
         FAILED: () => toast.error('GST request failed'),
@@ -102,7 +168,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     const fetchRequests = async () => {
         try {
-            const res = await api.get(`/external/gst/requests?case_id=${caseId}`);
+            const res = await api.get(`/external/gst/requests?case_id=${caseId}&applicant_id=${wantedApplicantId ?? 'null'}`);
             if (res.data.success) {
                 setFallbackRequests(res.data.data);
                 if (res.data.data.some(r => r.status === 'REPORT_READY' || r.status === 'COMPLETED')) {
@@ -126,26 +192,25 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         if (mode === 'IN_SYSTEM' && authType === 'PASSWORD' && !formData.password) {
             return toast.error("Password is required for Password auth");
         }
-        if (mode === 'AUTH_LINK' && !formData.emails.trim() && !formData.mobile_numbers.trim()) {
-            return toast.error("Enter at least one customer email or mobile number to send the auth link to");
-        }
+
+        // AUTH_LINK mode is handled entirely by handleSendAuthLink below — it
+        // emails the customer our own self-hosted link (never Signzy's own
+        // hosted auth-link page) instead of submitting this form.
+        if (mode === 'AUTH_LINK') return handleSendAuthLink();
 
         setLoading(true);
         try {
             const payload = {
                 customer_id: customerId,
                 case_id: caseId,
+                applicant_id: applicantId,
                 mode: mode,
-                auth_type: mode === 'IN_SYSTEM' ? authType : null,
+                auth_type: authType,
                 gstin: formData.gstin,
-                // Only meaningful for IN_SYSTEM auth — omit for AUTH_LINK so a
-                // stale value typed while on the other tab is never sent.
-                username: mode === 'IN_SYSTEM' ? formData.username : undefined,
-                password: mode === 'IN_SYSTEM' ? formData.password : undefined,
+                username: formData.username,
+                password: formData.password,
                 from_date: formData.from_date,
                 to_date: formData.to_date,
-                emails: formData.emails ? formData.emails.split(',').map(s => s.trim()) : [],
-                mobile_numbers: formData.mobile_numbers ? formData.mobile_numbers.split(',').map(s => s.trim()) : [],
                 pdf_url: true,
                 entity_details: true
             };
@@ -161,9 +226,89 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
             setFormData(prev => ({...prev, password: ''}));
         } catch (error) {
             const message = error.response?.data?.error || error.message;
-            toast.error(`GST request failed: ${message}`, { duration: 8000 });
+            // OTP-based login is a portal-level setting on the GSTIN's own
+            // account — Signzy can only tell us it's unusable once we've
+            // actually tried it, at request-creation time. There's no
+            // separate "does this GSTIN support OTP" check to call first, so
+            // point the user at the only actual alternative instead of
+            // leaving them stuck on a generic failure.
+            if (authType === 'OTP') {
+                toast.error(`OTP request failed: ${message}. If OTP login isn't available for this GSTIN, switch to the Password method above and try again.`, { duration: 10000 });
+            } else {
+                toast.error(`GST request failed: ${message}`, { duration: 8000 });
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Submits the OTP the customer/DSA received on the GST portal for an
+    // OTP-mode request — the only way an OTP_PENDING request ever advances,
+    // no auto-fetch involved (mirrors handleSendAuthLink's "nothing happens
+    // until the human acts" shape for the AUTH_LINK flow).
+    const handleSubmitOtp = async () => {
+        if (!otp.trim() || !latestRequest) return;
+        setSubmittingOtp(true);
+        try {
+            await api.post(`/external/gst/submit-otp`, { request_id: latestRequest.id, otp: otp.trim() });
+            toast.success('OTP submitted — fetching your GST data');
+            setOtp('');
+            refresh();
+            await fetchRequests();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to submit OTP', { duration: 8000 });
+        } finally {
+            setSubmittingOtp(false);
+        }
+    };
+
+    // Emails the customer a link to enter their own GST portal username/
+    // password — a self-hosted alternative to the DSA keying it in directly
+    // above (never Signzy's own hosted auth-link page). No data is pulled by
+    // this call itself; it only sends the link and flips this row to
+    // "Action needed — waiting for the customer" until they submit it.
+    // Mirrors ItrAnalyticsForm.jsx's own handleSendAuthLink.
+    const handleSendAuthLink = async () => {
+        if (!formData.gstin) return toast.error("Select or enter a GSTIN first");
+        if (channelMissingContact) {
+            return toast.error(channelNeedsEmail && !effectiveEmail
+                ? 'No email address to send to — enter one, or switch to SMS.'
+                : 'No mobile number to send to — enter one, or switch to Email.');
+        }
+        setSendingLink(true);
+        try {
+            await gstAuthLinkService.requestLink({
+                customer_id: customerId, case_id: caseId, applicant_id: applicantId, gstin: formData.gstin, channel: linkChannel,
+                override_email: useOtherContact ? overrideEmail.trim() : undefined,
+                override_mobile: useOtherContact ? overrideMobile.trim() : undefined,
+            });
+            toast.success('GST authorisation link sent to the customer');
+            setLinkJustSent(true);
+            refresh();
+        } catch (error) {
+            // A 429 here is the server-side resend cooldown (5 minutes between
+            // sends per case+applicant) — the message already says how long to
+            // wait, so no separate countdown UI is needed.
+            toast.error(error.response?.data?.error || 'Failed to send the GST auth link');
+        } finally {
+            setSendingLink(false);
+        }
+    };
+
+    // Revokes a still-pending link before the customer has used it — if they
+    // open it afterwards, the page shows "This request has been revoked."
+    const handleCancelAuthLink = async () => {
+        if (!authLinkId) return;
+        if (!window.confirm('Cancel this GST authorisation link? The customer will no longer be able to use it.')) return;
+        setCancellingLink(true);
+        try {
+            await gstAuthLinkService.cancelLink(authLinkId);
+            toast.success('GST auth link cancelled');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel the GST auth link');
+        } finally {
+            setCancellingLink(false);
         }
     };
 
@@ -201,18 +346,6 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
         }
     };
 
-    // Hoisted out of the old inline IIFE so both the form-visibility check
-    // below AND the status panel can agree on one computation — previously
-    // the form rendered unconditionally while only this panel checked
-    // completion, which is exactly how the fetch form kept showing up
-    // alongside an already-completed "GST data pulled successfully" panel.
-    const visibleRequests = activeRequests.filter(req => !(req.auth_type === 'OTP' && req.status === 'OTP_PENDING'));
-    const latestRequest = visibleRequests[0] || null;
-    // `phase` is only present on realtime snapshots; the REST fallback shape
-    // has just the raw status, so derive from that when a push hasn't arrived yet.
-    const phase = latestRequest && (latestRequest.phase
-        || (['REPORT_READY', 'COMPLETED'].includes(latestRequest.status) ? 'COMPLETED'
-            : ['FAILED', 'EXPIRED'].includes(latestRequest.status) ? 'FAILED' : 'PROCESSING'));
     const isSuccess = phase === 'COMPLETED';
     const isDead = phase === 'FAILED';
 
@@ -231,125 +364,460 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
     return (
         <div style={{ padding: 24 }}>
-            {!isSuccess && (
-            <>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                    <input type="radio" name="gstMode" value="IN_SYSTEM" checked={mode === 'IN_SYSTEM'} onChange={() => setMode('IN_SYSTEM')} />
-                    Enter Details in System
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-                    <input type="radio" name="gstMode" value="AUTH_LINK" checked={mode === 'AUTH_LINK'} onChange={() => setMode('AUTH_LINK')} />
-                    Send Auth Link to Customer
-                </label>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                <FormField label="SELECT GSTIN" required>
-                    {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <select
-                                className="form-control"
-                                value={formData.gstin}
-                                onChange={e => {
-                                    if (e.target.value === '__manual__') {
-                                        setIsManualGstin(true);
-                                        setFormData({ ...formData, gstin: '' });
-                                    } else {
-                                        setFormData({ ...formData, gstin: e.target.value });
-                                    }
-                                }}
-                            >
-                                <option value="">Select GSTIN</option>
-                                {linkedGstins.map(g => (
-                                    <option key={g.gstin} value={g.gstin}>
-                                        {g.gstin}{isUsableEntityName(g.registration_name) ? ` (${g.registration_name})` : ''} - {formatStatusLabel(g.status)}
-                                    </option>
-                                ))}
-                                <option value="__manual__">Enter manually...</option>
-                            </select>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
-                            {linkedGstins && linkedGstins.length > 0 && (
-                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsManualGstin(false)}>Cancel</button>
-                            )}
-                        </div>
-                    )}
-                </FormField>
-
-                {mode === 'IN_SYSTEM' && (
-                    <FormField label="GST Username" required>
-                        <input
-                            type="text"
-                            value={formData.username}
-                            onChange={e => setFormData({...formData, username: e.target.value})}
-                            className="form-control"
-                            placeholder="GST portal username"
-                            autoComplete="off"
-                            name="gst-username-no-autofill"
-                        />
-                    </FormField>
-                )}
-            </div>
-
-            {mode === 'IN_SYSTEM' && (
-                 <div style={{ display: 'flex', gap: 16, marginBottom: 16, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
-                    <div style={{ flex: 1 }}>
-                         <FormField label="GST Password" required>
-                             <input
-                                 type="password"
-                                 value={formData.password}
-                                 onChange={e => setFormData({...formData, password: e.target.value})}
-                                 className="form-control"
-                                 placeholder="GST portal password"
-                                 autoComplete="new-password"
-                                 name="gst-password-no-autofill"
-                             />
-                         </FormField>
+            {/* The applicant-name heading now lives in the parent wizard page
+                (rendered unconditionally there, above both this form and the
+                "not applicable" empty state) — this component can render with
+                no visible name context at all when hidden by that state, so
+                duplicating a heading here would only show up in the cases
+                where it's least needed. */}
+            {!isSuccess && !isAuthLinkPending && !isOtpPending && !linkJustSent && (
+            <div style={{
+                border: '1px solid var(--border)',
+                background: 'var(--bg-surface)',
+                marginBottom: 24,
+            }}>
+                {/* Section header — gives this block presence instead of
+                    dropping straight into a bare radio row. */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '14px 20px',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--bg-elevated)',
+                }}>
+                    <div style={{
+                        width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(79,70,229,0.12)', color: '#4f46e5', flexShrink: 0,
+                    }}>
+                        <Building2 size={16} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>GST Verification</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Pull the last 24 months of GST returns for this business</div>
                     </div>
                 </div>
-            )}
 
-            {mode === 'AUTH_LINK' && (
-                 <div style={{ marginBottom: 16 }}>
-                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-                         <FormField label="Target Emails (comma separated)">
-                            <input type="text" value={formData.emails} onChange={e => setFormData({...formData, emails: e.target.value})} className="form-control" placeholder="user@biz.com" />
-                         </FormField>
-                         <FormField label="Target Mobile Numbers (comma separated)">
-                            <input type="text" value={formData.mobile_numbers} onChange={e => setFormData({...formData, mobile_numbers: e.target.value})} className="form-control" placeholder="9876543210" />
-                         </FormField>
-                     </div>
-                     <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                        At least one email or mobile number is required — the customer receives the auth link there, not through the GST username/password fields above.
-                     </p>
-                 </div>
-            )}
+                <div style={{ padding: 20 }}>
+                    {/* Segmented mode toggle — same two options as before, styled
+                        as tabs instead of raw radio inputs. */}
+                    <div style={{
+                        display: 'inline-flex', padding: 3, marginBottom: 20,
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                        width: isMobile ? '100%' : 'auto',
+                    }}>
+                        {[
+                            { value: 'IN_SYSTEM', label: 'Enter Details in System' },
+                            { value: 'AUTH_LINK', label: 'Send Auth Link to Customer' },
+                        ].map((opt) => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setMode(opt.value)}
+                                style={{
+                                    flex: isMobile ? 1 : 'none',
+                                    padding: '7px 16px',
+                                    fontSize: 12.5, fontWeight: 700,
+                                    border: 'none', cursor: 'pointer',
+                                    background: mode === opt.value ? '#4f46e5' : 'transparent',
+                                    color: mode === opt.value ? '#fff' : 'var(--text-secondary)',
+                                    transition: 'background 0.15s, color 0.15s',
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
 
-            {!isMsme && gstCost != null && walletBalance < gstCost && (
-                <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
-                    <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
+                    <div style={{ marginBottom: 20 }}>
+                        <FormField label="SELECT GSTIN" required>
+                            {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <select
+                                        className="form-control"
+                                        value={formData.gstin}
+                                        onChange={e => {
+                                            if (e.target.value === '__manual__') {
+                                                setIsManualGstin(true);
+                                                setFormData({ ...formData, gstin: '' });
+                                            } else {
+                                                setFormData({ ...formData, gstin: e.target.value });
+                                            }
+                                        }}
+                                    >
+                                        <option value="">Select GSTIN</option>
+                                        {linkedGstins.map(g => (
+                                            <option key={g.gstin} value={g.gstin}>
+                                                {g.gstin}{isUsableEntityName(g.registration_name) ? ` (${g.registration_name})` : ''} - {formatStatusLabel(g.status)}
+                                            </option>
+                                        ))}
+                                        <option value="__manual__">Enter manually...</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <input type="text" value={formData.gstin} onChange={e => setFormData({...formData, gstin: e.target.value.toUpperCase()})} className="form-control" placeholder="12ABCDE3456X7YZ" />
+                                    {linkedGstins && linkedGstins.length > 0 && (
+                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsManualGstin(false)}>Cancel</button>
+                                    )}
+                                </div>
+                            )}
+                        </FormField>
+                    </div>
+
+                    {/* Username + password grouped together in one bordered box,
+                        side by side — they're one logical credential pair, not
+                        two unrelated fields, so they shouldn't read as separate
+                        rows. Left accent bar + lock icon mark it as the
+                        sensitive-input block. */}
+                    {mode === 'IN_SYSTEM' && (
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Lock size={13} color="#4f46e5" />
+                                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Portal Credentials</span>
+                                </div>
+                                {/* Not every GSTIN's GST-portal login has OTP enabled — Signzy
+                                    only tells us that when we actually try (see the OTP error
+                                    handling in handleCreateRequest), so this is a choice up
+                                    front, not a capability we can detect ahead of time. */}
+                                <div style={{ display: 'inline-flex', padding: 2, background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                                    {[
+                                        { value: 'PASSWORD', label: 'Password' },
+                                        { value: 'OTP', label: 'OTP' },
+                                    ].map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setAuthType(opt.value)}
+                                            style={{
+                                                padding: '4px 10px', fontSize: 11, fontWeight: 700,
+                                                border: 'none', cursor: 'pointer',
+                                                background: authType === opt.value ? '#4f46e5' : 'transparent',
+                                                color: authType === opt.value ? '#fff' : 'var(--text-secondary)',
+                                                transition: 'background 0.15s, color 0.15s',
+                                            }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile || authType === 'OTP' ? '1fr' : '1fr 1fr', gap: 16, padding: 16 }}>
+                                <FormField label="GST Username" required>
+                                    <input
+                                        type="text"
+                                        value={formData.username}
+                                        onChange={e => setFormData({...formData, username: e.target.value})}
+                                        className="form-control"
+                                        placeholder="GST portal username"
+                                        autoComplete="off"
+                                        name="gst-username-no-autofill"
+                                    />
+                                </FormField>
+                                {authType === 'PASSWORD' && (
+                                    <FormField label="GST Password" required>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type={showPassword ? 'text' : 'password'}
+                                                value={formData.password}
+                                                onChange={e => setFormData({...formData, password: e.target.value})}
+                                                className="form-control"
+                                                placeholder="GST portal password"
+                                                autoComplete="new-password"
+                                                name="gst-password-no-autofill"
+                                                style={{ paddingRight: 36 }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword((s) => !s)}
+                                                tabIndex={-1}
+                                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                                style={{
+                                                    position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                                    color: 'var(--text-tertiary)',
+                                                }}
+                                            >
+                                                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                            </button>
+                                        </div>
+                                    </FormField>
+                                )}
+                            </div>
+                            <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
+                                {authType === 'OTP'
+                                    ? "An OTP will be sent by the GST portal to this username's registered mobile/email — you'll enter it on the next step. If this GSTIN doesn't have OTP login enabled, the request will fail and you'll need to switch to Password."
+                                    : 'Sent directly to the GST portal to pull the report — never stored.'}
+                            </p>
+                        </div>
+                    )}
+
+                    {mode === 'AUTH_LINK' && (
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Mail size={13} color="#4f46e5" />
+                                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link Via</span>
+                                </div>
+                                <select
+                                    value={linkChannel}
+                                    onChange={(e) => setLinkChannel(e.target.value)}
+                                    className="form-control"
+                                    style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                >
+                                    <option value="EMAIL">Email</option>
+                                    <option value="SMS">SMS</option>
+                                    <option value="BOTH">Email + SMS</option>
+                                </select>
+                            </div>
+                            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {channelNeedsEmail && (
+                                    effectiveEmail ? (
+                                        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                                            Email: the customer will receive a link at <strong>{effectiveEmail}</strong>.
+                                        </p>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
+                                            <AlertCircle size={15} /> No email address on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one below, or switch to SMS.
+                                        </div>
+                                    )
+                                )}
+                                {channelNeedsSms && (
+                                    effectiveMobile ? (
+                                        <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>
+                                            SMS: the customer will receive a link at <strong>{effectiveMobile}</strong>.
+                                        </p>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}>
+                                            <AlertCircle size={15} /> No mobile number on file for {applicantType === 'PRIMARY' ? 'this customer' : 'this co-applicant'} — add one below, or switch to Email.
+                                        </div>
+                                    )
+                                )}
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUseOtherContact((s) => !s)}
+                                        className="btn btn-ghost btn-sm"
+                                        style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                                    >
+                                        {useOtherContact ? 'Use contact on file' : 'Send to a different contact…'}
+                                    </button>
+                                    {useOtherContact && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8 }}>
+                                            <input
+                                                type="email"
+                                                value={overrideEmail}
+                                                onChange={(e) => setOverrideEmail(e.target.value)}
+                                                className="form-control"
+                                                placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                                style={{ fontSize: 12.5 }}
+                                            />
+                                            <input
+                                                type="tel"
+                                                value={overrideMobile}
+                                                onChange={(e) => setOverrideMobile(e.target.value)}
+                                                className="form-control"
+                                                placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                                style={{ fontSize: 12.5 }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)', padding: '0 16px 14px', margin: 0 }}>
+                                Nothing is pulled until the customer submits their own credentials — this only sends the link.
+                            </p>
+                        </div>
+                    )}
+
+                    {!isMsme && gstCost != null && walletBalance < gstCost && (
+                        <div style={{ padding: 12, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 20 }}>
+                            <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={handleCreateRequest}
+                        disabled={disabled || loading || sendingLink || !formData.gstin
+                            || (mode === 'AUTH_LINK' && channelMissingContact)
+                            || (!isMsme && gstCost != null && walletBalance < gstCost)}
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                        title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
+                    >
+                        {mode === 'AUTH_LINK' ? (
+                            <>
+                                <Mail size={14} />
+                                {sendingLink ? 'Sending…' : isMsme ? 'Send Auth Link' : `Send Auth Link (~${gstCost ?? 1} Cr)`}
+                            </>
+                        ) : (
+                            <>
+                                <Send size={14} />
+                                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
+                            </>
+                        )}
+                    </button>
                 </div>
+            </div>
             )}
 
-            <button
-                type="button"
-                onClick={handleCreateRequest}
-                disabled={disabled || loading || !formData.gstin || (!isMsme && gstCost != null && walletBalance < gstCost)}
-                className="btn btn-primary"
-                style={{ marginBottom: 24 }}
-                title={disabled ? 'Live GST analysis is disabled for this test/injected case.' : undefined}
-            >
-                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
-            </button>
-            </>
+            {!latestRequest && linkJustSent && (
+                // Bridges the gap between the send succeeding and the realtime
+                // snapshot catching up (see linkJustSent above) — without this,
+                // hiding the form immediately would flash an empty panel for a
+                // moment instead of confirming the send went through.
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: 'var(--bg-surface)' }}>
+                    <PullStatusTracker
+                        variant="panel"
+                        phase="AWAITING_CUSTOMER"
+                        label="GST authorisation link sent"
+                        progress={12}
+                    />
+                </div>
             )}
 
             {latestRequest && (
-                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : isDead ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
-                    {isDead ? (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 16, background: isSuccess ? 'var(--success-bg)' : (isDead || isAuthLinkPending || isOtpPending) ? 'var(--error-bg)' : 'var(--bg-surface)' }}>
+                    {isOtpPending ? (
+                        // Signzy accepted the OTP-mode request and the portal has (or
+                        // will shortly) send an OTP — nothing else happens until it's
+                        // submitted here. Cancel abandons this attempt entirely (same
+                        // generic /gst/cancel every other in-flight request uses) rather
+                        // than falling back to Password automatically, since only the
+                        // DSA/customer knows whether the OTP is actually on its way.
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                    <PullStatusTracker
+                                        variant="panel"
+                                        phase={phase}
+                                        label={latestRequest.label || 'Waiting for the GST portal OTP'}
+                                        progress={latestRequest.progress ?? 15}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCancelRequest(latestRequest.id)}
+                                    disabled={cancelling}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ color: 'var(--error)', border: '1px solid var(--error)' }}
+                                >
+                                    {cancelling ? 'Cancelling...' : 'Cancel Request'}
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                <FormField label="OTP from GST Portal" required>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={otp}
+                                        onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                                        className="form-control"
+                                        placeholder="Enter OTP"
+                                        maxLength={8}
+                                        style={{ maxWidth: 160 }}
+                                        autoComplete="one-time-code"
+                                    />
+                                </FormField>
+                                <button
+                                    type="button"
+                                    onClick={handleSubmitOtp}
+                                    disabled={submittingOtp || !otp.trim()}
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    {submittingOtp ? 'Submitting…' : 'Submit OTP'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : isAuthLinkPending ? (
+                        // Link sent, customer hasn't submitted it yet — no data has
+                        // been touched, so the only actions available are re-sending
+                        // it (e.g. the customer says they never got the email, or the
+                        // first one expired) or revoking it. Mirrors ItrAnalyticsForm's
+                        // own isAuthLinkPending branch. Resend reuses the same
+                        // handleSendAuthLink call the Send Auth Link button does — it
+                        // already supersedes the still-pending link and issues a fresh one.
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                    <PullStatusTracker
+                                        variant="panel"
+                                        phase={phase}
+                                        label={latestRequest.label || 'Waiting for the customer to authorise'}
+                                        progress={latestRequest.progress ?? 12}
+                                    />
+                                    {latestRequest.recipient_email && (
+                                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                                            Auth link sent to {latestRequest.recipient_email}{latestRequest.recipient_mobile ? ` / ${latestRequest.recipient_mobile}` : ''}
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <select
+                                        value={linkChannel}
+                                        onChange={(e) => setLinkChannel(e.target.value)}
+                                        className="form-control"
+                                        style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                        title="Choose how to deliver the resent link"
+                                    >
+                                        <option value="EMAIL">Email</option>
+                                        <option value="SMS">SMS</option>
+                                        <option value="BOTH">Email + SMS</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={handleSendAuthLink}
+                                        disabled={sendingLink || channelMissingContact}
+                                        title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                        <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={handleCancelAuthLink}
+                                        disabled={cancellingLink}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                                    >
+                                        <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setUseOtherContact((s) => !s)}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                                >
+                                    {useOtherContact ? 'Use contact on file' : 'Resend to a different contact…'}
+                                </button>
+                                {useOtherContact && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8, maxWidth: 480 }}>
+                                        <input
+                                            type="email"
+                                            value={overrideEmail}
+                                            onChange={(e) => setOverrideEmail(e.target.value)}
+                                            className="form-control"
+                                            placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                            style={{ fontSize: 12.5 }}
+                                        />
+                                        <input
+                                            type="tel"
+                                            value={overrideMobile}
+                                            onChange={(e) => setOverrideMobile(e.target.value)}
+                                            className="form-control"
+                                            placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                            style={{ fontSize: 12.5 }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : isDead ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
                             <AlertCircle size={16} /> {latestRequest.label || (latestRequest.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
                         </div>
@@ -401,7 +869,7 @@ const GstAnalyticsForm = ({ caseId, customerId, linkedGstins = [], onComplete, o
 
                                     <button type="button" onClick={() => handleDeleteRequest(latestRequest.id)} disabled={deleting}
                                         className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}>
-                                        <Trash2 size={14} /> {deleting ? 'Removing...' : 'Remove'}
+                                        <Trash2 size={14} /> {deleting ? 'Deleting...' : 'Delete'}
                                     </button>
                                 </div>
                             </div>

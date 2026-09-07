@@ -8,6 +8,7 @@ import { getErrorMessage, formatDateTime } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
+import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
 
 // Same list CreateTenantPage offers — kept in sync there rather than shared,
 // same reasoning as EditUserPage's own local DSA_ROLE_NAMES copy.
@@ -483,7 +484,7 @@ const OrganizationProfilePage = () => {
             <div style={{ marginTop: isMobile ? 16 : 24 }}>
               <label style={labelStyle}>Operational States *</label>
               <p style={{ fontSize: 12, color: 'var(--on-muted)', margin: '0 0 8px' }}>
-                States you provide DSA service in — used to match you with leads in the admin panel.
+                States you provide Sourcing Partner service in — used to match you with leads in the admin panel.
               </p>
               <StatesMultiSelect
                 value={form.operational_states}
@@ -575,6 +576,8 @@ const OrganizationProfilePage = () => {
             </TravelingBorderButton>
           </div>
         </form>
+
+        <VirtualWorkspaceSubscriptionCard />
       </div>
     </div>
   );

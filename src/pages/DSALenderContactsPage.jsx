@@ -242,6 +242,7 @@ export default function DSALenderContactsPage() {
       payout_basis: 'NET_DISBURSED',
       commission_type: 'HYBRID',
       effective_from: '',
+      max_cap_amount: '',
       volume_slabs: [],
       case_count_slabs: [],
       special_schemes: []
@@ -268,6 +269,7 @@ export default function DSALenderContactsPage() {
         commission_type: stateToSave.commission_type || 'HYBRID',
         is_active: true,
         effective_from: stateToSave.effective_from || '',
+        max_cap_amount: stateToSave.max_cap_amount || null,
         volume_slabs: stateToSave.volume_slabs || [],
         case_count_slabs: stateToSave.case_count_slabs || [],
         special_schemes: stateToSave.special_schemes || []
@@ -321,7 +323,7 @@ export default function DSALenderContactsPage() {
       }}>
         <Lock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
         <div>
-          <strong>DSA Admin only.</strong> Commission rules <strong>must be explicitly configured per lender-product combination.</strong> Lender name cannot be edited once added. Subvention is recorded at the time of disbursement entry.
+          <strong>Sourcing Partner Admin only.</strong> Commission rules <strong>must be explicitly configured per lender-product combination.</strong> Lender name cannot be edited once added. Subvention is recorded at the time of disbursement entry.
         </div>
       </div>
 
@@ -544,6 +546,10 @@ export default function DSALenderContactsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, flexWrap: 'wrap' }}>
                           <span style={{ color: 'var(--text-secondary)' }}>Effective From:</span>
                           <input type="date" value={ruleState.effective_from ? ruleState.effective_from.split('T')[0] : ''} onChange={e => updateRuleEdit(lender.id, activeProduct, { effective_from: e.target.value })} style={{ ...inputStyle, width: 140, padding: '4px 0', borderBottom: '1px solid var(--border)' }} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, flexWrap: 'wrap' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Max Payout Cap (₹):</span>
+                          <input type="number" placeholder="No limit" value={ruleState.max_cap_amount || ''} onChange={e => updateRuleEdit(lender.id, activeProduct, { max_cap_amount: e.target.value ? Number(e.target.value) : '' })} style={{ ...inputStyle, width: 140, padding: '4px 0', borderBottom: '1px solid var(--border)' }} />
                         </div>
                       </div>
 

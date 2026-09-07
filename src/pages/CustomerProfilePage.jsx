@@ -24,10 +24,14 @@ const useResponsive = () => {
 };
 
 const formatCurrency = (val) => {
-  if (!val) return null;
-  if (val >= 1e7) return `₹${(val / 1e7).toFixed(1)} Cr`;
-  if (val >= 1e5) return `₹${(val / 1e5).toFixed(1)}L`;
-  return `₹${Number(val).toLocaleString('en-IN')}`;
+  // Prisma Decimal fields serialize over JSON as strings (e.g. "0.00"),
+  // which are truthy — coerce first so a real zero/unset amount is caught
+  // by the falsy check below instead of rendering as "₹0".
+  const num = Number(val);
+  if (!num) return null;
+  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)} Cr`;
+  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
+  return `₹${num.toLocaleString('en-IN')}`;
 };
 
 const formatDate = (d) => {

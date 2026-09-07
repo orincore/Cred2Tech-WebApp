@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
+import { GATABLE_NAV_ITEMS } from '../constants/navItems';
 
 // Responsive hook
 const useResponsive = () => {
@@ -123,6 +124,11 @@ const SuperadminPricingPage = () => {
   const [editForm, setEditForm] = useState({});
   const [msmeEditing, setMsmeEditing] = useState(false);
   const [msmeDraft, setMsmeDraft] = useState('');
+  const [freeNavItemIds, setFreeNavItemIds] = useState([]);
+  const [freeUntil, setFreeUntil] = useState(''); // yyyy-mm-dd, for the date input
+  const [tab, setTab] = useState('pricing'); // 'pricing' | 'discounts' | 'workspace'
+  const [savingFreeTabs, setSavingFreeTabs] = useState(false);
+  const [savingFreeUntil, setSavingFreeUntil] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -130,13 +136,51 @@ const SuperadminPricingPage = () => {
 
   const fetchData = async () => {
     try {
-      const res = await api.get(`/admin/wallet/api-pricing`);
-      setPricing(res.data.pricing || []);
-      setDiscounts(res.data.discounts || []);
+      const [pricingRes, vwRes] = await Promise.all([
+        api.get(`/admin/wallet/api-pricing`),
+        api.get(`/admin/wallet/virtual-workspace-config`),
+      ]);
+      setPricing(pricingRes.data.pricing || []);
+      setDiscounts(pricingRes.data.discounts || []);
+      setFreeNavItemIds(vwRes.data.free_nav_item_ids || []);
+      setFreeUntil(vwRes.data.free_until ? vwRes.data.free_until.slice(0, 10) : '');
     } catch (err) {
       toast.error('Failed to load pricing configurations');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleFreeNavItem = (itemId) => {
+    setFreeNavItemIds((prev) => (
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    ));
+  };
+
+  const handleSaveFreeTabs = async () => {
+    setSavingFreeTabs(true);
+    try {
+      await api.put(`/admin/wallet/virtual-workspace-config`, { free_nav_item_ids: freeNavItemIds });
+      toast.success('Virtual Workspace free tabs updated');
+    } catch (err) {
+      toast.error('Failed to save Virtual Workspace config');
+    } finally {
+      setSavingFreeTabs(false);
+    }
+  };
+
+  // Saving a later free_until retroactively extends every subscription
+  // already in flight (server-side batch job — see admin.wallet.controller
+  // .js#updateVirtualWorkspaceConfig), not just future subscribers.
+  const handleSaveFreeUntil = async () => {
+    setSavingFreeUntil(true);
+    try {
+      await api.put(`/admin/wallet/virtual-workspace-config`, { free_until: freeUntil || null });
+      toast.success(freeUntil ? `Virtual Workspace is now free until ${freeUntil} — existing subscriptions are being extended to match` : 'Free period cleared — Virtual Workspace billing applies immediately for new/renewing subscriptions');
+    } catch (err) {
+      toast.error('Failed to save the free-until date');
+    } finally {
+      setSavingFreeUntil(false);
     }
   };
 
@@ -289,7 +333,7 @@ const SuperadminPricingPage = () => {
             API Pricing & Credit Rules
           </h1>
           <p style={{ margin: isMobile ? '2px 0 0' : '2px 0 0', fontSize: isMobile ? 11 : 12, color: 'var(--on-muted)' }}>
-            DSA charges & discount tiers
+            Sourcing Partner charges & discount tiers
           </p>
         </div>
       </div>
@@ -319,7 +363,7 @@ const SuperadminPricingPage = () => {
           {showInfo && (
             <div style={{ padding: '0 16px 10px' }}>
               <p style={{ margin: '0 0 10px 26px', fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-                <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
+                <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                 <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" isMobile />
@@ -339,7 +383,7 @@ const SuperadminPricingPage = () => {
           <div style={{ borderBottom: '1px solid var(--outline)', padding: '5px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <ShieldAlert size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
             <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-              <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all DSA wallets immediately. Volume discounts apply at top-up time.
+              <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
             </p>
           </div>
 
@@ -380,6 +424,30 @@ const SuperadminPricingPage = () => {
         </div>
       </div>
 
+      {/* ─── Section tabs — keeps the page short: only one of API Pricing /
+          Volume Discounts / Virtual Workspace renders at a time instead of
+          one long stacked scroll. ─── */}
+      <div style={{ padding: '0 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: 4, flexShrink: 0, overflowX: 'auto' }}>
+        {[
+          { id: 'pricing', label: 'API Pricing' },
+          { id: 'discounts', label: 'Volume Discounts' },
+          { id: 'workspace', label: 'Virtual Workspace' },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              whiteSpace: 'nowrap', padding: '10px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+              background: 'transparent', border: 'none',
+              borderBottom: tab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
+              color: tab === t.id ? 'var(--primary)' : 'var(--on-muted)',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* ─── Pricing table + Volume Discounts — ONE scrolling region ───
           The outer page shell is overflow:hidden with exactly one flex:1
           child expected to hold everything below the filter row. Volume
@@ -399,9 +467,11 @@ const SuperadminPricingPage = () => {
           Sub-header → table/cards → Discounts at their natural heights, and
           overflowY:auto scrolls the stack as a whole once it doesn't fit. */}
       <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
+        {tab === 'pricing' && (
+        <>
         {/* Sub-header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — DSA Pricing</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — Sourcing Partner Pricing</span>
           <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} APIs</span>
         </div>
 
@@ -657,8 +727,11 @@ const SuperadminPricingPage = () => {
           hoverRows={true}
         />
         )}
+        </>
+        )}
 
-      {/* ─── Volume Package Discounts ───
+        {tab === 'discounts' && (
+      /* ─── Volume Package Discounts ───
           Brought in line with the rest of the page: sharp borders instead of
           rounded (`radius: 8` -> 0), theme tokens instead of hardcoded
           isDark-ternary hex, and a stacked mobile layout for each slab
@@ -667,7 +740,7 @@ const SuperadminPricingPage = () => {
           slab row previously used `<td>` elements as generic containers
           outside any `<table>`, which is invalid markup that happened to
           render via the browser's default table-cell styling colliding with
-          the parent's `display: grid`; replaced with plain `<div>`s. */}
+          the parent's `display: grid`; replaced with plain `<div>`s. */
       <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
         <div style={{
           padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
@@ -676,7 +749,7 @@ const SuperadminPricingPage = () => {
         }}>
           <div>
             <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Volume Package Discounts</h3>
-            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when DSA top-up crosses threshold</p>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when Sourcing Partner top-up crosses threshold</p>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -787,6 +860,87 @@ const SuperadminPricingPage = () => {
             <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: 0 }}>Discount applied as bonus credits at time of top-up. Discount slabs apply to wallet recharges — not individual API calls.</p>
         </div>
       </div>
+        )}
+
+        {tab === 'workspace' && (
+      <>
+      {/* ─── Virtual Workspace — Free Until ───
+          Platform-wide "free for now" window. While set to a future date,
+          subscribing never creates a real charge (see
+          virtualWorkspaceSubscription.service.js#subscribe) and every
+          in-flight subscription gets pulled forward to match whenever this
+          is changed — see updateVirtualWorkspaceConfig's batch extend. */}
+      <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
+        <div style={{
+          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+        }}>
+          <div>
+            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Until</h3>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>
+              No tenant is charged before this date — clear it to make billing apply immediately for new/renewing subscriptions
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" className="form-control" value={freeUntil} onChange={(e) => setFreeUntil(e.target.value)} style={{ maxWidth: 180 }} />
+          <button className="btn btn-primary btn-sm" onClick={handleSaveFreeUntil} disabled={savingFreeUntil} style={{ borderRadius: 0 }}>
+            <Save size={14} /> {savingFreeUntil ? 'Saving…' : 'Save'}
+          </button>
+          {freeUntil && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setFreeUntil('')} style={{ borderRadius: 0 }}>Clear</button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Virtual Workspace — Free Tabs ───
+          Which nav items a DSA-role user still sees when their tenant's
+          Virtual Workspace isn't active (per-tenant toggle lives on
+          TenantsListPage.jsx) — everything unchecked here disappears from
+          their sidebar. Same header/save pattern as Volume Package
+          Discounts above. */}
+      <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
+        <div style={{
+          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+        }}>
+          <div>
+            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Tabs</h3>
+            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Sidebar tabs a Sourcing Partner still sees before subscribing — everything else here is unchecked = locked</p>
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSaveFreeTabs}
+            disabled={savingFreeTabs}
+            style={{ borderRadius: 0, fontSize: 11 }}
+          >
+            <Save size={14} /> Save
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+          {GATABLE_NAV_ITEMS.map((item) => {
+            const checked = freeNavItemIds.includes(item.id);
+            return (
+              <label
+                key={item.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                  borderRadius: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--on-surface)',
+                }}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggleFreeNavItem(item.id)} />
+                {item.label}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+      </>
+        )}
       </div>
     </div>
   );

@@ -40,8 +40,13 @@ export const consentService = {
     return response.data;
   },
 
-  approve: async (token) => {
-    const response = await axios.post(`${API_BASE_URL}/consent/${token}/approve`, { agreed: true });
+  approve: async (token, otp) => {
+    const response = await axios.post(`${API_BASE_URL}/consent/${token}/approve`, { agreed: true, otp });
+    return response.data;
+  },
+
+  resendOtp: async (token) => {
+    const response = await axios.post(`${API_BASE_URL}/consent/${token}/resend-otp`);
     return response.data;
   },
 };

@@ -1,0 +1,864 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
+import { LayoutGrid, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import api from '../api/axiosInstance';
+import { loadRazorpay } from '../utils/razorpay';
+import { getErrorMessage, formatDateTime } from '../utils/helpers';
+
+const STATUS_LABEL = {
+  CREATED: 'Awaiting first payment',
+  AUTHENTICATED: 'Awaiting activation',
+  ACTIVE: 'Active',
+  PENDING: 'Payment retrying',
+  HALTED: 'Payment failed, grace period',
+  GRACE_PERIOD: 'Payment failed, grace period',
+  PAUSED: 'Paused',
+  CANCELLED: 'Cancelled',
+  COMPLETED: 'Completed',
+};
+
+const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+
+// Small square icon chip, reused for the card header and every info/warning
+// banner below it, so the same visual language repeats instead of a bare
+// icon floating next to text.
+const IconChip = ({ icon: Icon, color, bg, size = 34 }) => (
+  <div style={{
+    width: size, height: size, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: bg, color,
+  }}>
+    <Icon size={Math.round(size * 0.46)} strokeWidth={1.75} />
+  </div>
+);
+
+// A left-accent callout bar — used for the free-until notice, the payment-
+// authorization warning, and the pending-cancellation notice. One shape,
+// three semantic colors, instead of three hand-built banners.
+const Callout = ({ icon, color, bg, children }) => (
+  <div style={{
+    display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px',
+    background: bg, borderLeft: `3px solid ${color}`, marginBottom: 18,
+  }}>
+    <IconChip icon={icon} color={color} bg="transparent" size={20} />
+    <div style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--on-surface)' }}>{children}</div>
+  </div>
+);
+
+// Themed confirmation modal — replaces window.confirm()'s browser-native
+// dialog with the app's own sharp-cornered, CSS-variable-driven look.
+// `open` gates rendering entirely (no hidden-but-mounted overlay). Backdrop
+// click and the secondary button both just close it without acting, same
+// as dismissing a native confirm — only the primary button runs onConfirm.
+const ConfirmModal = ({ open, title, message, confirmLabel, dismissLabel = 'Cancel', tone = 'warning', busy, onConfirm, onDismiss }) => {
+  if (!open) return null;
+  const accent = tone === 'error' ? 'var(--error)' : 'var(--warning)';
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+      onClick={onDismiss}
+    >
+      <div
+        style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderTop: `3px solid ${accent}`,
+          maxWidth: 440, width: '100%', padding: 24,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 12px', color: 'var(--on-surface)' }}>{title}</h3>
+        <p style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--on-muted)', margin: '0 0 22px', whiteSpace: 'pre-line' }}>{message}</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onDismiss} disabled={busy} style={{ borderRadius: 0 }}>
+            {dismissLabel}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={onConfirm}
+            disabled={busy}
+            style={{ borderRadius: 0, background: accent, borderColor: accent }}
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Label-above-value stat pair — replaces run-on sentences like "Started X,
+// next charge Y" with a scannable pair of small metric cells.
+const StatTile = ({ label, value }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 16px', borderLeft: '1px solid var(--outline)' }}>
+    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{value}</span>
+  </div>
+);
+
+// Sharp-cornered on/off switch — the auto-renewal control. Built from a
+// plain button rather than a styled checkbox so it stays square, matching
+// the rest of this app's controls (nothing here uses a rounded native
+// input). `disabled` is used specifically for the "can't be turned back on"
+// RAZORPAY_AUTOPAY case, not just a generic busy-state lock.
+const ToggleSwitch = ({ checked, onChange, disabled, label, sublabel }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+    <div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)' }}>{label}</div>
+      {sublabel && <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{sublabel}</div>}
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      style={{
+        width: 40, height: 22, flexShrink: 0, padding: 0, position: 'relative',
+        border: `1px solid ${checked ? 'var(--primary)' : 'var(--outline)'}`,
+        background: checked ? 'var(--primary)' : 'var(--bg-surface)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        transition: 'background 0.2s cubic-bezier(0.32,0.72,0,1), border-color 0.2s cubic-bezier(0.32,0.72,0,1)',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 2, left: checked ? 20 : 2, width: 16, height: 16,
+        background: checked ? '#fff' : 'var(--on-muted)',
+        transition: 'left 0.2s cubic-bezier(0.32,0.72,0,1)',
+      }} />
+    </button>
+  </div>
+);
+
+// One plan tile, shared by the "choose a plan" (not yet subscribed) and
+// "all plans" (already subscribed, upgrade-only) grids, same visual
+// language, different selectability rules depending on `variant`.
+const PlanCard = ({ plan, variant, selected, onSelect, scheduled = false }) => {
+  const isCurrent = variant === 'current';
+  const isLocked = variant === 'locked'; // priced the same as current — no supported switch path either direction
+  const isDowngrade = variant === 'downgrade'; // priced lower — selectable, takes effect at cycle end
+  const disabled = isCurrent || isLocked;
+  const hasIntro = plan.first_cycle_price_credits != null && plan.first_cycle_price_credits !== plan.monthly_price_credits;
+  const accent = isCurrent ? 'var(--success)' : scheduled ? 'var(--warning)' : selected ? 'var(--primary)' : 'transparent';
+
+  return (
+    <label
+      style={{
+        position: 'relative', display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 16px 14px',
+        cursor: disabled ? 'default' : 'pointer',
+        border: `1px solid ${isCurrent ? 'var(--success)' : selected ? 'var(--primary)' : 'var(--outline)'}`,
+        background: isCurrent ? 'var(--success-bg)' : selected ? 'var(--primary-subtle)' : 'var(--bg-surface)',
+        opacity: isLocked ? 0.55 : 1,
+        minWidth: 180,
+        maxWidth: 230,
+        flex: '1 1 180px',
+        transition: 'border-color 0.25s cubic-bezier(0.32,0.72,0,1), background 0.25s cubic-bezier(0.32,0.72,0,1), transform 0.25s cubic-bezier(0.32,0.72,0,1)',
+      }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: accent }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)' }}>
+          {!disabled && (
+            <input type="radio" checked={selected} onChange={onSelect} style={{ margin: 0, accentColor: 'var(--primary)' }} />
+          )}
+          {plan.name}
+        </span>
+        {isCurrent && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 800, color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <ShieldCheck size={11} strokeWidth={2} /> Current
+          </span>
+        )}
+        {scheduled && !isCurrent && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9.5, fontWeight: 800, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <ArrowDownCircle size={11} strokeWidth={2} /> Scheduled
+          </span>
+        )}
+        {isLocked && <Lock size={12} strokeWidth={2} color="var(--on-muted)" />}
+        {isDowngrade && !scheduled && <ArrowDownCircle size={12} strokeWidth={1.75} color="var(--on-muted)" />}
+      </div>
+
+      {hasIntro ? (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>{money(plan.first_cycle_price_credits)}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--on-muted)' }}>first month, then {money(plan.monthly_price_credits)}/mo</span>
+        </div>
+      ) : (
+        <div>
+          <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>{money(plan.monthly_price_credits)}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-muted)' }}>/mo</span>
+        </div>
+      )}
+
+      {plan.description && <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>{plan.description}</span>}
+
+      {plan.included_features?.length > 0 && (
+        <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {plan.included_features.map((feature, i) => (
+            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11, color: 'var(--on-muted)' }}>
+              <Check size={12} strokeWidth={2} color="var(--success)" style={{ flexShrink: 0, marginTop: 1.5 }} />
+              {feature}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isLocked && (
+        <span style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 2 }}>Same price as your current plan</span>
+      )}
+      {scheduled && (
+        <span style={{ fontSize: 10.5, color: 'var(--warning)', marginTop: 2, fontWeight: 600 }}>Switching to this plan at your next renewal</span>
+      )}
+    </label>
+  );
+};
+
+// Self-contained, fetches/manages its own state so it can drop into
+// OrganizationProfilePage.jsx without threading into that page's own large
+// form/state. DSA_ADMIN only, matches the subscription routes' own gating.
+//
+// Deliberately simple, on purpose: a tenant who chooses to pay (either
+// payment method) is always charged and activated immediately, and renews
+// on that same date every month, regardless of the platform-wide free_until
+// date below. That date only ever matters to a tenant who DOESN'T subscribe
+// (see is_currently_free below, and Sidebar.jsx's gate). It never defers or
+// splits an active subscribe/upgrade.
+//
+// Switching plans is upgrade-only: a tenant already subscribed can only
+// move to a HIGHER-priced plan (paying the price difference right now,
+// same subscription/mandate kept, see upgradePlan()'s doc comment on the
+// backend). Moving to anything cheaper, including Free, only ever happens
+// via Cancel, which keeps the current plan active until it actually
+// expires rather than switching mid-cycle.
+const VirtualWorkspaceSubscriptionCard = () => {
+  const { hasRole, refreshUser } = useAuth();
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  // Only one payment method is offered for a new subscribe: Razorpay's
+  // Subscriptions API. It genuinely supports UPI Autopay (confirmed
+  // against Razorpay's own docs) — the newer ceiling-based RAZORPAY_
+  // RECURRING rail does not, on this account (verified live, card-only,
+  // across every Razorpay account tested including the live one), so this
+  // is the one that actually gets a UPI mandate in front of the tenant.
+  // WALLET_CREDITS still works fully for tenants already on it (see the
+  // rest of this file) — this is only what a NEW subscribe can choose, so
+  // there's nothing left to actually pick, just a fixed value.
+  const paymentMethod = 'RAZORPAY_AUTOPAY';
+  const [promoCode, setPromoCode] = useState('');
+  const [planId, setPlanId] = useState('');
+  const [switchPlanId, setSwitchPlanId] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Holds the confirm-modal's content while it's open (null = closed) — the
+  // app's own themed replacement for window.confirm(), shared by every
+  // "confirm before this takes effect" action on this card (turning off
+  // auto-renewal, scheduling a downgrade). { title, message, confirmLabel,
+  // onConfirm } — onConfirm is the async action the primary button runs.
+  const [confirmModal, setConfirmModal] = useState(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await api.get('/virtual-workspace/subscription');
+      setStatus(res.data);
+      const currentPlanId = res.data.subscription?.plan_id || res.data.plans?.[0]?.id || '';
+      setPlanId(String(currentPlanId));
+      // Defaults to the current plan itself, nothing pre-selected as an
+      // "upgrade" until the tenant actually picks a pricier one.
+      setSwitchPlanId(String(currentPlanId));
+    } catch {
+      // Non-fatal, card just shows nothing actionable.
+    } finally {
+      setLoading(false);
+    }
+    // Sidebar.jsx's nav-access gate reads virtual_workspace_restricted_nav_
+    // item_ids off the GLOBAL AuthContext user object, which only /auth/me
+    // repopulates, refreshing this card's OWN status above does nothing
+    // for it. Without this, a subscribe/upgrade/cancel just now still shows
+    // the Free plan's restricted sidebar until the next full page reload.
+    // Cheap enough to just always pair it with the card's own refresh.
+    refreshUser().catch(() => {});
+  }, [refreshUser]);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  if (!hasRole('DSA_ADMIN') || loading || !status) return null;
+
+  const { subscription, plans, monthly_price_credits, is_currently_free, free_until, key_id, scheduled_downgrade_plan } = status;
+  const freeUntilLabel = free_until ? new Date(free_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
+  // Cheapest plan first (left), priciest last (right), in both the initial
+  // "Choose a plan" grid and the already-subscribed "All Plans" grid, so the
+  // price ladder always reads left-to-right regardless of API/DB order.
+  const sortedPlans = plans ? [...plans].sort((a, b) => a.monthly_price_credits - b.monthly_price_credits) : plans;
+
+  // Opens Razorpay Checkout for mandate authorization against an
+  // already-created subscription, shared by a fresh subscribe, by
+  // "Complete Payment Setup" for one stuck at CREATED/AUTHENTICATED (e.g.
+  // one an admin started on this tenant's behalf, or a Checkout the tenant
+  // closed before finishing), and by the upgrade-reauthorization fallback
+  // (confirmEndpoint override) when an upgrade's old mandate couldn't
+  // absorb the new price and a fresh one had to be issued (see
+  // handleSwitchPlan below). For a plain subscribe/complete-payment,
+  // authorization itself IS the charge; for the reauth case the new
+  // mandate's first real charge is deferred server-side, so nothing is
+  // charged here beyond whatever token verification the payment method
+  // itself requires.
+  const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace', confirmEndpoint = '/virtual-workspace/subscription/confirm') => {
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({
+      key: key_id,
+      subscription_id: razorpaySubscriptionId,
+      name: 'Cred2Tech Virtual Workspace',
+      description: 'Monthly subscription',
+      handler: async (response) => {
+        try {
+          await api.post(confirmEndpoint, {
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          toast.success(successMessage);
+          fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
+        }
+      },
+      theme: { color: '#4F46E5' },
+    });
+    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
+    rzp.open();
+  };
+
+  // Opens Razorpay Checkout in `recurring: true` mode against a mandate
+  // registration order (RAZORPAY_RECURRING rail) — shared by a fresh
+  // subscribe and an upgrade re-registration on this rail (every upgrade
+  // on this rail re-registers a fresh mandate at the new plan's exact
+  // price, see the backend's registerRecurringMandate doc comment). The
+  // order's own `amount` already IS whatever's owed right now (full price
+  // for a fresh
+  // subscribe, the price difference for an upgrade) — Razorpay charges it
+  // as part of this SAME authenticated Checkout session, so completing it
+  // here is a real, instant, synchronous charge, not a "your first charge
+  // is being processed" placeholder. Only ONGOING renewals (fired later
+  // with no customer present) go through the ~24h bank confirmation delay
+  // — see the backend's RAZORPAY_RECURRING section header for why.
+  const openRecurringAuthCheckout = async ({ razorpay_order_id, razorpay_customer_id, amount, currency }, successMessage) => {
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({
+      key: key_id,
+      order_id: razorpay_order_id,
+      customer_id: razorpay_customer_id,
+      recurring: true,
+      amount,
+      currency,
+      name: 'Cred2Tech Virtual Workspace',
+      description: 'Recurring payment authorization',
+      handler: async (response) => {
+        try {
+          await api.post('/virtual-workspace/subscription/confirm-recurring-mandate', {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+          toast.success(successMessage);
+          fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to confirm the auto-pay mandate');
+        }
+      },
+      theme: { color: '#4F46E5' },
+    });
+    rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
+    rzp.open();
+  };
+
+  const handleSubscribe = async () => {
+    if (!planId) return toast.error('Select a plan');
+    setBusy(true);
+    try {
+      const res = await api.post('/virtual-workspace/subscription/subscribe', {
+        plan_id: planId,
+        payment_method: paymentMethod,
+        promo_code: promoCode.trim() || null,
+      });
+
+      if (res.data.payment_method === 'WALLET_CREDITS') {
+        toast.success('Subscribed. Paid from wallet credits');
+        await fetchStatus();
+        return;
+      }
+
+      if (res.data.payment_method === 'RAZORPAY_RECURRING') {
+        await openRecurringAuthCheckout(res.data, 'Subscribed to Virtual Workspace. Auto-pay is set up and active');
+        return;
+      }
+
+      // RAZORPAY_AUTOPAY, open Checkout against the created subscription;
+      // authorizing it is what charges the first month, right now.
+      await openCheckout(res.data.razorpay_subscription_id);
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to start subscription');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCompletePayment = async () => {
+    setBusy(true);
+    try {
+      if (subscription.payment_method === 'RAZORPAY_RECURRING') {
+        // Resuming a mandate registration whose Checkout tab was closed
+        // before completion — the auth order already exists (razorpay_
+        // order_id/razorpay_customer_id are still on the record), just
+        // reopen Checkout against it rather than registering a new one.
+        await openRecurringAuthCheckout(
+          { razorpay_order_id: subscription.razorpay_order_id, razorpay_customer_id: subscription.razorpay_customer_id },
+          'Auto-pay is set up and active'
+        );
+      } else if (subscription.scheduled_downgrade_plan_id && subscription.pending_razorpay_subscription_id) {
+        // A scheduled downgrade's cycle boundary arrived — the worker
+        // already issued a fresh mandate for the lower plan (see
+        // applyCycleEndDowngrades' own doc comment); this Checkout is
+        // against THAT new mandate, not the old (already-cancelled) one.
+        await openCheckout(
+          subscription.pending_razorpay_subscription_id,
+          `Downgraded to ${scheduled_downgrade_plan?.name || 'your new plan'}. Auto-pay is now active at the lower price`,
+          '/virtual-workspace/subscription/confirm-downgrade'
+        );
+      } else {
+        await openCheckout(subscription.razorpay_subscription_id);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectedSwitchPlan = plans?.find((p) => String(p.id) === String(switchPlanId));
+  const upgradeDiff = selectedSwitchPlan ? selectedSwitchPlan.monthly_price_credits - subscription?.effective_amount_credits : 0;
+
+  // RAZORPAY_AUTOPAY charges a PRORATED amount today, not the flat
+  // new-minus-old difference — mirrors the backend's own formula exactly
+  // (upgradePlan()'s doc comment) so the preview shown here never
+  // disagrees with what actually gets charged. WALLET_CREDITS and
+  // RAZORPAY_RECURRING both still charge the flat difference, unaffected.
+  const estimatedProratedCharge = (() => {
+    if (!selectedSwitchPlan || subscription?.payment_method !== 'RAZORPAY_AUTOPAY') return upgradeDiff;
+    const now = Date.now();
+    const cycleStart = subscription.current_period_start ? new Date(subscription.current_period_start).getTime() : now;
+    const cycleEnd = subscription.current_period_end ? new Date(subscription.current_period_end).getTime() : cycleStart + 30 * 24 * 60 * 60 * 1000;
+    const cycleLengthMs = Math.max(1, cycleEnd - cycleStart);
+    const remainingMs = Math.max(0, cycleEnd - now);
+    const unusedCredit = (subscription.effective_amount_credits || 0) * (remainingMs / cycleLengthMs);
+    return Math.max(1, Math.round(selectedSwitchPlan.monthly_price_credits - unusedCredit));
+  })();
+
+  const handleSwitchPlan = async () => {
+    if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
+    if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
+    if (upgradeDiff <= 0) return toast.error('Cancel your subscription to move to a lower-priced plan');
+    setBusy(true);
+    try {
+      const res = await api.post('/virtual-workspace/subscription/upgrade', { plan_id: switchPlanId });
+
+      if (res.data.payment_method === 'WALLET_CREDITS') {
+        toast.success(`Upgraded to ${selectedSwitchPlan.name}. ${money(upgradeDiff)} debited from wallet`);
+        await fetchStatus();
+        return;
+      }
+
+      if (res.data.payment_method === 'RAZORPAY_RECURRING') {
+        // This rail always re-registers a fresh mandate for an upgrade
+        // (the ceiling is always exactly the current plan's price, so any
+        // upgrade exceeds it by definition) — never a plain one-time-order
+        // top-up the way RAZORPAY_AUTOPAY's fallback below is.
+        await openRecurringAuthCheckout(
+          res.data,
+          `Upgraded to ${selectedSwitchPlan.name}. The price difference has been charged and auto-pay is updated`
+        );
+        return;
+      }
+
+      // RAZORPAY_AUTOPAY — a single Checkout, same helper subscribe() uses.
+      // Authorizing this new mandate IS the (prorated) charge; auto-pay
+      // then bills the plan's full price from the next cycle automatically
+      // (a plain server call right after confirmation, no further Checkout
+      // — see upgradePlan()'s own doc comment for the full design).
+      await openCheckout(
+        res.data.razorpay_subscription_id,
+        `Upgraded to ${selectedSwitchPlan.name}. Auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle`,
+        '/virtual-workspace/subscription/confirm-upgrade-payment'
+      );
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to switch plan');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Schedules a switch to a LOWER-priced plan, effective at the end of the
+  // current cycle, never mid-cycle. Nothing is charged now — this only
+  // changes what the NEXT renewal bills and switches to.
+  const handleScheduleDowngrade = () => {
+    if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
+    if (String(switchPlanId) === String(subscription.plan_id)) return toast.error('You are already on this plan');
+    const downgradeDiff = subscription.effective_amount_credits - selectedSwitchPlan.monthly_price_credits;
+    if (downgradeDiff <= 0) return toast.error('Select a lower-priced plan to downgrade, or use Upgrade for a higher-priced one');
+    const periodEndLabel = subscription.current_period_end ? formatDateTime(subscription.current_period_end) : 'the end of your current cycle';
+    setConfirmModal({
+      title: 'Schedule this downgrade?',
+      message: `Switch to ${selectedSwitchPlan.name} (${money(selectedSwitchPlan.monthly_price_credits)}/mo)? This will not take effect until your current plan ends on ${periodEndLabel}. You keep full access at today's price until then, and auto-pay will renew at the new, lower price from your next cycle.`,
+      confirmLabel: 'Schedule Downgrade',
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api.post('/virtual-workspace/subscription/downgrade', { plan_id: switchPlanId });
+          toast.success(`Downgrade to ${selectedSwitchPlan.name} scheduled. It takes effect at your next renewal on ${periodEndLabel}.`);
+          await fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to schedule the downgrade');
+        } finally {
+          setBusy(false);
+          setConfirmModal(null);
+        }
+      },
+    });
+  };
+
+  const handleCancelScheduledDowngrade = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post('/virtual-workspace/subscription/cancel-downgrade');
+
+      if (res.data?.reauthorization_required) {
+        // Razorpay's own resume API couldn't pick the paused mandate back
+        // up (their docs warn of exactly this for some instruments) — a
+        // fresh mandate was re-authorized instead, at the SAME plan/price.
+        // One Checkout, no charge today (deferred to the same paid-through
+        // date as before).
+        toast('Your auto-pay mandate needs re-authorizing to stay on this plan. Nothing is charged today.', { duration: 8000 });
+        await openCheckout(
+          res.data.razorpay_subscription_id,
+          'Scheduled downgrade cancelled. You will stay on your current plan.',
+          '/virtual-workspace/subscription/confirm-cancel-downgrade'
+        );
+        return;
+      }
+
+      toast.success('Scheduled downgrade cancelled. You will stay on your current plan.');
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to cancel the scheduled downgrade');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Turning auto-renewal off IS cancelSubscription() — opens the app's own
+  // confirm modal (see ConfirmModal below) rather than a browser alert. It
+  // leads with a nudge to keep auto-renewal on (uninterrupted service),
+  // then the actual consequence, then leaves the choice to the tenant.
+  // "Turn Off Anyway" runs the cancel itself (below); dismissing the modal
+  // any other way just leaves auto-renewal on, untouched.
+  const handleCancel = () => {
+    const hasRunningCycle = ['ACTIVE', 'PAUSED'].includes(subscription.status) && subscription.current_period_end;
+    const consequence = hasRunningCycle
+      ? `You won't be charged again. Full access stays as-is until ${formatDateTime(subscription.current_period_end)}, then you'll drop to the Free plan (restricted dashboard, no wallet recharge, no paid features) until you resubscribe.`
+      : `You won't be charged, and you'll move to the Free plan (restricted access) right away.`;
+    setConfirmModal({
+      title: 'Turn off auto-renewal?',
+      message: `For uninterrupted service, it's best to keep auto-renewal on.\n\nTurn it off anyway? ${consequence}`,
+      confirmLabel: 'Turn Off Anyway',
+      dismissLabel: 'Keep Auto-renewal On',
+      tone: 'error',
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await api.post('/virtual-workspace/subscription/cancel');
+          toast.success(hasRunningCycle ? 'Subscription cancelled. No further charges. Full access continues until your current period ends.' : 'Subscription cancelled. No further charges.');
+          await fetchStatus();
+        } catch (err) {
+          toast.error(getErrorMessage(err) || 'Failed to cancel subscription');
+        } finally {
+          setBusy(false);
+          setConfirmModal(null);
+        }
+      },
+    });
+  };
+
+  const handleResumeAutoRenewal = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post('/virtual-workspace/subscription/resume-auto-renewal');
+
+      if (res.data?.reauthorization_required) {
+        // Razorpay's own resume API couldn't pick this mandate back up
+        // (their docs warn of exactly this for some instruments) — a
+        // fresh mandate was re-authorized instead. One Checkout, no
+        // charge today (the new mandate's first real charge stays
+        // deferred to the same paid-through date as before).
+        toast('Your auto-pay mandate needs re-authorizing to turn back on. Nothing is charged today.', { duration: 8000 });
+        await openCheckout(
+          res.data.razorpay_subscription_id,
+          'Auto-renewal turned back on',
+          '/virtual-workspace/subscription/confirm-resume-auto-renewal'
+        );
+        return;
+      }
+
+      toast.success('Auto-renewal turned back on. Your subscription will keep renewing as normal.');
+      await fetchStatus();
+    } catch (err) {
+      toast.error(getErrorMessage(err) || 'Failed to resume auto-renewal');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const activeLike = subscription && ['CREATED', 'AUTHENTICATED', 'ACTIVE', 'PENDING', 'HALTED', 'GRACE_PERIOD', 'PAUSED'].includes(subscription.status);
+  const needsCheckout = subscription && ['CREATED', 'AUTHENTICATED'].includes(subscription.status) && ['RAZORPAY_AUTOPAY', 'RAZORPAY_RECURRING'].includes(subscription.payment_method);
+  const isHealthy = subscription?.status === 'ACTIVE';
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderTop: '3px solid var(--primary)', marginTop: 24 }}>
+      <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--outline)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <IconChip icon={LayoutGrid} color="var(--primary)" bg="var(--primary-subtle)" size={38} />
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace Subscription</h3>
+          <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '3px 0 0 0' }}>
+            {freeUntilLabel ? `Free until ${freeUntilLabel} for tenants who don't subscribe. Plans below are ${money(monthly_price_credits)}/month and start right away` : `From ${money(monthly_price_credits)}/month, auto-renews`}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ padding: 22 }}>
+        {is_currently_free && !activeLike && (
+          <Callout icon={Gift} color="var(--success)" bg="var(--success-bg)">
+            <strong style={{ color: 'var(--success)' }}>Virtual Workspace is free until {freeUntilLabel}.</strong> No need to subscribe to keep using it during this period.
+          </Callout>
+        )}
+        {needsCheckout && (
+          <Callout icon={AlertCircle} color="var(--warning)" bg="var(--warning-bg)">
+            {subscription.scheduled_downgrade_plan_id && subscription.pending_razorpay_subscription_id ? (
+              <>
+                <strong style={{ color: 'var(--warning)' }}>Your scheduled downgrade is ready.</strong> Your previous billing cycle has ended, and auto-pay needs re-authorizing at the new, lower price to continue.
+                Razorpay has also emailed and texted you a link; you can complete it right here instead.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: 'var(--warning)' }}>Payment authorization needed.</strong> Your subscription was started but not yet paid.
+                Razorpay has also emailed and texted you a link; you can complete it right here instead.
+              </>
+            )}
+            <div style={{ marginTop: 10 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleCompletePayment} disabled={busy} style={{ borderRadius: 0 }}>
+                {busy ? 'Opening…' : 'Complete Payment Setup'}
+              </button>
+            </div>
+          </Callout>
+        )}
+        {activeLike ? (
+          <div>
+            {/* Status header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4, flexWrap: 'wrap' }}>
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, padding: '5px 12px',
+                background: isHealthy ? 'var(--success-bg)' : 'var(--error-bg)',
+                color: isHealthy ? 'var(--success)' : 'var(--error)',
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}>
+                <span style={{ width: 6, height: 6, background: 'currentColor', display: 'inline-block' }} />
+                {STATUS_LABEL[subscription.status] || subscription.status}
+              </span>
+              <span style={{ fontSize: 12.5, color: 'var(--on-muted)' }}>
+                {subscription.plan?.name ? `${subscription.plan.name} · ` : ''}
+                {subscription.payment_method === 'WALLET_CREDITS'
+                  ? 'Paid from wallet credits'
+                  : subscription.payment_method === 'RAZORPAY_RECURRING'
+                    ? 'Auto-pay via Razorpay (Recurring)'
+                    : 'Auto-pay via Razorpay'}
+              </span>
+            </div>
+
+            {/* Price hero */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '14px 0 16px' }}>
+              <span style={{ fontSize: 34, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>{money(subscription.effective_amount_credits)}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--on-muted)' }}>/month</span>
+            </div>
+
+            {/* Date stats */}
+            {(subscription.current_period_start || subscription.current_period_end) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', border: '1px solid var(--outline)', marginBottom: subscription.pending_cancellation ? 16 : 0 }}>
+                {subscription.current_period_start && (
+                  <StatTile label="Started" value={formatDateTime(subscription.current_period_start)} />
+                )}
+                {subscription.current_period_end && (
+                  <StatTile
+                    label={subscription.pending_cancellation ? 'Full access until' : 'Next charge'}
+                    value={formatDateTime(subscription.current_period_end)}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Auto-renewal toggle — the primary on/off control for future
+                charges. ON means the subscription keeps renewing as normal;
+                turning it OFF is exactly cancelSubscription() (full access
+                continues through the paid-for period, then drops to Free).
+                Turning it back ON before that happens undoes it on every
+                rail — RAZORPAY_AUTOPAY pauses (not cancels) the mandate
+                specifically so this stays reversible with no fresh
+                Checkout, see the backend's own doc comment for why. */}
+            <div style={{ border: '1px solid var(--outline)', padding: '14px 16px', marginBottom: 16 }}>
+              <ToggleSwitch
+                checked={!subscription.pending_cancellation}
+                disabled={busy}
+                onChange={subscription.pending_cancellation ? handleResumeAutoRenewal : handleCancel}
+                label="Auto-renewal"
+                sublabel={
+                  subscription.pending_cancellation
+                    ? 'Off. No further charges. Turn back on any time before your access ends.'
+                    : 'On. Renews automatically every cycle.'
+                }
+              />
+            </div>
+
+            {subscription.pending_cancellation && (
+              <Callout icon={XCircle} color="var(--warning)" bg="var(--warning-bg)">
+                <strong style={{ color: 'var(--warning)' }}>Cancellation scheduled.</strong> No further charges. Full access continues until the date above, then you'll drop to the Free plan (restricted).
+              </Callout>
+            )}
+
+            {!subscription.pending_cancellation && plans?.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 20, paddingTop: 20 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ArrowUpCircle size={14} strokeWidth={1.75} /> All Plans
+                </p>
+
+                {scheduled_downgrade_plan && (
+                  <Callout icon={ArrowDownCircle} color="var(--warning)" bg="var(--warning-bg)">
+                    <strong style={{ color: 'var(--warning)' }}>Downgrade scheduled.</strong> Switching to {scheduled_downgrade_plan.name} ({money(scheduled_downgrade_plan.monthly_price_credits)}/mo) at your next renewal
+                    {subscription.current_period_end ? ` on ${formatDateTime(subscription.current_period_end)}` : ''}. You keep full access at today's price until then.
+                    <div style={{ marginTop: 10 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={handleCancelScheduledDowngrade} disabled={busy} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <XCircle size={13} strokeWidth={1.75} /> {busy ? 'Cancelling…' : 'Cancel Scheduled Downgrade'}
+                      </button>
+                    </div>
+                  </Callout>
+                )}
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                  {sortedPlans.map((p) => {
+                    const isCurrent = String(p.id) === String(subscription.plan_id);
+                    // Same price as current: no supported switch path either
+                    // way, stays locked. Strictly lower: selectable as a
+                    // downgrade, deferred to cycle end (see scheduleDowngrade
+                    // on the backend). Strictly higher: the existing
+                    // immediate, pay-the-difference upgrade path.
+                    const isLocked = !isCurrent && p.monthly_price_credits === subscription.effective_amount_credits;
+                    const isDowngradeTarget = !isCurrent && p.monthly_price_credits < subscription.effective_amount_credits;
+                    const variant = isCurrent ? 'current' : isLocked ? 'locked' : isDowngradeTarget ? 'downgrade' : 'upgrade';
+                    return (
+                      <PlanCard
+                        key={p.id}
+                        plan={p}
+                        variant={variant}
+                        scheduled={scheduled_downgrade_plan?.id === p.id}
+                        selected={String(switchPlanId) === String(p.id)}
+                        onSelect={() => setSwitchPlanId(String(p.id))}
+                      />
+                    );
+                  })}
+                </div>
+                {selectedSwitchPlan && String(switchPlanId) !== String(subscription.plan_id) && upgradeDiff > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', background: 'var(--primary-subtle)', borderLeft: '3px solid var(--primary)' }}>
+                    <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy} style={{ borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ArrowUpCircle size={14} strokeWidth={2} /> {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name}, pay ${money(estimatedProratedCharge)} now`}
+                    </button>
+                    <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>
+                      {subscription.payment_method === 'RAZORPAY_AUTOPAY'
+                        ? `This charges a prorated amount for your remaining days on the current plan, and auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from your next renewal.`
+                        : `Your subscription stays active. This charges just the difference, and auto-pay bills ${money(selectedSwitchPlan.monthly_price_credits)}/mo from next cycle.`}
+                    </span>
+                  </div>
+                )}
+                {selectedSwitchPlan && String(switchPlanId) !== String(subscription.plan_id) && upgradeDiff < 0 && scheduled_downgrade_plan?.id !== selectedSwitchPlan.id && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', background: 'var(--warning-bg)', borderLeft: '3px solid var(--warning)' }}>
+                    <button className="btn btn-primary btn-sm" onClick={handleScheduleDowngrade} disabled={busy} style={{ borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ArrowDownCircle size={14} strokeWidth={2} /> {busy ? 'Scheduling…' : `Schedule downgrade to ${selectedSwitchPlan.name}`}
+                    </button>
+                    <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>
+                      This will not take effect until your current plan ends. You keep full access at today's price until then, and auto-pay renews at {money(selectedSwitchPlan.monthly_price_credits)}/mo from your next cycle.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!subscription.pending_cancellation && (
+              <div style={{ borderTop: '1px solid var(--outline)', marginTop: 20, paddingTop: 20 }}>
+                <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: 0, maxWidth: 460 }}>
+                  Want to switch to a lower-priced plan? Select it above instead. Want to stop paying entirely (Free plan)? Turn off auto-renewal above. Either way, your current plan stays active until it expires, with no mid-cycle switch.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {plans?.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>Choose a plan</label>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {sortedPlans.map((p) => (
+                    <PlanCard
+                      key={p.id}
+                      plan={p}
+                      variant="upgrade"
+                      selected={String(planId) === String(p.id)}
+                      onSelect={() => setPlanId(String(p.id))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>Promo code (optional)</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 18 }}>
+              <Tag size={13} strokeWidth={1.75} color="var(--on-muted)" />
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="e.g. WELCOME20"
+                className="form-control"
+                style={{ maxWidth: 220, textTransform: 'uppercase', borderRadius: 0 }}
+              />
+            </div>
+            <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '0 0 14px' }}>
+              You'll be charged right now as part of authorizing auto-pay (card or UPI), and it renews the same date every month. An upgrade charges a prorated amount for your remaining days and raises the mandate in the same step.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <RefreshCw size={14} strokeWidth={2} /> {busy ? 'Starting…' : 'Subscribe'}
+            </button>
+          </>
+        )}
+      </div>
+      <ConfirmModal
+        open={!!confirmModal}
+        title={confirmModal?.title}
+        message={confirmModal?.message}
+        confirmLabel={confirmModal?.confirmLabel}
+        dismissLabel={confirmModal?.dismissLabel}
+        tone={confirmModal?.tone}
+        busy={busy}
+        onConfirm={confirmModal?.onConfirm}
+        onDismiss={() => setConfirmModal(null)}
+      />
+    </div>
+  );
+};
+
+export default VirtualWorkspaceSubscriptionCard;

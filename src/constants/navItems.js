@@ -22,6 +22,8 @@ import {
   MessageSquare,
   Receipt,
   Trash2,
+  Tag,
+  Bell,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -55,7 +57,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'tenants',
-    label: 'Manage DSAs',
+    label: 'Manage Sourcing Partners',
     path: '/tenants',
     icon: Building,
     roles: ['SUPER_ADMIN'],
@@ -79,6 +81,20 @@ export const NAV_ITEMS = [
     label: 'API Pricing',
     path: '/admin/pricing',
     icon: Settings,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-promo-codes',
+    label: 'Promo Codes',
+    path: '/admin/promo-codes',
+    icon: Tag,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-virtual-workspace',
+    label: 'Subscription Plans',
+    path: '/admin/virtual-workspace',
+    icon: LayoutDashboard,
     roles: ['SUPER_ADMIN'],
   },
   {
@@ -107,6 +123,20 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-notifications-send',
+    label: 'Send Notification',
+    path: '/admin/notifications/send',
+    icon: Bell,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-notifications-analytics',
+    label: 'Notification Analytics',
+    path: '/admin/notifications/analytics',
+    icon: Bell,
     roles: ['SUPER_ADMIN'],
   },
   {
@@ -222,7 +252,7 @@ export const NAV_ITEMS = [
   },
   {
     id: 'sub-dsa-payout',
-    label: 'Sub DSA Payout',
+    label: 'Sub-SP Payout',
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
     roles: ['DSA_ADMIN', 'SUB_DSA'],
@@ -251,20 +281,13 @@ export const NAV_ITEMS = [
     icon: User,
     roles: ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'CRED2TECH_MEMBER', 'SUB_DSA'],
   },
-  {
-    id: 'my-manager',
-    label: 'My Manager',
-    path: '/manager',
-    icon: Users,
-    roles: ['DSA_MEMBER'],
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    path: '/settings',
-    icon: Settings,
-    roles: ['SUPER_ADMIN'],
-    disabled: true,
-    badge: 'Soon',
-  },
 ];
+
+// The nav items Virtual Workspace can actually gate — DSA-role items only
+// (SUPER_ADMIN/CRED2TECH_MEMBER nav is never affected by a tenant's VW
+// flag, see Sidebar.jsx). Single source of truth shared by every feature-
+// list editor (SuperadminPricingPage's Free-tier list, AdminSubscriptionPlansPage's
+// per-plan list) so a newly added DSA nav item shows up in all of them
+// automatically instead of drifting.
+export const DSA_GATABLE_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
+export const GATABLE_NAV_ITEMS = NAV_ITEMS.filter((item) => item.roles?.some((r) => DSA_GATABLE_ROLES.includes(r)));

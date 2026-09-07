@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import {
     AlertCircle,
-    FileText, Download, Trash2
+    FileText, Download, Trash2, Mail, XCircle, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
@@ -10,6 +10,7 @@ import Skeleton from './ui/Skeleton';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
+import { itrAuthLinkService } from '../api/itrAuthLinkService';
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -20,6 +21,8 @@ const ItrAnalyticsForm = ({
     applicantType,
     applicantName,
     prefillPan,
+    prefillEmail,
+    prefillMobile,
     walletBalance,
     itrCost,
     existingRecord,
@@ -78,9 +81,14 @@ const ItrAnalyticsForm = ({
         setLocalExcelUrl(existingRecord.excel_url || null);
     }, [existingRecord, localReferenceId]);
 
+    // A revoked/expired auth link also resolves to phase FAILED (see
+    // casePullSnapshot.service.js's describeItrAuthLink) — that's the DSA's
+    // own deliberate action (or an inert timeout), not a provider failure,
+    // and the cancel button below already gives its own confirmation toast.
+    // Only a real provider failure on an actual pull should trigger this one.
     usePhaseTransition(livePull ? phase : null, {
         COMPLETED: () => toast.success('ITR analytics ready!'),
-        FAILED: () => toast.error('ITR analytics processing failed at provider'),
+        FAILED: () => { if (!livePull?.is_auth_link_request) toast.error('ITR analytics processing failed at provider'); },
     });
 
     // Hand the finished payload up once it exists — also covers the case where
@@ -95,16 +103,93 @@ const ItrAnalyticsForm = ({
 
     const [pan, setPan] = useState(prefillPan || '');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [refetching, setRefetching] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [sendingLink, setSendingLink] = useState(false);
+    const [cancellingLink, setCancellingLink] = useState(false);
+    // Delivery channel for the auth link — defaults to Email (the original
+    // behaviour before SMS support existed). Whichever channel(s) are chosen
+    // must have the matching contact info on file; the backend re-validates
+    // this too (see itrAuthLink.service.js), this is just for a clear
+    // disabled state + hint instead of a raw 400 toast.
+    const [linkChannel, setLinkChannel] = useState('EMAIL');
+    // Manual override — sends this link to a contact other than what's on
+    // file for the customer/applicant (e.g. they asked it go to a spouse's
+    // email, or their number on file is out of date), without editing the
+    // customer record itself. Empty means "use what's on file".
+    const [useOtherContact, setUseOtherContact] = useState(false);
+    const [overrideEmail, setOverrideEmail] = useState('');
+    const [overrideMobile, setOverrideMobile] = useState('');
+    const effectiveEmail = (useOtherContact && overrideEmail.trim()) || prefillEmail;
+    const effectiveMobile = (useOtherContact && overrideMobile.trim()) || prefillMobile;
+    const channelNeedsEmail = linkChannel === 'EMAIL' || linkChannel === 'BOTH';
+    const channelNeedsSms = linkChannel === 'SMS' || linkChannel === 'BOTH';
+    const channelMissingContact = (channelNeedsEmail && !effectiveEmail) || (channelNeedsSms && !effectiveMobile);
 
     const incomePreview = livePull?.income_preview || null;
 
+    // A link created but never yet used by the customer — see
+    // casePullSnapshot.service.js's serializeItrAuthLink. This is the only
+    // state where "Fetch ITR" should be replaced by a Cancel Request action:
+    // once the customer submits, livePull becomes the real ItrAnalyticsRequest
+    // row (reference_id present) and the ordinary PROCESSING branch below
+    // takes back over automatically.
+    const isAuthLinkPending = status === 'AWAITING_CUSTOMER_ACTION' && livePull?.is_auth_link_request;
+    const authLinkId = livePull?.auth_link_id;
+
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
+
+    // Emails the customer a link to enter their own ITR portal PAN/password —
+    // an alternative to the DSA keying it in directly below. No data is
+    // pulled by this call itself; it only sends the link and flips this row
+    // to "Action needed — waiting for the customer" until they submit it.
+    const handleSendAuthLink = async () => {
+        if (channelMissingContact) {
+            return toast.error(channelNeedsEmail && !effectiveEmail
+                ? 'No email address to send to — enter one, or switch to SMS.'
+                : 'No mobile number to send to — enter one, or switch to Email.');
+        }
+        setSendingLink(true);
+        try {
+            await itrAuthLinkService.requestLink({
+                customer_id: customerId, case_id: caseId, applicant_id: applicantId, channel: linkChannel,
+                override_email: useOtherContact ? overrideEmail.trim() : undefined,
+                override_mobile: useOtherContact ? overrideMobile.trim() : undefined,
+            });
+            toast.success('ITR authorisation link sent to the customer');
+            setIsOpen(false);
+            refresh();
+        } catch (error) {
+            // A 429 here is the server-side resend cooldown (5 minutes between
+            // sends per case+applicant) — the message already says how long to
+            // wait, so no separate countdown UI is needed.
+            toast.error(error.response?.data?.error || 'Failed to send the ITR auth link');
+        } finally {
+            setSendingLink(false);
+        }
+    };
+
+    // Revokes a still-pending link before the customer has used it — if they
+    // open it afterwards, the page shows "This request has been revoked."
+    const handleCancelAuthLink = async () => {
+        if (!authLinkId) return;
+        if (!window.confirm('Cancel this ITR authorisation link? The customer will no longer be able to use it.')) return;
+        setCancellingLink(true);
+        try {
+            await itrAuthLinkService.cancelLink(authLinkId);
+            toast.success('ITR auth link cancelled');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to cancel the ITR auth link');
+        } finally {
+            setCancellingLink(false);
+        }
+    };
 
     const handleAnalyze = async () => {
         if (!pan) return toast.error('PAN is required');
@@ -126,6 +211,7 @@ const ItrAnalyticsForm = ({
             setLocalStatus('PROCESSING');
             setIsOpen(false);
             setPassword(''); // Clear sensitive field immediately
+            setShowPassword(false);
             // Collapse the wait for the next server tick so the row flips to
             // "Processing" immediately.
             refresh();
@@ -195,14 +281,20 @@ const ItrAnalyticsForm = ({
         }
     };
 
-    // `existingRecord` is a synchronous prop (the parent wizard already
-    // awaited the case load before this component ever mounts), so this
-    // resolves to true on the very first render in the normal case — no
-    // artificial delay. It only stays false for the rare tick where the prop
-    // genuinely hasn't arrived yet, showing a skeleton instead of a
-    // default/empty "Fetch ITR" state that would otherwise flash before
-    // snapping to the real one.
-    if (existingRecord === undefined) {
+    // `existingRecord` is normally a synchronous prop (the parent wizard
+    // already awaited the case load before this component ever mounts), so
+    // this resolves on the very first render in the common case — no
+    // artificial delay. But it can also stay `undefined` for the entire
+    // session if the parent wizard's in-memory case data was built before
+    // this field existed on it (e.g. navigating straight from the GST step
+    // to the ITR step without a full page reload) — gating on it alone then
+    // left this stuck on a skeleton forever, only resolving on a manual
+    // refresh once the parent re-fetched the case fresh. `snapshot` (see
+    // hooks/useCasePullStatus) resolves independently over the socket
+    // regardless of what the parent prop ever does, so also treating that as
+    // "ready" — matching GstAnalyticsForm's own dataReady gate — means this
+    // never gets stuck even when `existingRecord` never arrives.
+    if (existingRecord === undefined && snapshot === null) {
         return (
             <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
                 <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
@@ -214,7 +306,7 @@ const ItrAnalyticsForm = ({
     return (
         <div style={{
             backgroundColor: 'var(--bg-base)',
-            border: `1px solid ${status === 'COMPLETED' ? 'var(--success)' : status === 'FAILED' ? 'var(--error)' : status === 'PROCESSING' ? 'var(--warning)' : 'var(--border)'}`,
+            border: `1px solid ${status === 'COMPLETED' ? 'var(--success)' : status === 'FAILED' ? 'var(--error)' : (status === 'PROCESSING' || isAuthLinkPending) ? 'var(--warning)' : 'var(--border)'}`,
             borderRadius: 0,
             overflow: 'hidden'
         }}>
@@ -230,9 +322,12 @@ const ItrAnalyticsForm = ({
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{applicantName}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{roleLabel}</span>
+                    {isAuthLinkPending && (livePull?.recipient_email || livePull?.recipient_mobile) && (
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            Auth link sent to {[livePull.recipient_email, livePull.recipient_mobile].filter(Boolean).join(' / ')}
+                        </span>
+                    )}
                 </div>
-
-                
 
                 {/* Right: Pills + Actions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
@@ -240,7 +335,46 @@ const ItrAnalyticsForm = ({
                     <PullStatusTracker phase={phase} label={phaseLabel} progress={progress} />
 
                     {/* Action Button */}
-                    {status === 'PROCESSING' ? (
+                    {isAuthLinkPending ? (
+                        // Link sent, customer hasn't submitted it yet — no data has
+                        // been touched, so the only actions available are re-sending
+                        // it (e.g. the customer says they never got the email, or the
+                        // first one expired) or revoking it. Resend reuses the same
+                        // requestItrAuthLink call Send Auth Link does — it already
+                        // supersedes the still-pending link and issues a fresh one.
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <select
+                                value={linkChannel}
+                                onChange={(e) => setLinkChannel(e.target.value)}
+                                className="form-control"
+                                style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                title="Choose how to deliver the resent link"
+                            >
+                                <option value="EMAIL">Email</option>
+                                <option value="SMS">SMS</option>
+                                <option value="BOTH">Email + SMS</option>
+                            </select>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleSendAuthLink}
+                                disabled={sendingLink || channelMissingContact}
+                                title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                                <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={handleCancelAuthLink}
+                                disabled={cancellingLink}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
+                            >
+                                <XCircle size={13} /> {cancellingLink ? 'Cancelling...' : 'Cancel Request'}
+                            </button>
+                        </div>
+                    ) : status === 'PROCESSING' ? (
                         <button
                             type="button"
                             className="btn btn-ghost btn-sm"
@@ -287,24 +421,99 @@ const ItrAnalyticsForm = ({
                                 disabled={deleting}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--error)', border: '1px solid var(--error)' }}
                             >
-                                <Trash2 size={13} /> {deleting ? 'Removing...' : 'Remove'}
+                                <Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}
                             </button>
                         </div>
                     ) : (
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => setIsOpen(!isOpen)}
-                            disabled={disabled}
-                            title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
-                        >
-                            {isMsme
-                                ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
-                                : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setIsOpen(!isOpen)}
+                                disabled={disabled}
+                                title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
+                            >
+                                {isMsme
+                                    ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
+                                    : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
+                            </button>
+                            {/* DSA-only: email the customer a link to enter their own
+                                PAN/password instead — never available in MSME self-service
+                                mode, since there the customer already is the one filling
+                                the form in directly. Deliberately NOT gated on the current
+                                wallet balance (unlike the expando's direct-entry Analyze
+                                button) — same as "Fetch ITR" above: the wallet is only
+                                actually charged once the customer submits, which may be
+                                well after the DSA has topped up, so blocking the send here
+                                would be premature. The real balance check still happens
+                                server-side at submit time either way. */}
+                            {!isMsme && (
+                                <>
+                                    <select
+                                        value={linkChannel}
+                                        onChange={(e) => setLinkChannel(e.target.value)}
+                                        className="form-control"
+                                        style={{ fontSize: 12, padding: '4px 6px', width: 'auto' }}
+                                        title="Choose how to deliver the auth link"
+                                    >
+                                        <option value="EMAIL">Email</option>
+                                        <option value="SMS">SMS</option>
+                                        <option value="BOTH">Email + SMS</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={handleSendAuthLink}
+                                        disabled={disabled || sendingLink || channelMissingContact}
+                                        title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'Missing contact info for the selected channel' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                                    >
+                                        <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
+
+            {/* Manual contact override — send this link to someone other than
+                whatever's on file (a different email/mobile), without editing
+                the customer/applicant record itself. Visible whenever a Send/
+                Resend Auth Link action is on screen (never in MSME self-service
+                mode, which never shows the auth-link path at all). */}
+            {!isMsme && status !== 'PROCESSING' && status !== 'COMPLETED' && (
+                <div style={{ padding: isMobile ? '0 16px 14px' : '0 24px 16px' }}>
+                    <button
+                        type="button"
+                        onClick={() => setUseOtherContact((s) => !s)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11.5, padding: '2px 6px', color: 'var(--text-tertiary)' }}
+                    >
+                        {useOtherContact ? 'Use contact on file' : 'Send to a different contact…'}
+                    </button>
+                    {useOtherContact && (
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10, marginTop: 8 }}>
+                            <input
+                                type="email"
+                                value={overrideEmail}
+                                onChange={(e) => setOverrideEmail(e.target.value)}
+                                className="form-control"
+                                placeholder={prefillEmail ? `Email (default: ${prefillEmail})` : 'Email address'}
+                                style={{ fontSize: 12.5 }}
+                            />
+                            <input
+                                type="tel"
+                                value={overrideMobile}
+                                onChange={(e) => setOverrideMobile(e.target.value)}
+                                className="form-control"
+                                placeholder={prefillMobile ? `Mobile (default: ${prefillMobile})` : 'Mobile number'}
+                                style={{ fontSize: 12.5 }}
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Income preview — quick net profit / gross receipts figures right
                 here, so seeing the headline numbers doesn't require opening the
@@ -338,7 +547,7 @@ const ItrAnalyticsForm = ({
             {/* Expando: credential entry — only relevant pre-completion, since the
                 completed state's only action (Excel download) already lives in the
                 summary row above; no separate "Analytics Summary" panel needed. */}
-            {isOpen && status !== 'COMPLETED' && (
+            {isOpen && status !== 'COMPLETED' && !isAuthLinkPending && (
                 <div style={{ padding: 24, backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         
@@ -350,26 +559,48 @@ const ItrAnalyticsForm = ({
                         </div>
                     )}
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
-                        <FormField label="PAN / ITR Username" required>
-                            <input
-                                type="text"
-                                className="form-control"
-                                value={pan}
-                                onChange={e => setPan(e.target.value.toUpperCase())}
-                                placeholder="ABCDE1234F"
-                                style={{ textTransform: 'uppercase' }}
-                            />
-                        </FormField>
-                        <FormField label="ITR Portal Password" required>
-                            <input
-                                type="password"
-                                className="form-control"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                placeholder="Enter portal password"
-                            />
-                        </FormField>
+                    {/* Username + password grouped side by side in one bordered
+                        box — same treatment as GstAnalyticsForm's credential
+                        group, since they're one logical credential pair. */}
+                    <div style={{ background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+                            <FormField label="PAN / ITR Username" required>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={pan}
+                                    onChange={e => setPan(e.target.value.toUpperCase())}
+                                    placeholder="ABCDE1234F"
+                                    style={{ textTransform: 'uppercase' }}
+                                />
+                            </FormField>
+                            <FormField label="ITR Portal Password" required>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        className="form-control"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                        placeholder="Enter portal password"
+                                        style={{ paddingRight: 36 }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword((s) => !s)}
+                                        tabIndex={-1}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                        style={{
+                                            position: 'absolute', right: 0, top: 0, height: '100%', width: 34,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            background: 'transparent', border: 'none', cursor: 'pointer',
+                                            color: 'var(--text-tertiary)',
+                                        }}
+                                    >
+                                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    </button>
+                                </div>
+                            </FormField>
+                        </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>

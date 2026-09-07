@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bell, HelpCircle, Wallet } from 'lucide-react';
+import { HelpCircle, Wallet } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Badge from '../ui/Badge';
 import api from '../../api/axiosInstance';
@@ -22,7 +22,7 @@ const Topbar = () => {
     // Match /users/:id/edit or /users/:id
     if (/^\/users\/\d+\/edit$/.test(location.pathname)) return 'Edit User';
     if (/^\/users\/\d+$/.test(location.pathname)) return 'User Details';
-    return PAGE_TITLES[location.pathname] || 'DSA CRM Admin';
+    return PAGE_TITLES[location.pathname] || 'Sourcing Partner CRM Admin';
   };
 
   const [walletBalance, setWalletBalance] = React.useState(null);
@@ -70,12 +70,9 @@ const Topbar = () => {
               <span style={{ fontSize: 13, fontWeight: 700 }}>{walletBalance.toLocaleString()} Credits</span>
            </div>
         )}
-        
+
         <button className="btn btn-ghost btn-icon" title="Help">
           <HelpCircle size={18} color="var(--text-tertiary)" />
-        </button>
-        <button className="btn btn-ghost btn-icon" title="Notifications">
-          <Bell size={18} color="var(--text-tertiary)" />
         </button>
 
         <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />

@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import api from '../api/axiosInstance';
 
 /**
  * One shared Socket.IO connection for the whole app.
@@ -12,6 +13,11 @@ import { io } from 'socket.io-client';
  * The connection is lazy — nothing opens until a component actually asks to
  * watch a case — and reference-counted per case, so the room is left only when
  * the last interested component unmounts.
+ *
+ * Notification channel: persistent, separate from case rooms so
+ * disconnectIfIdle() never tears it down. The server auto-joins user:X on
+ * connect (no client emit needed). The client reports focus state so the server
+ * can suppress push notifications when the app is open.
  */
 
 // VITE_API_BASE_URL points at the REST mount ("https://host/api"). Socket.IO
@@ -26,9 +32,15 @@ const SOCKET_PATH = '/api/socket.io';
 let socket = null;
 /** caseId -> { count, listeners:Set<fn>, joined:boolean, lastSnapshot:object|null } */
 const rooms = new Map();
-/** consentRequestId -> { count, listeners:Set<fn>, joined:boolean, lastStatus:string|null } */
-const consentRooms = new Map();
 const statusListeners = new Set();
+
+/** Persistent notification channel listeners — keep socket alive even when no case rooms are open. */
+const notificationListeners = new Set();
+const notificationUnreadCountListeners = new Set();
+
+/** Tracks whether this browser tab is considered "focused" for push suppression. */
+let focusState = null; // 'focused' | 'blurred' | null before the first report
+let focusReportingTimer = null; // debounce for the 1.5s grace period
 
 function emitConnectionStatus(status) {
   statusListeners.forEach((fn) => {
@@ -62,10 +74,8 @@ function getSocket() {
       room.joined = false;
       joinRoom(caseId);
     });
-    consentRooms.forEach((room, requestId) => {
-      room.joined = false;
-      joinConsentRoom(requestId);
-    });
+    // Re-report focus so the server updates its per-process remoteFocus map.
+    reportFocus(getFocusState() || (document.visibilityState === 'visible' ? 'focused' : 'blurred'));
   });
 
   socket.on('disconnect', () => emitConnectionStatus('disconnected'));
@@ -80,12 +90,15 @@ function getSocket() {
     });
   });
 
-  socket.on('consent_status_update', (payload) => {
-    const room = consentRooms.get(Number(payload?.request_id));
-    if (!room) return;
-    room.lastStatus = payload.status;
-    room.listeners.forEach((fn) => {
-      try { fn(payload); } catch (err) { console.error('[realtime] consent listener failed', err); }
+  // Notification events arrive on the persistent user:X room.
+  socket.on('notification:new', (data) => {
+    notificationListeners.forEach((fn) => {
+      try { fn(data); } catch (err) { console.error('[realtime] notification listener failed', err); }
+    });
+  });
+  socket.on('notification:unread_count', (count) => {
+    notificationUnreadCountListeners.forEach((fn) => {
+      try { fn(count); } catch (err) { console.error('[realtime] unread count listener failed', err); }
     });
   });
 
@@ -108,27 +121,6 @@ function joinRoom(caseId) {
       room.lastSnapshot = res.snapshot;
       room.listeners.forEach((fn) => {
         try { fn(res.snapshot); } catch (err) { console.error('[realtime] snapshot listener failed', err); }
-      });
-    }
-  });
-}
-
-function joinConsentRoom(requestId) {
-  const room = consentRooms.get(requestId);
-  if (!room || room.joined) return;
-
-  getSocket().emit('join_consent', { requestId }, (res) => {
-    if (!res?.ok) {
-      console.error('[realtime] join_consent rejected:', res?.error);
-      return;
-    }
-    room.joined = true;
-    // Same race the case rooms guard against: consent may have already been
-    // granted between the request being sent and this join completing.
-    if (res.status) {
-      room.lastStatus = res.status;
-      room.listeners.forEach((fn) => {
-        try { fn({ request_id: requestId, status: res.status }); } catch (err) { console.error('[realtime] consent listener failed', err); }
       });
     }
   });
@@ -173,9 +165,47 @@ export function subscribeToCasePulls(caseId, onSnapshot) {
   };
 }
 
+// --- Consent status: short-interval polling, not a socket room -------------
+//
+// A consent approval is a single one-off event per request, not a stream of
+// frequent updates like the case-pull supervisor above — so unlike
+// subscribeToCasePulls, this deliberately does NOT hold a socket connection
+// open. It polls GET /consent/status/:id (DSA-authenticated, same as
+// consentService.getStatus) every POLL_INTERVAL_MS instead, which is near-
+// enough to instant for a human waiting on a customer to click a link, at a
+// fraction of the memory a kept-alive connection costs per waiting DSA tab.
+// Reference-counted the same way subscribeToCasePulls is, so N components
+// watching the same request id share one poll loop instead of running N.
+const POLL_INTERVAL_MS = 3000;
+// PENDING is the only status that can still change — GRANTED/EXPIRED/
+// REVOKED are all terminal, so there's nothing left to poll for once one of
+// them is seen.
+const TERMINAL_CONSENT_STATUSES = ['GRANTED', 'EXPIRED', 'REVOKED'];
+/** requestId -> { count, listeners:Set<fn>, timer:number|null, lastStatus:string|null } */
+const consentPolls = new Map();
+
+async function pollConsentStatusOnce(id, poll) {
+  try {
+    const res = await api.get(`/consent/status/${id}`);
+    const status = res.data?.status;
+    if (!status || status === poll.lastStatus) return;
+    poll.lastStatus = status;
+    poll.listeners.forEach((fn) => {
+      try { fn({ request_id: id, status }); } catch (err) { console.error('[realtime] consent listener failed', err); }
+    });
+    if (TERMINAL_CONSENT_STATUSES.includes(status) && poll.timer) {
+      clearInterval(poll.timer);
+      poll.timer = null;
+    }
+  } catch (err) {
+    // Transient network hiccup — leave the interval running and try again
+    // on the next tick rather than killing the poll loop over one failure.
+    console.error('[realtime] consent status poll failed', err);
+  }
+}
+
 /**
- * Watch a single consent request for the moment the customer approves it —
- * same shared-socket, reference-counted pattern as subscribeToCasePulls.
+ * Watch a single consent request for the moment the customer approves it.
  *
  * @param {number|string} requestId
  * @param {(payload: {request_id:number, status:string}) => void} onUpdate
@@ -185,36 +215,42 @@ export function subscribeToConsentRequest(requestId, onUpdate) {
   const id = Number(requestId);
   if (!id) return () => {};
 
-  let room = consentRooms.get(id);
-  if (!room) {
-    room = { count: 0, listeners: new Set(), joined: false, lastStatus: null };
-    consentRooms.set(id, room);
+  let poll = consentPolls.get(id);
+  if (!poll) {
+    poll = { count: 0, listeners: new Set(), timer: null, lastStatus: null };
+    consentPolls.set(id, poll);
   }
-  room.count += 1;
-  room.listeners.add(onUpdate);
+  poll.count += 1;
+  poll.listeners.add(onUpdate);
 
-  if (room.lastStatus) {
-    try { onUpdate({ request_id: id, status: room.lastStatus }); } catch (err) { console.error('[realtime] consent replay failed', err); }
+  if (poll.lastStatus) {
+    try { onUpdate({ request_id: id, status: poll.lastStatus }); } catch (err) { console.error('[realtime] consent replay failed', err); }
   }
 
-  const s = getSocket();
-  if (s.connected) joinConsentRoom(id);
+  // Poll immediately — covers "already granted by the time this mounted" —
+  // then on an interval, same shape as the case-pull room's join-ack +
+  // subsequent pushes.
+  pollConsentStatusOnce(id, poll);
+  if (!poll.timer && !TERMINAL_CONSENT_STATUSES.includes(poll.lastStatus)) {
+    poll.timer = setInterval(() => pollConsentStatusOnce(id, poll), POLL_INTERVAL_MS);
+  }
 
   return () => {
-    room.listeners.delete(onUpdate);
-    room.count -= 1;
-    if (room.count > 0) return;
+    poll.listeners.delete(onUpdate);
+    poll.count -= 1;
+    if (poll.count > 0) return;
 
-    consentRooms.delete(id);
-    if (socket?.connected) socket.emit('leave_consent', { requestId: id });
-    disconnectIfIdle();
+    if (poll.timer) clearInterval(poll.timer);
+    consentPolls.delete(id);
   };
 }
 
 // Nothing left to watch anywhere — drop the connection rather than hold an
-// idle socket (and its server-side supervisor/consent room) open app-wide.
+// idle socket (and its server-side supervisor) open app-wide. Consent
+// polling never opens this connection in the first place, so it plays no
+// part here. The notification channel is always kept alive separately.
 function disconnectIfIdle() {
-  if (rooms.size === 0 && consentRooms.size === 0 && socket) {
+  if (rooms.size === 0 && notificationListeners.size === 0 && socket) {
     socket.disconnect();
     socket = null;
   }
@@ -236,4 +272,81 @@ export function subscribeToConnectionStatus(fn) {
   statusListeners.add(fn);
   if (socket) fn(socket.connected ? 'connected' : 'disconnected');
   return () => statusListeners.delete(fn);
+}
+
+// --- Persistent notification channel -----------------------------------------
+
+/**
+ * Subscribe to in-app notifications arriving via socket.
+ * Unlike case rooms, this channel stays open as long as any listener is registered,
+ * regardless of whether case rooms are active.
+ *
+ * @param {(notification: object) => void} listener
+ * @returns {() => void} unsubscribe
+ */
+export function listenToNotifications(listener) {
+  notificationListeners.add(listener);
+  // Trigger lazy connection open (subscribeToConnectionStatus doesn't open the
+  // socket on its own; a real emit does — joining the user:X room auto-happens
+  // server-side on connect).
+  const s = getSocket();
+  if (s.connected) reportFocus(getFocusState());
+
+  return () => {
+    notificationListeners.delete(listener);
+    disconnectIfIdle();
+  };
+}
+
+/** Subscribe to the server's authoritative unread notification count. */
+export function listenToNotificationUnreadCount(listener) {
+  notificationUnreadCountListeners.add(listener);
+  getSocket();
+  return () => notificationUnreadCountListeners.delete(listener);
+}
+
+// --- Focus tracking for push-suppression -------------------------------------
+
+/**
+ * Returns the current focus state: 'focused' when the tab is visible,
+ * 'blurred' when hidden or unfocused.
+ */
+export function getFocusState() {
+  return focusState;
+}
+
+/**
+ * Reports focus state to the server via the `notification:focus` socket event.
+ * Debounced to avoid hammering on rapid blur/focus toggles.
+ */
+function reportFocus(state) {
+  if (!socket?.connected || !state) return;
+  if (focusState === state) return; // no change — skip
+
+  focusState = state;
+  socket.emit('notification:focus', { focused: state === 'focused' });
+}
+
+/**
+ * Sets up browser visibilitychange, focus, and blur listeners to report
+ * focus state to the server. Call once at app startup (NotificationContext
+ * initialises this).
+ */
+export function initFocusTracking() {
+  const update = (state) => {
+    // 1.5 s grace period: if we flip back to focused within the window, cancel.
+    clearTimeout(focusReportingTimer);
+    focusReportingTimer = setTimeout(() => {
+      reportFocus(state);
+    }, 1500);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    update(document.visibilityState === 'visible' ? 'focused' : 'blurred');
+  });
+  window.addEventListener('focus', () => update('focused'));
+  window.addEventListener('blur', () => update('blurred'));
+
+  // Report initial state on open/reconnect.
+  update('focused');
 }

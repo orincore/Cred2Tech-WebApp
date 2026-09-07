@@ -1,10 +1,12 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
+import { NotificationProvider } from '../context/NotificationContext';
+import NotificationPanel from '../components/notifications/NotificationPanel';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import SessionRevokedModal from '../components/SessionRevokedModal';
 import { DASHBOARD_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
@@ -14,6 +16,8 @@ const MfaChallengePage = lazy(() => import('../pages/MfaChallengePage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const ConsentPage = lazy(() => import('../pages/ConsentPage'));
+const ItrAuthPage = lazy(() => import('../pages/ItrAuthPage'));
+const GstAuthPage = lazy(() => import('../pages/GstAuthPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
@@ -33,6 +37,9 @@ const AddCustomerWizardPage = lazy(() => import('../pages/AddCustomerWizardPage'
 const AddSalariedCustomerWizardPage = lazy(() => import('../pages/AddSalariedCustomerWizardPage'));
 const CustomerProfilePage = lazy(() => import('../pages/CustomerProfilePage'));
 const SuperadminPricingPage = lazy(() => import('../pages/SuperadminPricingPage'));
+const AdminPromoCodesPage = lazy(() => import('../pages/AdminPromoCodesPage'));
+const AdminTenantManagePage = lazy(() => import('../pages/AdminTenantManagePage'));
+const AdminSubscriptionPlansPage = lazy(() => import('../pages/AdminSubscriptionPlansPage'));
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
 const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetail'));
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
@@ -56,6 +63,8 @@ const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
 const AdminDataPurgePage = lazy(() => import('../pages/AdminDataPurgePage'));
+const AdminSendNotificationPage = lazy(() => import('../pages/AdminSendNotificationPage'));
+const AdminNotificationAnalyticsPage = lazy(() => import('../pages/AdminNotificationAnalyticsPage'));
 
 // MSME Direct Portal
 const MsmeLayout = lazy(() => import('../layouts/MsmeLayout'));
@@ -67,17 +76,55 @@ const MsmeCaseDetailPage = lazy(() => import('../pages/msme/MsmeCaseDetailPage')
 const MsmeTransactionsPage = lazy(() => import('../pages/msme/MsmeTransactionsPage'));
 const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 
-const PageLoader = () => (
-  <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <LoadingSpinner size={40} fullPage />
-  </div>
-);
+// Fires only while a lazy route's own JS chunk is still downloading —
+// typically sub-100ms after the first visit (cached thereafter), and
+// immediately followed by that page's own tailored loading skeleton once it
+// mounts and starts fetching its data. Deliberately a blank, not a second,
+// differently-shaped generic skeleton: three different skeleton treatments
+// flashing in sequence (this one, ProtectedRoute's, then the real page's)
+// read as broken, not as "loading" — this is the one of those three that
+// carries no useful shape of its own to preserve, so it's the one dropped.
+const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
+
+// Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
+// is domain/senderId/<opaque-token> with no further path segments (see
+// consent.service.js's senderId() comment), so an ITR/GST auth link can't
+// live under its own /itr/ or /gst/ path without breaking that registered
+// pattern. All three link types now share this exact same route, told apart
+// by a same-length 3-letter prefix baked into the token itself instead:
+// consent tokens start "CON" (generateConsentToken(), consent.service.js),
+// ITR auth tokens start "ITR" (generateItrAuthToken(), itrAuthLink.service.js),
+// and GST auth tokens start "GST" (generateGstAuthToken(), gstAuthLink.service.js)
+// — same total length either way, so the link types read as obviously
+// distinct at a glance rather than looking like variants of one opaque
+// string. The GST auth link is only ever delivered by email (never SMS), so
+// it has no DLT constraint of its own, but it still shares this shape/
+// dispatcher for consistency with the other two link types rather than
+// getting a bespoke route.
+// useParams() inside ConsentPage/ItrAuthPage/GstAuthPage still resolves
+// correctly from here, since it reads the matched route's own context, not
+// which component instance calls it. Anything NOT starting with "ITR" or
+// "GST" (including a pre-prefix legacy token, if one is ever still
+// outstanding) falls back to ConsentPage.
+const SmsLinkDispatcher = () => {
+  const { token } = useParams();
+  if (token && token.startsWith('ITR')) return <ItrAuthPage />;
+  if (token && token.startsWith('GST')) return <GstAuthPage />;
+  return <ConsentPage />;
+};
 
 const AppRouter = () => (
   <BrowserRouter>
     <AuthProvider>
       <RouteTitle />
-      <Suspense fallback={<PageLoader />}>
+      <SessionRevokedModal />
+      {/* NotificationProvider is inside AuthProvider so it can read auth.user;
+          NotificationPanel is rendered here so it overlays all routes. */}
+      <NotificationProvider>
+        {/* Fixed overlay — renders outside the route tree so it doesn't
+            navigate away when the user clicks a notification. */}
+        <NotificationPanel />
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
@@ -89,7 +136,21 @@ const AppRouter = () => (
           <Route path="/mfa-challenge" element={<MfaChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          {/* /SUNBY/:token is the short form used in the SMS link (every char
+              counts alongside the OTP + fixed template text in one 160-char
+              segment) — the path segment matches the DLT-registered sender ID
+              (ALOTS_SENDER, see consent.service.js's senderId()) so the link
+              matches what's on file with the telecom DLT registry. Consent
+              AND ITR-auth links both resolve here now (see SmsLinkDispatcher
+              above) — the DLT-registered shape has no room for a second link
+              type to get its own extra path segment.
+              /c/:token and /customer-consent?token= stay mounted too so any
+              already-sent link keeps working. */}
+          <Route path="/SUNBY/:token" element={<SmsLinkDispatcher />} />
+          <Route path="/c/:token" element={<SmsLinkDispatcher />} />
           <Route path="/customer-consent" element={<ConsentPage />} />
+          <Route path="/itr-auth" element={<ItrAuthPage />} />
+          <Route path="/gst-auth" element={<GstAuthPage />} />
           <Route path="/register-dsa" element={<DSARegisterPage />} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
@@ -168,6 +229,22 @@ const AppRouter = () => (
               }
             />
             <Route
+              path="/tenants/:id"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                  <AdminTenantManagePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/virtual-workspace"
+              element={
+                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                  <AdminSubscriptionPlansPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/organization"
               element={
                 <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN']}>
@@ -187,6 +264,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/pricing" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SuperadminPricingPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/promo-codes" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminPromoCodesPage /></ProtectedRoute>
             } />
             <Route path="/admin/wallets" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SuperadminWalletManager /></ProtectedRoute>
@@ -225,6 +305,12 @@ const AppRouter = () => (
             } />
             <Route path="/admin/ticket-recipients" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><AdminTicketRecipientsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/notifications/send" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminSendNotificationPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/notifications/analytics" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminNotificationAnalyticsPage /></ProtectedRoute>
             } />
 
             {/* Feedback/support tickets — shared path for MSME + DSA/staff
@@ -351,6 +437,7 @@ const AppRouter = () => (
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
+      </NotificationProvider>
     </AuthProvider>
   </BrowserRouter>
 );

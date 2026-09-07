@@ -15,7 +15,7 @@ import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseW
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
-import { toTitleCase } from '../utils/helpers';
+import { toTitleCase, formatDate } from '../utils/helpers';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -348,13 +348,14 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  // Replaces the old "Send OTP" button entirely — there is no mobile OTP
-  // step anymore. Emails the customer a consent link and opens a live
-  // subscription for the approval, same as the business wizard.
+  // Replaces the old "Send OTP" button entirely — there is no separate
+  // mobile OTP step anymore, it's folded into this one. Texts the customer
+  // an OTP + consent link via SMS and opens a live subscription for the
+  // approval, same as the business wizard.
   const handleRequestConsent = async () => {
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return toast.error('A valid customer email is required to send the consent request.');
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
+      return toast.error('Mobile number is required to send the consent request.');
     }
 
     setConsentRequesting(true);
@@ -366,7 +367,7 @@ const AddSalariedCustomerWizardPage = () => {
         case_id: draft.targetCaseId,
       });
       setConsentRequest({ id: result.id, status: result.status });
-      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
       toast.error(errMsg);
@@ -401,9 +402,6 @@ const AddSalariedCustomerWizardPage = () => {
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
     if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
-    if (!app.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) {
-      return toast.error("A valid email is required to send the co-applicant's consent request.");
-    }
 
     setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
@@ -424,7 +422,7 @@ const AddSalariedCustomerWizardPage = () => {
         applicant_id: targetAppId,
       });
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
-      toast.success(`Consent request sent to ${app.email}. Waiting for them to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
     } finally {
@@ -646,20 +644,21 @@ const AddSalariedCustomerWizardPage = () => {
       }
 
       // status can be SUCCESS, PARTIAL_SUCCESS, or FAILED — PARTIAL_SUCCESS
-      // covers "the independent obligations pull succeeded but the credit
-      // score call itself failed" (e.g. a vendor-side error for this
-      // applicant). That's not a completed CIBIL check, even though the
-      // request as a whole didn't throw, so success must be judged by
-      // whether THIS applicant's score actually came back — not by the
-      // overall status string alone.
+      // covers "some applicants in this batch succeeded, this one didn't"
+      // (e.g. a vendor-side error for this specific applicant's Experian
+      // pull, which now provides both the score and obligations in one
+      // call — see bureau.controller.js). That's not a completed bureau
+      // check for THIS applicant even though the request as a whole didn't
+      // throw, so success must be judged by whether their score actually
+      // came back — not by the overall status string alone.
       const targetApp = formData.applicants.find(a => a.id === applicantId);
       const newScore = targetApp?.type === 'PRIMARY'
         ? data.applicantScore
         : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
 
       if (!newScore) {
-        const scoreError = data.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
-        toast.error(scoreError?.error || 'Bureau score not returned — CIBIL check incomplete for this applicant.');
+        const pullError = data.errors?.find(e => e.applicantId === applicantId);
+        toast.error(pullError?.error || 'Bureau score not returned for this applicant.');
         return;
       }
 
@@ -720,6 +719,27 @@ const AddSalariedCustomerWizardPage = () => {
       setSaving(false);
     }
   };
+
+  // Everything the customer can actually fill in BEFORE consent exists —
+  // gates the Request Consent button itself. business_name/dob are
+  // deliberately excluded: they're read-only, auto-fetched by PAN
+  // verification, which itself only auto-fires once mobile_verified flips
+  // true (see the panAutoVerifyAttempted-style effect for this page) —
+  // requiring business_name here used to create an unbreakable deadlock
+  // where consent could never be requested because business_name didn't
+  // exist yet, and business_name could never exist because consent hadn't
+  // been requested yet. Mirrors AddCustomerWizardPage's identical fix
+  // (step1ConsentFieldsValid/step1BusinessFieldsValid).
+  const step1ConsentFieldsValid = !!formData.business_pan
+    && !!formData.business_mobile
+    && !!formData.business_email
+    && !!formData.pincode;
+  // Everything above, PLUS business_name — by the time this is checked
+  // (once consent is granted), PAN auto-verify has already run and filled
+  // it in, so this only ever gates the *next* step (Save & Next), never
+  // Request Consent.
+  const step1FieldsValid = step1ConsentFieldsValid && !!formData.business_name;
+  const step1Valid = step1FieldsValid && !!formData.mobile_verified;
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
 
@@ -949,21 +969,6 @@ const AddSalariedCustomerWizardPage = () => {
                   </FormField>
                 </div>
 
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Full Name (As Per PAN)" name="business_name" required>
-                    <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Arjun Sharma" disabled={!!caseId} />
-                  </FormField>
-
-                  <FormField label="Date Of Birth" name="dob">
-                    <input
-                      type="date"
-                      value={formData.dob || ''}
-                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                      className="form-control"
-                    />
-                  </FormField>
-                </div>
-
                 <div className="grid-2">
                   <FormField label="Email Address" name="business_email" required>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -975,27 +980,12 @@ const AddSalariedCustomerWizardPage = () => {
                         placeholder="arjun@example.com"
                         style={{ flex: 1, minWidth: 160 }}
                       />
-                      {!formData.mobile_verified ? (
-                        consentRequesting ? (
-                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Sending…</button>
-                        ) : consentRequest ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleRequestConsent}
-                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || walletBalance < costs.PAN_FETCH}
-                            className="btn btn-primary"
-                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
-                            title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                          >
-                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
-                          </button>
-                        )
-                      ) : (
+                      {/* The actual Request Consent action (and its
+                          sending/waiting/resend states) now lives in this
+                          sub-page's footer, in the same slot the Save & Next
+                          button occupies once consent is granted — this
+                          field just mirrors the end result once it lands. */}
+                      {formData.mobile_verified && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                           <CheckCircle2 size={18} /> Consented
                         </div>
@@ -1014,19 +1004,72 @@ const AddSalariedCustomerWizardPage = () => {
                     />
                   </FormField>
                 </div>
+
+                {/* Hidden until consent is actually granted — before that,
+                    business_name/dob are always empty (they're only ever
+                    auto-fetched by PAN verification, which itself only
+                    fires once mobile_verified flips true), so showing two
+                    permanently-blank "Autofetched via PAN" fields up front
+                    was just noise. Reusing index.css's existing slideUp
+                    keyframe for the reveal keeps this consistent with the
+                    rest of the app rather than introducing a new animation. */}
+                {formData.mobile_verified && (
+                  <div className="grid-2" style={{ marginTop: 24, animation: 'slideUp 0.35s ease' }}>
+                    <FormField label="Full Name (As Per PAN)" name="business_name" disabled>
+                      <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
+                    </FormField>
+
+                    {/* Never user-editable — always auto-fetched by PAN
+                        verification by the time this is visible at all — so
+                        a plain read-only text field (not a date-picker,
+                        which implies an editable value) showing a
+                        human-formatted date. */}
+                    <FormField label="Date Of Birth" name="dob" disabled>
+                      <input
+                        type="text"
+                        value={formData.dob ? formatDate(formData.dob) : ''}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                        readOnly
+                      />
+                    </FormField>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={() => setStep1SubPage('coapplicants')}
-                disabled={!formData.business_pan || !formData.business_name || !formData.business_email || !formData.pincode || !formData.mobile_verified}
-                title={!formData.mobile_verified ? 'Complete every required field and consent before continuing' : undefined}
-              >
-                Next: Co-Applicants →
-              </button>
+              {!formData.mobile_verified ? (
+                consentRequesting ? (
+                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                ) : consentRequest ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <PullingIndicator label="Waiting for customer to approve consent…" />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestConsent}
+                    disabled={saving || !step1ConsentFieldsValid || walletBalance < costs.PAN_FETCH}
+                    className="btn btn-primary btn-lg"
+                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                  >
+                    {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={() => setStep1SubPage('coapplicants')}
+                  disabled={!step1Valid}
+                  title={!step1Valid ? 'Complete every required field before continuing' : undefined}
+                >
+                  Save & Next
+                </button>
+              )}
             </div>
             </>
             )}
@@ -1145,7 +1188,7 @@ const AddSalariedCustomerWizardPage = () => {
                                   ) : coappConsent[realIdx] ? (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                       <PullingIndicator label="Waiting for approval…" />
-                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
                                     </div>
                                   ) : (
                                     <button
@@ -1187,7 +1230,7 @@ const AddSalariedCustomerWizardPage = () => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
-                {saving ? 'Processing...' : 'Continue to Financials →'}
+                {saving ? 'Processing...' : 'Save & Next'}
               </button>
             </div>
             </>
@@ -1259,7 +1302,7 @@ const AddSalariedCustomerWizardPage = () => {
                 disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
                 title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
               >
-                Continue to Product Selection →
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>
@@ -1313,7 +1356,7 @@ const AddSalariedCustomerWizardPage = () => {
                       <FormField label="Market Value (₹)" name="market_value" required>
                         <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
                       </FormField>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Sourcing Partner estimate — lender does independent valuation</div>
                     </div>
                   </>
                 )}
@@ -1334,7 +1377,7 @@ const AddSalariedCustomerWizardPage = () => {
                 type="submit"
                 disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
               >
-                {saving ? 'Saving...' : 'Complete Salaried Customer Profile →'}
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>

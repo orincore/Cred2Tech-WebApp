@@ -3,6 +3,7 @@ import { ChevronRight, Wallet } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axiosInstance';
+import NotificationBell from '../notifications/NotificationBell';
 
 const WALLET_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 
@@ -65,36 +66,35 @@ const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null, compact
         {subtitle && <p style={{ fontSize: compact ? 12 : 14, color: 'var(--text-secondary)', marginTop: compact ? 2 : 4 }}>{subtitle}</p>}
       </div>
 
-      {/* Right-hand group: wallet chip and any page-level actions share one
+      {/* Right-hand group: bell + wallet chip + any page-level actions share one
           row and wrap together on narrow screens. */}
-      {(walletBalance !== null || actions) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
-          {walletBalance !== null && (
-            <button
-              onClick={() => navigate('/wallet')}
-              title="View wallet"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 16px',
-                background: 'var(--surface)',
-                border: '1px solid var(--outline)',
-                borderRadius: 0,
-                flexShrink: 0,
-                cursor: 'pointer',
-                transition: 'background 0.15s ease',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
-            >
-              <Wallet size={16} color="var(--primary)" />
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{walletBalance.toLocaleString()} Credits</span>
-            </button>
-          )}
-          {actions}
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
+        <NotificationBell />
+        {walletBalance !== null && (
+          <button
+            onClick={() => navigate('/wallet')}
+            title="View wallet"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              background: 'var(--surface)',
+              border: '1px solid var(--outline)',
+              borderRadius: 0,
+              flexShrink: 0,
+              cursor: 'pointer',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-low)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+          >
+            <Wallet size={16} color="var(--primary)" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{walletBalance.toLocaleString()} Credits</span>
+          </button>
+        )}
+        {actions}
+      </div>
     </div>
   );
 };

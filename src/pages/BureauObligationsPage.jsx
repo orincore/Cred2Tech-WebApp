@@ -15,8 +15,8 @@ const GST_LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATIN
 
 const getCibilColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
-  if (score >= 750) return 'var(--success)';
-  if (score >= 700) return 'var(--warning)';
+  if (score >= 700) return 'var(--success)';
+  if (score >= 650) return 'var(--warning)';
   return 'var(--error)';
 };
 
@@ -24,15 +24,51 @@ const MONTH_MS = 1000 * 60 * 60 * 24 * 30.44; // average month length
 
 // Two independent facts per obligation, not a single status:
 //  - "Availed within X months" — how recently the loan was taken (loan_start_date vs today)
-//  - "O/s < X months" — approximate remaining tenure, estimated as
-//    outstanding_amount / emi_per_month (a flat, interest-free estimate —
-//    there's no stored maturity/tenure field to compute this exactly, this
-//    is the agreed quick-screening heuristic)
+//  - "O/s < X months" — approximate remaining tenure, accurately estimated using
+//    standard amortizing loan math (log formula) based on product ROI defaults.
 // Each side always shows a label when the underlying data exists — including
 // a "12+" fallback once a loan ages/outlasts both thresholds — so a row only
 // goes blank on a side when that side's source data is genuinely missing
 // (no loan_start_date, or EMI unverified/zero so remaining tenure can't be
 // estimated at all).
+const estimateRemainingTenure = (obl) => {
+  const p = obl.outstanding_amount;
+  const emi = obl.emi_per_month;
+  
+  if (!p || p <= 0 || !emi || emi <= 0) return 0;
+  
+  const TERMS_MAP = {
+    "Loan Against Property": 9.50,
+    "Housing Loan": 8.00,
+    "Business Loan": 16.00,
+    "Personal Loan": 13.00,
+    "Auto Loan": 9.00,
+    "Two Wheeler Loan": 9.00,
+    "Commercial Vehicle": 9.00,
+    "Consumer Loan": 8.00,
+    "Agri Loan": 10.00,
+    "Education Loan": 9.00,
+    "Term loan": 9.50
+  };
+  
+  const roi = TERMS_MAP[obl.loan_type];
+  
+  // Fall back to flat division for non-amortizing types or unknown types
+  if (!roi || obl.loan_type === 'Credit Card' || obl.loan_type === 'Overdraft') {
+    return p / emi;
+  }
+  
+  const r = (roi / 100) / 12;
+  
+  // Protect against negative amortization / bad data (EMI < Interest)
+  if (emi <= p * r) {
+    return p / emi;
+  }
+  
+  // Exact remaining months for amortizing loan: n = log(E / (E - P*r)) / log(1 + r)
+  return Math.log(emi / (emi - p * r)) / Math.log(1 + r);
+};
+
 const getObligationDetails = (obl) => {
   // Manual entries never have a loan_start_date — the "Add Loan Not in
   // Bureau" form doesn't collect one — so only the O/s-remaining half of
@@ -51,7 +87,7 @@ const getObligationDetails = (obl) => {
   }
 
   if (obl.emi_per_month > 0 && obl.outstanding_amount != null) {
-    const monthsRemaining = obl.outstanding_amount / obl.emi_per_month;
+    const monthsRemaining = estimateRemainingTenure(obl);
     if (monthsRemaining <= 6) details.push({ label: 'O/s < 6 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else if (monthsRemaining <= 12) details.push({ label: 'O/s < 12 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else details.push({ label: 'O/s 12+ months', color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' });
@@ -137,20 +173,23 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // the PAN-verified name from the full case record so we can show a
       // real name instead of that placeholder wherever it's available.
       const names = {};
+      const reports = {};
       (caseData.applicants || []).forEach(a => {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
       });
       setApplicantNames(names);
 
-      // The bureau vendor (Experian, via Signzy) hands back the actual report
-      // file at pull time, which gets ingested into document storage per
-      // applicant (see experian.service.js) — surface it here rather than
-      // regenerating anything client-side.
+      // Every bureau pull (BEFISC, Signzy CIBIL fallback, or the older
+      // Experian flow) snapshots its report into S3-backed document storage
+      // at pull time — see befiscBureau.service.js / signzyCibil.service.js.
+      // The vendor's own link (BEFISC's webtoken URL especially) is single-use
+      // and expires within hours, so the stored document is the only copy
+      // that stays downloadable/shareable later. listDocuments returns newest
+      // first, so the first match per applicant is always their latest report.
       try {
         const docs = await listDocuments({ caseId });
-        const reports = {};
-        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
-          .forEach(d => { reports[d.applicant_id] = d; });
+        docs.filter(d => d.document_type === 'CIBIL_REPORT_PDF' || d.original_file_name?.startsWith('Experian_Report_'))
+          .forEach(d => { if (!reports[d.applicant_id]) reports[d.applicant_id] = d; });
         setBureauReports(reports);
       } catch (docErr) {
         // Non-fatal — obligations already loaded fine, just no download button.
@@ -236,9 +275,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       const freshApplicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
 
-      // bureau_fetched only flips true once the credit-score call itself
-      // succeeds — that's what decides whether the pull button disappears
-      // (per applicant) or switches to a "Retry" label.
+      // bureau_fetched only flips true once the Experian pull actually
+      // returns a usable score — that's what decides whether the pull
+      // button disappears (per applicant) or switches to a "Retry" label.
       setBureauFailedFor(prev => {
         const next = new Set(prev);
         if (freshApplicant?.bureau_fetched) next.delete(applicantId);
@@ -246,15 +285,13 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         return next;
       });
 
-      // Score and obligations are two independent vendor calls now (see
-      // bureau.controller.js) — a failure in one no longer means the other
-      // never ran, so check specifically what actually failed instead of
-      // guessing at a PAN/DOB problem whenever the count comes back flat.
-      const scoreError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
+      // Score and obligations both come from one Experian pull now (see
+      // bureau.controller.js — the separate CIBIL score check was dropped),
+      // so a single vendor error covers both; check what actually failed
+      // instead of guessing at a PAN/DOB problem whenever the count comes
+      // back flat.
       const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (scoreError) {
-        toast.error(`Bureau score check failed: ${scoreError.error}`, { duration: 8000 });
-      } else if (after > before) {
+      if (after > before) {
         toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
@@ -293,7 +330,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleDownloadReport = async (applicantId) => {
     const doc = bureauReports[applicantId];
-    if (!doc) return;
+    if (!doc?.id) return;
+
+    // Always the S3-stored copy — BEFISC's webtoken URL and any raw vendor
+    // pdfUrl are single-use/short-lived, so this document is the only thing
+    // that stays downloadable (or shareable) after the pull itself.
     setDownloadingFor(applicantId);
     try {
       await downloadDocument(doc.id, doc.original_file_name);
@@ -397,7 +438,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 self-service journeys (same component, rendered inline by
                 AddCustomerWizardPage for each). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-              {bureauReports[applicant.id] && (
+              {bureauReports[applicant.id]?.id && (
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleDownloadReport(applicant.id)}
@@ -492,10 +533,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         onClick={() => handleDeleteObligation(obl.id)}
                         disabled={deletingId === obl.id}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
-                        title="Remove obligation"
+                        title="Delete obligation"
                       >
                         <Trash2 size={14} />
-                        {deletingId === obl.id ? 'Removing…' : 'Remove'}
+                        {deletingId === obl.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </div>
                   </div>

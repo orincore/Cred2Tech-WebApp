@@ -7,7 +7,7 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -15,12 +15,14 @@ import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import api from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
 import CaseWizardStepper, { CASE_WIZARD_STEPS, SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
+import NotificationBell from '../components/notifications/NotificationBell';
 import GstPullStatusBanner from '../components/case/GstPullStatusBanner';
+import ItrPullStatusBanner from '../components/case/ItrPullStatusBanner';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
-import { toTitleCase, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
 import EsrStep from './EsrPage';
@@ -127,6 +129,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // (case.category === 'SALARIED') — drives which stepper labels show.
     is_salaried: false,
     pan_verified: false,
+    pan_fetch_completed: false,
     linked_gstins: [],
     applicants: [],
     product_type: '',
@@ -163,10 +166,26 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
        })
        .catch(err => console.error(err));
+  }, [isMsme]);
 
-     api.get('/wallet/balance')
-       .then(res => setWalletBalance(res.data.balance))
-       .catch(console.error);
+  // Polled (not fetched once) so the header pill reflects a deduction the
+  // moment it happens — a GST/ITR/bank/PAN pull kicked off from any step, or
+  // a customer authorising an ITR pull via an emailed link, all charge this
+  // same wallet server-side without this page necessarily being the one that
+  // triggered it (e.g. the auth-link submission happens on a page the
+  // customer has open, not this one).
+  useEffect(() => {
+     if (isMsme) return; // wallet/credits are DSA-only
+
+     let cancelled = false;
+     const fetchBalance = () => {
+       api.get('/wallet/balance')
+         .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
+         .catch(console.error);
+     };
+     fetchBalance();
+     const interval = setInterval(fetchBalance, 10000);
+     return () => { cancelled = true; clearInterval(interval); };
   }, [isMsme]);
 
   // A brand-new case (urlCaseId unset) must start completely blank — no
@@ -196,6 +215,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [consentRequestFailed, setConsentRequestFailed] = useState(false);
   const consentGranted = consentRequest?.status === 'GRANTED';
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
+  // Same PAN->GSTIN lookup the primary applicant gets, per self-employed
+  // co-applicant — keyed by applicant index (mirrors coappPanVerifyingMap).
+  const [coappGstFetchingMap, setCoappGstFetchingMap] = useState({});
+  const [coappGstFetchFailedMap, setCoappGstFetchFailedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
 
@@ -258,9 +281,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // flips primaryApp.pan_verified back to true directly, independent
       // of this check).
       const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
+      // Same "consent must be explicit per case" principle mobile_verified
+      // below already enforces — a Customer/CustomerPanProfile row is shared
+      // across every case for the same PAN, so without this gate, a BRAND
+      // NEW case for a customer who'd already consented on some earlier,
+      // unrelated case silently showed that other case's PAN-verified name,
+      // DOB, and GST status the moment the page loaded — before this case's
+      // own customer had ever approved anything. Only once THIS case's own
+      // primary applicant has otp_verified (its consent) does an existing
+      // profile get reused at all; before that, none of it is shown, exactly
+      // like a customer who has genuinely never consented anywhere.
+      const consentGrantedForThisCase = !!primaryApp?.otp_verified;
       const matchingPanProfile = caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null;
       const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
-      const panVerifiedNow = !!primaryApp?.pan_verified || (!!matchingPanProfile && !wasResetOnThisCase);
+      const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
       const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
 
       setCaseId(caseData.id);
@@ -305,8 +339,38 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         is_locked: !!caseData.is_locked,
         pan_verified: panVerifiedNow,
         pan_profile: currentPanProfile,
+        // Independent of currentPanProfile/matchingPanProfile above: that join
+        // is scoped through caseData.customer.pan_profiles (a customer_id FK),
+        // which silently misses the cached CustomerPanProfile row whenever the
+        // PAN's fetch previously ran under a different Customer record (e.g. a
+        // repeat applicant re-onboarded into a fresh case) — the profile row
+        // stays valid (pan is the real, globally-unique cache key) but never
+        // shows up in this relation. This backend-set status flag is the same
+        // pattern already used for gst_completed below and does not depend on
+        // that relation at all, so it stays correct even when the join misses.
+        // Without it, a reopened case with a "missed" profile join silently
+        // re-ran the paid PAN_FETCH vendor call (₹20 credits) on every load —
+        // confirmed on case 2187 (3 real re-charges within 2 hours).
+        pan_fetch_completed: caseData.data_pull_status?.pan_status === 'COMPLETE',
         linked_gstins: currentPanProfile?.gstin_records || [],
-        applicants: (caseData.applicants || []).map(a => ({ ...a, dob: toDateInputValue(a.dob) })),
+        applicants: (caseData.applicants || []).map(a => {
+          // Same PAN->GSTIN lookup cache as the primary's own pan_profile/
+          // linked_gstins above, just keyed by this co-applicant's own PAN
+          // instead of the customer's business_pan — CustomerPanProfile rows
+          // for a case's co-applicants live under the same customer_id (see
+          // handleFetchCoAppGst), so they're already present in this same
+          // caseData.customer.pan_profiles list.
+          const coPanProfile = a.type === 'CO_APPLICANT' && a.pan_number
+            ? (caseData.customer?.pan_profiles?.find(p => p.pan === a.pan_number) || null)
+            : null;
+          return {
+            ...a,
+            dob: toDateInputValue(a.dob),
+            pan_gst_profile: coPanProfile,
+            pan_gst_linked_gstins: coPanProfile?.gstin_records || [],
+            pan_gst_fetch_completed: !!coPanProfile
+          };
+        }),
         product_type: caseData.product_type || '',
         dsa_notes: caseData.dsa_notes || '',
         property_type: caseData.property?.property_type || '',
@@ -432,17 +496,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     return { targetCaseId, targetCustomerId, targetApplicants };
   };
 
-  // Replaces the old "Send OTP" button entirely — there is no mobile OTP
-  // step anymore. Creates the draft customer/case (same as handleVerifyPan
-  // used to do first anyway), emails the customer a consent link, and opens
-  // a live subscription so approval resumes the pull the instant it happens
-  // — no manual refresh needed on either side.
+  // Replaces the old "Send OTP" button entirely — there is no separate mobile
+  // OTP step anymore, it's folded into this one. Creates the draft customer/
+  // case (same as handleVerifyPan used to do first anyway), texts the
+  // customer an OTP + consent link via SMS, and opens a live subscription so
+  // approval resumes the pull the instant it happens — no manual refresh
+  // needed on either side.
   const handleRequestConsent = async () => {
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return toast.error('A valid customer email is required to send the consent request.');
-    }
-    if (!formData.business_mobile) {
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
       return toast.error('Mobile number is required to send the consent request.');
     }
 
@@ -455,7 +517,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         case_id: draft.targetCaseId,
       });
       setConsentRequest({ id: result.id, status: result.status });
-      toast.success(`Consent request sent to ${email}. Waiting for the customer to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
       toast.error(errMsg);
@@ -491,9 +553,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
     if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
-    if (!app.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(app.email)) {
-      return toast.error("A valid email is required to send the co-applicant's consent request.");
-    }
 
     setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
@@ -514,7 +573,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         applicant_id: targetAppId,
       });
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
-      toast.success(`Consent request sent to ${app.email}. Waiting for them to approve.`);
+      toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
     } finally {
@@ -655,7 +714,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       });
       const data = res.data;
 
-      setFormData(prev => ({ ...prev, pan_profile: data, linked_gstins: data.gst_records || [] }));
+      setFormData(prev => ({ ...prev, pan_profile: data, pan_fetch_completed: true, linked_gstins: data.gst_records || [] }));
       toast.success('GST Records Fetched Successfully!');
     } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to fetch GST';
@@ -663,6 +722,43 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setGstFetchFailed(true);
     } finally {
       setGstFetching(false);
+    }
+  };
+
+  // Same PAN->GSTIN lookup as handleFetchGst above, run against a
+  // self-employed co-applicant's own PAN instead of the primary's business
+  // PAN. Uses the same /external/pan/fetch endpoint (customer_id is always
+  // the case's one Customer row — co-applicants don't have their own — so
+  // the resulting CustomerPanProfile lands in the same caseData.customer.
+  // pan_profiles list the load effect already reads for co-applicants).
+  const handleFetchCoAppGst = async (idx) => {
+    const app = formData.applicants[idx];
+    if (!app?.pan_number || app.pan_number.length < 10) return toast.error('Valid PAN required');
+    if (!formData.customer_id || !caseId) return toast.error('Please verify PAN first to generate a case');
+
+    setCoappGstFetchingMap(prev => ({ ...prev, [idx]: true }));
+    setCoappGstFetchFailedMap(prev => ({ ...prev, [idx]: false }));
+    try {
+      const res = await api.post(`/external/pan/fetch`, {
+        pan: app.pan_number,
+        customer_id: formData.customer_id,
+        case_id: caseId
+      });
+      const data = res.data;
+
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map((a, i) => i === idx
+          ? { ...a, pan_gst_profile: data, pan_gst_fetch_completed: true, pan_gst_linked_gstins: data.gst_records || [] }
+          : a)
+      }));
+      toast.success(`GST Records Fetched for ${toTitleCase(app.name) || app.pan_number}!`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to fetch GST';
+      toast.error(errMsg);
+      setCoappGstFetchFailedMap(prev => ({ ...prev, [idx]: true }));
+    } finally {
+      setCoappGstFetchingMap(prev => ({ ...prev, [idx]: false }));
     }
   };
 
@@ -724,6 +820,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       formData.pan_verified &&
       pan &&
       !formData.pan_profile &&
+      // Belt-and-suspenders on top of !formData.pan_profile: that check can
+      // miss a genuinely-completed pull (see pan_fetch_completed's own
+      // comment above, set from case load) — without this, reopening such a
+      // case re-fired the paid PAN_FETCH vendor call every single time.
+      !formData.pan_fetch_completed &&
       !gstFetching &&
       caseId &&
       formData.customer_id &&
@@ -733,7 +834,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       handleFetchGst();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.pan_verified, formData.pan_profile, gstFetching, formData.business_pan, caseId, formData.customer_id, formData.is_salaried]);
+  }, [currentStep, formData.pan_verified, formData.pan_profile, formData.pan_fetch_completed, gstFetching, formData.business_pan, caseId, formData.customer_id, formData.is_salaried]);
 
   // Auto-verify each co-applicant's PAN once it's a full 10 characters — same
   // no-manual-click pattern as the primary PAN above, guarded per-index so a
@@ -764,6 +865,37 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, formData.applicants, coappPanVerifyingMap]);
+
+  // Same auto-fetch-once-PAN-is-verified pattern as the primary applicant's
+  // gstAutoFetchAttempted effect above, run per self-employed co-applicant —
+  // GST is a business/self-employment concept, so this only applies to
+  // co-applicants who are themselves self-employed (same filter the GST
+  // subpage's co-applicant loop already uses).
+  const coappGstAutoFetchAttempted = useRef({});
+  useEffect(() => {
+    if (currentStep > 3 || formData.is_salaried) return;
+    if (isBulkInjectedCase) return;
+    formData.applicants.forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT' || app.employment_type !== 'SELF_EMPLOYED') return;
+      const pan = app.pan_number;
+      if (
+        app.pan_verified &&
+        pan &&
+        !app.pan_gst_profile &&
+        !app.pan_gst_fetch_completed &&
+        !coappGstFetchingMap[idx] &&
+        caseId &&
+        formData.customer_id &&
+        coappGstAutoFetchAttempted.current[idx] !== pan
+      ) {
+        coappGstAutoFetchAttempted.current[idx] = pan;
+        handleFetchCoAppGst(idx);
+      } else if (!pan) {
+        coappGstAutoFetchAttempted.current[idx] = null;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.applicants, coappGstFetchingMap, caseId, formData.customer_id, formData.is_salaried, isBulkInjectedCase]);
 
   const checkPanDuplicate = async (pan) => {
     // Tenant-wide duplicate lookup is a DSA workflow; MSME borrowers must not
@@ -935,7 +1067,30 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           savedApps.push(savedApp);
         }
       }
-      setFormData(prev => ({ ...prev, applicants: savedApps }));
+      // addApplicant's response only carries real DB columns — merge back the
+      // client-only pan_gst_*/gst_report_completed annotations (see the case-
+      // load effect and handleFetchCoAppGst above) from the pre-submit state,
+      // matched by identity. Without this, a co-applicant's already-fetched
+      // GST-lookup result would vanish the instant Step 1 is submitted (this
+      // fires on every "Save & Next" from the co-applicants subpage, which
+      // can happen after a co-applicant's GST has already auto-fetched on
+      // this same step), and the auto-fetch effect would then re-run it —
+      // another real paid PAN_FETCH call for data already on hand.
+      setFormData(prev => ({
+        ...prev,
+        applicants: savedApps.map(saved => {
+          const existing = prev.applicants.find(a =>
+            a.type === saved.type && (a.id === saved.id || (a.pan_number && a.pan_number === saved.pan_number))
+          );
+          return existing ? {
+            ...saved,
+            pan_gst_profile: existing.pan_gst_profile,
+            pan_gst_linked_gstins: existing.pan_gst_linked_gstins,
+            pan_gst_fetch_completed: existing.pan_gst_fetch_completed,
+            gst_report_completed: existing.gst_report_completed
+          } : saved;
+        })
+      }));
 
       goToStep(2);
     } catch (error) {
@@ -1069,12 +1224,24 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // clicked past with any of them still empty, same treatment as
   // AddSalariedCustomerWizardPage's equivalent button.
   const isProfessional = formData.is_professional === 'true' || formData.is_professional === true;
-  const step1BusinessValid = !!formData.business_pan
-    && !!formData.mobile_verified
+  // Everything the customer can actually fill in BEFORE consent exists —
+  // gates the Request Consent button itself. business_name/dob are
+  // deliberately excluded: they're read-only, auto-fetched by PAN
+  // verification, which itself only auto-fires once consent is granted (see
+  // the panAutoVerifyAttempted effect above) — requiring dob here used to
+  // create an unbreakable deadlock where consent could never be requested
+  // because dob didn't exist yet, and dob could never exist because consent
+  // hadn't been requested yet.
+  const step1ConsentFieldsValid = !!formData.business_pan
+    && !!formData.business_mobile
     && !!formData.business_email
     && !!formData.pincode
-    && !!formData.dob
     && (!isProfessional || !!formData.profession_type);
+  // Everything above, PLUS dob — by the time this is checked (once consent
+  // is granted), PAN auto-verify has already run and filled it in, so this
+  // only ever gates the *next* step (Save & Next), never Request Consent.
+  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob;
+  const step1BusinessValid = step1BusinessFieldsValid && !!formData.mobile_verified;
   // Gates the final Step 1 submit ("Continue to Financials") in addition to
   // the business-subpage fields above — handleStep1Submit also requires
   // every co-applicant that has a PAN entered to have a DOB too.
@@ -1095,17 +1262,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         .wizard-page .notice {
           border-radius: 0 !important;
         }
-        /* Dark mode: the shared grey text tokens read too low-contrast on
-           this data-heavy page — bump them to white here specifically,
-           without touching the global theme. */
+        /* --text-secondary/--text-tertiary are identical to --text-primary
+           in the global theme (see index.css) — this page used to "fix" the
+           resulting low-contrast labels by forcing both straight to pure
+           white/black, but that just moved the bug: --text-tertiary also
+           drives every placeholder's color (.form-control::placeholder), so
+           a full-strength placeholder became indistinguishable from real
+           typed text across all 7 steps. Real, distinct muted tones instead
+           of a blunt full-contrast override — secondary for labels/helper
+           text (still clearly readable), tertiary dimmer still for anything
+           meant to read as "hint, not content" (placeholders included). */
         :root.dark .wizard-page {
-          --text-secondary: #ffffff;
-          --text-tertiary: #ffffff;
+          --text-secondary: #c3cce0;
+          --text-tertiary: #8b98bd;
         }
-        /* Light mode: same low-contrast grey complaint — use black instead. */
         :root:not(.dark) .wizard-page {
-          --text-secondary: #000000;
-          --text-tertiary: #000000;
+          --text-secondary: #334155;
+          --text-tertiary: #64748b;
         }
         .hide-scrollbar {
           scrollbar-width: none;
@@ -1148,11 +1321,43 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             {caseId ? ((formData.proprietor_name || formData.business_name) ? toTitleCase(formData.proprietor_name || formData.business_name) : "Resume Draft Case") : "Add New Customer / New Case"}
           </h1>
         </div>
-        {caseId && (
-          <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Check size={16} /> Auto-saved
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {/* Bell sits left of the wallet chip, same order as the shared
+              PageHeader component uses elsewhere — gated the same way the
+              wallet chip already is: NotificationContext reads DSA staff's
+              own AuthContext, which an MSME_SELF_SERVICE session (this same
+              wizard, mounted under /msme/*) never populates, so the bell
+              would just be inert/broken there rather than truly hidden. */}
+          {!isMsme && <NotificationBell />}
+          {/* One fixed spot in the wizard's own header — rendered here once,
+              so it reads identically (same place, same look) on every one of
+              the 7 steps rather than being repeated per-step. Polled (see the
+              effect above), not fetched once, so a deduction from any pull —
+              including a customer authorising an ITR pull via an emailed
+              link on a page this DSA doesn't have open — shows up here on
+              its own within a few seconds, with no page reload needed. */}
+          {!isMsme && (
+            <div
+              title="Remaining wallet credits — updates automatically"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px',
+                background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
+                border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
+                borderRadius: 999, fontSize: 13, fontWeight: 700,
+                color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
+              }}
+            >
+              <Wallet size={14} />
+              {walletBalance.toLocaleString('en-IN')} Credits
+            </div>
+          )}
+          {caseId && (
+            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Check size={16} /> Auto-saved
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stepper — all 7 steps of the case journey render inline in this
@@ -1165,9 +1370,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         onStepClick={(step) => goToStep(step)}
       />
 
-      {/* Case-wide, not step-scoped — stays visible while a GST pull kicked
-          off on step 2 keeps running in the background on any other step. */}
+      {/* Case-wide, not step-scoped — stays visible while a GST/ITR pull
+          kicked off on step 2 keeps running in the background on any other
+          step (ITR: whether the DSA entered credentials directly or the
+          customer authorised it via an emailed auth link). */}
       {!formData.is_salaried && <GstPullStatusBanner caseId={caseId} />}
+      {!formData.is_salaried && <ItrPullStatusBanner caseId={caseId} />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {currentStep === 1 && (
@@ -1287,7 +1495,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               type="button"
                               className="btn btn-ghost btn-sm"
                               onClick={handleRequestConsent}
-                              title="Resend the consent email"
+                              title="Resend the consent SMS"
                               style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                             >
                               Resend
@@ -1361,27 +1569,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <FormField label="Email Address" name="business_email" required>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
-                      {!formData.mobile_verified ? (
-                        consentRequesting ? (
-                          <button type="button" disabled className="btn btn-primary" style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>Sending…</button>
-                        ) : consentRequest ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <PullingIndicator label="Waiting for approval…" />
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent email">Resend</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={handleRequestConsent}
-                            disabled={saving || !formData.business_email || !formData.business_mobile || !formData.business_pan || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                            className="btn btn-primary"
-                            style={{ padding: '0 16px', whiteSpace: 'nowrap' }}
-                            title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                          >
-                            {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                          </button>
-                        )
-                      ) : (
+                      {/* The actual Request Consent action (and its
+                          sending/waiting/resend states) now lives in this
+                          sub-page's footer, in the same slot the Save & Next
+                          button occupies once consent is granted — this field
+                          just mirrors the end result once it lands. */}
+                      {formData.mobile_verified && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                           <CheckCircle2 size={18} /> Consented
                         </div>
@@ -1408,32 +1601,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </FormField>
                 </div>
 
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="Business Name / Full Name" name="business_name" disabled={formData.pan_verified}>
-                    <input
-                      type="text"
-                      value={formData.business_name}
-                      onChange={e => setFormData({ ...formData, business_name: e.target.value })}
-                      className="form-control"
-                      placeholder={formData.pan_verified ? 'Autofetched via PAN' : 'Autofetched via PAN or enter manually'}
-                      disabled={formData.pan_verified}
-                    />
-                  </FormField>
-
-                  <FormField label="Date Of Birth / Incorporation" name="dob" required disabled={formData.pan_verified}>
-                    <input
-                      type="date"
-                      value={formData.dob || ''}
-                      onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                      className="form-control"
-                      required
-                      disabled={formData.pan_verified}
-                    />
-                  </FormField>
-                </div>
-
                 {(formData.is_professional === true || formData.is_professional === 'true') && (
-                  <div className="grid-2">
+                  <div className="grid-2" style={{ marginBottom: 24 }}>
                     <FormField label="Select Your Profession" name="profession_type" required>
                       <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
                         <option value="">Select Profession</option>
@@ -1446,20 +1615,78 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </div>
                 )}
 
-                
+                {/* Hidden until consent is actually granted — before that,
+                    business_name/dob are always empty (they're only ever
+                    auto-fetched by PAN verification, which itself only
+                    fires once mobile_verified flips true), so showing two
+                    permanently-blank "Autofetched via PAN" fields up front
+                    was just noise. Reusing index.css's existing slideUp
+                    keyframe for the reveal keeps this consistent with the
+                    rest of the app rather than introducing a new animation. */}
+                {formData.mobile_verified && (
+                  <div className="grid-2" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
+                    <FormField label="Business Name / Full Name" name="business_name" disabled>
+                      <input
+                        type="text"
+                        value={formData.business_name}
+                        onChange={e => setFormData({ ...formData, business_name: e.target.value })}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                      />
+                    </FormField>
+
+                    {/* Never user-editable — always auto-fetched by PAN
+                        verification by the time this is visible at all — so
+                        a plain read-only text field (not a date-picker,
+                        which implies an editable value) showing a
+                        human-formatted date. */}
+                    <FormField label="Date Of Birth / Incorporation" name="dob" disabled>
+                      <input
+                        type="text"
+                        value={formData.dob ? formatDate(formData.dob) : ''}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                        readOnly
+                      />
+                    </FormField>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg"
-                onClick={goToCoApplicants}
-                disabled={!step1BusinessValid}
-                title={!step1BusinessValid ? 'Complete every required field and consent before continuing' : undefined}
-              >
-                Next: Co-Applicants →
-              </button>
+              {!formData.mobile_verified ? (
+                consentRequesting ? (
+                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                ) : consentRequest ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <PullingIndicator label="Waiting for customer to approve consent…" />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestConsent}
+                    disabled={saving || !step1ConsentFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                    className="btn btn-primary btn-lg"
+                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                  >
+                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={goToCoApplicants}
+                  disabled={!step1BusinessValid}
+                  title={!step1BusinessValid ? 'Complete every required field before continuing' : undefined}
+                >
+                  Save & Next
+                </button>
+              )}
             </div>
             </>
             )}
@@ -1608,7 +1835,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                 ) : coappConsent[realIdx] ? (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                     <PullingIndicator label="Waiting for approval…" />
-                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent email">Resend</button>
+                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
                                   </div>
                                 ) : (
                                   <button
@@ -1668,7 +1895,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                 disabled={saving || !step1CoApplicantsValid}
                 title={!step1CoApplicantsValid ? 'Complete every required field (and each co-applicant\'s DOB) before continuing' : undefined}
               >
-                {saving ? 'Processing...' : 'Continue to Financials →'}
+                {saving ? 'Processing...' : 'Save & Next'}
               </button>
             </div>
             </>
@@ -1713,6 +1940,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
                </div>
+                {/* Applicant name — this card and the co-applicant loop below it
+                    share one "GST Profile" header, which by itself doesn't say
+                    WHOSE GST this is. Shown unconditionally (unlike the old
+                    per-instance heading that used to live inside
+                    GstAnalyticsForm) so it stays visible even in the
+                    "not applicable" state below, where GstAnalyticsForm itself
+                    doesn't render at all. */}
+                <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Applicant'}
+                </div>
                 {/* This strip is about the PAN→GSTIN lookup (linked_gstins) only —
                     a separate, weaker signal than the real GST pull. It must not
                     render once the real pull (gst_completed) has succeeded, or it
@@ -1730,6 +1967,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         </span>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
                       </>
+                    ) : formData.pan_profile ? (
+                      // The PAN→GSTIN lookup genuinely ran and came back empty —
+                      // distinct from "not attempted yet" below. No GSTIN means
+                      // there's nothing for a GST pull to run against, so the
+                      // pull form itself is skipped entirely rather than
+                      // offering a manual-entry option for a business that has
+                      // no real GST registration on file.
+                      <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                      </span>
                     ) : (
                       <>
                         <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
@@ -1739,25 +1986,114 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   </div>
                 )}
                 <div style={{ padding: 0 }}>
-                  <GstAnalyticsForm
-                     caseId={caseId}
-                     customerId={formData.customer_id}
-                     linkedGstins={formData.linked_gstins}
-                     gstCompleted={formData.gst_completed}
-                     onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
-                     onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
-                     onboardingMode={mode}
-                     walletBalance={walletBalance}
-                     gstCost={costs.GST_FETCH}
-                     disabled={isBulkInjectedCase}
-                  />
+                  {/* No GSTIN on file for the primary (lookup ran, came back
+                      empty) and no real pull already completed — the message
+                      above already says so; don't also show a pull form with
+                      nothing to select and only a pointless manual-GSTIN path. */}
+                  {!(formData.pan_profile && !formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0)) && (
+                    <GstAnalyticsForm
+                       caseId={caseId}
+                       customerId={formData.customer_id}
+                       applicantId={null}
+                       applicantType="PRIMARY"
+                       linkedGstins={formData.linked_gstins}
+                       gstCompleted={formData.gst_completed}
+                       onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
+                       onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
+                       onboardingMode={mode}
+                       walletBalance={walletBalance}
+                       gstCost={costs.GST_FETCH}
+                       disabled={isBulkInjectedCase}
+                       prefillEmail={formData.business_email}
+                       prefillMobile={formData.business_mobile}
+                    />
+                  )}
+
+                  {/* Same self-employed co-applicant loop as ITR below — GST is
+                      a business/self-employment concept, so only applies to
+                      co-applicants who are themselves self-employed. Each
+                      instance is scoped by applicantId (see GstAnalyticsForm's
+                      own applicant_id filtering) so co-applicants never see or
+                      trigger each other's (or the primary's) GST pull.
+                      Carrying the REAL index (realIdx) through the filter —
+                      not the filtered list's own local index — matters here
+                      because handleFetchCoAppGst/coappGstFetchingMap/the
+                      auto-fetch effect above all index into the unfiltered
+                      formData.applicants array; the primary applicant and any
+                      non-self-employed co-applicants earlier in that array
+                      would otherwise silently shift every index here. */}
+                  {formData.applicants && formData.applicants
+                    .map((a, realIdx) => ({ a, realIdx }))
+                    .filter(({ a }) => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED')
+                    .map(({ a: coApp, realIdx }, idx) => {
+                      const coAppFetching = !!coappGstFetchingMap[realIdx];
+                      const coAppFetchFailed = !!coappGstFetchFailedMap[realIdx];
+                      const coAppLinkedGstins = coApp.pan_gst_linked_gstins || [];
+                      // Same "genuinely fetched, came back empty" detection as
+                      // the primary's — lookup ran (pan_gst_profile truthy),
+                      // no GSTINs, and no real GST report already pulled for
+                      // this specific co-applicant.
+                      const coAppNotFound = !!coApp.pan_gst_profile && !coApp.gst_report_completed && coAppLinkedGstins.length === 0;
+                      const coAppDisplayName = toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`;
+                      return (
+                      <div key={coApp.id || realIdx} style={{ borderTop: '1px solid var(--border)' }}>
+                          {/* Same reasoning as the primary's heading above — shown
+                              unconditionally so it's visible even when
+                              GstAnalyticsForm itself is hidden (not-found state). */}
+                          <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                            {coAppDisplayName}
+                          </div>
+                          {!coApp.gst_report_completed && coAppLinkedGstins.length === 0 && (
+                            <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                              {coAppFetching ? (
+                                <PullingIndicator label="Fetching GST records for this PAN…" />
+                              ) : coAppFetchFailed ? (
+                                <>
+                                  <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
+                                  </span>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
+                                </>
+                              ) : coAppNotFound ? (
+                                <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                                </span>
+                              ) : (
+                                <>
+                                  <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={!coApp.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {!coAppNotFound && (
+                            <GstAnalyticsForm
+                               caseId={caseId}
+                               customerId={formData.customer_id}
+                               applicantId={coApp.id}
+                               applicantType="CO_APPLICANT"
+                               applicantName={coAppDisplayName}
+                               linkedGstins={coAppLinkedGstins}
+                               onComplete={() => updateApplicantRow(realIdx, 'gst_report_completed', true)}
+                               onRemoved={() => updateApplicantRow(realIdx, 'gst_report_completed', false)}
+                               onboardingMode={mode}
+                               walletBalance={walletBalance}
+                               gstCost={costs.GST_FETCH}
+                               disabled={isBulkInjectedCase}
+                               prefillEmail={coApp.email}
+                               prefillMobile={coApp.mobile}
+                            />
+                          )}
+                      </div>
+                      );
+                  })}
                 </div>
             </div>
 
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => { goToStep(1); setStep1SubPage('coapplicants'); }}>← Back to Co-Applicants</button>
               <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('itr')}>
-                Next: ITR Analytics →
+                Save & Next
               </button>
             </div>
             </>
@@ -1779,6 +2115,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       applicantType="PRIMARY"
                       applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                       prefillPan={formData.business_pan}
+                      prefillEmail={formData.business_email}
+                      prefillMobile={formData.business_mobile}
                       walletBalance={walletBalance}
                       itrCost={costs.ITR_ANALYTICS}
                       existingRecord={formData.customer_itr_profile}
@@ -1797,6 +2135,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           applicantType="CO_APPLICANT"
                           applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           prefillPan={coApp.pan_number || ''}
+                          prefillEmail={coApp.email}
+                          prefillMobile={coApp.mobile}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
                           existingRecord={coApp.itr_analytics?.[0] || null}
@@ -1813,7 +2153,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
               <button type="button" className="btn btn-ghost" onClick={() => setStep2SubPage('gst')}>← Back to GST</button>
               <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('bank')}>
-                Next: Bank Statements →
+                Save & Next
               </button>
             </div>
             </>
@@ -1888,7 +2228,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
             <div className="wizard-footer-actions" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
               <button className="btn btn-ghost" type="button" onClick={() => setStep2SubPage('itr')}>← Back to ITR Analytics</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
+              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save & Next'}</button>
             </div>
             </>
             )}
@@ -1963,7 +2303,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
               <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
               <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !step3Valid}>
-                {saving ? 'Saving...' : 'Next: Income Summary →'}
+                {saving ? 'Saving...' : 'Save & Next'}
               </button>
             </div>
           </form>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload, CheckCircle2 } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
@@ -11,6 +12,17 @@ import PageHeader from '../components/ui/PageHeader';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
+import { subscribeToCasePulls } from '../lib/realtime';
+import PageTour from '../components/tour/PageTour';
+
+const PIPELINE_TOUR_STEPS = [
+  { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
+  { target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' },
+  { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, PAN, phone, or email.' },
+  { target: '[data-tour="pipeline-filters"]', title: 'Filter your pipeline', description: 'Narrow the list down by entity type, lender, or open alerts (like a pending PDD), and sort it however is most useful to you.' },
+  { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Tap a stage to see only the cases sitting there right now, from Lead Created all the way through to Disbursed.' },
+  { target: '[data-tour="pipeline-results"]', title: 'Your cases', description: 'Every case in your pipeline, with its bureau score, amounts, and current stage. Tap a row any time to resume, view, or continue a case.' },
+];
 
 // Responsive hook
 const useResponsive = () => {
@@ -57,19 +69,23 @@ const STAGE_LABELS = {
 
 // [light, dark] pill colors per stage — matches the theme-aware pill pattern used elsewhere (e.g. UsersListPage role pills)
 const STAGE_COLORS = {
-  LEAD_CREATED:         { light: ['#FEF3C7', '#92400E'], dark: ['#78350F', '#FDE68A'] },
-  DATA_COLLECTION:      { light: ['#E0F2FE', '#0369A1'], dark: ['#0c4a6e', '#7dd3fc'] },
-  LEAD_SENT_TO_LENDER:  { light: ['#F3E8FF', '#6B21A8'], dark: ['#4c1d95', '#d8b4fe'] },
-  ESR_GENERATED:        { light: ['#FFEDD5', '#C2410C'], dark: ['#7c2d12', '#fdba74'] },
-  APPROVED:             { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
-  DISBURSED:            { light: ['#DCFCE7', '#166534'], dark: ['#14532d', '#86efac'] },
-  PARTLY_DISBURSED:     { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
-  CLOSED:               { light: ['#F3F4F6', '#374151'], dark: ['#1f2937', '#d1d5db'] },
-  REJECTED:             { light: ['#FEE2E2', '#991B1B'], dark: ['#7f1d1d', '#fca5a5'] },
-  DRAFT:                { light: ['#F3F4F6', '#6B7280'], dark: ['#1f2937', '#9ca3af'] },
+  LEAD_CREATED: { light: ['#FEF3C7', '#92400E'], dark: ['#78350F', '#FDE68A'] },
+  DATA_COLLECTION: { light: ['#E0F2FE', '#0369A1'], dark: ['#0c4a6e', '#7dd3fc'] },
+  LEAD_SENT_TO_LENDER: { light: ['#F3E8FF', '#6B21A8'], dark: ['#4c1d95', '#d8b4fe'] },
+  ESR_GENERATED: { light: ['#FFEDD5', '#C2410C'], dark: ['#7c2d12', '#fdba74'] },
+  APPROVED: { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
+  DISBURSED: { light: ['#DCFCE7', '#166534'], dark: ['#14532d', '#86efac'] },
+  PARTLY_DISBURSED: { light: ['#D1FAE5', '#065F46'], dark: ['#064e3b', '#6ee7b7'] },
+  CLOSED: { light: ['#F3F4F6', '#374151'], dark: ['#1f2937', '#d1d5db'] },
+  REJECTED: { light: ['#FEE2E2', '#991B1B'], dark: ['#7f1d1d', '#fca5a5'] },
+  DRAFT: { light: ['#F3F4F6', '#6B7280'], dark: ['#1f2937', '#9ca3af'] },
 };
 
 const ENTITY_TYPE_OPTIONS = ['Partnership', 'Pvt Ltd', 'LLP', 'Proprietorship', 'Public Ltd'].map(v => ({ value: v, label: v }));
+const CUSTOMER_TYPE_OPTIONS = [
+  { value: 'MSME', label: 'Business / MSME' },
+  { value: 'SALARIED', label: 'Salaried' },
+];
 const LENDER_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
 const ALERT_OPTIONS = [{ value: 'PDD_PENDING', label: 'PDD Pending' }];
 const SORT_OPTIONS = [
@@ -79,17 +95,26 @@ const SORT_OPTIONS = [
   { label: 'Bureau Score (High-Low)', by: 'cibil_score', order: 'desc' },
   { label: 'Amount (High-Low)', by: 'loan_amount', order: 'desc' },
 ];
-const LIMIT = 10;
-// Cases are fetched once (search + sort only) and then faceted client-side,
-// since the backend's pipeline filters only accept a single value each.
-// This ceiling keeps that one fetch bounded.
-const FETCH_CEILING = 1000;
+// True server-side pagination — one page of (at most) 50 cases per request.
+// The backend hard-caps at this same value regardless of what's asked for
+// (see case.service.js's MAX_PIPELINE_PAGE_SIZE), since it also fans out
+// into a live-pull-status query per row.
+const LIMIT = 50;
 
 const formatCurrency = (val) => {
-  if (!val) return '—';
-  if (val >= 1e7) return `₹${(val / 1e7).toFixed(1)} Cr`;
-  if (val >= 1e5) return `₹${(val / 1e5).toFixed(1)}L`;
-  return `₹${val.toLocaleString('en-IN')}`;
+  // Prisma Decimal fields (sanctioned/disbursed/loan amount) serialize over
+  // JSON as STRINGS (e.g. "0.00"), not numbers — `total_disbursed_amount`
+  // in particular defaults to Decimal 0, not null, for every undisbursed
+  // case. A non-empty string is truthy in JS, so the old `!val` check never
+  // caught it and every undisbursed case showed "D: ₹0.00" instead of "—";
+  // it also meant `.toLocaleString()` ran on a string (a no-op) rather than
+  // actually formatting real amounts with thousands separators. Coercing to
+  // a Number first fixes both.
+  const num = Number(val);
+  if (!num) return '—';
+  if (num >= 1e7) return `₹${(num / 1e7).toFixed(1)} Cr`;
+  if (num >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
+  return `₹${num.toLocaleString('en-IN')}`;
 };
 
 const formatDate = (dateStr) => {
@@ -186,6 +211,97 @@ const MultiSelectFilter = ({ label, options, selected, onChange, allLabel, isDar
   );
 };
 
+// Three breathing dots — same "actively working" signal PullStatusTracker's
+// row-level animation already uses, reused here at badge scale so a pending
+// pull reads consistently everywhere it shows up in the app.
+const WorkingDots = ({ color }) => (
+  <span style={{ display: 'inline-flex', gap: 2.5, alignItems: 'center' }}>
+    {[0, 0.15, 0.3].map((delay, i) => (
+      <motion.span
+        key={i}
+        animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+        transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay }}
+        style={{ width: 4, height: 4, borderRadius: '50%', background: color, display: 'inline-block' }}
+      />
+    ))}
+  </span>
+);
+
+/**
+ * "Action needed" / "data ready" badge for a case row's Stage/Alert cell —
+ * pending (GST/ITR/bank sent to the customer or still processing server-side)
+ * gets the animated dots; a completed pull the DSA hasn't opened the case to
+ * see yet gets a static "ready" pill instead, since nothing further is
+ * actually happening for that one.
+ */
+const PullAlertBadge = ({ pending, unseenCompleted, isDark, compact }) => {
+  const fontSize = compact ? 10 : 11;
+  const padding = compact ? '2px 6px' : '3px 8px';
+  if (pending.length > 0) {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding, borderRadius: 4, fontSize, fontWeight: 700 }}>
+        <WorkingDots color={isDark ? '#FDE68A' : '#92400E'} /> {pending.join('/')} pending
+      </div>
+    );
+  }
+  if (unseenCompleted.length > 0) {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? '#064e3b' : '#D1FAE5', color: isDark ? '#6ee7b7' : '#065F46', padding, borderRadius: 4, fontSize, fontWeight: 700 }}>
+        <CheckCircle2 size={compact ? 10 : 11} /> {unseenCompleted.join('/')} data ready
+      </div>
+    );
+  }
+  return null;
+};
+
+const PULL_LABELS = [['gst', 'GST'], ['itr', 'ITR'], ['bank', 'BANK']];
+
+/**
+ * Live-updates the current page's pending/unseen-completed pull badges over
+ * the same case-room sockets the case detail page itself uses (see
+ * lib/realtime.js's subscribeToCasePulls) — bounded to whatever's actually
+ * on screen (at most LIMIT rows), same as any other socket consumer here.
+ *
+ * The initial paint comes from each case's own `pull_status` (computed
+ * server-side in case.service.js's attachPullStatus, using the real
+ * pull_alerts_viewed_at cutoff); this hook only ever ADDS to or overrides
+ * that per case once a live snapshot arrives, so a page's very first render
+ * is never stuck on "nothing" while sockets connect.
+ */
+function usePagePullStatus(caseIds) {
+  const [liveByCase, setLiveByCase] = useState({});
+  const idsKey = caseIds.join(',');
+
+  useEffect(() => {
+    if (!idsKey) { setLiveByCase({}); return undefined; }
+    const ids = idsKey.split(',').map(Number);
+    const unsubscribes = ids.map((id) => subscribeToCasePulls(id, (snapshot) => {
+      setLiveByCase((prev) => {
+        const prevEntry = prev[id];
+        const pending = [];
+        const justCompleted = [];
+        for (const [key, label] of PULL_LABELS) {
+          const overall = snapshot?.[key]?.overall;
+          if (!overall) continue;
+          if (overall.live) { pending.push(label); continue; }
+          // Was pending a moment ago (per this same live stream) and just
+          // finished — flag it "ready" immediately, without waiting for a
+          // page reload to pick up the server-computed unseen_completed.
+          if (prevEntry?.pending?.includes(label) && overall.phase === 'COMPLETED') {
+            justCompleted.push(label);
+          }
+        }
+        const mergedJustCompleted = [...new Set([...(prevEntry?.justCompleted || []), ...justCompleted])];
+        return { ...prev, [id]: { pending, justCompleted: mergedJustCompleted } };
+      });
+    }));
+    return () => unsubscribes.forEach((fn) => fn());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
+  return liveByCase;
+}
+
 const CustomersListPage = () => {
   const navigate = useNavigate();
   const { isMobile, isTablet } = useResponsive();
@@ -202,39 +318,48 @@ const CustomersListPage = () => {
   // Each of these holds zero or more selected values — empty means "All".
   const [selectedStages, setSelectedStages] = useState([]);
   const [selectedEntityTypes, setSelectedEntityTypes] = useState([]);
+  const [selectedCustomerTypes, setSelectedCustomerTypes] = useState([]);
   const [selectedLenders, setSelectedLenders] = useState([]);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
   const [sortIndex, setSortIndex] = useState(0);
 
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
-  // Only search + sort go to the backend — stage/lender/entity/alert are
-  // faceted client-side below, since the pipeline endpoint only accepts one
-  // value per filter and multi-select needs OR-within-a-facet.
+  // Search, sort, every facet, AND the page itself all go to the backend now
+  // — true server-side pagination (50 rows/request) instead of fetching up
+  // to 1000 rows once and slicing/filtering them client-side. Each facet is
+  // still multi-select in the UI; the backend now takes a comma-joined list
+  // per facet and filters with an SQL `IN`, so OR-within-a-facet still works.
   const fetchPipeline = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         search,
-        stage: 'All',
+        stage: selectedStages.join(','),
+        lender: selectedLenders.join(','),
+        entity_type: selectedEntityTypes.join(','),
+        category: selectedCustomerTypes.join(','),
+        alert: selectedAlerts.join(','),
         sort_by: SORT_OPTIONS[sortIndex].by,
         sort_order: SORT_OPTIONS[sortIndex].order,
-        page: 1,
-        limit: FETCH_CEILING,
+        page,
+        limit: LIMIT,
       };
       const data = await caseService.getPipeline(params);
       setCases(Array.isArray(data.cases) ? data.cases : []);
-      setStats((s) => ({ ...s, totalCustomers: data.total_customers || 0 }));
+      setStats({ totalCases: data.total_cases || 0, totalCustomers: data.total_customers || 0 });
+      setTotalPages(Math.max(1, data.total_pages || 1));
     } catch (error) {
       toast.error('Failed to load pipeline data.');
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [search, sortIndex]);
+  }, [search, sortIndex, page, selectedStages, selectedLenders, selectedEntityTypes, selectedCustomerTypes, selectedAlerts]);
 
   useEffect(() => { fetchPipeline(); }, [fetchPipeline]);
 
@@ -243,17 +368,21 @@ const CustomersListPage = () => {
     return () => clearTimeout(handler);
   }, [searchInput]);
 
-  const filteredCases = useMemo(() => cases.filter((c) =>
-    (selectedStages.length === 0 || selectedStages.includes(c.stage)) &&
-    (selectedEntityTypes.length === 0 || selectedEntityTypes.includes(c.entity_type || c.customer?.entity_type)) &&
-    (selectedLenders.length === 0 || selectedLenders.includes(c.lender_name)) &&
-    (selectedAlerts.length === 0 || selectedAlerts.includes(c.alert_flag))
-  ), [cases, selectedStages, selectedEntityTypes, selectedLenders, selectedAlerts]);
+  // The server already returns exactly one page — no further client-side
+  // filtering or slicing needed.
+  const pagedCases = cases;
 
-  const totalPages = Math.max(1, Math.ceil(filteredCases.length / LIMIT));
-  const pagedCases = useMemo(() => filteredCases.slice((page - 1) * LIMIT, page * LIMIT), [filteredCases, page]);
+  // Live pending/data-ready pull badges for whatever's on screen right now —
+  // see usePagePullStatus's own header.
+  const livePullStatusByCase = usePagePullStatus(useMemo(() => pagedCases.map((c) => c.id), [pagedCases]));
+  const getPullAlert = useCallback((c) => {
+    const live = livePullStatusByCase[c.id];
+    const pending = live?.pending ?? c.pull_status?.pending ?? [];
+    const unseenCompleted = [...new Set([...(c.pull_status?.unseen_completed || []), ...(live?.justCompleted || [])])]
+      .filter((t) => !pending.includes(t));
+    return { pending, unseenCompleted };
+  }, [livePullStatusByCase]);
 
-  useEffect(() => { setStats((s) => ({ ...s, totalCases: filteredCases.length })); }, [filteredCases]);
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
 
   const handleStageToggle = (val) => {
@@ -293,16 +422,19 @@ const CustomersListPage = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 type="button"
+                data-tour="pipeline-bulk-upload"
                 className="btn btn-secondary btn-sm"
                 onClick={() => setIsBulkUploadModalOpen(true)}
               >
                 <Upload size={13} /> Bulk Upload
               </button>
-              <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <UserPlus size={13} /> Add New Customer
-                </div>
-              </TravelingBorderButton>
+              <div data-tour="pipeline-add-customer" style={{ display: 'inline-flex' }}>
+                <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <UserPlus size={13} /> Add New Customer
+                  </div>
+                </TravelingBorderButton>
+              </div>
             </div>
           }
         />
@@ -316,14 +448,14 @@ const CustomersListPage = () => {
       />
 
       {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
-        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 24, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+        <div data-tour="pipeline-search" style={{ flex: '0 1 240px', minWidth: isMobile ? '100%' : 180, maxWidth: isMobile ? '100%' : 240 }}>
           <span style={labelSm(isDark)}>Search</span>
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: isDark ? '#fff' : '#94a3b8' }} />
             <input
               type="text"
-              placeholder="Name, Case ID, lender, PAN…"
+              placeholder="Name, Case ID, lender, PAN, phone, email…"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               style={{ ...underlineInput(false), paddingLeft: 20 }}
@@ -331,7 +463,16 @@ const CustomersListPage = () => {
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 160 }}>
+        <div data-tour="pipeline-filters" style={{ display: 'flex', gap: isMobile ? 16 : 20, flexWrap: 'wrap', flex: '1 1 0', minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 145 }}>
+          <MultiSelectFilter
+            label="Customer type" allLabel="All customer types" isDark={isDark}
+            options={CUSTOMER_TYPE_OPTIONS} selected={selectedCustomerTypes}
+            onChange={handleFacetChange(setSelectedCustomerTypes)}
+          />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 145 }}>
           <MultiSelectFilter
             label="Entity Type" allLabel="All Entity Types" isDark={isDark}
             options={ENTITY_TYPE_OPTIONS} selected={selectedEntityTypes}
@@ -339,7 +480,7 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 150 }}>
+        <div style={{ flex: 1, minWidth: 135 }}>
           <MultiSelectFilter
             label="Lender" allLabel="All Lenders" isDark={isDark}
             options={LENDER_OPTIONS} selected={selectedLenders}
@@ -347,7 +488,7 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 140 }}>
+        <div style={{ flex: 1, minWidth: 120 }}>
           <MultiSelectFilter
             label="Alert" allLabel="All Alerts" isDark={isDark}
             options={ALERT_OPTIONS} selected={selectedAlerts}
@@ -355,17 +496,18 @@ const CustomersListPage = () => {
           />
         </div>
 
-        <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ flex: 1, minWidth: 145 }}>
           <span style={labelSm(isDark)}>Sort</span>
           <select value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
             style={{ ...underlineInput(sortIndex !== 0), appearance: 'none', cursor: 'pointer' }}>
             {SORT_OPTIONS.map((opt, i) => <option key={i} value={i}>{opt.label}</option>)}
           </select>
         </div>
+        </div>
       </div>
 
       {/* ─── Stage tabs (multi-select, compact) ─── */}
-      <div className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
+      <div data-tour="pipeline-stage-tabs" className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
         <button
           onClick={() => { setSelectedStages([]); setPage(1); }}
           style={{
@@ -403,7 +545,7 @@ const CustomersListPage = () => {
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
           <LoadingSpinner fullPage />
         </div>
-      ) : filteredCases.length === 0 ? (
+      ) : pagedCases.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 6px' }}>No cases found</h3>
@@ -411,7 +553,7 @@ const CustomersListPage = () => {
         </div>
       ) : isMobile ? (
         /* ─── Mobile: stacked cards — never scrolls horizontally ─── */
-        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <div data-tour="pipeline-results" className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {pagedCases.map((c) => {
             const stageColors = STAGE_COLORS[c.stage] || STAGE_COLORS.DRAFT;
             const [stageBg, stageColor] = isDark ? stageColors.dark : stageColors.light;
@@ -451,12 +593,19 @@ const CustomersListPage = () => {
                   <div><div style={labelSm(isDark)}>Bureau Score</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Lender</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.lender_name || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Product</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.product_type || '—'}</div></div>
-                  <div><div style={labelSm(isDark)}>Requested</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.loan_amount || c.parent_case?.loan_amount)}</div></div>
                   <div><div style={labelSm(isDark)}>Sanctioned</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div></div>
                   <div><div style={labelSm(isDark)}>Disbursed</div><div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700 }}>{formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div></div>
                   <div><div style={labelSm(isDark)}>Updated</div><div style={{ color: 'var(--on-surface)' }}>{formatRelative(c.updated_at)}</div></div>
                 </div>
 
+                {(() => {
+                  const { pending, unseenCompleted } = getPullAlert(c);
+                  return (pending.length > 0 || unseenCompleted.length > 0) && (
+                    <div style={{ marginBottom: 10 }}>
+                      <PullAlertBadge pending={pending} unseenCompleted={unseenCompleted} isDark={isDark} />
+                    </div>
+                  );
+                })()}
                 {c.alert_flag === 'PDD_PENDING' && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>
                     <AlertTriangle size={12} /> PDD Pending
@@ -483,7 +632,7 @@ const CustomersListPage = () => {
         </div>
       ) : (
         /* ─── Tablet / Desktop: fixed-layout table, wraps instead of overflowing — never scrolls horizontally ─── */
-        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
+        <div data-tour="pipeline-results" className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
           <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
             <colgroup>
               <col style={{ width: '9%' }} /><col style={{ width: '18%' }} /><col style={{ width: '14%' }} />
@@ -492,7 +641,7 @@ const CustomersListPage = () => {
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
-                {['Case', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Req / Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
+                {['Case', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
                   <th key={h} style={{
                     position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)',
                     padding: '10px 8px', fontSize: 10, fontWeight: 800, color: mutedColor,
@@ -539,8 +688,7 @@ const CustomersListPage = () => {
                       <span style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</span>
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ color: 'var(--on-surface)' }}>R: {formatCurrency(c.loan_amount || c.parent_case?.loan_amount)}</div>
-                      <div style={{ color: 'var(--on-surface)', marginTop: 2 }}>S: {formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div>
+                      <div style={{ color: 'var(--on-surface)' }}>S: {formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div>
                       <div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700, marginTop: 2 }}>D: {formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div>
                     </td>
                     <td style={cellStyle}>
@@ -548,6 +696,12 @@ const CustomersListPage = () => {
                         <span style={{ display: 'inline-block', background: stageBg, color: stageColor, padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700 }}>
                           {STAGE_LABELS[c.stage] || formatStatusLabel(c.stage)}
                         </span>
+                        {(() => {
+                          const { pending, unseenCompleted } = getPullAlert(c);
+                          return (pending.length > 0 || unseenCompleted.length > 0) && (
+                            <PullAlertBadge pending={pending} unseenCompleted={unseenCompleted} isDark={isDark} compact />
+                          );
+                        })()}
                         {c.alert_flag === 'PDD_PENDING' && (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
                             <AlertTriangle size={10} /> PDD
@@ -576,7 +730,7 @@ const CustomersListPage = () => {
         </div>
       )}
 
-      {!loading && filteredCases.length > 0 && (
+      {!loading && pagedCases.length > 0 && (
         <>
           {totalPages > 1 && (
             <div style={{ padding: '14px 20px', borderTop: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -603,6 +757,7 @@ const CustomersListPage = () => {
           )}
         </>
       )}
+      <PageTour pageKey="pipeline" steps={PIPELINE_TOUR_STEPS} />
     </div>
   );
 };
