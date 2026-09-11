@@ -21,13 +21,14 @@ const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE
 // paise-level decimals just added noise to a quick-glance amount.
 const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString('en-IN')}` : '—';
 
-// Signzy's own per-file cap on the bank-analyze API (2026-09-11) — enforced
-// here, client-side, so an oversized file is rejected instantly with clear
-// next-step guidance instead of round-tripping to the server first (the
-// platform's own pipe is 50MB — nginx client_max_body_size, app.js's JSON
-// limit — comfortably wider than this on purpose, so the SIGNZY limit is
-// always what actually governs, not an artificial one lower down the chain).
-const MAX_STATEMENT_FILE_MB = 20;
+// Client-side-only cap, tighter than Signzy's own per-file limit on the
+// bank-analyze API (20MB) and the platform's pipe (50MB — nginx
+// client_max_body_size, app.js's JSON limit) — enforced here so an oversized
+// file is rejected instantly with clear next-step guidance instead of
+// round-tripping to the server first. Deliberately set below what the
+// backend/vendor would actually accept; this is a product choice, not a
+// reflection of either of their real caps.
+const MAX_STATEMENT_FILE_MB = 5;
 const MAX_STATEMENT_FILE_BYTES = MAX_STATEMENT_FILE_MB * 1024 * 1024;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -228,23 +229,9 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             return toast.error("Please select a physical PDF or Excel file to upload.");
         }
 
-        // Each file is already checked against MAX_STATEMENT_FILE_MB above, but
-        // several files together (multi-part statements) still travel as one
-        // JSON request — base64 inflates each by ~1/3, and the platform's own
-        // pipe (nginx + the API) tops out at 50MB total. 45MB of raw file
-        // bytes keeps the encoded request safely under that with room for the
-        // rest of the JSON payload, so this can never itself be the cause of
-        // the request-too-large failure this whole change exists to prevent.
-        const totalRawBytes = validFiles.reduce((sum, f) => sum + (f.fileSize || 0), 0);
-        const MAX_COMBINED_RAW_BYTES = 45 * 1024 * 1024;
-        if (totalRawBytes > MAX_COMBINED_RAW_BYTES) {
-            return toast.error(
-                `These ${validFiles.length} files add up to ${formatFileSize(totalRawBytes)}, over what we can submit together. `
-                + `Remove one and analyze it separately, or combine fewer parts per submission.`,
-                { duration: 8000 }
-            );
-        }
-
+        // No combined-size cap here by design — each file is already checked
+        // against MAX_STATEMENT_FILE_MB above, and that per-file limit alone
+        // is what governs regardless of how many files are added together.
         setLoading(true);
         try {
             const payload = {
@@ -264,13 +251,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             // Collapse the wait for the next server tick.
             refresh();
         } catch (error) {
-            // The pre-checks above (per-file and combined-size) should make a
-            // real 413 unreachable from here, but if the pipe is ever
-            // tightened again on the server side without this component
-            // being updated, surface something actionable instead of axios's
-            // raw "Network Error" (which is what a 413/oversized-body
-            // rejection looks like from here — no JSON body to read a
-            // message out of).
+            // The per-file pre-check above makes a real 413 unlikely from a
+            // single file, but with no combined-size cap, several files
+            // added together can still hit the platform's own pipe limit
+            // (nginx client_max_body_size / app.js's JSON limit) — surface
+            // something actionable instead of axios's raw "Network Error"
+            // (which is what a 413/oversized-body rejection looks like from
+            // here — no JSON body to read a message out of).
             if (error.response?.status === 413 || (!error.response && /network/i.test(error.message || ''))) {
                 toast.error(
                     'The upload was rejected as too large. Split the statement into smaller parts '
