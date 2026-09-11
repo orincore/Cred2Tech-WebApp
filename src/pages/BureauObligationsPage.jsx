@@ -528,6 +528,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
                       </div>
                     </div>
+                    {/* Delete is manual-entry-only — an API-fetched (BUREAU)
+                        obligation would just come right back on the next
+                        bureau sync, so deleting it here would be silently
+                        undone rather than actually removing it. */}
+                    {obl.source === 'MANUAL' && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                       <button
                         onClick={() => handleDeleteObligation(obl.id)}
@@ -539,6 +544,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         {deletingId === obl.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -591,14 +597,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <button
-                          onClick={() => handleDeleteObligation(obl.id)}
-                          disabled={deletingId === obl.id}
-                          style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }}
-                          title="Remove obligation"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {/* Manual-entry-only — see the mobile view's own
+                            comment on why an API-fetched (BUREAU) row can't
+                            be deleted here. */}
+                        {obl.source === 'MANUAL' && (
+                          <button
+                            onClick={() => handleDeleteObligation(obl.id)}
+                            disabled={deletingId === obl.id}
+                            style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }}
+                            title="Remove obligation"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

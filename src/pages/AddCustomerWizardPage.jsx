@@ -7,7 +7,7 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet, Building2 } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -1538,6 +1538,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             </span>
                           ) : null
                         )}
+
+                        {/* Entity type (constitution of business — Proprietorship /
+                            Partnership / Pvt Ltd / etc.) comes back from the same
+                            PAN-to-IntelliBiz pull as the GSTIN above (see
+                            external.pan.controller.js's constitutionOfBusiness),
+                            already persisted to Customer.entity_type — surfaced
+                            here on Step 1 right where that pull ran, instead of
+                            only showing up later on the case/customer profile. */}
+                        {formData.pan_profile?.constitution_of_business && (
+                          <span style={{ background: 'var(--info-bg)', color: 'var(--info)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Building2 size={13} /> Entity Type: {formData.pan_profile.constitution_of_business}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </FormField>
@@ -1656,7 +1669,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               </div>
             </div>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+              <div style={{ background: 'var(--info-bg)', border: '1px solid var(--info)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
+                <AlertCircle size={18} color="var(--info)" style={{ flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--info)' }}>
+                  For proprietorship cases proprietor needs not be added as co applicant
+                </span>
+              </div>
+
               {!formData.mobile_verified ? (
                 consentRequesting ? (
                   <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
