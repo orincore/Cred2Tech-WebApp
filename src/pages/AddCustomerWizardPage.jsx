@@ -237,35 +237,33 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   }, [formData.is_salaried, caseId, currentStep, navigate]);
 
-  const restoreSession = async (preserveStep = false) => {
-    try {
-      setLoading(true);
-      // If the URL has a caseId, use it to restore. If not, the user clicked "Add New Customer" so start fresh.
-      const targetCaseId = urlCaseId;
+  // Pure state-setting half of restoreSession below — no fetch, no loading
+  // toggle. Split out so a caller that ALREADY has a full case payload in
+  // hand (handleContinueAsNewCase below, once case.controller.js#
+  // createFromExisting started returning the fully-populated case instead
+  // of the bare just-created row) can apply it directly and instantly,
+  // instead of throwing that response away and re-fetching the exact same
+  // data through restoreSession — which meant a setLoading(true)/skeleton/
+  // setLoading(false) cycle on every "Continue as New Case" even though the
+  // data needed was already sitting in memory. That skeleton cycle was
+  // confirmed, live, to be exactly what read as "the page refreshed" even
+  // though the URL update itself (navigate() to the same route, just a new
+  // ?caseId=) never actually remounts anything on its own.
+  const applyCaseData = (caseData, { preserveStep = false } = {}) => {
+    // A purged case's data must never be loaded into this fully-editable
+    // form — the backend already rejects the mutating calls this wizard
+    // makes (see Cred2Tech/backend's requireCaseAccess middleware /
+    // casePurgeGuard.js), but that alone would surface as a confusing
+    // mid-edit error on whichever step the user reaches first. Redirect
+    // to the case's own read-only detail page instead, which already
+    // shows the purge banner + "Create New Case" CTA.
+    if (caseData.data_purged_at) {
+      toast.error("This case's data has been permanently purged and can no longer be edited.");
+      navigate(isMsme ? `/msme/cases/${caseData.id}` : `/cases/${caseData.id}`, { replace: true });
+      return;
+    }
 
-      if (!targetCaseId) {
-        localStorage.removeItem('draftCaseId');
-        setLoading(false);
-        return;
-      }
-
-      const caseData = await caseService.getCaseById(targetCaseId);
-
-      // A purged case's data must never be loaded into this fully-editable
-      // form — the backend already rejects the mutating calls this wizard
-      // makes (see Cred2Tech/backend's requireCaseAccess middleware /
-      // casePurgeGuard.js), but that alone would surface as a confusing
-      // mid-edit error on whichever step the user reaches first. Redirect
-      // to the case's own read-only detail page instead, which already
-      // shows the purge banner + "Create New Case" CTA.
-      if (caseData.data_purged_at) {
-        toast.error("This case's data has been permanently purged and can no longer be edited.");
-        navigate(isMsme ? `/msme/cases/${targetCaseId}` : `/cases/${targetCaseId}`, { replace: true });
-        setLoading(false);
-        return;
-      }
-
-      // Primary source of truth for PAN verification is the primary
+    // Primary source of truth for PAN verification is the primary
       // applicant's own `pan_verified` flag — but that flag is per-CASE
       // (a fresh Applicant row per case), while a CustomerPanProfile is
       // per-CUSTOMER. A customer with a second case for the same PAN (e.g.
@@ -433,7 +431,26 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         const pid = searchParams.get('proposalId');
         if (pid) setProposalId(pid);
       }
+  };
 
+  // If the URL has a caseId, fetch it and apply it. If not, the user
+  // clicked "Add New Customer" so start fresh. explicitCaseId lets a caller
+  // force which case to load regardless of what the URL currently says —
+  // not needed by "Continue as New Case" any more (it now applies its own
+  // already-fetched response directly via applyCaseData, no second fetch),
+  // but kept for any other caller that only has an id, not a full payload.
+  const restoreSession = async (preserveStep = false, explicitCaseId = null) => {
+    try {
+      setLoading(true);
+      const targetCaseId = explicitCaseId || urlCaseId;
+
+      if (!targetCaseId) {
+        localStorage.removeItem('draftCaseId');
+        return;
+      }
+
+      const caseData = await caseService.getCaseById(targetCaseId);
+      applyCaseData(caseData, { preserveStep });
     } catch (error) {
       toast.error('Failed to restore case draft.');
     } finally {
@@ -452,6 +469,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // Always upsert the customer data so email/name updates are preserved
     const customer = await customerService.createOrAttach({
       customer_id: formData.customer_id,
+      // Lets the backend also sync THIS case's own primary applicant
+      // mobile/email (case.service.js#getCaseById reads contact info from
+      // there, not the shared customer row — see its own comment) —
+      // undefined on the very first save, before a case exists yet, which
+      // is fine: createCase itself sets the applicant's fields at creation.
+      case_id: caseId,
       business_pan: formData.business_pan,
       business_name: formData.business_name,
       business_mobile: formData.business_mobile,
@@ -925,11 +948,26 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!duplicateWarning) return;
     try {
       setSaving(true);
-      const res = await api.post('/cases/create-from-existing', { customer_id: duplicateWarning.id });
-      const newCaseId = res.data.id;
+      const res = await api.post('/cases/create-from-existing', {
+        customer_id: duplicateWarning.id,
+        // Same fix as AddSalariedCustomerWizardPage.jsx's own call — without
+        // this, a DSA starting a new MSME case here for a customer whose
+        // most recent case happened to be SALARIED would silently get a
+        // SALARIED case back instead.
+        category: 'MSME'
+      });
+      // The response is now the FULLY populated case (see
+      // case.controller.js#createFromExisting) — apply it directly, with no
+      // second getCaseById fetch and no loading/skeleton flip at all. The
+      // mount effect (`useEffect(() => { restoreSession(); }, [])`) never
+      // re-fires on a caseId change anyway, so relying on it (or on a
+      // restoreSession() re-fetch of data we already have) was both
+      // unnecessary and, before this fix, the entire reason this button's
+      // click looked like a page reload.
+      applyCaseData(res.data);
       toast.success('New case created with existing customer data!');
       setDuplicateWarning(null);
-      navigate(`/customers/add?caseId=${newCaseId}`);
+      navigate(`/customers/add?caseId=${res.data.id}`);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create new case from existing customer.');
     } finally {

@@ -6,7 +6,7 @@ import { consentService } from '../api/consentService';
 import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
@@ -175,9 +175,20 @@ const AddSalariedCustomerWizardPage = () => {
   };
 
 
+  // Mount-only ([] deps, matching AddCustomerWizardPage.jsx's own identical
+  // effect) — NOT [urlCaseId]. That used to re-fire restoreSession() (a full
+  // fetch + setLoading(true) skeleton cycle) every time the URL's caseId
+  // changed for ANY reason, including right after handleContinueAsNewCase
+  // above already applied the new case's data instantly via applyCaseData —
+  // confirmed live: the mobile field updated correctly at the moment the
+  // create-from-existing response landed, then ~100ms later the skeleton
+  // appeared anyway and stayed, from this effect's own redundant, pointless
+  // second fetch of the exact same data. ensureDraftSaved's own navigate()
+  // (the only other same-route caseId change) already sets state directly
+  // too, so nothing here was ever depending on this effect re-firing.
   useEffect(() => {
     restoreSession();
-  }, [urlCaseId]);
+  }, []);
 
   const checkPanDuplicate = async (pan) => {
     if (!pan || pan.length !== 10) return;
@@ -209,17 +220,116 @@ const AddSalariedCustomerWizardPage = () => {
     try {
       setSaving(true);
       const res = await api.post('/cases/create-from-existing', {
-        customer_id: duplicateWarning.id
+        customer_id: duplicateWarning.id,
+        // Without this, the backend defaulted to whatever category the
+        // customer's OWN most recent case happened to be — a DSA starting a
+        // new SALARIED case here for a customer whose last case was MSME
+        // silently got an MSME case back instead (confirmed live: case
+        // created via this exact flow had category flip to MSME).
+        category: 'SALARIED'
       });
-      const newCaseId = res.data.id;
+      // The response is now the FULLY populated case (see
+      // case.controller.js#createFromExisting) — apply it directly, with no
+      // second getCaseById fetch and no loading/skeleton flip at all. Same
+      // fix as AddCustomerWizardPage.jsx's own handleContinueAsNewCase —
+      // this used to rely entirely on restoreSession's own
+      // [urlCaseId]-keyed effect re-firing after navigate() below, which
+      // DID correctly reload the data (unlike the business wizard's
+      // mount-only effect) but did so through a full setLoading(true)
+      // teardown-and-rebuild of the whole page — confirmed, live, to be
+      // exactly what read as "the page refreshed", even though the
+      // underlying data was always correct.
+      applyCaseData(res.data);
       toast.success('New case created with existing customer data!');
       setDuplicateWarning(null);
-      navigate(`/customers/salaried/add?caseId=${newCaseId}`);
+      navigate(`/customers/salaried/add?caseId=${res.data.id}`);
     } catch (error) {
       console.error('[handleContinueAsNewCase]', error);
       toast.error(error.response?.data?.error || 'Failed to create new case from existing customer.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Pure state-setting half of restoreSession below — no fetch, no loading
+  // toggle. See AddCustomerWizardPage.jsx's own applyCaseData for why this
+  // split exists: handleContinueAsNewCase above already has a full case
+  // payload in hand and applies it directly, instantly, with none of this
+  // function's setLoading(true) skeleton cycle.
+  const applyCaseData = (caseData) => {
+    setCaseId(caseData.id);
+
+    const applicants = caseData.applicants || [];
+    const primaryApp = applicants.find(a => a.type === 'PRIMARY');
+
+    const restoredApplicants = applicants.map(app => ({
+      ...app,
+      // `bureau_checks.length > 0` is true even for a FAILED pull attempt
+      // (it's just "a row exists in bureau_verifications"), and
+      // `obligations.length > 0` reflects the independent Experian pull,
+      // not the credit score check — neither means the CIBIL score was
+      // actually retrieved. The server's own `bureau_fetched` is only set
+      // true on a successful score fetch; `cibil_score` presence is kept
+      // as a defensive fallback for older records.
+      bureau_fetched: app.bureau_fetched === true || !!app.cibil_score,
+      has_ocr: app.salary_ocr_results?.length > 0
+    }));
+
+    setFormData({
+      customer_id: caseData.customer?.id,
+      business_pan: caseData.customer?.business_pan || '',
+      // proprietor_name/pan_holder_name are always set from the plain PAN-verify
+      // API's own name field, regardless of anything GST-derived — business_name
+      // can end up holding a stale legal_business_name/trade_name (a GST artifact,
+      // sometimes even a raw GST TRN placeholder string) left over from a
+      // different flow, which is never applicable to a salaried customer.
+      business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
+      business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
+      business_email: caseData.customer?.business_email || '',
+      pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
+      dob: toDateInputValue(caseData.customer?.dob),
+      // Sourced from THIS case's own primary Applicant row, not
+      // caseData.customer.mobile_verified — that field lives on the shared
+      // Customer record and is reused across every case for the same PAN,
+      // which let a brand-new salaried case silently inherit "Consented"
+      // from a completely different, unrelated case for the same customer.
+      // Consent must be explicit per case (see the same fix already applied
+      // in AddCustomerWizardPage.jsx, and case.service.js/consent.service.js).
+      mobile_verified: primaryApp?.otp_verified || false,
+      applicants: restoredApplicants.map(app => ({
+        ...app,
+        mobile: (app.mobile || '').replace(/\D/g, ''),
+        dob: toDateInputValue(app.dob)
+      })),
+      product_type: caseData.product_type || '',
+      dsa_notes: caseData.dsa_notes || '',
+      property_type: caseData.property?.property_type || '',
+      occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
+      ownership_type: caseData.property?.ownership_type || 'Sole Owner',
+      market_value: caseData.property?.market_value || '',
+    });
+
+    if (primaryApp?.otp_verified && restoredApplicants.length > 0) {
+      setCurrentStep(2);
+    } else {
+      setCurrentStep(1);
+    }
+
+    // Rehydrate any consent request that's still live for THIS case — same
+    // fix as AddCustomerWizardPage.jsx's own restoreSession, which this
+    // page never had at all: consentRequest only ever got set locally, in
+    // memory, right after actually sending one — never restored from the
+    // server. Without this, a page refresh (or reopening the case) while a
+    // request was genuinely still pending lost that state entirely and fell
+    // straight back to a fresh "Request Consent" button, even though the
+    // customer hadn't done anything — reading as "consent status reset".
+    // Best-effort: a failure here shouldn't block the rest of the case from
+    // loading, so a fresh "Request Consent" is the worst case, not a
+    // broken page.
+    if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
+      consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
+        .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
+        .catch(() => {});
     }
   };
 
@@ -229,69 +339,11 @@ const AddSalariedCustomerWizardPage = () => {
       const targetCaseId = urlCaseId;
 
       if (!targetCaseId) {
-        setLoading(false);
         return;
       }
 
       const caseData = await caseService.getCaseById(targetCaseId);
-
-      setCaseId(caseData.id);
-
-      const applicants = caseData.applicants || [];
-      const primaryApp = applicants.find(a => a.type === 'PRIMARY');
-
-      const restoredApplicants = applicants.map(app => ({
-        ...app,
-        // `bureau_checks.length > 0` is true even for a FAILED pull attempt
-        // (it's just "a row exists in bureau_verifications"), and
-        // `obligations.length > 0` reflects the independent Experian pull,
-        // not the credit score check — neither means the CIBIL score was
-        // actually retrieved. The server's own `bureau_fetched` is only set
-        // true on a successful score fetch; `cibil_score` presence is kept
-        // as a defensive fallback for older records.
-        bureau_fetched: app.bureau_fetched === true || !!app.cibil_score,
-        has_ocr: app.salary_ocr_results?.length > 0
-      }));
-
-      setFormData({
-        customer_id: caseData.customer?.id,
-        business_pan: caseData.customer?.business_pan || '',
-        // proprietor_name/pan_holder_name are always set from the plain PAN-verify
-        // API's own name field, regardless of anything GST-derived — business_name
-        // can end up holding a stale legal_business_name/trade_name (a GST artifact,
-        // sometimes even a raw GST TRN placeholder string) left over from a
-        // different flow, which is never applicable to a salaried customer.
-        business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
-        business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
-        business_email: caseData.customer?.business_email || '',
-        pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
-        dob: toDateInputValue(caseData.customer?.dob),
-        // Sourced from THIS case's own primary Applicant row, not
-        // caseData.customer.mobile_verified — that field lives on the shared
-        // Customer record and is reused across every case for the same PAN,
-        // which let a brand-new salaried case silently inherit "Consented"
-        // from a completely different, unrelated case for the same customer.
-        // Consent must be explicit per case (see the same fix already applied
-        // in AddCustomerWizardPage.jsx, and case.service.js/consent.service.js).
-        mobile_verified: primaryApp?.otp_verified || false,
-        applicants: restoredApplicants.map(app => ({
-          ...app,
-          mobile: (app.mobile || '').replace(/\D/g, ''),
-          dob: toDateInputValue(app.dob)
-        })),
-        product_type: caseData.product_type || '',
-        dsa_notes: caseData.dsa_notes || '',
-        property_type: caseData.property?.property_type || '',
-        occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
-        ownership_type: caseData.property?.ownership_type || 'Sole Owner',
-        market_value: caseData.property?.market_value || '',
-      });
-
-      if (primaryApp?.otp_verified && restoredApplicants.length > 0) {
-        setCurrentStep(2);
-      } else {
-        setCurrentStep(1);
-      }
+      applyCaseData(caseData);
     } catch (error) {
       console.error('[restoreSession]', error);
       toast.error('Failed to restore case draft.');
@@ -336,6 +388,11 @@ const AddSalariedCustomerWizardPage = () => {
     } else {
       await customerService.createOrAttach({
         customer_id: formData.customer_id,
+        // Lets the backend also sync THIS case's own primary applicant
+        // mobile/email — see AddCustomerWizardPage.jsx's identical call for
+        // why (case.service.js#getCaseById reads contact info per-case, not
+        // from the shared customer row).
+        case_id: caseId,
         business_pan: formData.business_pan,
         business_name: formData.business_name,
         business_mobile: formData.business_mobile,
@@ -584,6 +641,29 @@ const AddSalariedCustomerWizardPage = () => {
     setFormData(prev => ({ ...prev, applicants: arr }));
   };
 
+  // Same fix as AddCustomerWizardPage.jsx's own handlePincodeBlur — pincode
+  // otherwise only ever reached the backend via handleStep1Submit, which
+  // fires solely from "Save & Next". A DSA who types a pincode and then
+  // clicks "Request Consent" instead (staying on step 1 to wait for the
+  // customer, exactly when a page reopen/refresh is most likely) had it
+  // silently never saved — reading back blank the moment applyCaseData
+  // repopulates the form from the server, since the server never actually
+  // had it. Persisting on blur closes that gap.
+  const handlePincodeBlur = async () => {
+    if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
+    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
+    if (!primaryApp?.id || primaryApp.pincode === formData.pincode) return;
+    try {
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: formData.pincode });
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
+      }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save pincode');
+    }
+  };
+
   const handleStep1Submit = async (e) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error('PAN is required.');
@@ -741,7 +821,48 @@ const AddSalariedCustomerWizardPage = () => {
   const step1FieldsValid = step1ConsentFieldsValid && !!formData.business_name;
   const step1Valid = step1FieldsValid && !!formData.mobile_verified;
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
+  // A bare centered spinner (the old version of this) replaces the ENTIRE
+  // wizard — header, stepper, form, everything — with empty space for the
+  // duration of every restoreSession() call, not just the very first page
+  // load. Since restoreSession also re-runs after "Continue as New Case"
+  // (this page's own useEffect deps include urlCaseId, unlike
+  // AddCustomerWizardPage.jsx's mount-only one — see that page's own
+  // restoreSession comment on why IT needed an explicit-caseId fix instead),
+  // every one of those transitions looked and felt like the browser had
+  // done a full page reload, which is exactly what was reported. A skeleton
+  // shaped like the real Step 1 layout — matching AddCustomerWizardPage.jsx's
+  // own loading state — reads as "this page's content is updating," not
+  // "this page just reloaded."
+  if (loading) return (
+    <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
+      <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
+        <Skeleton width={220} height={24} style={{ marginBottom: 24 }} />
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={160} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i}>
+                  <Skeleton width={100} height={10} style={{ marginBottom: 8 }} />
+                  <Skeleton height={38} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={140} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <Skeleton height={90} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
@@ -998,6 +1119,7 @@ const AddSalariedCustomerWizardPage = () => {
                       type="text"
                       value={formData.pincode || ''}
                       onChange={e => setFormData({ ...formData, pincode: e.target.value })}
+                      onBlur={handlePincodeBlur}
                       className="form-control"
                       placeholder="e.g. 560026"
                       maxLength={6}

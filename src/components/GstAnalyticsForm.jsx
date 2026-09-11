@@ -69,7 +69,20 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // and external.gst.controller.js's getRequestDetails applicant_id filter).
     const wantedApplicantId = applicantId == null ? null : Number(applicantId);
     const allRequests = snapshot ? snapshot.gst.requests : fallbackRequests;
-    const activeRequests = allRequests.filter(r => (r.applicant_id ?? null) === wantedApplicantId);
+    // A deleted/removed row (handleDeleteRequest -> external.gst.controller.js
+    // #deleteGstRequest) is a soft-delete: GstrAnalyticsStatus has no REMOVED
+    // value, so it reuses FAILED with provider_message "Removed by <user>" —
+    // it was never a provider failure, the DSA deliberately cleared it. Same
+    // convention ItrAnalyticsRequest's own delete uses (see
+    // casePullSnapshot.service.js#describeItr's identical "removed" check),
+    // but unlike ITR, GST has a second raw-row data source (the REST
+    // fallback below, external.gst.controller.js#getRequestDetails, which
+    // returns rows unmodified — no derived phase/label to correct there).
+    // Filtering the row out here, once, covers both sources at once: a
+    // removed request should read as "no request yet", not "failed".
+    const activeRequests = allRequests
+        .filter(r => (r.applicant_id ?? null) === wantedApplicantId)
+        .filter(r => !(r.status === 'FAILED' && r.provider_message?.toLowerCase().includes('removed')));
 
     // Hoisted above the effects below (moved from further down the file) so
     // gstPhase can be derived from THIS applicant's own latest request
@@ -370,7 +383,19 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 no visible name context at all when hidden by that state, so
                 duplicating a heading here would only show up in the cases
                 where it's least needed. */}
-            {!isSuccess && !isAuthLinkPending && !isOtpPending && !linkJustSent && (
+            {/* Hidden whenever there's any request to actually show a status
+                panel for below — not just success/auth-link-pending/otp-
+                pending/just-sent as before, which left this whole form
+                showing redundantly alongside the "Pulling GST data…"
+                progress panel for the entire post-approval PROCESSING
+                window (the gap between the customer submitting the auth
+                link and the pull actually finishing). Still shown for a
+                genuinely dead request (isDead) so a real failure can be
+                retried — a removed/deleted one no longer reaches this
+                check at all, since activeRequests above filters it out
+                entirely, so deleting cleanly falls back to "no request yet"
+                instead of coexisting with a stale "failed" banner. */}
+            {(!latestRequest || isDead) && !linkJustSent && (
             <div style={{
                 border: '1px solid var(--border)',
                 background: 'var(--bg-surface)',
