@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import { AlertCircle, UploadCloud, Plus, X, Download, Trash2 } from 'lucide-react';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
+import FileLimitModal from './ui/FileLimitModal';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
@@ -188,6 +189,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // Index of the file row currently being page-counted server-side —
     // between picking a file and it either sticking or getting rejected.
     const [validatingIndex, setValidatingIndex] = useState(null);
+    // A rejected file (over the 5MB/80-page limit) gets a blocking popup
+    // with the fix, not a toast — there's no room in a toast to actually
+    // walk someone through splitting and re-adding the statement.
+    const [fileLimitModal, setFileLimitModal] = useState({ open: false, fileName: '', reasonDetail: '' });
 
     // UI state
     const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -227,11 +232,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             const newFiles = [...files];
             newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
             setFiles(newFiles);
-            toast.error(
-                `"${file.name}" is ${formatFileSize(file.size)} — over the ${MAX_STATEMENT_FILE_MB}MB-per-file limit. `
-                + `Split the statement into smaller parts (e.g. by half-year) and add each part with "Add Another File" — we'll combine them for a full year's analysis.`,
-                { duration: 8000 }
-            );
+            setFileLimitModal({
+                open: true,
+                fileName: file.name,
+                reasonDetail: `it's ${formatFileSize(file.size)}, over the ${MAX_STATEMENT_FILE_MB}MB-per-file limit`,
+            });
             return;
         }
 
@@ -258,10 +263,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                     const newFiles = [...files];
                     newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
                     setFiles(newFiles);
-                    toast.error(
-                        `We can't process this file — it exceeds the size/page limit. ${res.data.reason}`,
-                        { duration: 8000 }
-                    );
+                    setFileLimitModal({ open: true, fileName: file.name, reasonDetail: res.data.detail || res.data.reason });
                     return;
                 }
                 const newFiles = [...files];
@@ -446,6 +448,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     // RENDER HORIZONTAL ROW
     return (
+        <>
         <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--warning)', borderRadius: 0, overflow: 'hidden' }}>
             {/* Summary Row */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: isMobile ? 10 : 16, alignItems: 'center', padding: isMobile ? '14px 16px' : '16px 24px', backgroundColor: 'var(--bg-base)' }}>
@@ -646,6 +649,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 </div>
             )}
         </div>
+        <FileLimitModal
+            isOpen={fileLimitModal.open}
+            fileName={fileLimitModal.fileName}
+            reasonDetail={fileLimitModal.reasonDetail}
+            onClose={() => setFileLimitModal({ open: false, fileName: '', reasonDetail: '' })}
+        />
+        </>
     );
 };
 
