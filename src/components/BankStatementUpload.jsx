@@ -42,6 +42,23 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
+
+    // Escape hatch for the `existingStatus === undefined` skeleton below: the
+    // comment on that guard assumes the parent always hands this component a
+    // resolved prop (never undefined) by the time it mounts, but a case
+    // reached by switching tabs client-side (ITR -> Bank, no full page load)
+    // never gets a second chance to re-derive it if that assumption is ever
+    // wrong for any reason — there's nothing else that flips it away from
+    // undefined, so the skeleton would otherwise sit there until the user
+    // manually refreshes the page. This caps that wait instead of trusting
+    // it never happens.
+    const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
+    useEffect(() => {
+        if (existingStatus !== undefined) return;
+        const timer = setTimeout(() => setSkeletonTimedOut(true), 4000);
+        return () => clearTimeout(timer);
+    }, [existingStatus]);
+
     // Live server-pushed status for this case (see hooks/useCasePullStatus).
     // The server now owns the whole "analysing → generating report files →
     // ready" loop, including the retry that used to run here as AWAITING_LINKS,
@@ -357,8 +374,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // very first render in the normal case, no artificial delay. Guards the
     // rare tick where it genuinely hasn't arrived yet, showing a skeleton
     // instead of a default "Upload PDF" state that would otherwise flash
-    // before snapping to the real one.
-    if (existingStatus === undefined) {
+    // before snapping to the real one. Falls through to the real UI (as
+    // "not started") after skeletonTimedOut regardless — see that state's
+    // own comment.
+    if (existingStatus === undefined && !skeletonTimedOut) {
         return (
             <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
                 <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />

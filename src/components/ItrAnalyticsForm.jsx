@@ -534,12 +534,14 @@ const ItrAnalyticsForm = ({
                         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{incomePreview.financial_year_previous || '—'}</div>
                     </div>
                     <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gross Receipts (Latest Year)</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Turnover (Latest Year)</div>
                         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.gross_receipts_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{incomePreview.financial_year_latest || '—'}</div>
                     </div>
                     <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gross Receipts (Previous Year)</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Turnover (Previous Year)</div>
                         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(incomePreview.gross_receipts_previous_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{incomePreview.financial_year_previous || '—'}</div>
                     </div>
                 </div>
             )}

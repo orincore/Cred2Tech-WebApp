@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
-import { PlusCircle, Trash2, ChevronRight, User, Users } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronRight, User, Users, Info } from 'lucide-react';
 
 const INCOME_TYPES_MSME = [
   'Director Salary', "Partner's Salary", 'Interest on Capital',
@@ -99,6 +99,17 @@ const AddEntryInlineForm = ({ show, incomeTypes, saving, isMobile, onSubmit }) =
   );
 };
 
+// GST's own "latest year" figure is a trailing 12-month window, not a clean
+// financial year (it routinely straddles two — see gst.parser.js's own
+// comment), so its fy_latest has always been a date-range string like "Aug
+// 2025 – Jul 2026", never a bare "FY 2025-26". That's fine as this row's
+// own period caption (Latest/Previous Year columns), but the dedicated FY
+// column must hold only an actual FY label — showing that same range there
+// too just doubles it up. Blank it out (an em dash) rather than fabricate a
+// single FY that doesn't genuinely apply to a figure spanning two.
+const isBareFyLabel = (v) => typeof v === 'string' && /^FY\s?\d{4}-\d{2}$/i.test(v.trim());
+const fyColumnValue = (v) => (isBareFyLabel(v) ? v : '—');
+
 // One block per applicant on the case, reusing the exact same two tables
 // (API Pulls, Manual Entries) the page always had — just repeated once per
 // applicant instead of shown once for the whole case. Income used to be a
@@ -119,17 +130,48 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
   // three rows (picking whichever metric's fy_latest happened to be non-null
   // first) showed the wrong period next to at least two of the three values
   // whenever their real periods didn't match.
+  // Each row now carries TWO period concepts, kept deliberately separate:
+  // - rangeLatest/rangePrev: the real from-to month span the Latest/Previous
+  //   Year value was actually computed over (e.g. "Apr 2024 – Nov 2024" for
+  //   a partially-filed year) — shown right under each amount, replacing
+  //   the bare FY label that used to sit there and implied a full Apr–Mar
+  //   year even when the real filed months didn't cover one.
+  // - fyLatest/fyPrev: the plain FY label ("FY 2024-25") on its own, now in
+  //   its own FY column instead of doubling as the amount's period caption.
+  // GST/Bank ranges reflect actually-filed months (see gst.parser.js /
+  // bankParser.service.js's trackMonthRange); ITR's is a straight FY->range
+  // conversion (income.service.js#fyLabelToRange) since a filed return
+  // always covers the complete Apr-Mar year, unlike GST/bank filings.
   const apiRows = isSalariedApp
     ? [{
         label: 'Salary (Annual)', latest: app.salary?.latest, prev: null,
         fyLatest: app.salary?.fy_latest, fyPrev: app.salary?.fy_prev,
+        rangeLatest: app.salary?.fy_latest, rangePrev: app.salary?.fy_prev,
         source: app.salary?.source === 'OCR' ? 'Salary OCR' : (app.salary?.source === 'MANUAL' ? 'Manual' : '—'),
         color: 'var(--success)', bg: 'var(--success-bg)'
       }]
     : [
-        { label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev, fyLatest: app.gst_turnover?.fy_latest, fyPrev: app.gst_turnover?.fy_prev, source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)' },
-        { label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev, fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev, source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)' },
-        { label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev, fyLatest: app.avg_bank_balance?.fy_latest, fyPrev: app.avg_bank_balance?.fy_prev, source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)' }
+        {
+          label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev,
+          fyLatest: app.gst_turnover?.fy_latest, fyPrev: app.gst_turnover?.fy_prev,
+          rangeLatest: app.gst_turnover?.fy_latest_range || app.gst_turnover?.fy_latest,
+          rangePrev: app.gst_turnover?.fy_prev_range || app.gst_turnover?.fy_prev,
+          source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)'
+        },
+        {
+          label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev,
+          fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev,
+          rangeLatest: app.net_profit?.fy_latest_range || app.net_profit?.fy_latest,
+          rangePrev: app.net_profit?.fy_prev_range || app.net_profit?.fy_prev,
+          source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)'
+        },
+        {
+          label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev,
+          fyLatest: app.avg_bank_balance?.fy_latest, fyPrev: app.avg_bank_balance?.fy_prev,
+          rangeLatest: app.avg_bank_balance?.fy_latest_range || app.avg_bank_balance?.fy_latest,
+          rangePrev: app.avg_bank_balance?.fy_prev_range || app.avg_bank_balance?.fy_prev,
+          source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)'
+        }
       ];
 
   const manualEntries = app.manual_entries || [];
@@ -150,6 +192,20 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
         </button>
       }
     >
+      {/* "Income not considered" (employment_type) — a DSA marking this
+          co-applicant as not being assessed for income at all. Still gets
+          its own block on this page (so the exclusion reads as deliberate,
+          not a missing pull) but shows this note instead of an income table
+          that would otherwise just be full of dashes. */}
+      {app.income_not_considered ? (
+        <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: '1px solid var(--border)' }}>
+          <Info size={16} color="var(--text-tertiary)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            "Income not considered" is selected for this applicant, so no income summary is shown for them.
+          </span>
+        </div>
+      ) : (
+      <>
       {/* Income from API Pulls — same table as before, this applicant's own rows only. */}
       <div style={{ borderBottom: '1px solid var(--border)' }}>
         {isMobile ? (
@@ -161,12 +217,15 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                   <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  <div style={{ marginBottom: 2 }}>Latest Year ({row.fyLatest || '—'})</div>
+                  <div style={{ marginBottom: 2 }}>Latest Year ({row.rangeLatest || '—'})</div>
                   <strong style={{ fontSize: 14, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  <div style={{ marginBottom: 2 }}>Previous Year ({row.fyPrev || '—'})</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  <div style={{ marginBottom: 2 }}>Previous Year ({row.rangePrev || '—'})</div>
                   <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  FY: {fyColumnValue(row.fyLatest)} / {fyColumnValue(row.fyPrev)}
                 </div>
               </div>
             ))}
@@ -176,8 +235,19 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)' }}>
-                  {['Item', 'Latest Year', 'Previous Year', 'Source'].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
+                  {['Item', 'Latest Year', 'Previous Year', 'FY', 'Source'].map(h => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)',
+                        borderBottom: '1px solid var(--border)', fontSize: 12,
+                        // Global thead-th CSS force-lowercases everything but
+                        // the first letter (index.css) — right for ordinary
+                        // words, wrong for the "FY" acronym, which it turns
+                        // into "Fy". Override just this header back to as-typed.
+                        ...(h === 'FY' ? { textTransform: 'none' } : {})
+                      }}
+                    >{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -185,16 +255,23 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                 {apiRows.map((row, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
-                    {/* Period shown above its own value — each row's period
-                        comes from that row's own source (GST/ITR/Bank), not a
-                        single period shared across every row. */}
+                    {/* Period shown above its own value is the real from-to
+                        month range the figure was computed over — each row's
+                        period comes from that row's own source (GST/ITR/
+                        Bank), not a single period shared across every row.
+                        The plain FY label these used to show here now lives
+                        in its own FY column instead. */}
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.fyLatest || '—'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangeLatest || '—'}</div>
                       <strong style={{ fontSize: 13, fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.fyPrev || '—'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangePrev || '—'}</div>
                       <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      <div>{fyColumnValue(row.fyLatest)}</div>
+                      <div>{fyColumnValue(row.fyPrev)}</div>
                     </td>
                     <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
                   </tr>
@@ -204,6 +281,8 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
           </div>
         )}
       </div>
+      </>
+      )}
 
       <AddEntryInlineForm
         show={adding}

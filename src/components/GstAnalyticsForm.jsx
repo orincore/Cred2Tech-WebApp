@@ -885,12 +885,16 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     <div>
                                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Turnover</div>
                                         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.turnover_latest_year)}</div>
-                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_latest || '—'}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_latest_range || latestRequest.turnover_preview.financial_year_latest || '—'}</div>
                                     </div>
                                     <div>
                                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Previous Year Turnover</div>
                                         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.turnover_previous_year)}</div>
-                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_previous || '—'}</div>
+                                        {/* Real filed-month span (e.g. "Apr 2024 – Nov 2024"), not
+                                            just the bare "FY 2024-25" label — matches Last 12 Months
+                                            Turnover's own date-range line above instead of being the
+                                            only one of the two without an actual date range. */}
+                                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{latestRequest.turnover_preview.financial_year_previous_range || latestRequest.turnover_preview.financial_year_previous || '—'}</div>
                                     </div>
                                     <div>
                                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Avg. Monthly Turnover</div>
