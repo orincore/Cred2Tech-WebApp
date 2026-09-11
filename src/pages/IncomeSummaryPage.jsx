@@ -210,7 +210,12 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
         },
         {
           label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev,
-          fyLatest: app.avg_bank_balance?.fy_latest, fyPrev: app.avg_bank_balance?.fy_prev,
+          // Bank ABB's own period is a real filed-month range (see
+          // rangeLatest/rangePrev below), same trailing-window situation as
+          // GST's rolling turnover — not a clean single FY, so the FY column
+          // is deliberately left blank ("—" via fyColumnValue) rather than
+          // showing a range there too.
+          fyLatest: null, fyPrev: null,
           rangeLatest: app.avg_bank_balance?.fy_latest_range || app.avg_bank_balance?.fy_latest,
           rangePrev: app.avg_bank_balance?.fy_prev_range || app.avg_bank_balance?.fy_prev,
           source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)'

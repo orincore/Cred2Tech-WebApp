@@ -7,7 +7,7 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet, Building2 } from 'lucide-react';
+import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet } from 'lucide-react';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -1538,19 +1538,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             </span>
                           ) : null
                         )}
-
-                        {/* Entity type (constitution of business — Proprietorship /
-                            Partnership / Pvt Ltd / etc.) comes back from the same
-                            PAN-to-IntelliBiz pull as the GSTIN above (see
-                            external.pan.controller.js's constitutionOfBusiness),
-                            already persisted to Customer.entity_type — surfaced
-                            here on Step 1 right where that pull ran, instead of
-                            only showing up later on the case/customer profile. */}
-                        {formData.pan_profile?.constitution_of_business && (
-                          <span style={{ background: 'var(--info-bg)', color: 'var(--info)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Building2 size={13} /> Entity Type: {formData.pan_profile.constitution_of_business}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </FormField>
@@ -1637,7 +1624,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     keyframe for the reveal keeps this consistent with the
                     rest of the app rather than introducing a new animation. */}
                 {formData.mobile_verified && (
-                  <div className="grid-2" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
+                  <div className="grid-3" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
                     <FormField label="Business Name / Full Name" name="business_name" disabled>
                       <input
                         type="text"
@@ -1646,6 +1633,24 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         className="form-control"
                         placeholder="Autofetched via PAN"
                         disabled
+                      />
+                    </FormField>
+
+                    {/* Entity type (constitution of business — Proprietorship /
+                        Partnership / Pvt Ltd / etc.) comes back from the same
+                        PAN-to-IntelliBiz pull as the GSTIN above (see
+                        external.pan.controller.js's constitutionOfBusiness),
+                        already persisted to Customer.entity_type — surfaced
+                        here on Step 1 right where that pull ran, instead of
+                        only showing up later on the case/customer profile. */}
+                    <FormField label="Entity Type" name="entity_type" disabled>
+                      <input
+                        type="text"
+                        value={formData.pan_profile?.constitution_of_business || ''}
+                        className="form-control"
+                        placeholder="Autofetched via PAN"
+                        disabled
+                        readOnly
                       />
                     </FormField>
 
@@ -1669,14 +1674,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               </div>
             </div>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-              <div style={{ background: 'var(--info-bg)', border: '1px solid var(--info)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
-                <AlertCircle size={18} color="var(--info)" style={{ flexShrink: 0 }} />
-                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--info)' }}>
-                  For proprietorship cases proprietor needs not be added as co applicant
-                </span>
-              </div>
-
+            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
               {!formData.mobile_verified ? (
                 consentRequesting ? (
                   <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
@@ -1718,10 +1716,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <AlertCircle size={13} color="var(--info)" style={{ flexShrink: 0 }} />
+                    <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--info)' }}>
+                      For proprietorship cases proprietor needs not be added as co applicant
+                    </span>
+                  </div>
                 </div>
                 <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
               </div>
-              
+
               <div style={{ padding: 24 }}>
                 {suggestedCoApplicants && suggestedCoApplicants.length > 0 && (
                   <div style={{ marginBottom: 24 }}>
