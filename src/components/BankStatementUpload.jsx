@@ -88,6 +88,19 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     const sourceUrls = livePull
         ? { excel: livePull.report_excel_url || null, json: livePull.report_json_url || null }
         : localSourceUrls;
+    // Live balance figures on top of localPreview (2026-09-11) — previously
+    // the FY-balance preview only ever came from `existingStatus`, read once
+    // at mount, so it sat blank until a full page reload re-fetched the
+    // case: the pull would finish, `status` would flip to COMPLETED live via
+    // the socket (correctly showing "Bank statement analysed"/Excel/Delete),
+    // but the balance grid right below it stayed hidden because
+    // `localPreview` itself was never touched again. The server now pushes
+    // these same four fields live (casePullSnapshot.service.js's
+    // `balance_preview`, cheap plain columns — see its own comment);
+    // avg_monthly_credit/total_credits aren't part of that push (they need
+    // the full raw vendor JSON parsed, not a cheap column read), so those
+    // two still only ever come from localPreview/existingStatus.
+    const preview = { ...localPreview, ...(livePull?.balance_preview || {}) };
     const phase = livePull?.phase
         || (localStatus === 'COMPLETED' ? 'COMPLETED'
             : localStatus === 'FAILED' ? 'FAILED'
@@ -444,22 +457,22 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             {/* Turnover-preview-style summary — same idea and layout as
                 GstAnalyticsForm's own preview grid, so GST and Bank read as
                 one consistent design instead of GST alone having a preview.
-                Sourced from `existingStatus` (see localPreview above), so it
-                appears the instant the pull is COMPLETED without waiting on
-                a live socket field that doesn't carry this. */}
-            {status === 'COMPLETED' && (localPreview.avg_bank_balance_latest_year != null || localPreview.total_credits != null) && (
+                `preview` prefers the live socket push (see its own comment
+                above) so this appears the instant the pull completes, not
+                only after a page reload. */}
+            {status === 'COMPLETED' && (preview.avg_bank_balance_latest_year != null || preview.total_credits != null) && (
                 <div style={{
                     display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14,
                     padding: isMobile ? '14px 16px' : '16px 24px', borderTop: '1px solid var(--border)',
                 }}>
                     <div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Daily Average Balance</div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.avg_bank_balance_latest_year)}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{localPreview.financial_year_latest || '—'}</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(preview.avg_bank_balance_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{preview.financial_year_latest || '—'}</div>
                     </div>
                     <div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Bank Credit</div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(localPreview.total_credits)}</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(preview.total_credits)}</div>
                     </div>
                 </div>
             )}
