@@ -406,12 +406,27 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             </button>
                         </div>
                     ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? (
-                        // Usually redundant with the live push from the webhook —
-                        // this only matters when that single callback never
-                        // arrives/completes. See syncNow's own comment above.
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={syncNow} disabled={syncing}>
-                            {syncing ? 'Checking…' : 'Check status'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            {/* Usually redundant with the live push from the webhook —
+                                this only matters when that single callback never
+                                arrives/completes. See syncNow's own comment above. */}
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={syncNow} disabled={syncing}>
+                                {syncing ? 'Checking…' : 'Check status'}
+                            </button>
+                            {/* Last resort when "Check status" itself can't recover
+                                it (e.g. the provider-side retrieve-work-order call
+                                failing independently of our own bug) — resets this
+                                request back to INITIATED so the panel returns to
+                                the normal upload flow. Re-uses the same
+                                handleDelete the COMPLETED state already exposes;
+                                nothing bank-specific is lost by resetting since a
+                                stuck ANALYZING request never had any data ingested
+                                in the first place. */}
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleDelete} disabled={deleting}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Trash2 size={14} /> {deleting ? 'Resetting…' : 'Reset & re-upload'}
+                            </button>
+                        </div>
                     ) : (
                         <button
                             type="button"
