@@ -29,6 +29,14 @@ const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString(
 // backend/vendor would actually accept; this is a product choice, not a
 // reflection of either of their real caps.
 const MAX_STATEMENT_FILE_MB = 5;
+// Signzy production's real page cap for Bank Statement Analysis (Custom
+// Plan) — confirmed live 2026-09-11: a 251-page statement came back FAILED
+// with "File exceeds max limit of 80 pages allowed in Custom Plan". Checked
+// server-side (see POST /external/bank/validate-file) since there's no PDF
+// parser on the client — this app has no pdf.js/pdf-lib dependency, and
+// adding one just for a page count isn't worth the bundle weight when the
+// backend already has pdf-parse for exactly this.
+const MAX_STATEMENT_PAGES = 80;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -156,7 +164,14 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     usePhaseTransition(livePull ? phase : null, {
         COMPLETED: () => toast.success('Bank analysis completed.'),
-        FAILED: () => toast.error('Bank statement analysis failed at provider'),
+        // Prefer the real vendor reason (e.g. "File exceeds max limit of 80
+        // pages allowed in Custom Plan") when the server has one — it's the
+        // difference between a dead end and the user knowing exactly what to
+        // fix and re-upload.
+        FAILED: () => toast.error(
+            livePull?.provider_message ? `Bank statement analysis failed: ${livePull.provider_message}` : 'Bank statement analysis failed at provider',
+            { duration: 8000 }
+        ),
     });
 
     const notifiedRef = React.useRef(false);
@@ -168,8 +183,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     }, [phase]);
 
     // Store physical file data
-    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null }]);
+    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const [loading, setLoading] = useState(false);
+    // Index of the file row currently being page-counted server-side —
+    // between picking a file and it either sticking or getting rejected.
+    const [validatingIndex, setValidatingIndex] = useState(null);
 
     // UI state
     const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -207,7 +225,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             // re-picking the SAME oversized file fires onChange again.
             e.target.value = '';
             const newFiles = [...files];
-            newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null };
+            newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
             setFiles(newFiles);
             toast.error(
                 `"${file.name}" is ${formatFileSize(file.size)} — over the ${MAX_STATEMENT_FILE_MB}MB-per-file limit. `
@@ -219,17 +237,50 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = () => {
+        reader.onload = async () => {
             const base64Data = reader.result.split(',')[1];
-            const newFiles = [...files];
-            newFiles[index].fileName = file.name;
-            newFiles[index].fileBase64 = base64Data;
-            newFiles[index].fileSize = file.size;
-            setFiles(newFiles);
+
+            // Page-count gate (80 pages, PDFs only) — server-side, since
+            // there's no PDF parser on the client. Runs after the free
+            // client-side size check above, before this file is allowed to
+            // stick, so an over-length statement gets the same instant,
+            // actionable rejection as an oversized one instead of only
+            // failing minutes later once actually submitted to Signzy.
+            setValidatingIndex(index);
+            try {
+                const res = await api.post('/external/bank/validate-file', {
+                    fileBase64: base64Data,
+                    fileName: file.name,
+                    password: files[index]?.password || undefined,
+                });
+                if (!res.data.valid) {
+                    e.target.value = '';
+                    const newFiles = [...files];
+                    newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
+                    setFiles(newFiles);
+                    toast.error(
+                        `We can't process this file — it exceeds the size/page limit. ${res.data.reason}`,
+                        { duration: 8000 }
+                    );
+                    return;
+                }
+                const newFiles = [...files];
+                newFiles[index] = { ...newFiles[index], fileName: file.name, fileBase64: base64Data, fileSize: file.size, pages: res.data.pages ?? null };
+                setFiles(newFiles);
+            } catch (err) {
+                // The check itself failing (network blip, etc.) shouldn't
+                // block a legitimate upload — Signzy remains the final
+                // authority on whether the file is usable either way.
+                const newFiles = [...files];
+                newFiles[index] = { ...newFiles[index], fileName: file.name, fileBase64: base64Data, fileSize: file.size, pages: null };
+                setFiles(newFiles);
+            } finally {
+                setValidatingIndex(null);
+            }
         };
     };
 
-    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '', fileSize: null }]);
+    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const removeFile = (index) => setFiles(files.filter((_, i) => i !== index));
 
     const handleAnalyze = async () => {
@@ -267,14 +318,25 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             // something actionable instead of axios's raw "Network Error"
             // (which is what a 413/oversized-body rejection looks like from
             // here — no JSON body to read a message out of).
+            const providerMessage = error.response?.data?.error || '';
             if (error.response?.status === 413 || (!error.response && /network/i.test(error.message || ''))) {
                 toast.error(
                     'The upload was rejected as too large. Split the statement into smaller parts '
                     + `(under ${MAX_STATEMENT_FILE_MB}MB each) and add each part separately.`,
                     { duration: 8000 }
                 );
+            } else if (/name match failed/i.test(providerMessage)) {
+                // Signzy validates that every file in one submission belongs
+                // to the same account holder before it'll produce a single
+                // consolidated report — a mismatch here means two different
+                // people's statements were added as parts of the same pull.
+                toast.error(
+                    `${providerMessage} — every file added to one submission must be a statement for the same account holder. `
+                    + `Remove the mismatched file and submit it as a separate pull instead.`,
+                    { duration: 9000 }
+                );
             } else {
-                toast.error(error.response?.data?.error || error.message);
+                toast.error(providerMessage || error.message);
             }
         } finally {
             setLoading(false);
@@ -513,7 +575,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
-                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span>. If your statement is larger, split it
+                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span> and <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_PAGES} pages</span>. If your statement is larger, split it
                         into smaller parts (e.g. one file per half-year) and add each part below with
                         "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
@@ -530,19 +592,25 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB)</span>
+                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB, {MAX_STATEMENT_PAGES} pages)</span>
                                         </label>
                                         <input
                                             type="file"
                                             accept=".pdf,.xlsx,.xls"
                                             className="form-control"
-                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB`}
+                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB, max ${MAX_STATEMENT_PAGES} pages`}
+                                            disabled={validatingIndex === index}
                                             onChange={e => handleFileUpload(index, e)}
                                             style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
                                         />
+                                        {validatingIndex === index && (
+                                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                                                Checking file size and page count…
+                                            </div>
+                                        )}
                                         {file.fileName && (
                                             <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
-                                                ✓ Attached: {file.fileName}{file.fileSize != null ? ` (${formatFileSize(file.fileSize)})` : ''}
+                                                ✓ Attached: {file.fileName}{file.fileSize != null ? ` (${formatFileSize(file.fileSize)}${file.pages != null ? `, ${file.pages} pages` : ''})` : ''}
                                             </div>
                                         )}
                                     </div>
@@ -570,8 +638,8 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </button>
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
                             </button>
                         </div>
                     </div>
