@@ -21,6 +21,18 @@ const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE
 // paise-level decimals just added noise to a quick-glance amount.
 const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString('en-IN')}` : '—';
 
+// Signzy's own per-file cap on the bank-analyze API (2026-09-11) — enforced
+// here, client-side, so an oversized file is rejected instantly with clear
+// next-step guidance instead of round-tripping to the server first (the
+// platform's own pipe is 50MB — nginx client_max_body_size, app.js's JSON
+// limit — comfortably wider than this on purpose, so the SIGNZY limit is
+// always what actually governs, not an artificial one lower down the chain).
+const MAX_STATEMENT_FILE_MB = 20;
+const MAX_STATEMENT_FILE_BYTES = MAX_STATEMENT_FILE_MB * 1024 * 1024;
+const formatFileSize = (bytes) => bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
@@ -126,7 +138,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     }, [phase]);
 
     // Store physical file data
-    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '' }]);
+    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null }]);
     const [loading, setLoading] = useState(false);
 
     // UI state
@@ -147,6 +159,24 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         const file = e.target.files[0];
         if (!file) return;
 
+        if (file.size > MAX_STATEMENT_FILE_BYTES) {
+            // Reject before ever reading the file — no point base64-encoding
+            // a file we already know Signzy will refuse. Clears whatever was
+            // in this slot before (so a stale "Attached" checkmark from a
+            // prior valid selection can't linger) and resets the input so
+            // re-picking the SAME oversized file fires onChange again.
+            e.target.value = '';
+            const newFiles = [...files];
+            newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null };
+            setFiles(newFiles);
+            toast.error(
+                `"${file.name}" is ${formatFileSize(file.size)} — over the ${MAX_STATEMENT_FILE_MB}MB-per-file limit. `
+                + `Split the statement into smaller parts (e.g. by half-year) and add each part with "Add Another File" — we'll combine them for a full year's analysis.`,
+                { duration: 8000 }
+            );
+            return;
+        }
+
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
@@ -154,17 +184,35 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             const newFiles = [...files];
             newFiles[index].fileName = file.name;
             newFiles[index].fileBase64 = base64Data;
+            newFiles[index].fileSize = file.size;
             setFiles(newFiles);
         };
     };
 
-    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '' }]);
+    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '', fileSize: null }]);
     const removeFile = (index) => setFiles(files.filter((_, i) => i !== index));
 
     const handleAnalyze = async () => {
         const validFiles = files.filter(f => f.fileName && f.fileBase64);
         if (validFiles.length === 0) {
             return toast.error("Please select a physical PDF or Excel file to upload.");
+        }
+
+        // Each file is already checked against MAX_STATEMENT_FILE_MB above, but
+        // several files together (multi-part statements) still travel as one
+        // JSON request — base64 inflates each by ~1/3, and the platform's own
+        // pipe (nginx + the API) tops out at 50MB total. 45MB of raw file
+        // bytes keeps the encoded request safely under that with room for the
+        // rest of the JSON payload, so this can never itself be the cause of
+        // the request-too-large failure this whole change exists to prevent.
+        const totalRawBytes = validFiles.reduce((sum, f) => sum + (f.fileSize || 0), 0);
+        const MAX_COMBINED_RAW_BYTES = 45 * 1024 * 1024;
+        if (totalRawBytes > MAX_COMBINED_RAW_BYTES) {
+            return toast.error(
+                `These ${validFiles.length} files add up to ${formatFileSize(totalRawBytes)}, over what we can submit together. `
+                + `Remove one and analyze it separately, or combine fewer parts per submission.`,
+                { duration: 8000 }
+            );
         }
 
         setLoading(true);
@@ -186,7 +234,22 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             // Collapse the wait for the next server tick.
             refresh();
         } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
+            // The pre-checks above (per-file and combined-size) should make a
+            // real 413 unreachable from here, but if the pipe is ever
+            // tightened again on the server side without this component
+            // being updated, surface something actionable instead of axios's
+            // raw "Network Error" (which is what a 413/oversized-body
+            // rejection looks like from here — no JSON body to read a
+            // message out of).
+            if (error.response?.status === 413 || (!error.response && /network/i.test(error.message || ''))) {
+                toast.error(
+                    'The upload was rejected as too large. Split the statement into smaller parts '
+                    + `(under ${MAX_STATEMENT_FILE_MB}MB each) and add each part separately.`,
+                    { duration: 8000 }
+                );
+            } else {
+                toast.error(error.response?.data?.error || error.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -365,9 +428,14 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             {/* Expando File UI (Only visible when isUploadOpen is true) */}
             {isUploadOpen && (
                 <div style={{ padding: '24px', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <UploadCloud size={18} color="var(--text-tertiary)" />
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 16, lineHeight: 1.5 }}>
+                        Each file must be under {MAX_STATEMENT_FILE_MB}MB. If your statement is larger, split it
+                        into smaller parts (e.g. one file per half-year) and add each part below with
+                        "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
 
                     {!isMsme && walletBalance < analyzeCost && (
@@ -389,7 +457,11 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                             onChange={e => handleFileUpload(index, e)}
                                             style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
                                         />
-                                        {file.fileName && <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>✓ Attached: {file.fileName}</div>}
+                                        {file.fileName && (
+                                            <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
+                                                ✓ Attached: {file.fileName}{file.fileSize != null ? ` (${formatFileSize(file.fileSize)})` : ''}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <input
