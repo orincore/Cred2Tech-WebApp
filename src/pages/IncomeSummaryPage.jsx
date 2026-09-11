@@ -99,16 +99,41 @@ const AddEntryInlineForm = ({ show, incomeTypes, saving, isMobile, onSubmit }) =
   );
 };
 
-// GST's own "latest year" figure is a trailing 12-month window, not a clean
+// GST's own "latest year" AMOUNT is a trailing 12-month window, not a clean
 // financial year (it routinely straddles two — see gst.parser.js's own
-// comment), so its fy_latest has always been a date-range string like "Aug
-// 2025 – Jul 2026", never a bare "FY 2025-26". That's fine as this row's
-// own period caption (Latest/Previous Year columns), but the dedicated FY
-// column must hold only an actual FY label — showing that same range there
-// too just doubles it up. Blank it out (an em dash) rather than fabricate a
-// single FY that doesn't genuinely apply to a figure spanning two.
+// comment), so it's shown under Latest/Previous Year with its real "Aug 2025
+// – Jul 2026"-style range as the period caption (rangeLatest/rangePrev
+// below) rather than a bare FY label — labeling a cross-FY sum with one FY
+// would misrepresent the amount next to it.
+// The FY column is a different, narrower question: "which closed Indian FY
+// does this pull's data belong to". For GST that's answered from the same
+// pull's own per-FY summaries (income.service.js's fy_turnover_latest_label/
+// fy_turnover_previous_label, sourced from gstAnalyticsSnapshot.service.js's
+// meaningfulFys — a real, >=6-months-filed closed FY, never fabricated).
+// Falls back to fy_latest/fy_prev (only ever a bare label for ITR/Bank, see
+// isBareFyLabel below) for the other two rows, which don't have a separate
+// closed-FY concept to prefer instead.
 const isBareFyLabel = (v) => typeof v === 'string' && /^FY\s?\d{4}-\d{2}$/i.test(v.trim());
 const fyColumnValue = (v) => (isBareFyLabel(v) ? v : '—');
+
+// One FY-column entry: the label, plus — only when the row supplies its own
+// FY-specific amount (currently just GST's fyAmountLatest/fyAmountPrev,
+// since that row's Latest/Previous Year amount above is a rolling-window
+// sum that doesn't equal this FY's own turnover) — the real value for that
+// FY right underneath it, so the column is self-contained instead of naming
+// a year with no way to tell what it was worth. ITR/Bank rows have no
+// fyAmount* (their Latest/Previous Year amount already IS this FY's own
+// figure), so they keep showing just the label, as before.
+const FyCellValue = ({ label, amount }) => {
+  const shown = fyColumnValue(label);
+  if (shown === '—') return '—';
+  return (
+    <>
+      {shown}
+      {amount != null && <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(amount)}</div>}
+    </>
+  );
+};
 
 // One block per applicant on the case, reusing the exact same two tables
 // (API Pulls, Manual Entries) the page always had — just repeated once per
@@ -153,7 +178,19 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
     : [
         {
           label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev,
-          fyLatest: app.gst_turnover?.fy_latest, fyPrev: app.gst_turnover?.fy_prev,
+          // FY column prefers the genuine closed-FY label (fy_turnover_*_label)
+          // over the rolling row's own fy_latest/fy_prev (a date range, not a
+          // bare label — always blanked by fyColumnValue below anyway). Falls
+          // back to fy_latest/fy_prev only when this pull has too little filed
+          // history to have produced a closed-FY summary at all.
+          fyLatest: app.gst_turnover?.fy_turnover_latest_label || app.gst_turnover?.fy_latest,
+          fyPrev: app.gst_turnover?.fy_turnover_previous_label || app.gst_turnover?.fy_prev,
+          // The FY column's own amount — genuinely different from
+          // latest/prev above (the rolling-window sum), so it's carried
+          // separately and rendered under the FY label itself rather than
+          // implying the two numbers are the same figure.
+          fyAmountLatest: app.gst_turnover?.fy_turnover_latest,
+          fyAmountPrev: app.gst_turnover?.fy_turnover_previous,
           rangeLatest: app.gst_turnover?.fy_latest_range || app.gst_turnover?.fy_latest,
           rangePrev: app.gst_turnover?.fy_prev_range || app.gst_turnover?.fy_prev,
           source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)'
@@ -161,6 +198,12 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
         {
           label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev,
           fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev,
+          // Unlike GST's rolling-window row, ITR's Latest Year amount above
+          // already IS this FY's own PAT (a filed return always covers the
+          // complete Apr-Mar year — see this file's own comment further up),
+          // so it's safe to reuse the same value as the FY column's amount
+          // rather than needing a separate closed-FY figure the way GST does.
+          fyAmountLatest: app.net_profit?.latest,
           rangeLatest: app.net_profit?.fy_latest_range || app.net_profit?.fy_latest,
           rangePrev: app.net_profit?.fy_prev_range || app.net_profit?.fy_prev,
           source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)'
@@ -225,7 +268,7 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                   <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  FY: {fyColumnValue(row.fyLatest)} / {fyColumnValue(row.fyPrev)}
+                  FY: <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
                 </div>
               </div>
             ))}
@@ -270,8 +313,7 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                       <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      <div>{fyColumnValue(row.fyLatest)}</div>
-                      <div>{fyColumnValue(row.fyPrev)}</div>
+                      <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
                     </td>
                     <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
                   </tr>
