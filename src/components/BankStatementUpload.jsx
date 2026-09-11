@@ -29,7 +29,6 @@ const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString(
 // backend/vendor would actually accept; this is a product choice, not a
 // reflection of either of their real caps.
 const MAX_STATEMENT_FILE_MB = 5;
-const MAX_STATEMENT_FILE_BYTES = MAX_STATEMENT_FILE_MB * 1024 * 1024;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -190,7 +189,17 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         const file = e.target.files[0];
         if (!file) return;
 
-        if (file.size > MAX_STATEMENT_FILE_BYTES) {
+        // Compare against the size rounded to 1 decimal MB — the same
+        // rounding formatFileSize uses for the rejection message below.
+        // Without this, a file of e.g. 5,250,000 bytes fails a raw-byte
+        // check against MAX_STATEMENT_FILE_BYTES (5,242,880) yet its own
+        // rejection toast, built from that same rounded display value,
+        // reads "is 5.0 MB — over the 5MB-per-file limit" — a
+        // self-contradiction that looks exactly like "it's under 5MB but
+        // still errors". Rounding first keeps the check and the message
+        // it produces in agreement at the boundary.
+        const roundedFileMB = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+        if (roundedFileMB > MAX_STATEMENT_FILE_MB) {
             // Reject before ever reading the file — no point base64-encoding
             // a file we already know Signzy will refuse. Clears whatever was
             // in this slot before (so a stale "Attached" checkmark from a
@@ -503,8 +512,8 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <UploadCloud size={18} color="var(--text-tertiary)" />
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 16, lineHeight: 1.5 }}>
-                        Each file must be under {MAX_STATEMENT_FILE_MB}MB. If your statement is larger, split it
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span>. If your statement is larger, split it
                         into smaller parts (e.g. one file per half-year) and add each part below with
                         "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
@@ -520,11 +529,14 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             <div key={index} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Select Bank Statement</label>
+                                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB)</span>
+                                        </label>
                                         <input
                                             type="file"
                                             accept=".pdf,.xlsx,.xls"
                                             className="form-control"
+                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB`}
                                             onChange={e => handleFileUpload(index, e)}
                                             style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
                                         />
