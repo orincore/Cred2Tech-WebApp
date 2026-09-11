@@ -43,6 +43,7 @@ const AdminSubscriptionPlansPage = lazy(() => import('../pages/AdminSubscription
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
 const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetail'));
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
+const AdminBureauProviderSettingsPage = lazy(() => import('../pages/AdminBureauProviderSettingsPage'));
 const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'));
 const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
@@ -276,6 +277,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/logs" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SuperadminApiLogsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/bureau-providers" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminBureauProviderSettingsPage /></ProtectedRoute>
             } />
             <Route path="/admin/lenders" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><LenderConfigPage /></ProtectedRoute>

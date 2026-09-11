@@ -24,6 +24,7 @@ import {
   Trash2,
   Tag,
   Bell,
+  ShieldCheck,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -123,6 +124,13 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-bureau-providers',
+    label: 'Bureau API Settings',
+    path: '/admin/bureau-providers',
+    icon: ShieldCheck,
     roles: ['SUPER_ADMIN'],
   },
   {
