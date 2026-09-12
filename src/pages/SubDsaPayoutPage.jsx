@@ -153,13 +153,14 @@ function GenerateInvoiceModal({ selectedIds, allLedgers, onClose, onSuccess }) {
   const selectedRows = allLedgers.filter(l => selectedIds.includes(l.id));
   const partners = [...new Set(selectedRows.map(l => l.sub_dsa_user_id))];
   const months = [...new Set(selectedRows.map(l => l.payout_period || l.calculation_metadata?.payout_period).filter(Boolean))];
-  const validSelection = selectedRows.length === selectedIds.length && partners.length === 1 && months.length === 1 && selectedRows.every(l => l.status === 'DRAFT');
+  const products = [...new Set(selectedRows.map(l => l.product_type || l.calculation_metadata?.product_type))];
+  const validSelection = selectedRows.length === selectedIds.length && partners.length === 1 && months.length === 1 && products.length === 1 && selectedRows.every(l => l.status === 'DRAFT');
   const subDsaUserId = partners[0];
   const monthYear = months[0];
 
   const handleGenerate = async () => {
     if (!validSelection) {
-      toast.error('Select only DRAFT entries for one Sub-Sourcing Partner and one payout month.');
+      toast.error('Select only DRAFT entries for one Sub-Sourcing Partner, one payout month, and one product.');
       return;
     }
     setSaving(true);
@@ -185,7 +186,7 @@ function GenerateInvoiceModal({ selectedIds, allLedgers, onClose, onSuccess }) {
             {selectedIds.length} entry(ies) selected. All must be in DRAFT status.
           </div>
           <div style={{ fontSize: 13, color: validSelection ? 'var(--text-secondary)' : 'var(--error)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: '10px 14px' }}>
-            {validSelection ? `Invoice will be generated for ${selectedRows[0]?.user?.name || 'selected Sub-Sourcing Partner'} / ${monthYear}.` : 'Selection must contain only DRAFT entries for one Sub-Sourcing Partner and one payout month.'}
+            {validSelection ? `Invoice will be generated for ${selectedRows[0]?.user?.name || 'selected Sub-Sourcing Partner'} / ${monthYear} / ${products[0]}.` : 'Selection must contain only DRAFT entries for one Sub-Sourcing Partner, one payout month, and one product.'}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
@@ -215,7 +216,7 @@ function SummaryRow({ label, data }) {
 
 function SubDsaCard({ subDsa, ledgers, selectedIds, onToggleSelect, onUpdate, isAdmin }) {
   const [expanded, setExpanded] = useState(true);
-  const totalVolume = ledgers.reduce((s, l) => s + parseFloat(l.dsa_earned_amount || 0), 0);
+  const totalVolume = ledgers.reduce((s, l) => s + parseFloat(l.disbursed_amount || 0), 0);
   const totalPayout = ledgers.reduce((s, l) => s + parseFloat(l.sub_dsa_payout || 0), 0);
   const hasPddPending = ledgers.some(l => l.status === 'PDD_PENDING');
 
@@ -280,7 +281,7 @@ function SubDsaCard({ subDsa, ledgers, selectedIds, onToggleSelect, onUpdate, is
                       {l.status === 'PDD_PENDING' && <span className="badge" style={{ marginLeft: 6, fontSize: 10, color: 'var(--error)', background: 'var(--error-bg)' }}>PDD</span>}
                     </td>
                     <td data-label="Product">{l.product_type || l.calculation_metadata?.product_type || '—'}</td>
-                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.dsa_earned_amount)}</td>
+                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.disbursed_amount)}</td>
                     <td data-label="Payout" style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>{fmt(l.sub_dsa_payout)}</td>
                     <td data-label="Subvention" style={{ textAlign: 'right', color: subvent > 0 ? 'var(--error)' : 'var(--text-tertiary)' }}>{subvent > 0 ? `-${fmt(subvent)}` : '—'}</td>
                     <td data-label="Net Payable" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(l.net_payable)}</td>
@@ -361,10 +362,12 @@ export default function SubDsaPayoutPage() {
       if (prev.includes(id)) return prev.filter(x => x !== id);
       const currentRows = ledgers.filter(l => prev.includes(l.id));
       const rowMonth = row?.payout_period || row?.calculation_metadata?.payout_period;
+      const rowProduct = row?.product_type || row?.calculation_metadata?.product_type;
       const samePartner = currentRows.every(l => l.sub_dsa_user_id === row?.sub_dsa_user_id);
       const sameMonth = currentRows.every(l => (l.payout_period || l.calculation_metadata?.payout_period) === rowMonth);
-      if (currentRows.length && (!samePartner || !sameMonth)) {
-        toast.error('Invoice selection must stay within one Sub-Sourcing Partner and one payout month.');
+      const sameProduct = currentRows.every(l => (l.product_type || l.calculation_metadata?.product_type) === rowProduct);
+      if (currentRows.length && (!samePartner || !sameMonth || !sameProduct)) {
+        toast.error('Invoice selection must stay within one Sub-Sourcing Partner, one payout month, and one product type.');
         return prev;
       }
       return [...prev, id];

@@ -20,6 +20,8 @@ const STATUS_META = {
   CANCELLED: { label: 'Rejected', color: 'var(--error)', bg: 'var(--error-bg)' },
 };
 
+const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
+
 // Backend accepts any status value with no transition validation (see
 // commissionOperations.controller.js#updateLedgerStatus) — this map keeps the
 // UI from offering illegal jumps (e.g. PAID back to PENDING), matching the
@@ -109,7 +111,7 @@ function UpdateInvoiceStatusModal({ caseData, onClose, onSuccess }) {
 function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSuccess }) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ month: availableMonths[0] || '', lenderName: '', product: 'All Products' });
+  const [filters, setFilters] = useState({ month: availableMonths[0] || '', lenderName: '', product: 'LAP' });
   const [candidates, setCandidates] = useState([]);
   const [selectedCaseIds, setSelectedCaseIds] = useState(new Set());
   const [candidateLoading, setCandidateLoading] = useState(false);
@@ -204,9 +206,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Product</label>
                   <select className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
-                    <option value="All Products">All Products</option>
-                    <option value="LAP">LAP</option>
-                    <option value="HL">Home Loan</option>
+                    {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
                   </select>
                 </div>
               </div>
@@ -481,8 +481,7 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
               <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Product</label>
               <select className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
                 <option value="All Products">All Products</option>
-                <option value="LAP">LAP</option>
-                <option value="HL">Home Loan</option>
+                {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
               </select>
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
@@ -750,7 +749,7 @@ export default function LenderCommissionPage() {
                 <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
                 <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.product || 'All Products'} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
                   <option value="All Products">All Products</option>
-                  <option value="LAP">LAP</option><option value="HL">Home Loan</option><option value="TL">Term Loan</option><option value="BL">Business Loan</option>
+                  {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
                 </select>
               </div>
               <div className="search-field" style={{ flex: 2, minWidth: 170 }}>

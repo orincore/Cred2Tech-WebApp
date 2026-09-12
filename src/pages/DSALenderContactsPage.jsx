@@ -556,7 +556,9 @@ export default function DSALenderContactsPage() {
                       {/* Product Tabs */}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24, borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
                         {PRODUCT_TYPES.map(pt => {
-                          const isConfigured = !!getRuleForLenderProduct(lender.id, pt);
+                          const existingRule = getRuleForLenderProduct(lender.id, pt);
+                          const isConfigured = !!existingRule;
+                          const isScheduled = isConfigured && existingRule.display_status === 'SCHEDULED';
                           const isActive = activeProduct === pt;
                           return (
                             <button key={pt} onClick={() => setActiveProductTabs({...activeProductTabs, [lender.id]: pt})} style={{
@@ -567,7 +569,12 @@ export default function DSALenderContactsPage() {
                               display: 'flex', alignItems: 'center', gap: 6
                             }}>
                               {pt}
-                              {isConfigured ? <Check size={12} color={isActive ? '#A7F3D0' : 'var(--success)'} /> : <span style={{ fontSize: 10, color: isActive ? '#C7D2FE' : 'var(--text-tertiary)' }}>Not set</span>}
+                              {isConfigured
+                                ? isScheduled
+                                  ? <span style={{ fontSize: 10, color: isActive ? '#FDE68A' : 'var(--warning)', fontWeight: 700 }} title={`Rule effective from ${existingRule.effective_from ? new Date(existingRule.effective_from).toLocaleDateString('en-IN') : '?'}`}>⏰ Sched.</span>
+                                  : <Check size={12} color={isActive ? '#A7F3D0' : 'var(--success)'} />
+                                : <span style={{ fontSize: 10, color: isActive ? '#C7D2FE' : 'var(--text-tertiary)' }}>Not set</span>
+                              }
                             </button>
                           );
                         })}
