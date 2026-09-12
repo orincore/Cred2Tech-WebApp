@@ -30,14 +30,6 @@ const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString(
 // backend/vendor would actually accept; this is a product choice, not a
 // reflection of either of their real caps.
 const MAX_STATEMENT_FILE_MB = 5;
-// Signzy production's real page cap for Bank Statement Analysis (Custom
-// Plan) — confirmed live 2026-09-11: a 251-page statement came back FAILED
-// with "File exceeds max limit of 80 pages allowed in Custom Plan". Checked
-// server-side (see POST /external/bank/validate-file) since there's no PDF
-// parser on the client — this app has no pdf.js/pdf-lib dependency, and
-// adding one just for a page count isn't worth the bundle weight when the
-// backend already has pdf-parse for exactly this.
-const MAX_STATEMENT_PAGES = 80;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -186,10 +178,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // Store physical file data
     const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const [loading, setLoading] = useState(false);
-    // Index of the file row currently being page-counted server-side —
-    // between picking a file and it either sticking or getting rejected.
+    // Index of the file row currently being validated server-side — between
+    // picking a file and it either sticking or getting rejected.
     const [validatingIndex, setValidatingIndex] = useState(null);
-    // A rejected file (over the 5MB/80-page limit) gets a blocking popup
+    // A rejected file (over the 5MB per-file limit) gets a blocking popup
     // with the fix, not a toast — there's no room in a toast to actually
     // walk someone through splitting and re-adding the statement.
     const [fileLimitModal, setFileLimitModal] = useState({ open: false, fileName: '', reasonDetail: '' });
@@ -245,10 +237,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         reader.onload = async () => {
             const base64Data = reader.result.split(',')[1];
 
-            // Page-count gate (80 pages, PDFs only) — server-side, since
-            // there's no PDF parser on the client. Runs after the free
-            // client-side size check above, before this file is allowed to
-            // stick, so an over-length statement gets the same instant,
+            // Server-side validation (file size; page count for PDFs is
+            // returned for display only, no limit enforced on it) — runs
+            // after the free client-side size check above, before this file
+            // is allowed to stick, so a rejected file gets the same instant,
             // actionable rejection as an oversized one instead of only
             // failing minutes later once actually submitted to Signzy.
             setValidatingIndex(index);
@@ -578,7 +570,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
-                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span> and <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_PAGES} pages</span>. If your statement is larger, split it
+                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span>. If your statement is larger, split it
                         into smaller parts (e.g. one file per half-year) and add each part below with
                         "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
@@ -595,13 +587,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB, {MAX_STATEMENT_PAGES} pages)</span>
+                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB)</span>
                                         </label>
                                         <input
                                             type="file"
                                             accept=".pdf,.xlsx,.xls"
                                             className="form-control"
-                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB, max ${MAX_STATEMENT_PAGES} pages`}
+                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB`}
                                             disabled={validatingIndex === index}
                                             onChange={e => handleFileUpload(index, e)}
                                             style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
