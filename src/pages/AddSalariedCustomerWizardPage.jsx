@@ -149,7 +149,7 @@ const AddSalariedCustomerWizardPage = () => {
           .forEach(d => { reports[d.applicant_id] = d; });
         setBureauReports(reports);
       })
-      .catch(() => {}); // non-fatal — just no download button
+      .catch(() => { }); // non-fatal — just no download button
   }, [caseId, formData.applicants]);
 
   const handleDownloadReport = async (applicantId) => {
@@ -329,7 +329,7 @@ const AddSalariedCustomerWizardPage = () => {
     if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
       consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
         .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
-        .catch(() => {});
+        .catch(() => { });
     }
   };
 
@@ -912,222 +912,222 @@ const AddSalariedCustomerWizardPage = () => {
         }
       `}</style>
       <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {caseId ? (formData.business_name ? toTitleCase(formData.business_name) : 'Resume Salaried Case') : 'Add Salaried Customer'}
-          </h1>
-        </div>
-        {caseId && (
-          <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Check size={16} /> Auto-saved
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {caseId ? (formData.business_name ? toTitleCase(formData.business_name) : 'Resume Salaried Case') : 'Add Salaried Customer'}
+            </h1>
           </div>
-        )}
-      </div>
-
-      <CaseWizardStepper
-        currentStep={currentStep}
-        caseId={caseId}
-        steps={SALARIED_ORIGIN_STEPS}
-        onStepClick={(step) => {
-          // This page only ever renders content for its own steps 1-3 —
-          // steps 4-7 (Income Summary onward) live on AddCustomerWizardPage,
-          // same handoff used after completing step 3 normally.
-          if (step <= 3) setCurrentStep(step);
-          else navigate(`/customers/add?caseId=${caseId}&step=${step}`);
-        }}
-      />
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {currentStep === 1 && (
-          <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Step 1 sub-navigation — Personal Details / Co-Applicants, both still "Step 1" */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setStep1SubPage('business')}
-                className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 180px', fontWeight: 600 }}
-              >
-                1. Personal Details
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep1SubPage('coapplicants')}
-                className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 180px', fontWeight: 600 }}
-              >
-                2. Co-Applicants
-              </button>
+          {caseId && (
+            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Check size={16} /> Auto-saved
             </div>
+          )}
+        </div>
 
-            {step1SubPage === 'business' && (
-            <>
-            {duplicateWarning && !caseId && (
-              <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Search size={22} color="var(--warning)" />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                      <div>
-                        <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
+        <CaseWizardStepper
+          currentStep={currentStep}
+          caseId={caseId}
+          steps={SALARIED_ORIGIN_STEPS}
+          onStepClick={(step) => {
+            // This page only ever renders content for its own steps 1-3 —
+            // steps 4-7 (Income Summary onward) live on AddCustomerWizardPage,
+            // same handoff used after completing step 3 normally.
+            if (step <= 3) setCurrentStep(step);
+            else navigate(`/customers/add?caseId=${caseId}&step=${step}`);
+          }}
+        />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {currentStep === 1 && (
+            <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Step 1 sub-navigation — Personal Details / Co-Applicants, both still "Step 1" */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep1SubPage('business')}
+                  className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 180px', fontWeight: 600 }}
+                >
+                  1. Personal Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep1SubPage('coapplicants')}
+                  className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 180px', fontWeight: 600 }}
+                >
+                  2. Co-Applicants
+                </button>
+              </div>
+
+              {step1SubPage === 'business' && (
+                <>
+                  {duplicateWarning && !caseId && (
+                    <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Search size={22} color="var(--warning)" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                            <div>
+                              <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
+                              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
+                            </div>
+                            <button type="button" onClick={() => navigate(`/customers/${duplicateWarning.id}`)} className="btn btn-secondary btn-sm">View Existing Profile</button>
+                          </div>
+
+                          {duplicateWarning.summary && (
+                            <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
+                              {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
+                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
+                              {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
+                            </div>
+                          )}
+
+                          <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
+                            {saving ? 'Creating...' : 'Continue as New Case →'}
+                          </button>
+                        </div>
                       </div>
-                      <button type="button" onClick={() => navigate(`/customers/${duplicateWarning.id}`)} className="btn btn-secondary btn-sm">View Existing Profile</button>
+                    </div>
+                  )}
+
+                  {/* Primary Applicant Card */}
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700 }}>Primary Applicant</h3>
+                      <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Salaried Individual Details</span>
                     </div>
 
-                    {duplicateWarning.summary && (
-                      <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
-                        {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                        {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
-                        {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
-                      </div>
-                    )}
-
-                    <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
-                      {saving ? 'Creating...' : 'Continue as New Case →'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Primary Applicant Card */}
-            <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Primary Applicant</h3>
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Salaried Individual Details</span>
-              </div>
-
-              <div style={{ padding: 24 }}>
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="PAN Number" name="business_pan" required disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input
-                        type="text"
-                        value={formData.business_pan}
-                        onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
-                        onBlur={() => checkPanDuplicate(formData.business_pan)}
-                        className="form-control"
-                        placeholder="ABCDE1234F"
-                        disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                      {formData.pan_verified ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CheckCircle2 size={13} /> Verified
-                          </span>
-                          {/* A mistyped PAN must be correctable, not permanently
+                    <div style={{ padding: 24 }}>
+                      <div className="grid-2" style={{ marginBottom: 24 }}>
+                        <FormField label="PAN Number" name="business_pan" required disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              value={formData.business_pan}
+                              onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
+                              onBlur={() => checkPanDuplicate(formData.business_pan)}
+                              className="form-control"
+                              placeholder="ABCDE1234F"
+                              disabled={(!!caseId || formData.mobile_verified) && !panEditUnlocked}
+                              style={{ textTransform: 'uppercase' }}
+                            />
+                            {formData.pan_verified ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <CheckCircle2 size={13} /> Verified
+                                </span>
+                                {/* A mistyped PAN must be correctable, not permanently
                               locked once a case exists — same "Edit" affordance
                               the mobile field already has. */}
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => { setPanEditUnlocked(true); setFormData(prev => ({ ...prev, pan_verified: false })); }}
-                            title="Edit PAN number"
-                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <Pencil size={13} /> Edit
-                          </button>
-                        </div>
-                      ) : panVerifying ? (
-                        <PullingIndicator label="Verifying PAN…" />
-                      ) : panVerifyFailed ? (
-                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <AlertCircle size={13} /> PAN verification failed — fix and re-enter
-                        </span>
-                      ) : formData.mobile_verified ? (
-                        // Reachable the instant the customer approves the
-                        // consent request sent from the Mobile Number field
-                        // below (mobile_verified is now set on consent
-                        // grant) — the panAutoVerifyAttempted effect fires
-                        // Verify PAN automatically from here, same as
-                        // AddCustomerWizardPage's primary PAN auto-verify.
-                        // No manual click needed (and none was ever safe
-                        // before consent was granted, since that would pull
-                        // the applicant's real name/DOB before they'd
-                        // consented to it).
-                        !isBulkInjectedCase && <PullingIndicator label="Queued…" />
-                      ) : null}
-                    </div>
-                  </FormField>
-
-                  <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input
-                        type="tel"
-                        value={formData.business_mobile}
-                        onChange={e => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setFormData({ ...formData, business_mobile: val });
-                        }}
-                        className="form-control"
-                        placeholder="9820012345"
-                        disabled={formData.mobile_verified}
-                      />
-                      {formData.mobile_verified && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
-                            <CheckCircle2 size={18} /> Verified
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => { setPanEditUnlocked(true); setFormData(prev => ({ ...prev, pan_verified: false })); }}
+                                  title="Edit PAN number"
+                                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <Pencil size={13} /> Edit
+                                </button>
+                              </div>
+                            ) : panVerifying ? (
+                              <PullingIndicator label="Verifying PAN…" />
+                            ) : panVerifyFailed ? (
+                              <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <AlertCircle size={13} /> PAN verification failed — fix and re-enter
+                              </span>
+                            ) : formData.mobile_verified ? (
+                              // Reachable the instant the customer approves the
+                              // consent request sent from the Mobile Number field
+                              // below (mobile_verified is now set on consent
+                              // grant) — the panAutoVerifyAttempted effect fires
+                              // Verify PAN automatically from here, same as
+                              // AddCustomerWizardPage's primary PAN auto-verify.
+                              // No manual click needed (and none was ever safe
+                              // before consent was granted, since that would pull
+                              // the applicant's real name/DOB before they'd
+                              // consented to it).
+                              !isBulkInjectedCase && <PullingIndicator label="Queued…" />
+                            ) : null}
                           </div>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => { setFormData({ ...formData, mobile_verified: false }); setConsentRequest(null); }}
-                            title="Edit mobile number (you'll need to request consent again)"
-                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <Pencil size={13} /> Edit
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </FormField>
-                </div>
+                        </FormField>
 
-                <div className="grid-2">
-                  <FormField label="Email Address" name="business_email" required>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input
-                        type="email"
-                        value={formData.business_email}
-                        onChange={e => setFormData({ ...formData, business_email: e.target.value })}
-                        className="form-control"
-                        placeholder="arjun@example.com"
-                        style={{ flex: 1, minWidth: 160 }}
-                      />
-                      {/* The actual Request Consent action (and its
+                        <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                              type="tel"
+                              value={formData.business_mobile}
+                              onChange={e => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                setFormData({ ...formData, business_mobile: val });
+                              }}
+                              className="form-control"
+                              placeholder="9820012345"
+                              disabled={formData.mobile_verified}
+                            />
+                            {formData.mobile_verified && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                                  <CheckCircle2 size={18} /> Verified
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => { setFormData({ ...formData, mobile_verified: false }); setConsentRequest(null); }}
+                                  title="Edit mobile number (you'll need to request consent again)"
+                                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <Pencil size={13} /> Edit
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </FormField>
+                      </div>
+
+                      <div className="grid-2">
+                        <FormField label="Email Address" name="business_email" required>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                              type="email"
+                              value={formData.business_email}
+                              onChange={e => setFormData({ ...formData, business_email: e.target.value })}
+                              className="form-control"
+                              placeholder="arjun@example.com"
+                              style={{ flex: 1, minWidth: 160 }}
+                            />
+                            {/* The actual Request Consent action (and its
                           sending/waiting/resend states) now lives in this
                           sub-page's footer, in the same slot the Save & Next
                           button occupies once consent is granted — this
                           field just mirrors the end result once it lands. */}
-                      {formData.mobile_verified && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
-                          <CheckCircle2 size={18} /> Consented
-                        </div>
-                      )}
-                    </div>
-                  </FormField>
+                            {formData.mobile_verified && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                                <CheckCircle2 size={18} /> Consented
+                              </div>
+                            )}
+                          </div>
+                        </FormField>
 
-                  <FormField label="Pincode" name="pincode" required>
-                    <input
-                      type="text"
-                      value={formData.pincode || ''}
-                      onChange={e => setFormData({ ...formData, pincode: e.target.value })}
-                      onBlur={handlePincodeBlur}
-                      className="form-control"
-                      placeholder="e.g. 560026"
-                      maxLength={6}
-                    />
-                  </FormField>
-                </div>
+                        <FormField label="Pincode" name="pincode" required>
+                          <input
+                            type="text"
+                            value={formData.pincode || ''}
+                            onChange={e => setFormData({ ...formData, pincode: e.target.value })}
+                            onBlur={handlePincodeBlur}
+                            className="form-control"
+                            placeholder="e.g. 400004"
+                            maxLength={6}
+                          />
+                        </FormField>
+                      </div>
 
-                {/* Hidden until consent is actually granted — before that,
+                      {/* Hidden until consent is actually granted — before that,
                     business_name/dob are always empty (they're only ever
                     auto-fetched by PAN verification, which itself only
                     fires once mobile_verified flips true), so showing two
@@ -1135,376 +1135,376 @@ const AddSalariedCustomerWizardPage = () => {
                     was just noise. Reusing index.css's existing slideUp
                     keyframe for the reveal keeps this consistent with the
                     rest of the app rather than introducing a new animation. */}
-                {formData.mobile_verified && (
-                  <div className="grid-2" style={{ marginTop: 24, animation: 'slideUp 0.35s ease' }}>
-                    <FormField label="Full Name (As Per PAN)" name="business_name" disabled>
-                      <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
-                    </FormField>
+                      {formData.mobile_verified && (
+                        <div className="grid-2" style={{ marginTop: 24, animation: 'slideUp 0.35s ease' }}>
+                          <FormField label="Full Name (As Per PAN)" name="business_name" disabled>
+                            <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
+                          </FormField>
 
-                    {/* Never user-editable — always auto-fetched by PAN
+                          {/* Never user-editable — always auto-fetched by PAN
                         verification by the time this is visible at all — so
                         a plain read-only text field (not a date-picker,
                         which implies an editable value) showing a
                         human-formatted date. */}
-                    <FormField label="Date Of Birth" name="dob" disabled>
-                      <input
-                        type="text"
-                        value={formData.dob ? formatDate(formData.dob) : ''}
-                        className="form-control"
-                        placeholder="Autofetched via PAN"
-                        disabled
-                        readOnly
-                      />
-                    </FormField>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-              {!formData.mobile_verified ? (
-                consentRequesting ? (
-                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
-                ) : consentRequest ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <PullingIndicator label="Waiting for customer to approve consent…" />
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleRequestConsent}
-                    disabled={saving || !step1ConsentFieldsValid || walletBalance < costs.PAN_FETCH}
-                    className="btn btn-primary btn-lg"
-                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                  >
-                    {`Request Consent (~${costs.PAN_FETCH} Cr)`}
-                  </button>
-                )
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-lg"
-                  onClick={() => setStep1SubPage('coapplicants')}
-                  disabled={!step1Valid}
-                  title={!step1Valid ? 'Complete every required field before continuing' : undefined}
-                >
-                  Save & Next
-                </button>
-              )}
-            </div>
-            </>
-            )}
-
-            {step1SubPage === 'coapplicants' && (
-            <>
-            {/* Co-Applicants Card */}
-            <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Add each co-applicant's details. You can specify if they are Salaried or Self-Employed.</p>
-                </div>
-                <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
-              </div>
-
-              <div style={{ padding: 24 }}>
-                {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
-                    No Co-Applicants appended to this profile yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    {formData.applicants.map((app, realIdx) => {
-                      if (app.type !== 'CO_APPLICANT') return null;
-                      const coApplicantDisplayIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
-
-                      return (
-                        <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                            <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantDisplayIdx + 1}</h4>
-                            <button type="button" className="btn btn-danger btn-sm" onClick={() => removeApplicant(realIdx)}>Remove ×</button>
-                          </div>
-
-                          <div className="grid-2" style={{ marginBottom: 16 }}>
-                            <FormField label="PAN Number" name={`copan_${realIdx}`}>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                                <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }} disabled={app.otp_verified && !coappPanEditUnlockedMap[realIdx]} placeholder="ABCDE1234F" />
-                                {app.pan_verified ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                                      <CheckCircle2 size={16} /> Verified
-                                    </span>
-                                    <button
-                                      type="button"
-                                      className="btn btn-ghost btn-sm"
-                                      onClick={() => {
-                                        setCoappPanEditUnlockedMap(prev => ({ ...prev, [realIdx]: true }));
-                                        updateApplicantRow(realIdx, 'pan_verified', false);
-                                      }}
-                                      title="Edit PAN number"
-                                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                                    >
-                                      <Pencil size={12} /> Edit
-                                    </button>
-                                  </div>
-                                ) : coappPanVerifyingMap[realIdx] ? (
-                                  <PullingIndicator label="Verifying PAN…" />
-                                ) : app.otp_verified && !isBulkInjectedCase && (app.pan_number || '').length === 10 ? (
-                                  // Auto-verified the instant this co-applicant's own
-                                  // consent is granted (coappPanAutoVerifyAttempted
-                                  // effect) — no manual click needed, same as the
-                                  // primary applicant above.
-                                  <PullingIndicator label="Queued…" />
-                                ) : null}
-                              </div>
-                            </FormField>
-                            <FormField label="Mobile Number" name={`comob_${realIdx}`}>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <input type="tel" value={app.mobile || ''} onChange={e => {
-                                  const val = e.target.value.replace(/\D/g, '');
-                                  updateApplicantRow(realIdx, 'mobile', val);
-                                }} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
-                                {app.otp_verified && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
-                                    <CheckCircle2 size={16} /> Verified
-                                    <button
-                                      type="button"
-                                      className="btn btn-ghost btn-sm"
-                                      onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
-                                      title="Edit mobile number (you'll need to request consent again)"
-                                      style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
-                                    >
-                                      <Pencil size={12} /> Edit
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </FormField>
-                          </div>
-
-                          <div className="grid-3" style={{ marginBottom: 16 }}>
-                            <FormField label="Employment Type" name={`coemp_${realIdx}`}>
-                              <select className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
-                                <option value="SALARIED">Salaried</option>
-                                <option value="SELF_EMPLOYED">Self Employed</option>
-                                <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                              </select>
-                            </FormField>
-                            <FormField label="Pincode" name={`copincode_${realIdx}`} required>
-                              <input
-                                type="text"
-                                value={app.pincode || ''}
-                                onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)}
-                                className="form-control"
-                                placeholder="560026"
-                                maxLength={6}
-                              />
-                            </FormField>
-                            <FormField label="Email" name={`coemail_${realIdx}`}>
-                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
-                                {!app.otp_verified ? (
-                                  coappConsentRequesting[realIdx] ? (
-                                    <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
-                                  ) : coappConsent[realIdx] ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                      <PullingIndicator label="Waiting for approval…" />
-                                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className="btn btn-primary btn-sm"
-                                      onClick={() => handleRequestCoapplicantConsent(realIdx)}
-                                      style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
-                                      disabled={saving || walletBalance < costs.PAN_FETCH}
-                                      title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                                    >
-                                      {`Request Consent (~${costs.PAN_FETCH} Cr)`}
-                                    </button>
-                                  )
-                                ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
-                                    <CheckCircle2 size={16} /> Consented
-                                  </div>
-                                )}
-                              </div>
-                            </FormField>
-                          </div>
-
-                          <div className="grid-2">
-                            <FormField label="Full Name" name={`coname_${realIdx}`}>
-                              <input type="text" value={app.name || ''} onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)} className="form-control" placeholder="Enter Full Name" />
-                            </FormField>
-                            <FormField label="Date Of Birth" name={`codob_${realIdx}`}>
-                              <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
-                            </FormField>
-                          </div>
+                          <FormField label="Date Of Birth" name="dob" disabled>
+                            <input
+                              type="text"
+                              value={formData.dob ? formatDate(formData.dob) : ''}
+                              className="form-control"
+                              placeholder="Autofetched via PAN"
+                              disabled
+                              readOnly
+                            />
+                          </FormField>
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
-                {saving ? 'Processing...' : 'Save & Next'}
-              </button>
-            </div>
-            </>
-            )}
-          </form>
-        )}
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                    {!formData.mobile_verified ? (
+                      consentRequesting ? (
+                        <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                      ) : consentRequest ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <PullingIndicator label="Waiting for customer to approve consent…" />
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRequestConsent}
+                          disabled={saving || !step1ConsentFieldsValid || walletBalance < costs.PAN_FETCH}
+                          className="btn btn-primary btn-lg"
+                          title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                        >
+                          {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-lg"
+                        onClick={() => setStep1SubPage('coapplicants')}
+                        disabled={!step1Valid}
+                        title={!step1Valid ? 'Complete every required field before continuing' : undefined}
+                      >
+                        Save & Next
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
 
-        {currentStep === 2 && (
-          <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Bureau Verification */}
-            <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bureau Verification</h3>
-                <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Verify credit scores before analysis</p>
+              {step1SubPage === 'coapplicants' && (
+                <>
+                  {/* Co-Applicants Card */}
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
+                        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Add each co-applicant's details. You can specify if they are Salaried or Self-Employed.</p>
+                      </div>
+                      <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
+                    </div>
+
+                    <div style={{ padding: 24 }}>
+                      {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
+                          No Co-Applicants appended to this profile yet.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                          {formData.applicants.map((app, realIdx) => {
+                            if (app.type !== 'CO_APPLICANT') return null;
+                            const coApplicantDisplayIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
+
+                            return (
+                              <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                  <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantDisplayIdx + 1}</h4>
+                                  <button type="button" className="btn btn-danger btn-sm" onClick={() => removeApplicant(realIdx)}>Remove ×</button>
+                                </div>
+
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="PAN Number" name={`copan_${realIdx}`}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                      <input type="text" value={app.pan_number || ''} onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())} className="form-control" style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }} disabled={app.otp_verified && !coappPanEditUnlockedMap[realIdx]} placeholder="ABCDE1234F" />
+                                      {app.pan_verified ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                            <CheckCircle2 size={16} /> Verified
+                                          </span>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => {
+                                              setCoappPanEditUnlockedMap(prev => ({ ...prev, [realIdx]: true }));
+                                              updateApplicantRow(realIdx, 'pan_verified', false);
+                                            }}
+                                            title="Edit PAN number"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                          >
+                                            <Pencil size={12} /> Edit
+                                          </button>
+                                        </div>
+                                      ) : coappPanVerifyingMap[realIdx] ? (
+                                        <PullingIndicator label="Verifying PAN…" />
+                                      ) : app.otp_verified && !isBulkInjectedCase && (app.pan_number || '').length === 10 ? (
+                                        // Auto-verified the instant this co-applicant's own
+                                        // consent is granted (coappPanAutoVerifyAttempted
+                                        // effect) — no manual click needed, same as the
+                                        // primary applicant above.
+                                        <PullingIndicator label="Queued…" />
+                                      ) : null}
+                                    </div>
+                                  </FormField>
+                                  <FormField label="Mobile Number" name={`comob_${realIdx}`}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <input type="tel" value={app.mobile || ''} onChange={e => {
+                                        const val = e.target.value.replace(/\D/g, '');
+                                        updateApplicantRow(realIdx, 'mobile', val);
+                                      }} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
+                                      {app.otp_verified && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
+                                          <CheckCircle2 size={16} /> Verified
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
+                                            title="Edit mobile number (you'll need to request consent again)"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
+                                          >
+                                            <Pencil size={12} /> Edit
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormField>
+                                </div>
+
+                                <div className="grid-3" style={{ marginBottom: 16 }}>
+                                  <FormField label="Employment Type" name={`coemp_${realIdx}`}>
+                                    <select className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                                      <option value="SALARIED">Salaried</option>
+                                      <option value="SELF_EMPLOYED">Self Employed</option>
+                                      <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
+                                    </select>
+                                  </FormField>
+                                  <FormField label="Pincode" name={`copincode_${realIdx}`} required>
+                                    <input
+                                      type="text"
+                                      value={app.pincode || ''}
+                                      onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)}
+                                      className="form-control"
+                                      placeholder="400004"
+                                      maxLength={6}
+                                    />
+                                  </FormField>
+                                  <FormField label="Email" name={`coemail_${realIdx}`}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
+                                      {!app.otp_verified ? (
+                                        coappConsentRequesting[realIdx] ? (
+                                          <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
+                                        ) : coappConsent[realIdx] ? (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                            <PullingIndicator label="Waiting for approval…" />
+                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                            style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
+                                            disabled={saving || walletBalance < costs.PAN_FETCH}
+                                            title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                          >
+                                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                          </button>
+                                        )
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
+                                          <CheckCircle2 size={16} /> Consented
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormField>
+                                </div>
+
+                                <div className="grid-2">
+                                  <FormField label="Full Name" name={`coname_${realIdx}`}>
+                                    <input type="text" value={app.name || ''} onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)} className="form-control" placeholder="Enter Full Name" />
+                                  </FormField>
+                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`}>
+                                    <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
+                                  </FormField>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+                    <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
+                    <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
+                      {saving ? 'Processing...' : 'Save & Next'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          )}
+
+          {currentStep === 2 && (
+            <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Bureau Verification */}
+              <div className="card">
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bureau Verification</h3>
+                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Verify credit scores before analysis</p>
+                </div>
+                <div style={{ padding: 24 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {[...formData.applicants].sort((a, b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => (
+                      <DataPullProgress
+                        key={app.id || idx}
+                        label={getApplicantDisplayName(app, idx)}
+                        status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
+                        description={app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'}
+                        score={app.cibil_score}
+                        onDownload={bureauReports[app.id] ? () => handleDownloadReport(app.id) : null}
+                        downloading={downloadingFor === app.id}
+                        onStart={() => handleRunBureau(app.id)}
+                        loading={saving}
+                        cost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+                        disabled={isBulkInjectedCase || walletBalance < (costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS)}
+                        disabledTitle={isBulkInjectedCase ? undefined : `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}.`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div style={{ padding: 24 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {[...formData.applicants].sort((a, b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => (
-                    <DataPullProgress
-                      key={app.id || idx}
-                      label={getApplicantDisplayName(app, idx)}
-                      status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
-                      description={app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'}
-                      score={app.cibil_score}
-                      onDownload={bureauReports[app.id] ? () => handleDownloadReport(app.id) : null}
-                      downloading={downloadingFor === app.id}
-                      onStart={() => handleRunBureau(app.id)}
-                      loading={saving}
-                      cost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
-                      disabled={isBulkInjectedCase || walletBalance < (costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS)}
-                      disabledTitle={isBulkInjectedCase ? undefined : `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}.`}
-                    />
+
+              {/* Salary Slip Upload section */}
+              <div className="card">
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <FileText size={15} /> Salary Slip Upload
+                  </h3>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 months — OCR auto-extracts data</span>
+                </div>
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {formData.applicants.filter(a => a.id).map((app, idx) => (
+                    <div key={app.id} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
+                      <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                        {getApplicantDisplayName(app, idx)}
+                        <span style={{ fontWeight: 500, marginLeft: 6, color: 'var(--text-tertiary)' }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
+                      </h4>
+
+                      <SalarySlipUploader
+                        caseId={caseId}
+                        applicantId={app.id}
+                        applicantName={getApplicantDisplayName(app, idx)}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Salary Slip Upload section */}
-            <div className="card">
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <FileText size={15} /> Salary Slip Upload
-                </h3>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 months — OCR auto-extracts data</span>
+              <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+                <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
+                <button
+                  className="btn btn-primary btn-lg"
+                  type="submit"
+                  disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
+                  title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
+                >
+                  {saving ? 'Saving...' : 'Save & Next'}
+                </button>
               </div>
-              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {formData.applicants.filter(a => a.id).map((app, idx) => (
-                  <div key={app.id} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
-                    <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                      {getApplicantDisplayName(app, idx)}
-                      <span style={{ fontWeight: 500, marginLeft: 6, color: 'var(--text-tertiary)' }}>({app.type === 'PRIMARY' ? 'Primary' : 'Co-Applicant'})</span>
-                    </h4>
+            </form>
+          )}
 
-                    <SalarySlipUploader
-                      caseId={caseId}
-                      applicantId={app.id}
-                      applicantName={getApplicantDisplayName(app, idx)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
+          {currentStep === 3 && (
+            <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <Panel icon={Landmark} accentColor="var(--warning)" title={<>Loan Product &amp; Collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
+                <div className="grid-3">
+                  <FormField label="Select Product" name="product_type" required>
+                    <select
+                      className="form-control"
+                      value={formData.product_type}
+                      onChange={e => setFormData({ ...formData, product_type: e.target.value })}
+                      required
+                      style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
+                    >
+                      <option value="">— Select a loan product —</option>
+                      <option value="HL">HL — Home Loan</option>
+                      <option value="LAP">LAP — Loan Against Property</option>
+                      <option value="PL">PL — Personal Loan</option>
+                    </select>
+                  </FormField>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
-              <button
-                className="btn btn-primary btn-lg"
-                type="submit"
-                disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
-                title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
-              >
-                {saving ? 'Saving...' : 'Save & Next'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {currentStep === 3 && (
-          <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <Panel icon={Landmark} accentColor="var(--warning)" title={<>Loan Product &amp; Collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
-              <div className="grid-3">
-                <FormField label="Select Product" name="product_type" required>
-                  <select
-                    className="form-control"
-                    value={formData.product_type}
-                    onChange={e => setFormData({ ...formData, product_type: e.target.value })}
-                    required
-                    style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
-                  >
-                    <option value="">— Select a loan product —</option>
-                    <option value="HL">HL — Home Loan</option>
-                    <option value="LAP">LAP — Loan Against Property</option>
-                    <option value="PL">PL — Personal Loan</option>
-                  </select>
-                </FormField>
+                  {PROPERTY_REQUIRED.includes(formData.product_type) && (
+                    <>
+                      <FormField label="Property Type" name="property_type" required>
+                        <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                          <option value="">— Select —</option>
+                          <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
+                          <option value="Residential — House / Flat">Residential — House / Flat</option>
+                          <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
+                          <option value="Plot / Land">Plot / Land</option>
+                        </select>
+                      </FormField>
+                      <FormField label="Occupancy Status" name="occupancy_status">
+                        <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                          <option value="Self Occupied">Self Occupied</option>
+                          <option value="Rented Out">Rented Out</option>
+                          <option value="Vacant">Vacant</option>
+                        </select>
+                      </FormField>
+                      <FormField label="Ownership" name="ownership_type">
+                        <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                          <option value="Sole Owner">Sole Owner</option>
+                          <option value="Joint Owner">Joint Owner</option>
+                          <option value="Company Owned">Company Owned</option>
+                        </select>
+                      </FormField>
+                      <div>
+                        <FormField label="Market Value (₹)" name="market_value" required>
+                          <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
+                        </FormField>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Sourcing Partner estimate — lender does independent valuation</div>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {PROPERTY_REQUIRED.includes(formData.product_type) && (
-                  <>
-                    <FormField label="Property Type" name="property_type" required>
-                      <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
-                        <option value="">— Select —</option>
-                        <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
-                        <option value="Residential — House / Flat">Residential — House / Flat</option>
-                        <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
-                        <option value="Plot / Land">Plot / Land</option>
-                      </select>
-                    </FormField>
-                    <FormField label="Occupancy Status" name="occupancy_status">
-                      <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
-                        <option value="Self Occupied">Self Occupied</option>
-                        <option value="Rented Out">Rented Out</option>
-                        <option value="Vacant">Vacant</option>
-                      </select>
-                    </FormField>
-                    <FormField label="Ownership" name="ownership_type">
-                      <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
-                        <option value="Sole Owner">Sole Owner</option>
-                        <option value="Joint Owner">Joint Owner</option>
-                        <option value="Company Owned">Company Owned</option>
-                      </select>
-                    </FormField>
-                    <div>
-                      <FormField label="Market Value (₹)" name="market_value" required>
-                        <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
-                      </FormField>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Sourcing Partner estimate — lender does independent valuation</div>
-                    </div>
-                  </>
+                  <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>Property location, title clearance, full address will be collected after the lender is identified.</span>
+                  </div>
                 )}
+              </Panel>
+
+              <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+                <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
+                <button
+                  className="btn btn-primary btn-lg"
+                  type="submit"
+                  disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
+                >
+                  {saving ? 'Saving...' : 'Save & Next'}
+                </button>
               </div>
-
-              {PROPERTY_REQUIRED.includes(formData.product_type) && (
-                <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--primary-subtle)', borderRadius: 0, fontSize: 12, color: 'var(--primary-dark)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                  <span>Property location, title clearance, full address will be collected after the lender is identified.</span>
-                </div>
-              )}
-            </Panel>
-
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
-              <button
-                className="btn btn-primary btn-lg"
-                type="submit"
-                disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
-              >
-                {saving ? 'Saving...' : 'Save & Next'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
+            </form>
+          )}
+        </div>
       </div>
 
     </div>

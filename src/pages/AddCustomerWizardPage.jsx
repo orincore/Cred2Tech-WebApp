@@ -152,20 +152,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
 
   useEffect(() => {
-     if (isMsme) return; // wallet/credits are DSA-only
+    if (isMsme) return; // wallet/credits are DSA-only
 
-     api.get('/wallet/api-costs')
-       .then(res => {
-          const data = res.data;
-          const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
-          const itr = data.find(d => d.api_code === 'ITR_ANALYTICS')?.tenant_cost || 0;
-          const bank = data.find(d => d.api_code === 'BANK_ANALYSIS')?.tenant_cost || 0;
-          const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
-          const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
-          const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-          setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
-       })
-       .catch(err => console.error(err));
+    api.get('/wallet/api-costs')
+      .then(res => {
+        const data = res.data;
+        const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
+        const itr = data.find(d => d.api_code === 'ITR_ANALYTICS')?.tenant_cost || 0;
+        const bank = data.find(d => d.api_code === 'BANK_ANALYSIS')?.tenant_cost || 0;
+        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
+        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
+        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
+        setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
+      })
+      .catch(err => console.error(err));
   }, [isMsme]);
 
   // Polled (not fetched once) so the header pill reflects a deduction the
@@ -175,17 +175,17 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // triggered it (e.g. the auth-link submission happens on a page the
   // customer has open, not this one).
   useEffect(() => {
-     if (isMsme) return; // wallet/credits are DSA-only
+    if (isMsme) return; // wallet/credits are DSA-only
 
-     let cancelled = false;
-     const fetchBalance = () => {
-       api.get('/wallet/balance')
-         .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
-         .catch(console.error);
-     };
-     fetchBalance();
-     const interval = setInterval(fetchBalance, 10000);
-     return () => { cancelled = true; clearInterval(interval); };
+    let cancelled = false;
+    const fetchBalance = () => {
+      api.get('/wallet/balance')
+        .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
+        .catch(console.error);
+    };
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [isMsme]);
 
   // A brand-new case (urlCaseId unset) must start completely blank — no
@@ -264,173 +264,173 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
 
     // Primary source of truth for PAN verification is the primary
-      // applicant's own `pan_verified` flag — but that flag is per-CASE
-      // (a fresh Applicant row per case), while a CustomerPanProfile is
-      // per-CUSTOMER. A customer with a second case for the same PAN (e.g.
-      // via "New Case") has a brand-new, never-verified applicant row even
-      // though the PAN/GST data is already known — without this, every
-      // reopen of that second case silently re-ran PAN verify + GST fetch
-      // (backend-cached, so no real re-cost/re-pull, but still two
-      // redundant "success" toasts and network round-trips every time).
-      // Exception: if THIS case has its own PAN_RESET activity log entry,
-      // an admin deliberately forced re-verification for it — a stale
-      // cached profile for the same PAN must not silently satisfy that
-      // until a fresh /external/pan/verify actually succeeds again (which
-      // flips primaryApp.pan_verified back to true directly, independent
-      // of this check).
-      const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
-      // Same "consent must be explicit per case" principle mobile_verified
-      // below already enforces — a Customer/CustomerPanProfile row is shared
-      // across every case for the same PAN, so without this gate, a BRAND
-      // NEW case for a customer who'd already consented on some earlier,
-      // unrelated case silently showed that other case's PAN-verified name,
-      // DOB, and GST status the moment the page loaded — before this case's
-      // own customer had ever approved anything. Only once THIS case's own
-      // primary applicant has otp_verified (its consent) does an existing
-      // profile get reused at all; before that, none of it is shown, exactly
-      // like a customer who has genuinely never consented anywhere.
-      const consentGrantedForThisCase = !!primaryApp?.otp_verified;
-      const matchingPanProfile = caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null;
-      const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
-      const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
-      const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
+    // applicant's own `pan_verified` flag — but that flag is per-CASE
+    // (a fresh Applicant row per case), while a CustomerPanProfile is
+    // per-CUSTOMER. A customer with a second case for the same PAN (e.g.
+    // via "New Case") has a brand-new, never-verified applicant row even
+    // though the PAN/GST data is already known — without this, every
+    // reopen of that second case silently re-ran PAN verify + GST fetch
+    // (backend-cached, so no real re-cost/re-pull, but still two
+    // redundant "success" toasts and network round-trips every time).
+    // Exception: if THIS case has its own PAN_RESET activity log entry,
+    // an admin deliberately forced re-verification for it — a stale
+    // cached profile for the same PAN must not silently satisfy that
+    // until a fresh /external/pan/verify actually succeeds again (which
+    // flips primaryApp.pan_verified back to true directly, independent
+    // of this check).
+    const primaryApp = caseData.applicants?.find(a => a.type === 'PRIMARY');
+    // Same "consent must be explicit per case" principle mobile_verified
+    // below already enforces — a Customer/CustomerPanProfile row is shared
+    // across every case for the same PAN, so without this gate, a BRAND
+    // NEW case for a customer who'd already consented on some earlier,
+    // unrelated case silently showed that other case's PAN-verified name,
+    // DOB, and GST status the moment the page loaded — before this case's
+    // own customer had ever approved anything. Only once THIS case's own
+    // primary applicant has otp_verified (its consent) does an existing
+    // profile get reused at all; before that, none of it is shown, exactly
+    // like a customer who has genuinely never consented anywhere.
+    const consentGrantedForThisCase = !!primaryApp?.otp_verified;
+    const matchingPanProfile = caseData.customer?.pan_profiles?.find(p => p.pan === caseData.customer.business_pan) || null;
+    const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
+    const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
+    const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
 
-      setCaseId(caseData.id);
-      setFormData({
-        customer_id: caseData.customer?.id,
-        // Classification lives on the Case itself, not the Customer — the
-        // same PAN/customer can have one salaried case and one MSME case at
-        // the same time without either affecting the other.
-        is_salaried: caseData.category === 'SALARIED',
-        business_pan: caseData.customer?.business_pan || '',
-        // proprietor_name is a plain user-entered/KYC identity field; business_name
-        // is derived from GST vendor lookups and can end up holding a GST
-        // registration TRN (reference number) when the business never registered
-        // a real trade name yet - prefer the reliable identity field first, same
-        // as the case header / MSME dashboard greeting already do.
-        business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
-        proprietor_name: caseData.customer?.proprietor_name || '',
-        dob: toDateInputValue(caseData.customer?.dob),
-        business_mobile: caseData.customer?.business_mobile || '',
-        business_email: caseData.customer?.business_email || '',
-        // Falls back to the verified PAN's own KYC pincode (principal_pincode)
-        // when the applicant row itself was never manually filled in - the
-        // salaried wizard already does this (see AddSalariedCustomerWizardPage);
-        // this page was missing it, so a case with PAN/GST verified but no
-        // manually-typed pincode rendered the field blank even though the
-        // case has a usable pincode on file.
-        pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
-        is_professional: caseData.customer?.is_professional || false,
-        profession_type: caseData.customer?.profession_type || '',
-        // Sourced from THIS case's own primary Applicant row, not
-        // caseData.customer.mobile_verified — that field lives on the
-        // shared Customer record and is reused across every case for the
-        // same PAN, which used to let a brand-new loan application silently
-        // inherit "Consented" from a completely different, unrelated case
-        // for the same customer. Consent must be explicit per case; the
-        // backend now always seeds a new case's primary applicant
-        // unconsented and only flips this specific row true when this
-        // specific case's own consent request is granted (see
-        // case.service.js createCase/createSalariedCase/createCaseFromExisting
-        // and consent.service.js approveConsent).
-        mobile_verified: primaryApp?.otp_verified || false,
-        is_locked: !!caseData.is_locked,
-        pan_verified: panVerifiedNow,
-        pan_profile: currentPanProfile,
-        // Independent of currentPanProfile/matchingPanProfile above: that join
-        // is scoped through caseData.customer.pan_profiles (a customer_id FK),
-        // which silently misses the cached CustomerPanProfile row whenever the
-        // PAN's fetch previously ran under a different Customer record (e.g. a
-        // repeat applicant re-onboarded into a fresh case) — the profile row
-        // stays valid (pan is the real, globally-unique cache key) but never
-        // shows up in this relation. This backend-set status flag is the same
-        // pattern already used for gst_completed below and does not depend on
-        // that relation at all, so it stays correct even when the join misses.
-        // Without it, a reopened case with a "missed" profile join silently
-        // re-ran the paid PAN_FETCH vendor call (₹20 credits) on every load —
-        // confirmed on case 2187 (3 real re-charges within 2 hours).
-        pan_fetch_completed: caseData.data_pull_status?.pan_status === 'COMPLETE',
-        linked_gstins: currentPanProfile?.gstin_records || [],
-        applicants: (caseData.applicants || []).map(a => {
-          // Same PAN->GSTIN lookup cache as the primary's own pan_profile/
-          // linked_gstins above, just keyed by this co-applicant's own PAN
-          // instead of the customer's business_pan — CustomerPanProfile rows
-          // for a case's co-applicants live under the same customer_id (see
-          // handleFetchCoAppGst), so they're already present in this same
-          // caseData.customer.pan_profiles list.
-          const coPanProfile = a.type === 'CO_APPLICANT' && a.pan_number
-            ? (caseData.customer?.pan_profiles?.find(p => p.pan === a.pan_number) || null)
-            : null;
-          return {
-            ...a,
-            dob: toDateInputValue(a.dob),
-            pan_gst_profile: coPanProfile,
-            pan_gst_linked_gstins: coPanProfile?.gstin_records || [],
-            pan_gst_fetch_completed: !!coPanProfile
-          };
-        }),
-        product_type: caseData.product_type || '',
-        dsa_notes: caseData.dsa_notes || '',
-        property_type: caseData.property?.property_type || '',
-        occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
-        ownership_type: caseData.property?.ownership_type || 'Sole Owner',
-        market_value: caseData.property?.market_value || '',
-        // Not gated on panVerifiedNow (unlike pan_profile above) — a
-        // completed GST pull stays valid data even if the PAN was reset
-        // afterwards, so it must keep showing as done rather than
-        // resurrecting the "empty state next to a completed pull"
-        // contradiction this was part of.
-        gst_completed: caseData.data_pull_status?.gst_status === 'COMPLETE',
-        itr_completed: caseData.data_pull_status?.itr_status === 'COMPLETE',
-        // NOTE: the backend strips `customer.itr_analytics` / `customer.bank_statements`
-        // (see case.service.js getCaseById) and relocates the latest record to
-        // `business_financials.*` — reading the old path here always returned null,
-        // which is why these showed "Pending" forever even after completion.
-        customer_itr_profile: caseData.business_financials?.itr_analytics || null,
-        customer_bank_profile: caseData.business_financials?.bank_statements || null
-      });
-      setSuggestedCoApplicants(caseData.suggested_co_applicants || []);
+    setCaseId(caseData.id);
+    setFormData({
+      customer_id: caseData.customer?.id,
+      // Classification lives on the Case itself, not the Customer — the
+      // same PAN/customer can have one salaried case and one MSME case at
+      // the same time without either affecting the other.
+      is_salaried: caseData.category === 'SALARIED',
+      business_pan: caseData.customer?.business_pan || '',
+      // proprietor_name is a plain user-entered/KYC identity field; business_name
+      // is derived from GST vendor lookups and can end up holding a GST
+      // registration TRN (reference number) when the business never registered
+      // a real trade name yet - prefer the reliable identity field first, same
+      // as the case header / MSME dashboard greeting already do.
+      business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
+      proprietor_name: caseData.customer?.proprietor_name || '',
+      dob: toDateInputValue(caseData.customer?.dob),
+      business_mobile: caseData.customer?.business_mobile || '',
+      business_email: caseData.customer?.business_email || '',
+      // Falls back to the verified PAN's own KYC pincode (principal_pincode)
+      // when the applicant row itself was never manually filled in - the
+      // salaried wizard already does this (see AddSalariedCustomerWizardPage);
+      // this page was missing it, so a case with PAN/GST verified but no
+      // manually-typed pincode rendered the field blank even though the
+      // case has a usable pincode on file.
+      pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
+      is_professional: caseData.customer?.is_professional || false,
+      profession_type: caseData.customer?.profession_type || '',
+      // Sourced from THIS case's own primary Applicant row, not
+      // caseData.customer.mobile_verified — that field lives on the
+      // shared Customer record and is reused across every case for the
+      // same PAN, which used to let a brand-new loan application silently
+      // inherit "Consented" from a completely different, unrelated case
+      // for the same customer. Consent must be explicit per case; the
+      // backend now always seeds a new case's primary applicant
+      // unconsented and only flips this specific row true when this
+      // specific case's own consent request is granted (see
+      // case.service.js createCase/createSalariedCase/createCaseFromExisting
+      // and consent.service.js approveConsent).
+      mobile_verified: primaryApp?.otp_verified || false,
+      is_locked: !!caseData.is_locked,
+      pan_verified: panVerifiedNow,
+      pan_profile: currentPanProfile,
+      // Independent of currentPanProfile/matchingPanProfile above: that join
+      // is scoped through caseData.customer.pan_profiles (a customer_id FK),
+      // which silently misses the cached CustomerPanProfile row whenever the
+      // PAN's fetch previously ran under a different Customer record (e.g. a
+      // repeat applicant re-onboarded into a fresh case) — the profile row
+      // stays valid (pan is the real, globally-unique cache key) but never
+      // shows up in this relation. This backend-set status flag is the same
+      // pattern already used for gst_completed below and does not depend on
+      // that relation at all, so it stays correct even when the join misses.
+      // Without it, a reopened case with a "missed" profile join silently
+      // re-ran the paid PAN_FETCH vendor call (₹20 credits) on every load —
+      // confirmed on case 2187 (3 real re-charges within 2 hours).
+      pan_fetch_completed: caseData.data_pull_status?.pan_status === 'COMPLETE',
+      linked_gstins: currentPanProfile?.gstin_records || [],
+      applicants: (caseData.applicants || []).map(a => {
+        // Same PAN->GSTIN lookup cache as the primary's own pan_profile/
+        // linked_gstins above, just keyed by this co-applicant's own PAN
+        // instead of the customer's business_pan — CustomerPanProfile rows
+        // for a case's co-applicants live under the same customer_id (see
+        // handleFetchCoAppGst), so they're already present in this same
+        // caseData.customer.pan_profiles list.
+        const coPanProfile = a.type === 'CO_APPLICANT' && a.pan_number
+          ? (caseData.customer?.pan_profiles?.find(p => p.pan === a.pan_number) || null)
+          : null;
+        return {
+          ...a,
+          dob: toDateInputValue(a.dob),
+          pan_gst_profile: coPanProfile,
+          pan_gst_linked_gstins: coPanProfile?.gstin_records || [],
+          pan_gst_fetch_completed: !!coPanProfile
+        };
+      }),
+      product_type: caseData.product_type || '',
+      dsa_notes: caseData.dsa_notes || '',
+      property_type: caseData.property?.property_type || '',
+      occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
+      ownership_type: caseData.property?.ownership_type || 'Sole Owner',
+      market_value: caseData.property?.market_value || '',
+      // Not gated on panVerifiedNow (unlike pan_profile above) — a
+      // completed GST pull stays valid data even if the PAN was reset
+      // afterwards, so it must keep showing as done rather than
+      // resurrecting the "empty state next to a completed pull"
+      // contradiction this was part of.
+      gst_completed: caseData.data_pull_status?.gst_status === 'COMPLETE',
+      itr_completed: caseData.data_pull_status?.itr_status === 'COMPLETE',
+      // NOTE: the backend strips `customer.itr_analytics` / `customer.bank_statements`
+      // (see case.service.js getCaseById) and relocates the latest record to
+      // `business_financials.*` — reading the old path here always returned null,
+      // which is why these showed "Pending" forever even after completion.
+      customer_itr_profile: caseData.business_financials?.itr_analytics || null,
+      customer_bank_profile: caseData.business_financials?.bank_statements || null
+    });
+    setSuggestedCoApplicants(caseData.suggested_co_applicants || []);
 
-      // Rehydrate any consent request that's still live for THIS case —
-      // otherwise a page reload or a fresh login after logging out loses the
-      // in-memory consentRequest/coappConsent state entirely and the UI
-      // falls back to "Request Consent" even though a request is genuinely
-      // still pending (or was quietly approved while the tab was closed, and
-      // the live socket update was missed for the same reason).
-      // Scoped by case_id (for the primary) / applicant_id (co-applicants,
-      // already unique per case) — never just customer_id, which would leak
-      // in a sibling case's own consent status for the same PAN.
-      // Best-effort: a failure here shouldn't block the rest of the case
-      // from loading, so a fresh "Request Consent" is the worst case, not
-      // a broken page.
-      if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
-        consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
-          .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
-          .catch(() => {});
-      }
-      (caseData.applicants || []).forEach((app, idx) => {
-        if (app.type !== 'CO_APPLICANT' || app.otp_verified || !app.id) return;
-        consentService.getLatest({ customer_id: caseData.customer?.id, case_id: caseData.id, applicant_id: app.id })
-          .then((latest) => {
-            if (latest) setCoappConsent((prev) => ({ ...prev, [idx]: { id: latest.id, status: latest.status } }));
-          })
-          .catch(() => {});
-      });
+    // Rehydrate any consent request that's still live for THIS case —
+    // otherwise a page reload or a fresh login after logging out loses the
+    // in-memory consentRequest/coappConsent state entirely and the UI
+    // falls back to "Request Consent" even though a request is genuinely
+    // still pending (or was quietly approved while the tab was closed, and
+    // the live socket update was missed for the same reason).
+    // Scoped by case_id (for the primary) / applicant_id (co-applicants,
+    // already unique per case) — never just customer_id, which would leak
+    // in a sibling case's own consent status for the same PAN.
+    // Best-effort: a failure here shouldn't block the rest of the case
+    // from loading, so a fresh "Request Consent" is the worst case, not
+    // a broken page.
+    if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
+      consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
+        .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
+        .catch(() => { });
+    }
+    (caseData.applicants || []).forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT' || app.otp_verified || !app.id) return;
+      consentService.getLatest({ customer_id: caseData.customer?.id, case_id: caseData.id, applicant_id: app.id })
+        .then((latest) => {
+          if (latest) setCoappConsent((prev) => ({ ...prev, [idx]: { id: latest.id, status: latest.status } }));
+        })
+        .catch(() => { });
+    });
 
-      // Only dispatch to a step on initial load. Callers re-syncing data
-      // mid-edit (PAN reset, applicant reuse/removal) pass preserveStep=true
-      // so the user isn't yanked away from the step they're actively on.
-      if (!preserveStep) {
-        // A URL with ?step= (a saved/shared link, or returning from a full
-        // reload) resumes at that exact step. Otherwise always start at step
-        // 1 - do NOT guess a "further along" step from data already present
-        // (e.g. an applicant existing as soon as PAN is verified), since that
-        // silently skipped the user past step 1 without them clicking Next.
-        const stepParam = parseInt(searchParams.get('step'), 10);
-        setCurrentStep(stepParam >= 1 && stepParam <= 7 ? stepParam : 1);
-        const pid = searchParams.get('proposalId');
-        if (pid) setProposalId(pid);
-      }
+    // Only dispatch to a step on initial load. Callers re-syncing data
+    // mid-edit (PAN reset, applicant reuse/removal) pass preserveStep=true
+    // so the user isn't yanked away from the step they're actively on.
+    if (!preserveStep) {
+      // A URL with ?step= (a saved/shared link, or returning from a full
+      // reload) resumes at that exact step. Otherwise always start at step
+      // 1 - do NOT guess a "further along" step from data already present
+      // (e.g. an applicant existing as soon as PAN is verified), since that
+      // silently skipped the user past step 1 without them clicking Next.
+      const stepParam = parseInt(searchParams.get('step'), 10);
+      setCurrentStep(stepParam >= 1 && stepParam <= 7 ? stepParam : 1);
+      const pid = searchParams.get('proposalId');
+      if (pid) setProposalId(pid);
+    }
   };
 
   // If the URL has a caseId, fetch it and apply it. If not, the user
@@ -465,7 +465,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!formData.business_pan || !formData.business_mobile) {
       throw new Error("Business PAN and Mobile are required first");
     }
-    
+
     // Always upsert the customer data so email/name updates are preserved
     const customer = await customerService.createOrAttach({
       customer_id: formData.customer_id,
@@ -629,8 +629,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const handleVerifyPan = async (isCoapplicant = false, idx = null) => {
     // Prevent React onClick passing the synthetic event object as the first parameter
     if (typeof isCoapplicant === 'object') {
-        isCoapplicant = false;
-        idx = null;
+      isCoapplicant = false;
+      idx = null;
     }
 
     const pan = isCoapplicant ? formData.applicants[idx]?.pan_number : formData.business_pan;
@@ -685,16 +685,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         setFormData(prev => ({ ...prev, applicants: list }));
       } else {
         setFormData(prev => ({
-           ...prev,
-           business_name: entityName && !prev.business_name ? entityName : prev.business_name,
-           dob: entityDob && !prev.dob ? entityDob : prev.dob,
-           pan_verified: true
+          ...prev,
+          business_name: entityName && !prev.business_name ? entityName : prev.business_name,
+          dob: entityDob && !prev.dob ? entityDob : prev.dob,
+          pan_verified: true
         }));
       }
 
       toast.success('PAN Verified Successfully!');
 
-    } catch(err) {
+    } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to verify PAN';
       toast.error(errMsg);
       if (!isCoapplicant) setPanVerifyFailed(true);
@@ -985,7 +985,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const updateApplicantRow = (idx, field, val) => {
     const list = [...formData.applicants];
     list[idx] = { ...list[idx], [field]: val };
-    setFormData(prev => ({...prev, applicants: list}));
+    setFormData(prev => ({ ...prev, applicants: list }));
   };
 
   const removeApplicant = async (index) => {
@@ -1140,16 +1140,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   const handleGenerateGst = async (months) => {
     if (!formData.customer_id) return toast.error("Customer ID missing. Please go back and resave.");
-    
+
     try {
       setSaving(true);
       const res = await api.post(`/external/gst-fetch`, {
-         customer_id: formData.customer_id, case_id: caseId,
-         months, gstin: formData.gstin || '27XXXXX1234X1Z5'
+        customer_id: formData.customer_id, case_id: caseId,
+        months, gstin: formData.gstin || '27XXXXX1234X1Z5'
       });
       const data = res.data;
-      
-      setFormData(prev => ({...prev, gst_completed: true }));
+
+      setFormData(prev => ({ ...prev, gst_completed: true }));
       toast.success("GST Report Generated successfully!");
     } catch (err) {
       if (err.message.includes('Insufficient credits')) toast.error("Insufficient Credits - Top Up Required!", { duration: 5000 });
@@ -1161,16 +1161,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   const handleGenerateItr = async (years) => {
     if (!formData.customer_id) return toast.error("Customer ID missing.");
-    
+
     try {
       setSaving(true);
       const res = await api.post(`/external/itr-fetch`, {
-         customer_id: formData.customer_id, case_id: caseId,
-         years, pan: formData.business_pan
+        customer_id: formData.customer_id, case_id: caseId,
+        years, pan: formData.business_pan
       });
       const data = res.data;
 
-      setFormData(prev => ({...prev, itr_completed: true, itr_profile: data.itrProfile }));
+      setFormData(prev => ({ ...prev, itr_completed: true, itr_profile: data.itrProfile }));
       toast.success("ITR Report Generated successfully!");
     } catch (err) {
       if (err.message.includes('Insufficient credits')) toast.error("Insufficient Credits - Top Up Required!", { duration: 5000 });
@@ -1193,7 +1193,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!formData.product_type) return toast.error('Please select a loan product.');
     const needsProperty = PROPERTY_REQUIRED.includes(formData.product_type);
     if (needsProperty && !formData.property_type) return toast.error('Property type is required for LAP/HL.');
-    if (needsProperty && !formData.market_value)  return toast.error('Market value is required for LAP/HL.');
+    if (needsProperty && !formData.market_value) return toast.error('Market value is required for LAP/HL.');
 
     try {
       setSaving(true);
@@ -1201,10 +1201,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         product_type: formData.product_type,
         dsa_notes: formData.dsa_notes || null,
         property: needsProperty ? {
-          property_type:    formData.property_type,
+          property_type: formData.property_type,
           occupancy_status: formData.occupancy_status,
-          ownership_type:   formData.ownership_type,
-          market_value:     parseFloat(formData.market_value)
+          ownership_type: formData.ownership_type,
+          market_value: parseFloat(formData.market_value)
         } : null
       };
       await caseService.updateProductProperty(caseId, payload);
@@ -1352,308 +1352,308 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       {/* Every step shares one centered column (see WIZARD_MAX_WIDTH), so the
           stepper, header and content keep identical gutters from step 1 to 7. */}
       <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {caseId ? ((formData.proprietor_name || formData.business_name) ? toTitleCase(formData.proprietor_name || formData.business_name) : "Resume Draft Case") : "Add New Customer / New Case"}
-          </h1>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          {/* Bell sits left of the wallet chip, same order as the shared
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {caseId ? ((formData.proprietor_name || formData.business_name) ? toTitleCase(formData.proprietor_name || formData.business_name) : "Resume Draft Case") : "Add New Customer / New Case"}
+            </h1>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            {/* Bell sits left of the wallet chip, same order as the shared
               PageHeader component uses elsewhere — gated the same way the
               wallet chip already is: NotificationContext reads DSA staff's
               own AuthContext, which an MSME_SELF_SERVICE session (this same
               wizard, mounted under /msme/*) never populates, so the bell
               would just be inert/broken there rather than truly hidden. */}
-          {!isMsme && <NotificationBell />}
-          {/* One fixed spot in the wizard's own header — rendered here once,
+            {!isMsme && <NotificationBell />}
+            {/* One fixed spot in the wizard's own header — rendered here once,
               so it reads identically (same place, same look) on every one of
               the 7 steps rather than being repeated per-step. Polled (see the
               effect above), not fetched once, so a deduction from any pull —
               including a customer authorising an ITR pull via an emailed
               link on a page this DSA doesn't have open — shows up here on
               its own within a few seconds, with no page reload needed. */}
-          {!isMsme && (
-            <div
-              title="Remaining wallet credits — updates automatically"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '5px 12px',
-                background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
-                border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
-                borderRadius: 999, fontSize: 13, fontWeight: 700,
-                color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
-              }}
-            >
-              <Wallet size={14} />
-              {walletBalance.toLocaleString('en-IN')} Credits
-            </div>
-          )}
-          {caseId && (
-            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Check size={16} /> Auto-saved
-            </div>
-          )}
+            {!isMsme && (
+              <div
+                title="Remaining wallet credits — updates automatically"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '5px 12px',
+                  background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
+                  border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
+                  borderRadius: 999, fontSize: 13, fontWeight: 700,
+                  color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
+                }}
+              >
+                <Wallet size={14} />
+                {walletBalance.toLocaleString('en-IN')} Credits
+              </div>
+            )}
+            {caseId && (
+              <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Check size={16} /> Auto-saved
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Stepper — all 7 steps of the case journey render inline in this
+        {/* Stepper — all 7 steps of the case journey render inline in this
           single component now, so jumping steps is always just goToStep. */}
-      <CaseWizardStepper
-        currentStep={currentStep}
-        caseId={caseId}
-        proposalId={proposalId}
-        steps={formData.is_salaried ? SALARIED_ORIGIN_STEPS : CASE_WIZARD_STEPS}
-        onStepClick={(step) => goToStep(step)}
-      />
+        <CaseWizardStepper
+          currentStep={currentStep}
+          caseId={caseId}
+          proposalId={proposalId}
+          steps={formData.is_salaried ? SALARIED_ORIGIN_STEPS : CASE_WIZARD_STEPS}
+          onStepClick={(step) => goToStep(step)}
+        />
 
-      {/* Case-wide, not step-scoped — stays visible while a GST/ITR pull
+        {/* Case-wide, not step-scoped — stays visible while a GST/ITR pull
           kicked off on step 2 keeps running in the background on any other
           step (ITR: whether the DSA entered credentials directly or the
           customer authorised it via an emailed auth link). */}
-      {!formData.is_salaried && <GstPullStatusBanner caseId={caseId} />}
-      {!formData.is_salaried && <ItrPullStatusBanner caseId={caseId} />}
+        {!formData.is_salaried && <GstPullStatusBanner caseId={caseId} />}
+        {!formData.is_salaried && <ItrPullStatusBanner caseId={caseId} />}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {currentStep === 1 && (
-          <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* Step 1 sub-navigation — Business Entity / Co-Applicants, both still "Step 1" */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setStep1SubPage('business')}
-                className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 180px', fontWeight: 600 }}
-              >
-                1. Business Entity / Applicant
-              </button>
-              <button
-                type="button"
-                onClick={goToCoApplicants}
-                className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 180px', fontWeight: 600 }}
-              >
-                2. Co-Applicants
-              </button>
-            </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {currentStep === 1 && (
+            <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* Step 1 sub-navigation — Business Entity / Co-Applicants, both still "Step 1" */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep1SubPage('business')}
+                  className={`btn btn-sm ${step1SubPage === 'business' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 180px', fontWeight: 600 }}
+                >
+                  1. Business Entity / Applicant
+                </button>
+                <button
+                  type="button"
+                  onClick={goToCoApplicants}
+                  className={`btn btn-sm ${step1SubPage === 'coapplicants' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 180px', fontWeight: 600 }}
+                >
+                  2. Co-Applicants
+                </button>
+              </div>
 
-            {step1SubPage === 'business' && (
-            <>
-            {duplicateWarning && !caseId && !isMsme && (
-              <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Search size={22} color="var(--warning)" />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                      <div>
-                        <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
-                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
+              {step1SubPage === 'business' && (
+                <>
+                  {duplicateWarning && !caseId && !isMsme && (
+                    <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Search size={22} color="var(--warning)" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                            <div>
+                              <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
+                              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
+                            </div>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/customers/${duplicateWarning.id}`)}>View Existing Profile</button>
+                          </div>
+
+                          {duplicateWarning.summary && (
+                            <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
+                              {duplicateWarning.summary?.gst?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> GST Data</div>}
+                              {duplicateWarning.summary?.itr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> ITR Analytics</div>}
+                              {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
+                              {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
+                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary OCR</div>}
+                            </div>
+                          )}
+
+                          <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
+                            {saving ? 'Creating...' : 'Continue as New Case →'}
+                          </button>
+                        </div>
                       </div>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/customers/${duplicateWarning.id}`)}>View Existing Profile</button>
+                    </div>
+                  )}
+
+                  {/* Business Entity Card */}
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700 }}>Business Entity</h3>
+
                     </div>
 
-                    {duplicateWarning.summary && (
-                      <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
-                        {duplicateWarning.summary?.gst?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> GST Data</div>}
-                        {duplicateWarning.summary?.itr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> ITR Analytics</div>}
-                        {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
-                        {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                        {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary OCR</div>}
-                      </div>
-                    )}
-
-                    <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
-                      {saving ? 'Creating...' : 'Continue as New Case →'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Business Entity Card */}
-            <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Business Entity</h3>
-
-              </div>
-              
-              <div style={{ padding: 24 }}>
-                <div className="grid-2" style={{ marginBottom: 24 }}>
-                  <FormField label="PAN Number" name="business_pan" required disabled={!!caseId && formData.pan_verified}>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input
-                        type="text"
-                        value={formData.business_pan}
-                        onChange={e => setFormData({...formData, business_pan: e.target.value.toUpperCase()})}
-                        onBlur={() => checkPanDuplicate(formData.business_pan)}
-                        className="form-control"
-                        placeholder="E.G. AABCE1234F"
-                        disabled={!!caseId && formData.pan_verified}
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {formData.pan_verified ? (
-                          <>
-                            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CheckCircle2 size={13} /> PAN Verified
-                            </span>
-                            {/* A mistyped PAN must be correctable, not permanently
+                    <div style={{ padding: 24 }}>
+                      <div className="grid-2" style={{ marginBottom: 24 }}>
+                        <FormField label="PAN Number" name="business_pan" required disabled={!!caseId && formData.pan_verified}>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              value={formData.business_pan}
+                              onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
+                              onBlur={() => checkPanDuplicate(formData.business_pan)}
+                              className="form-control"
+                              placeholder="E.G. AABCE1234F"
+                              disabled={!!caseId && formData.pan_verified}
+                              style={{ textTransform: 'uppercase' }}
+                            />
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              {formData.pan_verified ? (
+                                <>
+                                  <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={13} /> PAN Verified
+                                  </span>
+                                  {/* A mistyped PAN must be correctable, not permanently
                                 locked — same "Edit" affordance the mobile field
                                 already has just below. Unlocking here re-runs
                                 verification against whatever gets typed next
                                 (the backend resets pan_verified once the value
                                 actually changes), so this never leaves a stale
                                 "Verified" badge on a corrected PAN. */}
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => setFormData(prev => ({ ...prev, pan_verified: false }))}
-                              title="Edit PAN number"
-                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                            >
-                              <Pencil size={13} /> Edit
-                            </button>
-                          </>
-                        ) : panVerifying ? (
-                          <PullingIndicator label="Verifying PAN…" />
-                        ) : panVerifyFailed ? (
-                          <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <AlertCircle size={13} /> PAN verification failed — fix and re-enter
-                          </span>
-                        ) : consentRequesting ? (
-                          <PullingIndicator label="Sending consent request…" />
-                        ) : consentRequest && !consentGranted ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <PullingIndicator label="Waiting for customer to approve consent…" />
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={handleRequestConsent}
-                              title="Resend the consent SMS"
-                              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                            >
-                              Resend
-                            </button>
-                          </div>
-                        ) : consentRequestFailed ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <AlertCircle size={13} /> Could not send consent request
-                            </span>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleRequestConsent}>Retry</button>
-                          </div>
-                        ) : formData.business_pan?.length === 10 ? (
-                          <PullingIndicator label={formData.mobile_verified ? 'Queued…' : 'Request customer consent to continue…'} />
-                        ) : null}
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setFormData(prev => ({ ...prev, pan_verified: false }))}
+                                    title="Edit PAN number"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                  >
+                                    <Pencil size={13} /> Edit
+                                  </button>
+                                </>
+                              ) : panVerifying ? (
+                                <PullingIndicator label="Verifying PAN…" />
+                              ) : panVerifyFailed ? (
+                                <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <AlertCircle size={13} /> PAN verification failed — fix and re-enter
+                                </span>
+                              ) : consentRequesting ? (
+                                <PullingIndicator label="Sending consent request…" />
+                              ) : consentRequest && !consentGranted ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <PullingIndicator label="Waiting for customer to approve consent…" />
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={handleRequestConsent}
+                                    title="Resend the consent SMS"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                  >
+                                    Resend
+                                  </button>
+                                </div>
+                              ) : consentRequestFailed ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> Could not send consent request
+                                  </span>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleRequestConsent}>Retry</button>
+                                </div>
+                              ) : formData.business_pan?.length === 10 ? (
+                                <PullingIndicator label={formData.mobile_verified ? 'Queued…' : 'Request customer consent to continue…'} />
+                              ) : null}
 
-                        {formData.pan_verified && (
-                          // `gst_completed` (the real, backend-confirmed GST pull
-                          // status — see GstAnalyticsForm / data_pull_status.gst_status)
-                          // always takes priority over `pan_profile` (just the
-                          // PAN→GSTIN lookup, a separate and much weaker signal
-                          // that can stay empty forever — e.g. a manually-entered
-                          // GSTIN never populates it — even after a real GST pull
-                          // has succeeded). Checking pan_profile first was exactly
-                          // why this badge got stuck on a permanent, misleading
-                          // "Queued…" once gst_completed was already true.
-                          formData.gst_completed ? (
-                            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CheckCircle2 size={13} /> GST Pulled
-                            </span>
-                          ) : formData.pan_profile ? (
-                            <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CheckCircle2 size={13} /> GSTIN Found
-                            </span>
-                          ) : gstFetching ? (
-                            <PullingIndicator label="Looking up GSTIN…" />
-                          ) : gstFetchFailed ? (
-                            <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <AlertCircle size={13} /> No GSTIN on file — enter manually below
-                            </span>
-                          ) : null
-                        )}
+                              {formData.pan_verified && (
+                                // `gst_completed` (the real, backend-confirmed GST pull
+                                // status — see GstAnalyticsForm / data_pull_status.gst_status)
+                                // always takes priority over `pan_profile` (just the
+                                // PAN→GSTIN lookup, a separate and much weaker signal
+                                // that can stay empty forever — e.g. a manually-entered
+                                // GSTIN never populates it — even after a real GST pull
+                                // has succeeded). Checking pan_profile first was exactly
+                                // why this badge got stuck on a permanent, misleading
+                                // "Queued…" once gst_completed was already true.
+                                formData.gst_completed ? (
+                                  <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={13} /> GST Pulled
+                                  </span>
+                                ) : formData.pan_profile ? (
+                                  <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={13} /> GSTIN Found
+                                  </span>
+                                ) : gstFetching ? (
+                                  <PullingIndicator label="Looking up GSTIN…" />
+                                ) : gstFetchFailed ? (
+                                  <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> No GSTIN on file — enter manually below
+                                  </span>
+                                ) : null
+                              )}
+                            </div>
+                          </div>
+                        </FormField>
+
+                        <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input type="tel" value={formData.business_mobile} onChange={e => setFormData({ ...formData, business_mobile: e.target.value })} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
+                            {formData.mobile_verified && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                                  <CheckCircle2 size={18} /> Verified
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => { setFormData(prev => ({ ...prev, mobile_verified: false })); setConsentRequest(null); }}
+                                  title="Edit mobile number (you'll need to request consent again)"
+                                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <Pencil size={13} /> Edit
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </FormField>
                       </div>
-                    </div>
-                  </FormField>
 
-                  <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input type="tel" value={formData.business_mobile} onChange={e => setFormData({...formData, business_mobile: e.target.value})} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
-                      {formData.mobile_verified && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
-                            <CheckCircle2 size={18} /> Verified
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => { setFormData(prev => ({ ...prev, mobile_verified: false })); setConsentRequest(null); }}
-                            title="Edit mobile number (you'll need to request consent again)"
-                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <Pencil size={13} /> Edit
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </FormField>
-                </div>
-
-                <div className="grid-3" style={{ marginBottom: 24 }}>
-                  <FormField label="Email Address" name="business_email" required>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <input type="email" value={formData.business_email} onChange={e => setFormData({...formData, business_email: e.target.value})} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
-                      {/* The actual Request Consent action (and its
+                      <div className="grid-3" style={{ marginBottom: 24 }}>
+                        <FormField label="Email Address" name="business_email" required>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
+                            {/* The actual Request Consent action (and its
                           sending/waiting/resend states) now lives in this
                           sub-page's footer, in the same slot the Save & Next
                           button occupies once consent is granted — this field
                           just mirrors the end result once it lands. */}
-                      {formData.mobile_verified && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
-                          <CheckCircle2 size={18} /> Consented
+                            {formData.mobile_verified && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                                <CheckCircle2 size={18} /> Consented
+                              </div>
+                            )}
+                          </div>
+                        </FormField>
+
+                        <FormField label="Pincode" name="pincode" required>
+                          <input type="text" value={formData.pincode || ''} onChange={e => setFormData({ ...formData, pincode: e.target.value })} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
+                        </FormField>
+
+                        <FormField label="Are You A Professional?" name="is_professional">
+                          <select
+                            className="form-control"
+                            value={formData.is_professional === true || formData.is_professional === 'true' ? 'true' : 'false'}
+                            onChange={e => {
+                              const isProf = e.target.value === 'true';
+                              setFormData({ ...formData, is_professional: isProf, profession_type: isProf ? formData.profession_type : '' });
+                            }}
+                          >
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                          </select>
+                        </FormField>
+                      </div>
+
+                      {(formData.is_professional === true || formData.is_professional === 'true') && (
+                        <div className="grid-2" style={{ marginBottom: 24 }}>
+                          <FormField label="Select Your Profession" name="profession_type" required>
+                            <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
+                              <option value="">Select Profession</option>
+                              <option value="CA">CA</option>
+                              <option value="Lawyer">Lawyer</option>
+                              <option value="Doctor">Doctor</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </FormField>
                         </div>
                       )}
-                    </div>
-                  </FormField>
 
-                  <FormField label="Pincode" name="pincode" required>
-                    <input type="text" value={formData.pincode || ''} onChange={e => setFormData({...formData, pincode: e.target.value})} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 560026" maxLength={6} />
-                  </FormField>
-
-                  <FormField label="Are You A Professional?" name="is_professional">
-                    <select
-                      className="form-control"
-                      value={formData.is_professional === true || formData.is_professional === 'true' ? 'true' : 'false'}
-                      onChange={e => {
-                        const isProf = e.target.value === 'true';
-                        setFormData({ ...formData, is_professional: isProf, profession_type: isProf ? formData.profession_type : '' });
-                      }}
-                    >
-                      <option value="false">No</option>
-                      <option value="true">Yes</option>
-                    </select>
-                  </FormField>
-                </div>
-
-                {(formData.is_professional === true || formData.is_professional === 'true') && (
-                  <div className="grid-2" style={{ marginBottom: 24 }}>
-                    <FormField label="Select Your Profession" name="profession_type" required>
-                      <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
-                        <option value="">Select Profession</option>
-                        <option value="CA">CA</option>
-                        <option value="Lawyer">Lawyer</option>
-                        <option value="Doctor">Doctor</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </FormField>
-                  </div>
-                )}
-
-                {/* Hidden until consent is actually granted — before that,
+                      {/* Hidden until consent is actually granted — before that,
                     business_name/dob are always empty (they're only ever
                     auto-fetched by PAN verification, which itself only
                     fires once mobile_verified flips true), so showing two
@@ -1661,417 +1661,417 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     was just noise. Reusing index.css's existing slideUp
                     keyframe for the reveal keeps this consistent with the
                     rest of the app rather than introducing a new animation. */}
-                {formData.mobile_verified && (
-                  <div className="grid-3" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
-                    <FormField label="Business Name / Full Name" name="business_name" disabled>
-                      <input
-                        type="text"
-                        value={formData.business_name}
-                        onChange={e => setFormData({ ...formData, business_name: e.target.value })}
-                        className="form-control"
-                        placeholder="Autofetched via PAN"
-                        disabled
-                      />
-                    </FormField>
+                      {formData.mobile_verified && (
+                        <div className="grid-3" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
+                          <FormField label="Business Name / Full Name" name="business_name" disabled>
+                            <input
+                              type="text"
+                              value={formData.business_name}
+                              onChange={e => setFormData({ ...formData, business_name: e.target.value })}
+                              className="form-control"
+                              placeholder="Autofetched via PAN"
+                              disabled
+                            />
+                          </FormField>
 
-                    {/* Entity type (constitution of business — Proprietorship /
+                          {/* Entity type (constitution of business — Proprietorship /
                         Partnership / Pvt Ltd / etc.) comes back from the same
                         PAN-to-IntelliBiz pull as the GSTIN above (see
                         external.pan.controller.js's constitutionOfBusiness),
                         already persisted to Customer.entity_type — surfaced
                         here on Step 1 right where that pull ran, instead of
                         only showing up later on the case/customer profile. */}
-                    <FormField label="Entity Type" name="entity_type" disabled>
-                      <input
-                        type="text"
-                        value={formData.pan_profile?.constitution_of_business || ''}
-                        className="form-control"
-                        placeholder="Autofetched via PAN"
-                        disabled
-                        readOnly
-                      />
-                    </FormField>
+                          <FormField label="Entity Type" name="entity_type" disabled>
+                            <input
+                              type="text"
+                              value={formData.pan_profile?.constitution_of_business || ''}
+                              className="form-control"
+                              placeholder="Autofetched via PAN"
+                              disabled
+                              readOnly
+                            />
+                          </FormField>
 
-                    {/* Never user-editable — always auto-fetched by PAN
+                          {/* Never user-editable — always auto-fetched by PAN
                         verification by the time this is visible at all — so
                         a plain read-only text field (not a date-picker,
                         which implies an editable value) showing a
                         human-formatted date. */}
-                    <FormField label="Date Of Birth / Incorporation" name="dob" disabled>
-                      <input
-                        type="text"
-                        value={formData.dob ? formatDate(formData.dob) : ''}
-                        className="form-control"
-                        placeholder="Autofetched via PAN"
-                        disabled
-                        readOnly
-                      />
-                    </FormField>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              {!formData.mobile_verified ? (
-                consentRequesting ? (
-                  <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
-                ) : consentRequest ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <PullingIndicator label="Waiting for customer to approve consent…" />
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleRequestConsent}
-                    disabled={saving || !step1ConsentFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                    className="btn btn-primary btn-lg"
-                    title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                  >
-                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                  </button>
-                )
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-lg"
-                  onClick={goToCoApplicants}
-                  disabled={!step1BusinessValid}
-                  title={!step1BusinessValid ? 'Complete every required field before continuing' : undefined}
-                >
-                  Save & Next
-                </button>
-              )}
-            </div>
-            </>
-            )}
-
-            {step1SubPage === 'coapplicants' && (
-            <>
-            {/* Co-Applicants Card */}
-            <div className="card">
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <AlertCircle size={13} color="var(--info)" style={{ flexShrink: 0 }} />
-                    <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--info)' }}>
-                      For proprietorship cases proprietor needs not be added as co applicant
-                    </span>
-                  </div>
-                </div>
-                <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
-              </div>
-
-              <div style={{ padding: 24 }}>
-                {suggestedCoApplicants && suggestedCoApplicants.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary-dark)', marginBottom: 12 }}>Suggested Co-Applicants from Past Cases</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {suggestedCoApplicants.map((suggestion, idx) => (
-                        <div key={idx} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{suggestion.name || 'Unnamed Co-Applicant'}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8 }}>
-                              PAN: {suggestion.pan_number ? `${suggestion.pan_number.substring(0, 2)}******${suggestion.pan_number.substring(8)}` : 'N/A'} • Mobile: {suggestion.mobile}
-                              {suggestion.relationship_to_primary && ` • ${suggestion.relationship_to_primary}`}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              {suggestion.bureau_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Bureau Available</span>}
-                              {suggestion.documents_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Documents</span>}
-                              {suggestion.income_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Income</span>}
-                              {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary OCR</span>}
-                              {suggestion.obligations_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Obligations</span>}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleReuseApplicant(suggestion.source_applicant_id)}
-                            disabled={saving}
-                            className="btn btn-secondary btn-sm"
-                            style={{ fontWeight: 600, color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                          >
-                            Use in this case
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
-                    No Co-Applicants appended to this profile yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    {formData.applicants.map((app, realIdx) => {
-                      if (app.type !== 'CO_APPLICANT') return null;
-                      const coApplicantIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
-                      return (
-                      <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                          <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantIdx + 1}</h4>
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() => removeApplicant(realIdx)}
-                          >
-                            Remove ×
-                          </button>
-                        </div>
-                        <div className="grid-2" style={{ marginBottom: 16 }}>
-                          <FormField label="PAN Number" name={`copan_${realIdx}`} required>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <input
-                                type="text"
-                                value={app.pan_number || ''}
-                                onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())}
-                                className="form-control"
-                                style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }}
-                                disabled={app.pan_verified}
-                                placeholder="E.G. AABCE1234F"
-                              />
-                              {app.pan_verified ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                                    <CheckCircle2 size={16} /> Verified
-                                  </span>
-                                  {/* Same correction affordance as the primary
-                                      applicant's PAN — a wrong co-applicant PAN
-                                      shouldn't be permanently stuck once verified. */}
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => updateApplicantRow(realIdx, 'pan_verified', false)}
-                                    title="Edit PAN number"
-                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                                  >
-                                    <Pencil size={12} /> Edit
-                                  </button>
-                                </div>
-                              ) : coappPanVerifyingMap[realIdx] ? (
-                                <PullingIndicator label="Verifying PAN…" />
-                              ) : (app.pan_number || '').length === 10 ? (
-                                <PullingIndicator label="Queued…" />
-                              ) : null}
-                            </div>
-                          </FormField>
-                          <FormField label="Mobile Number" name={`comob_${realIdx}`}>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
-                              {app.otp_verified && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
-                                  <CheckCircle2 size={16} /> Verified
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
-                                    title="Edit mobile number (you'll need to request consent again)"
-                                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
-                                  >
-                                    <Pencil size={12} /> Edit
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </FormField>
-                        </div>
-                        <div className="grid-3" style={{ marginBottom: 16 }}>
-                          <FormField label="Employment Type" name={`coemp_${realIdx}`}>
-                            <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
-                              <option value="SELF_EMPLOYED">Self Employed</option>
-                              <option value="SALARIED">Salaried</option>
-                              <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                            </select>
-                          </FormField>
-                          <FormField label="Pincode" name={`copincode_${realIdx}`} required>
-                            <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="560026" maxLength={6} />
-                          </FormField>
-                          <FormField label="Email" name={`coemail_${realIdx}`}>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
-                              {!app.otp_verified ? (
-                                coappConsentRequesting[realIdx] ? (
-                                  <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
-                                ) : coappConsent[realIdx] ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <PullingIndicator label="Waiting for approval…" />
-                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn btn-primary btn-sm"
-                                    onClick={() => handleRequestCoapplicantConsent(realIdx)}
-                                    style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
-                                    disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
-                                    title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
-                                  >
-                                    {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
-                                  </button>
-                                )
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
-                                  <CheckCircle2 size={16} /> Consented
-                                </div>
-                              )}
-                            </div>
-                          </FormField>
-                        </div>
-                        <div className="grid-2">
-                          <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
+                          <FormField label="Date Of Birth / Incorporation" name="dob" disabled>
                             <input
                               type="text"
-                              value={app.name || ''}
-                              onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+                              value={formData.dob ? formatDate(formData.dob) : ''}
                               className="form-control"
-                              placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
-                              disabled={app.pan_verified}
-                            />
-                          </FormField>
-                          <FormField label="Date Of Birth" name={`codob_${realIdx}`} required disabled={app.pan_verified}>
-                            <input
-                              type="date"
-                              value={app.dob || ''}
-                              onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
-                              className="form-control"
-                              required
-                              disabled={app.pan_verified}
+                              placeholder="Autofetched via PAN"
+                              disabled
+                              readOnly
                             />
                           </FormField>
                         </div>
-                      </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                    {!formData.mobile_verified ? (
+                      consentRequesting ? (
+                        <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                      ) : consentRequest ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <PullingIndicator label="Waiting for customer to approve consent…" />
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRequestConsent}
+                          disabled={saving || !step1ConsentFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                          className="btn btn-primary btn-lg"
+                          title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                        >
+                          {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-lg"
+                        onClick={goToCoApplicants}
+                        disabled={!step1BusinessValid}
+                        title={!step1BusinessValid ? 'Complete every required field before continuing' : undefined}
+                      >
+                        Save & Next
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {step1SubPage === 'coapplicants' && (
+                <>
+                  {/* Co-Applicants Card */}
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>Co-Applicants</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                          <AlertCircle size={13} color="var(--info)" style={{ flexShrink: 0 }} />
+                          <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--info)' }}>
+                            For proprietorship cases proprietor needs not be added as co applicant
+                          </span>
+                        </div>
+                      </div>
+                      <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600 }}>+ Add Co-Applicant</button>
+                    </div>
+
+                    <div style={{ padding: 24 }}>
+                      {suggestedCoApplicants && suggestedCoApplicants.length > 0 && (
+                        <div style={{ marginBottom: 24 }}>
+                          <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary-dark)', marginBottom: 12 }}>Suggested Co-Applicants from Past Cases</h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {suggestedCoApplicants.map((suggestion, idx) => (
+                              <div key={idx} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{suggestion.name || 'Unnamed Co-Applicant'}</div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8 }}>
+                                    PAN: {suggestion.pan_number ? `${suggestion.pan_number.substring(0, 2)}******${suggestion.pan_number.substring(8)}` : 'N/A'} • Mobile: {suggestion.mobile}
+                                    {suggestion.relationship_to_primary && ` • ${suggestion.relationship_to_primary}`}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {suggestion.bureau_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Bureau Available</span>}
+                                    {suggestion.documents_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Documents</span>}
+                                    {suggestion.income_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Income</span>}
+                                    {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary OCR</span>}
+                                    {suggestion.obligations_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Obligations</span>}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReuseApplicant(suggestion.source_applicant_id)}
+                                  disabled={saving}
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ fontWeight: 600, color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                                >
+                                  Use in this case
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
+                          No Co-Applicants appended to this profile yet.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                          {formData.applicants.map((app, realIdx) => {
+                            if (app.type !== 'CO_APPLICANT') return null;
+                            const coApplicantIdx = formData.applicants.filter((a, i) => a.type === 'CO_APPLICANT' && i < realIdx).length;
+                            return (
+                              <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                  <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantIdx + 1}</h4>
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger btn-sm"
+                                    onClick={() => removeApplicant(realIdx)}
+                                  >
+                                    Remove ×
+                                  </button>
+                                </div>
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="PAN Number" name={`copan_${realIdx}`} required>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                      <input
+                                        type="text"
+                                        value={app.pan_number || ''}
+                                        onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())}
+                                        className="form-control"
+                                        style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }}
+                                        disabled={app.pan_verified}
+                                        placeholder="E.G. AABCE1234F"
+                                      />
+                                      {app.pan_verified ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                            <CheckCircle2 size={16} /> Verified
+                                          </span>
+                                          {/* Same correction affordance as the primary
+                                      applicant's PAN — a wrong co-applicant PAN
+                                      shouldn't be permanently stuck once verified. */}
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => updateApplicantRow(realIdx, 'pan_verified', false)}
+                                            title="Edit PAN number"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                          >
+                                            <Pencil size={12} /> Edit
+                                          </button>
+                                        </div>
+                                      ) : coappPanVerifyingMap[realIdx] ? (
+                                        <PullingIndicator label="Verifying PAN…" />
+                                      ) : (app.pan_number || '').length === 10 ? (
+                                        <PullingIndicator label="Queued…" />
+                                      ) : null}
+                                    </div>
+                                  </FormField>
+                                  <FormField label="Mobile Number" name={`comob_${realIdx}`}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
+                                      {app.otp_verified && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
+                                          <CheckCircle2 size={16} /> Verified
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
+                                            title="Edit mobile number (you'll need to request consent again)"
+                                            style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
+                                          >
+                                            <Pencil size={12} /> Edit
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormField>
+                                </div>
+                                <div className="grid-3" style={{ marginBottom: 16 }}>
+                                  <FormField label="Employment Type" name={`coemp_${realIdx}`}>
+                                    <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                                      <option value="SELF_EMPLOYED">Self Employed</option>
+                                      <option value="SALARIED">Salaried</option>
+                                      <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
+                                    </select>
+                                  </FormField>
+                                  <FormField label="Pincode" name={`copincode_${realIdx}`} required>
+                                    <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
+                                  </FormField>
+                                  <FormField label="Email" name={`coemail_${realIdx}`}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
+                                      {!app.otp_verified ? (
+                                        coappConsentRequesting[realIdx] ? (
+                                          <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
+                                        ) : coappConsent[realIdx] ? (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                            <PullingIndicator label="Waiting for approval…" />
+                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                            style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
+                                            disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
+                                            title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                          >
+                                            {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                          </button>
+                                        )
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
+                                          <CheckCircle2 size={16} /> Consented
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormField>
+                                </div>
+                                <div className="grid-2">
+                                  <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
+                                    <input
+                                      type="text"
+                                      value={app.name || ''}
+                                      onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+                                      className="form-control"
+                                      placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
+                                      disabled={app.pan_verified}
+                                    />
+                                  </FormField>
+                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`} required disabled={app.pan_verified}>
+                                    <input
+                                      type="date"
+                                      value={app.dob || ''}
+                                      onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
+                                      className="form-control"
+                                      required
+                                      disabled={app.pan_verified}
+                                    />
+                                  </FormField>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+                    <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Business Entity</button>
+                    <button
+                      className="btn btn-primary btn-lg"
+                      type="submit"
+                      disabled={saving || !step1CoApplicantsValid}
+                      title={!step1CoApplicantsValid ? 'Complete every required field (and each co-applicant\'s DOB) before continuing' : undefined}
+                    >
+                      {saving ? 'Processing...' : 'Save & Next'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          )}
+
+          {currentStep === 2 && (
+            <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {/* Step 2 sub-navigation — GST / ITR / Bank Statements, all still "Step 2" */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep2SubPage('gst')}
+                  className={`btn btn-sm ${step2SubPage === 'gst' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 140px', fontWeight: 600 }}
+                >
+                  1. GST
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep2SubPage('itr')}
+                  className={`btn btn-sm ${step2SubPage === 'itr' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 140px', fontWeight: 600 }}
+                >
+                  2. ITR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep2SubPage('bank')}
+                  className={`btn btn-sm ${step2SubPage === 'bank' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: '1 1 140px', fontWeight: 600 }}
+                >
+                  3. Bank Statements
+                </button>
               </div>
-            </div>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Business Entity</button>
-              <button
-                className="btn btn-primary btn-lg"
-                type="submit"
-                disabled={saving || !step1CoApplicantsValid}
-                title={!step1CoApplicantsValid ? 'Complete every required field (and each co-applicant\'s DOB) before continuing' : undefined}
-              >
-                {saving ? 'Processing...' : 'Save & Next'}
-              </button>
-            </div>
-            </>
-            )}
-          </form>
-        )}
-
-        {currentStep === 2 && (
-          <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-
-            {/* Step 2 sub-navigation — GST / ITR / Bank Statements, all still "Step 2" */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => setStep2SubPage('gst')}
-                className={`btn btn-sm ${step2SubPage === 'gst' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 140px', fontWeight: 600 }}
-              >
-                1. GST
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep2SubPage('itr')}
-                className={`btn btn-sm ${step2SubPage === 'itr' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 140px', fontWeight: 600 }}
-              >
-                2. ITR
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep2SubPage('bank')}
-                className={`btn btn-sm ${step2SubPage === 'bank' ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ flex: '1 1 140px', fontWeight: 600 }}
-              >
-                3. Bank Statements
-              </button>
-            </div>
-
-            {step2SubPage === 'gst' && (
-            <>
-            <div className="card">
-               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                 <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
-               </div>
-                {/* Applicant name — this card and the co-applicant loop below it
+              {step2SubPage === 'gst' && (
+                <>
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700 }}>GST Profile</h3>
+                    </div>
+                    {/* Applicant name — this card and the co-applicant loop below it
                     share one "GST Profile" header, which by itself doesn't say
                     WHOSE GST this is. Shown unconditionally (unlike the old
                     per-instance heading that used to live inside
                     GstAnalyticsForm) so it stays visible even in the
                     "not applicable" state below, where GstAnalyticsForm itself
                     doesn't render at all. */}
-                <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                  {toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Applicant'}
-                </div>
-                {/* This strip is about the PAN→GSTIN lookup (linked_gstins) only —
+                    <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                      {toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Applicant'}
+                    </div>
+                    {/* This strip is about the PAN→GSTIN lookup (linked_gstins) only —
                     a separate, weaker signal than the real GST pull. It must not
                     render once the real pull (gst_completed) has succeeded, or it
                     contradicts the "GST data pulled successfully" panel rendered
                     by GstAnalyticsForm right below it (the exact bug reported: an
                     empty-state message and a success panel shown at the same time). */}
-                {!formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0) && (
-                  <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
-                    {gstFetching ? (
-                      <PullingIndicator label="Fetching GST records for this PAN…" />
-                    ) : gstFetchFailed ? (
-                      <>
-                        <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
-                        </span>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
-                      </>
-                    ) : formData.pan_profile ? (
-                      // The PAN→GSTIN lookup genuinely ran and came back empty —
-                      // distinct from "not attempted yet" below. No GSTIN means
-                      // there's nothing for a GST pull to run against, so the
-                      // pull form itself is skipped entirely rather than
-                      // offering a manual-entry option for a business that has
-                      // no real GST registration on file.
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
-                      </span>
-                    ) : (
-                      <>
-                        <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={!formData.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
-                      </>
+                    {!formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0) && (
+                      <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                        {gstFetching ? (
+                          <PullingIndicator label="Fetching GST records for this PAN…" />
+                        ) : gstFetchFailed ? (
+                          <>
+                            <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
+                            </span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
+                          </>
+                        ) : formData.pan_profile ? (
+                          // The PAN→GSTIN lookup genuinely ran and came back empty —
+                          // distinct from "not attempted yet" below. No GSTIN means
+                          // there's nothing for a GST pull to run against, so the
+                          // pull form itself is skipped entirely rather than
+                          // offering a manual-entry option for a business that has
+                          // no real GST registration on file.
+                          <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                          </span>
+                        ) : (
+                          <>
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleFetchGst} disabled={!formData.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
+                          </>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-                <div style={{ padding: 0 }}>
-                  {/* No GSTIN on file for the primary (lookup ran, came back
+                    <div style={{ padding: 0 }}>
+                      {/* No GSTIN on file for the primary (lookup ran, came back
                       empty) and no real pull already completed — the message
                       above already says so; don't also show a pull form with
                       nothing to select and only a pointless manual-GSTIN path. */}
-                  {!(formData.pan_profile && !formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0)) && (
-                    <GstAnalyticsForm
-                       caseId={caseId}
-                       customerId={formData.customer_id}
-                       applicantId={null}
-                       applicantType="PRIMARY"
-                       linkedGstins={formData.linked_gstins}
-                       gstCompleted={formData.gst_completed}
-                       onComplete={() => setFormData(prev => ({...prev, gst_completed: true}))}
-                       onRemoved={() => setFormData(prev => ({...prev, gst_completed: false}))}
-                       onboardingMode={mode}
-                       walletBalance={walletBalance}
-                       gstCost={costs.GST_FETCH}
-                       disabled={isBulkInjectedCase}
-                       prefillEmail={formData.business_email}
-                       prefillMobile={formData.business_mobile}
-                    />
-                  )}
+                      {!(formData.pan_profile && !formData.gst_completed && (!formData.linked_gstins || formData.linked_gstins.length === 0)) && (
+                        <GstAnalyticsForm
+                          caseId={caseId}
+                          customerId={formData.customer_id}
+                          applicantId={null}
+                          applicantType="PRIMARY"
+                          linkedGstins={formData.linked_gstins}
+                          gstCompleted={formData.gst_completed}
+                          onComplete={() => setFormData(prev => ({ ...prev, gst_completed: true }))}
+                          onRemoved={() => setFormData(prev => ({ ...prev, gst_completed: false }))}
+                          onboardingMode={mode}
+                          walletBalance={walletBalance}
+                          gstCost={costs.GST_FETCH}
+                          disabled={isBulkInjectedCase}
+                          prefillEmail={formData.business_email}
+                          prefillMobile={formData.business_mobile}
+                        />
+                      )}
 
-                  {/* Same self-employed co-applicant loop as ITR below — GST is
+                      {/* Same self-employed co-applicant loop as ITR below — GST is
                       a business/self-employment concept, so only applies to
                       co-applicants who are themselves self-employed. Each
                       instance is scoped by applicantId (see GstAnalyticsForm's
@@ -2084,112 +2084,112 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       formData.applicants array; the primary applicant and any
                       non-self-employed co-applicants earlier in that array
                       would otherwise silently shift every index here. */}
-                  {formData.applicants && formData.applicants
-                    .map((a, realIdx) => ({ a, realIdx }))
-                    .filter(({ a }) => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED')
-                    .map(({ a: coApp, realIdx }, idx) => {
-                      const coAppFetching = !!coappGstFetchingMap[realIdx];
-                      const coAppFetchFailed = !!coappGstFetchFailedMap[realIdx];
-                      const coAppLinkedGstins = coApp.pan_gst_linked_gstins || [];
-                      // Same "genuinely fetched, came back empty" detection as
-                      // the primary's — lookup ran (pan_gst_profile truthy),
-                      // no GSTINs, and no real GST report already pulled for
-                      // this specific co-applicant.
-                      const coAppNotFound = !!coApp.pan_gst_profile && !coApp.gst_report_completed && coAppLinkedGstins.length === 0;
-                      const coAppDisplayName = toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`;
-                      return (
-                      <div key={coApp.id || realIdx} style={{ borderTop: '1px solid var(--border)' }}>
-                          {/* Same reasoning as the primary's heading above — shown
+                      {formData.applicants && formData.applicants
+                        .map((a, realIdx) => ({ a, realIdx }))
+                        .filter(({ a }) => a.type === 'CO_APPLICANT' && a.employment_type === 'SELF_EMPLOYED')
+                        .map(({ a: coApp, realIdx }, idx) => {
+                          const coAppFetching = !!coappGstFetchingMap[realIdx];
+                          const coAppFetchFailed = !!coappGstFetchFailedMap[realIdx];
+                          const coAppLinkedGstins = coApp.pan_gst_linked_gstins || [];
+                          // Same "genuinely fetched, came back empty" detection as
+                          // the primary's — lookup ran (pan_gst_profile truthy),
+                          // no GSTINs, and no real GST report already pulled for
+                          // this specific co-applicant.
+                          const coAppNotFound = !!coApp.pan_gst_profile && !coApp.gst_report_completed && coAppLinkedGstins.length === 0;
+                          const coAppDisplayName = toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`;
+                          return (
+                            <div key={coApp.id || realIdx} style={{ borderTop: '1px solid var(--border)' }}>
+                              {/* Same reasoning as the primary's heading above — shown
                               unconditionally so it's visible even when
                               GstAnalyticsForm itself is hidden (not-found state). */}
-                          <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                            {coAppDisplayName}
-                          </div>
-                          {!coApp.gst_report_completed && coAppLinkedGstins.length === 0 && (
-                            <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
-                              {coAppFetching ? (
-                                <PullingIndicator label="Fetching GST records for this PAN…" />
-                              ) : coAppFetchFailed ? (
-                                <>
-                                  <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
-                                  </span>
-                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
-                                </>
-                              ) : coAppNotFound ? (
-                                <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
-                                </span>
-                              ) : (
-                                <>
-                                  <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
-                                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={!coApp.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
-                                </>
+                              <div style={{ padding: '14px 24px 0', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                                {coAppDisplayName}
+                              </div>
+                              {!coApp.gst_report_completed && coAppLinkedGstins.length === 0 && (
+                                <div style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                                  {coAppFetching ? (
+                                    <PullingIndicator label="Fetching GST records for this PAN…" />
+                                  ) : coAppFetchFailed ? (
+                                    <>
+                                      <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <AlertCircle size={13} /> GST fetch failed — no records loaded for this PAN yet
+                                      </span>
+                                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={isBulkInjectedCase}>Retry GST Fetch</button>
+                                    </>
+                                  ) : coAppNotFound ? (
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <AlertCircle size={13} /> No GST registration found for this PAN — GST pull is not applicable.
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>No GST records loaded yet for this PAN.</span>
+                                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleFetchCoAppGst(realIdx)} disabled={!coApp.pan_verified || isBulkInjectedCase}>Fetch GST Records</button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                              {!coAppNotFound && (
+                                <GstAnalyticsForm
+                                  caseId={caseId}
+                                  customerId={formData.customer_id}
+                                  applicantId={coApp.id}
+                                  applicantType="CO_APPLICANT"
+                                  applicantName={coAppDisplayName}
+                                  linkedGstins={coAppLinkedGstins}
+                                  onComplete={() => updateApplicantRow(realIdx, 'gst_report_completed', true)}
+                                  onRemoved={() => updateApplicantRow(realIdx, 'gst_report_completed', false)}
+                                  onboardingMode={mode}
+                                  walletBalance={walletBalance}
+                                  gstCost={costs.GST_FETCH}
+                                  disabled={isBulkInjectedCase}
+                                  prefillEmail={coApp.email}
+                                  prefillMobile={coApp.mobile}
+                                />
                               )}
                             </div>
-                          )}
-                          {!coAppNotFound && (
-                            <GstAnalyticsForm
-                               caseId={caseId}
-                               customerId={formData.customer_id}
-                               applicantId={coApp.id}
-                               applicantType="CO_APPLICANT"
-                               applicantName={coAppDisplayName}
-                               linkedGstins={coAppLinkedGstins}
-                               onComplete={() => updateApplicantRow(realIdx, 'gst_report_completed', true)}
-                               onRemoved={() => updateApplicantRow(realIdx, 'gst_report_completed', false)}
-                               onboardingMode={mode}
-                               walletBalance={walletBalance}
-                               gstCost={costs.GST_FETCH}
-                               disabled={isBulkInjectedCase}
-                               prefillEmail={coApp.email}
-                               prefillMobile={coApp.mobile}
-                            />
-                          )}
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+                    <button type="button" className="btn btn-ghost" onClick={() => { goToStep(1); setStep1SubPage('coapplicants'); }}>← Back to Co-Applicants</button>
+                    <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('itr')}>
+                      Save & Next
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {step2SubPage === 'itr' && (
+                <>
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>ITR Analytics</h3>
                       </div>
-                      );
-                  })}
-                </div>
-            </div>
-
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => { goToStep(1); setStep1SubPage('coapplicants'); }}>← Back to Co-Applicants</button>
-              <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('itr')}>
-                Save & Next
-              </button>
-            </div>
-            </>
-            )}
-
-            {step2SubPage === 'itr' && (
-            <>
-            <div className="card">
-               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                 <div>
-                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>ITR Analytics</h3>
-                 </div>
-               </div>
-               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <ItrAnalyticsForm
-                      caseId={caseId}
-                      customerId={formData.customer_id}
-                      applicantId={null}
-                      applicantType="PRIMARY"
-                      applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
-                      prefillPan={formData.business_pan}
-                      prefillEmail={formData.business_email}
-                      prefillMobile={formData.business_mobile}
-                      walletBalance={walletBalance}
-                      itrCost={costs.ITR_ANALYTICS}
-                      existingRecord={formData.customer_itr_profile}
-                      onComplete={(data) => setFormData(prev => ({...prev, itr_completed: true, itr_analytics: data}))}
-                      onRemoved={() => setFormData(prev => ({...prev, itr_completed: false, itr_analytics: null}))}
-                      mode={mode}
-                      disabled={isBulkInjectedCase}
-                  />
-
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
+                    </div>
+                    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                       <ItrAnalyticsForm
+                        caseId={caseId}
+                        customerId={formData.customer_id}
+                        applicantId={null}
+                        applicantType="PRIMARY"
+                        applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
+                        prefillPan={formData.business_pan}
+                        prefillEmail={formData.business_email}
+                        prefillMobile={formData.business_mobile}
+                        walletBalance={walletBalance}
+                        itrCost={costs.ITR_ANALYTICS}
+                        existingRecord={formData.customer_itr_profile}
+                        onComplete={(data) => setFormData(prev => ({ ...prev, itr_completed: true, itr_analytics: data }))}
+                        onRemoved={() => setFormData(prev => ({ ...prev, itr_completed: false, itr_analytics: null }))}
+                        mode={mode}
+                        disabled={isBulkInjectedCase}
+                      />
+
+                      {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
+                        <ItrAnalyticsForm
                           key={idx}
                           caseId={caseId}
                           customerId={formData.customer_id}
@@ -2205,204 +2205,204 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           onComplete={(data) => console.log(`Co-App ${idx} ITR complete`)}
                           mode={mode}
                           disabled={isBulkInjectedCase}
+                        />
+                      ))}
+
+
+                    </div>
+                  </div>
+
+                  <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
+                    <button type="button" className="btn btn-ghost" onClick={() => setStep2SubPage('gst')}>← Back to GST</button>
+                    <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('bank')}>
+                      Save & Next
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {step2SubPage === 'bank' && (
+                <>
+                  {/* Bank Statement Section */}
+                  <div className="card">
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bank Statement Upload</h3>
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Upload 12-month bank statement for each applicant — PDF only</p>
+                    </div>
+                    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <BankStatementUpload
+                        caseId={caseId}
+                        customerId={formData.customer_id}
+                        applicantId={null}
+                        applicantType="PRIMARY"
+                        applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
+                        walletBalance={walletBalance}
+                        analyzeCost={costs.BANK_ANALYSIS}
+                        existingStatus={formData.customer_bank_profile}
+                        onComplete={(status, payload) => console.log('Primary bank complete')}
+                        mode={mode}
+                        disabled={isBulkInjectedCase}
                       />
-                  ))}
 
-
-               </div>
-            </div>
-
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setStep2SubPage('gst')}>← Back to GST</button>
-              <button type="button" className="btn btn-primary btn-lg" onClick={() => setStep2SubPage('bank')}>
-                Save & Next
-              </button>
-            </div>
-            </>
-            )}
-
-            {step2SubPage === 'bank' && (
-            <>
-            {/* Bank Statement Section */}
-            <div className="card">
-               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                   <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bank Statement Upload</h3>
-                 </div>
-                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Upload 12-month bank statement for each applicant — PDF only</p>
-               </div>
-               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <BankStatementUpload 
-                      caseId={caseId}
-                      customerId={formData.customer_id}
-                      applicantId={null} 
-                      applicantType="PRIMARY"
-                      applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
-                      walletBalance={walletBalance}
-                      analyzeCost={costs.BANK_ANALYSIS}
-                      existingStatus={formData.customer_bank_profile}
-                      onComplete={(status, payload) => console.log('Primary bank complete')}
-                      mode={mode}
-                      disabled={isBulkInjectedCase}
-                  />
-                  
-                  {/* Bank statement analysis is a business-income concept — a
+                      {/* Bank statement analysis is a business-income concept — a
                       salaried co-applicant's income comes from the Salary Slip
                       OCR section below instead, so it's excluded here the same
                       way it already is from ITR Analytics above. */}
-                  {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
-                      <BankStatementUpload
+                      {formData.applicants && formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type !== 'SALARIED' && a.employment_type !== 'INCOME_NOT_CONSIDERED').map((coApp, idx) => (
+                        <BankStatementUpload
                           key={idx}
                           caseId={caseId}
                           customerId={formData.customer_id}
                           applicantId={coApp.id}
                           applicantType="CO_APPLICANT"
-                          applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx+1}`}
+                          applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           walletBalance={walletBalance}
                           analyzeCost={costs.BANK_ANALYSIS}
                           existingStatus={coApp.bank_statements?.[0] || null}
                           onComplete={(status, payload) => console.log(`Co-App ${idx} bank complete`)}
                           mode={mode}
                           disabled={isBulkInjectedCase}
-                      />
-                  ))}
-                  
-                  
-               </div>
-            </div>
+                        />
+                      ))}
 
-            {formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED') && (
-              <div className="card">
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Salary Slip OCR</h3>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 slips — auto-parsed via OCR</span>
-                </div>
-                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
-                    <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
-                      <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
-                      <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={toTitleCase(app.name) || app.pan_number} />
+
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => setStep2SubPage('itr')}>← Back to ITR Analytics</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save & Next'}</button>
-            </div>
-            </>
-            )}
-          </form>
-        )}
-        {currentStep === 3 && (
-          <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED') && (
+                    <div className="card">
+                      <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Salary Slip OCR</h3>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 slips — auto-parsed via OCR</span>
+                      </div>
+                      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
+                          <div key={app.id || idx} style={{ borderTop: idx > 0 ? '1px dashed var(--border)' : 'none', paddingTop: idx > 0 ? 12 : 0 }}>
+                            <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{app.name || app.pan_number || `Applicant ${idx + 1}`}</h4>
+                            <SalarySlipUploader caseId={caseId} applicantId={app.id} applicantName={toTitleCase(app.name) || app.pan_number} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-            {/* Loan Product — merges Property & Collateral Details into a single field grid when required */}
-            <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product & collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20 }}>
-                <FormField label="Select Product" name="product_type" required>
-                  <select
-                    className="form-control"
-                    value={formData.product_type}
-                    onChange={e => setFormData({ ...formData, product_type: e.target.value })}
-                    required
-                    style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
-                  >
-                    <option value="">— Select a loan product —</option>
-                    <option value="LAP">LAP — Loan Against Property</option>
-                    <option value="HL">HL — Home Loan</option>
-                    <option value="WC">Working Capital (CC / OD)</option>
-                    <option value="TL">Term Loan (MSME / BL)</option>
-                    <option value="ML">Machinery / Equipment Finance</option>
-                    <option value="BL">Business Loan (Unsecured)</option>
-                    <option value="Other">Other — Specify</option>
-                  </select>
-                </FormField>
+                  <div className="wizard-footer-actions" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
+                    <button className="btn btn-ghost" type="button" onClick={() => setStep2SubPage('itr')}>← Back to ITR Analytics</button>
+                    <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save & Next'}</button>
+                  </div>
+                </>
+              )}
+            </form>
+          )}
+          {currentStep === 3 && (
+            <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                <FormField label="Additional Requirements / Notes" name="dsa_notes">
-                  <textarea rows={3} className="form-control" placeholder="Any specific requirements..." value={formData.dsa_notes} onChange={e => setFormData({ ...formData, dsa_notes: e.target.value })} />
-                </FormField>
+              {/* Loan Product — merges Property & Collateral Details into a single field grid when required */}
+              <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product & collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20 }}>
+                  <FormField label="Select Product" name="product_type" required>
+                    <select
+                      className="form-control"
+                      value={formData.product_type}
+                      onChange={e => setFormData({ ...formData, product_type: e.target.value })}
+                      required
+                      style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
+                    >
+                      <option value="">— Select a loan product —</option>
+                      <option value="LAP">LAP — Loan Against Property</option>
+                      <option value="HL">HL — Home Loan</option>
+                      <option value="WC">Working Capital (CC / OD)</option>
+                      <option value="TL">Term Loan (MSME / BL)</option>
+                      <option value="ML">Machinery / Equipment Finance</option>
+                      <option value="BL">Business Loan (Unsecured)</option>
+                      <option value="Other">Other — Specify</option>
+                    </select>
+                  </FormField>
 
-                {/* Property & Collateral fields — only for LAP / HL */}
-                {PROPERTY_REQUIRED.includes(formData.product_type) && (
-                  <>
-                    <FormField label="Property Type" name="property_type" required>
-                      <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
-                        <option value="">— Select —</option>
-                        <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
-                        <option value="Residential — House / Flat">Residential — House / Flat</option>
-                        <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
-                        <option value="Plot / Land">Plot / Land</option>
-                      </select>
-                    </FormField>
-                    <FormField label="Occupancy Status" name="occupancy_status">
-                      <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
-                        <option value="Self Occupied">Self Occupied</option>
-                        <option value="Rented Out">Rented Out</option>
-                        <option value="Vacant">Vacant</option>
-                      </select>
-                    </FormField>
-                    <FormField label="Ownership" name="ownership_type">
-                      <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
-                        <option value="Sole Owner">Sole Owner</option>
-                        <option value="Joint Owner">Joint Owner</option>
-                        <option value="Company Owned">Company Owned</option>
-                      </select>
-                    </FormField>
-                    <div>
-                      <FormField label="Market Value (₹)" name="market_value" required>
-                        <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
+                  <FormField label="Additional Requirements / Notes" name="dsa_notes">
+                    <textarea rows={3} className="form-control" placeholder="Any specific requirements..." value={formData.dsa_notes} onChange={e => setFormData({ ...formData, dsa_notes: e.target.value })} />
+                  </FormField>
+
+                  {/* Property & Collateral fields — only for LAP / HL */}
+                  {PROPERTY_REQUIRED.includes(formData.product_type) && (
+                    <>
+                      <FormField label="Property Type" name="property_type" required>
+                        <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                          <option value="">— Select —</option>
+                          <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
+                          <option value="Residential — House / Flat">Residential — House / Flat</option>
+                          <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
+                          <option value="Plot / Land">Plot / Land</option>
+                        </select>
                       </FormField>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Estimate — lender does independent valuation</div>
-                    </div>
-                  </>
-                )}
+                      <FormField label="Occupancy Status" name="occupancy_status">
+                        <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                          <option value="Self Occupied">Self Occupied</option>
+                          <option value="Rented Out">Rented Out</option>
+                          <option value="Vacant">Vacant</option>
+                        </select>
+                      </FormField>
+                      <FormField label="Ownership" name="ownership_type">
+                        <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                          <option value="Sole Owner">Sole Owner</option>
+                          <option value="Joint Owner">Joint Owner</option>
+                          <option value="Company Owned">Company Owned</option>
+                        </select>
+                      </FormField>
+                      <div>
+                        <FormField label="Market Value (₹)" name="market_value" required>
+                          <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
+                        </FormField>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Estimate — lender does independent valuation</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </Panel>
+
+              <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
+                <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
+                <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !step3Valid}>
+                  {saving ? 'Saving...' : 'Save & Next'}
+                </button>
               </div>
-            </Panel>
+            </form>
+          )}
 
-            <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-              <button className="btn btn-ghost" type="button" onClick={() => goToStep(2)}>← Back</button>
-              <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !step3Valid}>
-                {saving ? 'Saving...' : 'Save & Next'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Steps 4-7 — formerly separate /cases/:id/* routed pages, now
+          {/* Steps 4-7 — formerly separate /cases/:id/* routed pages, now
             rendered inline so they share this component's mount lifetime
             (auto-fetch effects, etc.) instead of tearing down on navigation. */}
-        {currentStep === 4 && (
-          <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} isSalaried={formData.is_salaried} />
-        )}
-        {currentStep === 5 && (
-          <BureauObligationsStep
-            caseId={caseId}
-            onNext={() => goToStep(6)}
-            onBack={() => goToStep(4)}
-            mode={mode}
-            walletBalance={walletBalance}
-            bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
-          />
-        )}
-        {currentStep === 6 && (
-          <EsrStep
-            caseId={caseId}
-            onOpenProposal={handleProposalCreated}
-            isMsme={isMsme}
-            onApplyForLoan={handleApplyForLoan}
-          />
-        )}
-        {currentStep === 7 && (
-          isMsme ? (
-            <MsmeLoanTermsStep caseId={caseId} lender={applyLender} onBack={() => goToStep(6)} />
-          ) : (
-            <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} isSalaried={formData.is_salaried} />
-          )
-        )}
-      </div>
+          {currentStep === 4 && (
+            <IncomeSummaryStep caseId={caseId} onNext={() => goToStep(5)} isSalaried={formData.is_salaried} />
+          )}
+          {currentStep === 5 && (
+            <BureauObligationsStep
+              caseId={caseId}
+              onNext={() => goToStep(6)}
+              onBack={() => goToStep(4)}
+              mode={mode}
+              walletBalance={walletBalance}
+              bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+            />
+          )}
+          {currentStep === 6 && (
+            <EsrStep
+              caseId={caseId}
+              onOpenProposal={handleProposalCreated}
+              isMsme={isMsme}
+              onApplyForLoan={handleApplyForLoan}
+            />
+          )}
+          {currentStep === 7 && (
+            isMsme ? (
+              <MsmeLoanTermsStep caseId={caseId} lender={applyLender} onBack={() => goToStep(6)} />
+            ) : (
+              <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} isSalaried={formData.is_salaried} />
+            )
+          )}
+        </div>
 
       </div>
     </div>
