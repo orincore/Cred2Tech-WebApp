@@ -296,6 +296,7 @@ const AddSalariedCustomerWizardPage = () => {
       // Consent must be explicit per case (see the same fix already applied
       // in AddCustomerWizardPage.jsx, and case.service.js/consent.service.js).
       mobile_verified: primaryApp?.otp_verified || false,
+      pan_verified: !!primaryApp?.pan_verified,
       applicants: restoredApplicants.map(app => ({
         ...app,
         mobile: (app.mobile || '').replace(/\D/g, ''),
