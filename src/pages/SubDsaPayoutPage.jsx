@@ -281,7 +281,7 @@ function SubDsaCard({ subDsa, ledgers, selectedIds, onToggleSelect, onUpdate, is
                       {l.status === 'PDD_PENDING' && <span className="badge" style={{ marginLeft: 6, fontSize: 10, color: 'var(--error)', background: 'var(--error-bg)' }}>PDD</span>}
                     </td>
                     <td data-label="Product">{l.product_type || l.calculation_metadata?.product_type || '—'}</td>
-                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.disbursed_amount)}</td>
+                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.actual_disbursed_amount || l.disbursed_amount)}</td>
                     <td data-label="Payout" style={{ textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>{fmt(l.sub_dsa_payout)}</td>
                     <td data-label="Subvention" style={{ textAlign: 'right', color: subvent > 0 ? 'var(--error)' : 'var(--text-tertiary)' }}>{subvent > 0 ? `-${fmt(subvent)}` : '—'}</td>
                     <td data-label="Net Payable" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(l.net_payable)}</td>

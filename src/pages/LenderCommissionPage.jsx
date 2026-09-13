@@ -305,7 +305,7 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                           <div style={{ fontStyle: 'italic', marginBottom: 4 }}>{c.customer}</div>
                           <div style={{ color: '#4B5563' }}>Disb Amount - {c.disb_amount ? `${Number(c.disb_amount).toLocaleString('en-IN')}/-` : 'N/A'}</div>
                           <div style={{ color: '#4B5563' }}>Disb Date - {c.disb_date}</div>
-                          <div style={{ color: '#4B5563' }}>Payout - {c.payout_percent}%</div>
+                          <div style={{ color: '#4B5563' }}>{c.payout_percent ? `Payout - ${c.payout_percent}%` : 'Fixed Payout'}</div>
                           <div style={{ color: '#4B5563' }}>Product - {c.product}</div>
                         </td>
                         <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
@@ -389,6 +389,8 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
     } else {
       setCandidates([]);
     }
+    // Reset selection so switching filters doesn't leave stale counters from hidden rows
+    setSelectedCaseIds(new Set());
   }, [filters.lenderName, filters.month, filters.product, filters.search]);
 
   const handleSearchSubmit = (e) => {
