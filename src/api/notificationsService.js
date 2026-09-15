@@ -73,16 +73,18 @@ export const adminNotificationsService = {
   },
 
   /** Send a broadcast notification to all users or a filtered set. */
-  send: async ({ title, message, audience = 'ALL', targetRole = null, targetUserId = null, actionUrl = null, couponCode = null, notificationType = 'ALERT' }) => {
+  send: async ({ title, message, audience = 'ALL', targetRole = null, targetUserId = null, targetUserIds = null, actionUrl = null, couponCode = null, notificationType = 'ALERT', sendEmail = false }) => {
     const res = await api.post('/admin/notifications/send', {
       title,
       message,
       audience,
       targetRole,
       targetUserId,
+      targetUserIds,
       actionUrl,
       couponCode,
       notificationType,
+      sendEmail,
     });
     return res.data;
   },

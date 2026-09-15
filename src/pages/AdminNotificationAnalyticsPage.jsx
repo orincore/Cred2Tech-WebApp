@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { Loader2, ExternalLink, TrendingUp, Eye, MousePointer, Clock } from 'lucide-react';
+import { Loader2, ExternalLink, TrendingUp, Eye, MousePointer, Clock, Mail } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
@@ -249,6 +249,9 @@ const AdminNotificationAnalyticsPage = () => {
                     <StatRow icon={TrendingUp} label="Sent" value={selectedBroadcast.sent ?? 0} color="var(--success)" />
                     <StatRow icon={Eye} label="Read" value={selectedBroadcast.read ?? 0} color="var(--primary)" />
                     <StatRow icon={MousePointer} label="Tapped" value={selectedBroadcast.tapped ?? 0} color="var(--primary)" />
+                    {selectedBroadcast.send_email && (
+                      <StatRow icon={Mail} label="Emailed" value={selectedBroadcast.email_sent_count ?? 0} color="var(--success)" />
+                    )}
                     <StatRow icon={Clock} label="Sent at" value={formatDate(selectedBroadcast.created_at)} />
                   </div>
 

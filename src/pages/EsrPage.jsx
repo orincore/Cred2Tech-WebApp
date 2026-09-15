@@ -1069,7 +1069,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       >
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Your Loan Eligibility Results
+            Indicative Credit limits
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>
             Here's what you qualify for across our lending partners.

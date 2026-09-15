@@ -25,7 +25,7 @@ const TARGET_OPTIONS = [
   { value: 'DSA_MEMBER', label: 'Sourcing Partner Members only', audience: 'ROLE', targetRole: 'DSA_MEMBER' },
   { value: 'SUB_DSA', label: 'Sub-Sourcing Partners only', audience: 'ROLE', targetRole: 'SUB_DSA' },
   { value: 'MSME_CUSTOMER', label: 'MSME Customers only', audience: 'ROLE', targetRole: 'MSME_CUSTOMER' },
-  { value: 'USER', label: 'A specific user', audience: 'USER', targetRole: null },
+  { value: 'USER', label: 'Specific user(s)', audience: 'USER', targetRole: null },
 ];
 
 const AdminSendNotificationPage = () => {
@@ -35,11 +35,12 @@ const AdminSendNotificationPage = () => {
   const [notificationType, setNotificationType] = useState('ALERT');
   const [targetOption, setTargetOption] = useState(TARGET_OPTIONS[0]);
   const [recipientEmail, setRecipientEmail] = useState('');
-  const [recipient, setRecipient] = useState(null);
+  const [recipients, setRecipients] = useState([]); // multiple users can be targeted for the 'USER' audience
   const [recipientSuggestions, setRecipientSuggestions] = useState([]);
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [actionUrl, setActionUrl] = useState('');
   const [couponCode, setCouponCode] = useState('');
+  const [sendEmailNotification, setSendEmailNotification] = useState(false);
   const [sending, setSending] = useState(false);
   const [testingBrowserNotification, setTestingBrowserNotification] = useState(false);
   const [result, setResult] = useState(null); // { delivered, failed }
@@ -57,7 +58,7 @@ const AdminSendNotificationPage = () => {
   };
 
   useEffect(() => {
-    if (targetOption.value !== 'USER' || recipient || recipientEmail.trim().length < 2) {
+    if (targetOption.value !== 'USER' || recipientEmail.trim().length < 2) {
       setRecipientSuggestions([]);
       return undefined;
     }
@@ -68,7 +69,8 @@ const AdminSendNotificationPage = () => {
       try {
         const { adminNotificationsService } = await import('../api/notificationsService');
         const matches = await adminNotificationsService.listRecipients(recipientEmail.trim());
-        if (!cancelled) setRecipientSuggestions(matches);
+        const selectedIds = new Set(recipients.map((r) => r.id));
+        if (!cancelled) setRecipientSuggestions(matches.filter((u) => !selectedIds.has(u.id)));
       } catch {
         if (!cancelled) setRecipientSuggestions([]);
       } finally {
@@ -80,13 +82,23 @@ const AdminSendNotificationPage = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [recipientEmail, recipient, targetOption.value]);
+  }, [recipientEmail, recipients, targetOption.value]);
+
+  const addRecipient = (user) => {
+    setRecipients((prev) => (prev.some((r) => r.id === user.id) ? prev : [...prev, user]));
+    setRecipientEmail('');
+    setRecipientSuggestions([]);
+  };
+
+  const removeRecipient = (userId) => {
+    setRecipients((prev) => prev.filter((r) => r.id !== userId));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) return toast.error('Please enter a notification title.');
     if (!message.trim()) return toast.error('Please enter a notification message.');
-    if (targetOption.value === 'USER' && !recipient) return toast.error('Please select a user from the email suggestions.');
+    if (targetOption.value === 'USER' && recipients.length === 0) return toast.error('Please select at least one user from the email suggestions.');
 
     setSending(true);
     setResult(null);
@@ -97,10 +109,11 @@ const AdminSendNotificationPage = () => {
         message: message.trim(),
         audience: targetOption.audience,
         targetRole: targetOption.targetRole,
-        targetUserId: recipient?.id || null,
+        targetUserIds: recipients.map((r) => r.id),
         actionUrl: actionUrl.trim() || null,
         couponCode: couponCode.trim() || null,
         notificationType,
+        sendEmail: sendEmailNotification,
       });
       setResult(data.data || data);
       setTitle('');
@@ -109,7 +122,8 @@ const AdminSendNotificationPage = () => {
       setActionUrl('');
       setCouponCode('');
       setRecipientEmail('');
-      setRecipient(null);
+      setRecipients([]);
+      setSendEmailNotification(false);
       toast.success('Notification sent successfully');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to send notification');
@@ -229,19 +243,19 @@ const AdminSendNotificationPage = () => {
                   className="form-control"
                   type="email"
                   value={recipientEmail}
-                  onChange={(e) => { setRecipientEmail(e.target.value); setRecipient(null); }}
-                  placeholder="Type a user email address"
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  placeholder="Type a user email address to add them"
                   autoComplete="off"
-                  required
+                  required={recipients.length === 0}
                 />
                 {loadingRecipients && <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Searching users...</p>}
-                {!recipient && recipientSuggestions.length > 0 && (
+                {recipientSuggestions.length > 0 && (
                   <div style={{ position: 'absolute', zIndex: 2, top: '100%', left: 0, right: 0, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
                     {recipientSuggestions.map((user) => (
                       <button
                         key={user.id}
                         type="button"
-                        onClick={() => { setRecipient(user); setRecipientEmail(user.email); setRecipientSuggestions([]); }}
+                        onClick={() => addRecipient(user)}
                         style={{ display: 'block', width: '100%', padding: '9px 12px', textAlign: 'left', border: 0, borderBottom: '1px solid var(--border)', background: 'transparent', color: 'var(--on-surface)', cursor: 'pointer' }}
                       >
                         <strong>{user.email}</strong>
@@ -250,9 +264,43 @@ const AdminSendNotificationPage = () => {
                     ))}
                   </div>
                 )}
-                {recipient && <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--success)' }}>Selected: {recipient.name || recipient.email}</p>}
+                {recipients.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {recipients.map((user) => (
+                      <span
+                        key={user.id}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', fontSize: 11, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)' }}
+                      >
+                        {user.name || user.email}
+                        <button
+                          type="button"
+                          onClick={() => removeRecipient(user.id)}
+                          aria-label={`Remove ${user.email}`}
+                          style={{ border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
+          </div>
+
+          {/* Email delivery */}
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={sendEmailNotification}
+                onChange={(e) => setSendEmailNotification(e.target.checked)}
+              />
+              Also send via email
+            </label>
+            <p style={{ margin: '4px 0 0 24px', fontSize: 11, color: 'var(--text-muted)' }}>
+              Sends the same title and message to each recipient's registered email address, in addition to the in-app notification.
+            </p>
           </div>
 
           <div style={{ marginBottom: 24 }}>
@@ -331,8 +379,8 @@ const AdminSendNotificationPage = () => {
               Sent successfully
             </p>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-              Delivered to {result.delivered ?? 0} user(s).
               Sent to {result.recipient_count ?? result.delivered ?? 0} user(s).
+              {result.send_email ? ` Emailed ${result.email_sent_count ?? 0} of them.` : ''}
             </p>
           </div>
         )}
