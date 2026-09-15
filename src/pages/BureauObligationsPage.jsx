@@ -70,14 +70,30 @@ const estimateRemainingTenure = (obl) => {
 };
 
 const getObligationDetails = (obl) => {
+  const details = [];
+
+  // Flagged ahead of the manual-source early return below so it's never
+  // suppressed regardless of source — a row the backend decided not to
+  // count toward the totals (because the bureau reported the same loan
+  // again elsewhere) must stay visible here, not silently disappear from
+  // the number while still showing in the list with no explanation.
+  if (obl.is_counted === false) {
+    details.push({
+      label: 'Duplicate — not counted',
+      color: 'var(--warning)',
+      bg: 'var(--warning-bg)',
+      title: obl.duplicate_info?.note
+        ? `${obl.duplicate_info.note} Review row #${obl.duplicate_info.paired_with_id} — if this is actually a separate loan, edit this row's EMI to include it.`
+        : undefined
+    });
+  }
+
   // Manual entries never have a loan_start_date — the "Add Loan Not in
   // Bureau" form doesn't collect one — so only the O/s-remaining half of
   // this heuristic could ever fire for them, showing a lopsided badge
   // instead of the "recency + remaining tenure" pair this column means to
   // convey. Show the plain "—" fallback for these instead.
-  if (obl.source === 'MANUAL') return [];
-
-  const details = [];
+  if (obl.source === 'MANUAL') return details;
 
   if (obl.loan_start_date) {
     const monthsSinceStart = (Date.now() - new Date(obl.loan_start_date).getTime()) / MONTH_MS;
@@ -511,7 +527,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>Obligation Details</span>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                         {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
-                          <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                          <span key={d.label} title={d.title} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
                         )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                       </div>
                     </div>
@@ -568,7 +584,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                           {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
-                            <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                            <span key={d.label} title={d.title} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
                           )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                         </div>
                       </td>
