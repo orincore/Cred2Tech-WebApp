@@ -330,6 +330,15 @@ export default function CaseDetailPage() {
         if (caseData.stage !== 'ESR_GENERATED' && caseData.stage !== 'APPROVED') {
           return toast.error('Case must be Login Done before sanction.');
         }
+        if (!sanctionForm.lender_name) return toast.error('Lender is required.');
+        if (!sanctionForm.sanctioned_amount) return toast.error('Sanctioned amount is required.');
+        if (!sanctionForm.sanction_date) return toast.error('Sanction date is required.');
+        if (sanctionForm.confirmed_roi === '' || sanctionForm.confirmed_roi === null || sanctionForm.confirmed_roi === undefined) {
+          return toast.error('Confirmed ROI (%) is required.');
+        }
+        if (sanctionForm.processing_fee === '' || sanctionForm.processing_fee === null || sanctionForm.processing_fee === undefined) {
+          return toast.error('Processing Fee (₹) is required.');
+        }
         await caseService.sanctionCase(id, sanctionForm);
         toast.success('Case sanctioned successfully');
       } else if (['PARTLY_DISBURSED', 'DISBURSED'].includes(selectedStage)) {
@@ -837,19 +846,19 @@ export default function CaseDetailPage() {
                       <input type="text" className="form-control" value={sanctionForm.loan_account_number} onChange={(e) => setSanctionForm({ ...sanctionForm, loan_account_number: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Sanctioned Amount (₹)</label>
+                      <label className="form-label">Sanctioned Amount (₹) *</label>
                       <input type="number" className="form-control" value={sanctionForm.sanctioned_amount} onChange={(e) => setSanctionForm({ ...sanctionForm, sanctioned_amount: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Sanction Date</label>
+                      <label className="form-label">Sanction Date *</label>
                       <input type="date" className="form-control" value={sanctionForm.sanction_date} onChange={(e) => setSanctionForm({ ...sanctionForm, sanction_date: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Confirmed ROI (%)</label>
+                      <label className="form-label">Confirmed ROI (%) *</label>
                       <input type="number" step="0.01" className="form-control" value={sanctionForm.confirmed_roi} onChange={(e) => setSanctionForm({ ...sanctionForm, confirmed_roi: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Processing Fee (₹)</label>
+                      <label className="form-label">Processing Fee (₹) *</label>
                       <input type="number" className="form-control" value={sanctionForm.processing_fee} onChange={(e) => setSanctionForm({ ...sanctionForm, processing_fee: e.target.value })} />
                     </div>
                   </div>
