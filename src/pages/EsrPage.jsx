@@ -46,105 +46,61 @@ const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 // dev.api.cred2tech.com.
 const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
-// ─── Ineligibility reason humanizer ───────────────────────────────────────────
-// The eligibility engine (dynamicEligibility.service.js) emits a mix of plain
-// sentences and internal SCREAMING_SNAKE_CASE codes (e.g. LIP_REQUIRES_MANUAL_REVIEW,
-// PRIMARY_APPLICANT_NOT_SALARIED: employment type is NA), joined with " | ".
-// This maps the known codes to plain-English explanations, and falls back to
-// turning any unmapped code into readable words rather than showing raw jargon.
-const REASON_ACRONYMS = new Set(['LTV', 'FOIR', 'DBR', 'KYC', 'CIBIL', 'GST', 'PAN', 'ROI', 'NWM', 'LIP', 'GRP', 'CA', 'ICICI', 'TATA', 'EMI']);
+// ─── Ineligibility reason → canonical reason mapping ──────────────────────────
+// Docs/Lender_Reject_Reasons_Master_List.xlsx is the single source of truth for
+// every rejection reason a DSA/customer may see. Only its 11 "Final Reason"
+// strings may ever be shown here — the eligibility engine
+// (dynamicEligibility.service.js) emits a much larger set of internal codes and
+// sentences (config-missing errors, manual-review triggers, method-scoping
+// messages, etc.) that are NOT policy rejections and must never surface as one.
+// Each raw reason (the " | "-joined string on lender.ineligibility_reason) is
+// matched against the rules below; anything that doesn't match a rule is
+// dropped rather than shown, guessed at, or humanized into invented wording.
+const CANONICAL_REJECTION_REASONS = Object.freeze({
+  BUREAU_CUTOFF: 'Bureau score below the required cut-off',
+  MIN_LOAN_AMOUNT: 'Minimum Loan amount norms not met',
+  MAX_LOAN_CAPPING: 'Final eligible loan exceeds maximum loan capping',
+  AGE_TENURE_ZERO: 'Applicant or co-applicant age leaves zero/negative eligible tenure',
+  MIN_EMI_SERVICEABILITY: 'Minimum EMI-serviceability check fails',
+  INCOME_NORMS: 'Income Eligibility norms not met',
+  CA_ASSESSED_INCOME: 'Loan Eligibility is subject to CA Assessed income',
+  MIN_MAX_POLICY_BAND: "Final eligible loan outside the method's Min/Max policy band",
+  EMI_SERVICEABILITY_RATIO: 'EMI-serviceability check fails (Adjusted ABB / ratio < 0.5x proposed EMI (HL) or < 0.8x proposed EMI (LAP))',
+  BL_PL_COUNT: 'More than 3 live Business Loan / Personal Loan accounts',
+  BL_PL_RECENCY: 'Business Loan / Personal Loan was availed in the last 6 months',
+});
 
-const humanizeReasonCode = (code) => code
-  .split('_')
-  .filter(Boolean)
-  .map(w => REASON_ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-  .join(' ');
-
-const REASON_PATTERNS = [
-  [/^PRIMARY_APPLICANT_NOT_SALARIED:\s*employment type is\s*(.+)$/i,
-    (m) => `This scheme needs the primary applicant to be salaried${m[1] && m[1].toUpperCase() !== 'NA' ? ` (current employment type: ${m[1]})` : ''}.`],
-  [/^Composed eligible income is 0 or missing\.?$/i,
-    () => 'Your eligible income could not be calculated — required income details may be missing.'],
-  [/^GRP eligibility is 0.*$/i,
-    () => 'Based on your gross receipts, the eligible loan amount works out to zero for this scheme.'],
-  [/^GRP gross receipt not available$/i,
-    () => 'Gross receipts details are not available for this business.'],
-  [/^PROFESSION_REQUIRED_FOR_GRP$/i,
-    () => 'Profession details are required to evaluate this scheme.'],
-  [/^POLICY_VALUE_REQUIRES_CONFIRMATION:?\s*(.*)$/i,
-    (m) => `This scheme needs confirmation of a policy value${m[1] ? ` (${m[1]})` : ''}.`],
-  [/^LIP_REQUIRES_MANUAL_REVIEW$/i,
-    () => 'This scheme requires manual review by our credit team.'],
-  [/^LOW_LTV_REQUIRES_MANUAL_REVIEW$/i,
-    () => 'This scheme requires manual review due to a low loan-to-value ratio.'],
-  [/^NWM_CUSTOMER_SELECTION_FAILED$/i,
-    () => 'Additional details are required to evaluate this scheme.'],
-  [/^NWM inactive.*$/i,
-    () => 'This scheme is currently unavailable with this lender.'],
-  [/^TATA_LIP_CURRENT_YEAR_NET_PROFIT_REQUIRED$/i,
-    () => 'Current year net profit details are required for this scheme.'],
-  [/^CA_ASSESSED_ELIGIBLE_AMOUNT_REQUIRED_FOR_TATA_LIP$/i,
-    () => 'A CA-assessed eligible loan amount is required for this scheme.'],
-  [/^PIRAMAL_LIP_LATEST_YEAR_NET_PROFIT_REQUIRED$/i,
-    () => 'Latest year net profit details are required for this scheme.'],
-  [/^CA_ASSESSED_ELIGIBLE_AMOUNT_REQUIRED_FOR_PIRAMAL_LIP$/i,
-    () => 'A CA-assessed eligible loan amount is required for this scheme.'],
-  [/^Bureau score missing\.?$/i,
-    () => 'Your bureau score is missing, so this lender could not be evaluated.'],
-  [/^Lowest CIBIL score (\d+) is below bureau cutoff (\d+)$/i,
-    (m) => `Your bureau score (${m[1]}) is below this lender's minimum requirement (${m[2]}).`],
-  [/^No valid ROI configured.*$/i,
-    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
-  [/^No valid tenure configured.*$/i,
-    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
-  [/is a manual\/deviation method\..*$/i,
-    () => 'This scheme requires manual review by our credit team.'],
-  [/requires manual override\.?$/i,
-    () => 'This scheme requires manual review by our credit team.'],
-  [/^Manual \/ Low LTV \/ LIP method requires.*$/i,
-    () => 'This scheme requires manual underwriting review.'],
-  [/^Invalid lender configuration for.*$/i,
-    () => "This lender's eligibility criteria could not be evaluated due to a setup issue."],
-  [/^Missing required lender configuration for.*$/i,
-    () => "This lender's eligibility criteria could not be evaluated due to a setup issue."],
-  [/FOIR\/DBR not configured.*$/i,
-    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
-  [/FOIR config missing.*$/i,
-    () => 'This scheme is not fully set up yet, so eligibility could not be calculated.'],
-  [/^Maximum eligible loan (₹[\d,]+) is below lender minimum (₹[\d,]+)$/i,
-    (m) => `Your maximum eligible loan (${m[1]}) is below this lender's minimum loan amount (${m[2]}).`],
+// Only unambiguous, verified matches to a raw backend message belong here —
+// see the mapping review in this repo's change history for what was
+// deliberately left unmapped (and why) rather than guessed at.
+const REASON_MAPPING_RULES = [
+  [/^Lowest CIBIL score \d+ is below the hard-reject floor \d+$/i, CANONICAL_REJECTION_REASONS.BUREAU_CUTOFF],
+  [/^Bureau score missing\.?$/i, CANONICAL_REJECTION_REASONS.BUREAU_CUTOFF],
+  [/^Maximum eligible loan ₹[\d,]+ is below lender minimum ₹[\d,]+$/i, CANONICAL_REJECTION_REASONS.MIN_LOAN_AMOUNT],
+  [/^Composed eligible income is 0 or missing\.?$/i, CANONICAL_REJECTION_REASONS.INCOME_NORMS],
+  [/^GRP eligibility is 0.*$/i, CANONICAL_REJECTION_REASONS.INCOME_NORMS],
 ];
 
-const humanizeReason = (raw) => {
+const mapToCanonicalReason = (raw) => {
   const text = (raw || '').trim();
-  if (!text) return text;
-
-  for (const [pattern, format] of REASON_PATTERNS) {
-    const m = text.match(pattern);
-    if (m) return format(m);
+  if (!text) return null;
+  for (const [pattern, canonical] of REASON_MAPPING_RULES) {
+    if (pattern.test(text)) return canonical;
   }
-
-  // "SOME_CODE: extra detail" — humanize the code, keep the human-written detail
-  const codeWithDetail = text.match(/^([A-Z][A-Z0-9_]{3,}):\s*(.+)$/);
-  if (codeWithDetail) return `${humanizeReasonCode(codeWithDetail[1])} — ${codeWithDetail[2]}`;
-
-  // A bare "SOME_CODE" with no known mapping and no detail
-  if (/^[A-Z][A-Z0-9_]{3,}$/.test(text)) return `${humanizeReasonCode(text)}.`;
-
-  // Already a plain sentence — leave as-is
-  return text;
+  return null;
 };
 
-// Splits the " | "-joined raw reason string into de-duplicated, humanized reasons.
+// Splits the " | "-joined raw reason string, maps each part to a canonical
+// master-list reason, drops anything that doesn't map, and de-duplicates.
 const parseIneligibilityReasons = (raw) => {
   if (!raw) return [];
   const seen = new Set();
   const out = [];
   for (const part of raw.split(' | ')) {
-    const humanized = humanizeReason(part);
-    if (humanized && !seen.has(humanized)) {
-      seen.add(humanized);
-      out.push(humanized);
+    const canonical = mapToCanonicalReason(part);
+    if (canonical && !seen.has(canonical)) {
+      seen.add(canonical);
+      out.push(canonical);
     }
   }
   return out;
@@ -1248,7 +1204,10 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       {(() => {
                         const reasons = parseIneligibilityReasons(lender.ineligibility_reason);
                         if (reasons.length === 0) {
-                          return <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Not eligible</div>;
+                          // No raw reason mapped to one of the master list's canonical
+                          // reasons — show nothing rather than invented/generic text.
+                          // The "Not Eligible" badge above already conveys the status.
+                          return null;
                         }
                         return (
                           <>

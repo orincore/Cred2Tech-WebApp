@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { CheckCircle2, AlertCircle, FileText, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Download, Trash2, Building2, Lock, Eye, EyeOff, Mail, Send, RefreshCw, XCircle } from 'lucide-react';
 import FormField from './ui/FormField';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
@@ -868,18 +868,6 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     <CheckCircle2 size={16} /> GST data pulled successfully
                                 </div>
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                    {/* PDF: prefer internal document, fallback to source URL for legacy records */}
-                                    {latestRequest.gst_pdf_document_id ? (
-                                        <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                                            onClick={() => downloadDocument(latestRequest.gst_pdf_document_id, `gst_${latestRequest.gstin}.pdf`).catch(e => toast.error(e.message))}>
-                                            <FileText size={14} /> PDF Report
-                                        </button>
-                                    ) : latestRequest.report_pdf_url ? (
-                                        <a href={latestRequest.report_pdf_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <FileText size={14} /> PDF Report
-                                        </a>
-                                    ) : null}
-
                                     {/* Excel */}
                                     {latestRequest.gst_excel_document_id ? (
                                         <button type="button" className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
