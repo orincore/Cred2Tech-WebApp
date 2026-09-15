@@ -46,12 +46,19 @@ const fmtDate = (v) => (v ? new Date(v).toLocaleDateString('en-IN') : '—');
 
 function cellDisplay(value, col) {
   if (value === null || value === undefined || value === '') return '—';
+  // Checked ahead of the generic string-passthrough below: a real Date
+  // always arrives here as an ISO string — JSON has no Date type, so
+  // res.json() on the backend already serialized it — not a JS Date
+  // instance. None of this module's date columns ever carry a non-date
+  // fallback string (they're always a real timestamp or null, already
+  // handled above), so it's always safe to run every date column through
+  // fmtDate regardless of its wire representation.
+  if (col.type === 'date') return fmtDate(value);
   if (typeof value === 'string') return value; // pre-formatted / label / "n/a (...)" text passes through as-is
   switch (col.type) {
     case 'currency': return fmtCurrency(value);
     case 'percent': return fmtPercent(value);
     case 'number': return fmtNumber(value);
-    case 'date': return fmtDate(value);
     default: return String(value);
   }
 }
