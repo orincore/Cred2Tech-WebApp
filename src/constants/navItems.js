@@ -25,6 +25,7 @@ import {
   Tag,
   Bell,
   ShieldCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -264,6 +265,13 @@ export const NAV_ITEMS = [
     path: '/financials/sub-dsa-payout',
     icon: HandCoins,
     roles: ['DSA_ADMIN', 'SUB_DSA'],
+  },
+  {
+    id: 'mis-reports',
+    label: 'MIS Reports',
+    path: '/financials/mis-reports',
+    icon: FileSpreadsheet,
+    roles: ['DSA_ADMIN'],
   },
   {
     id: 'dsa-wallet',

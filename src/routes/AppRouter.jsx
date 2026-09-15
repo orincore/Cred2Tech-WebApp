@@ -55,6 +55,7 @@ const PddManagementPage = lazy(() => import('../pages/PddManagementPage'));
 const SalesIncentivePage = lazy(() => import('../pages/SalesIncentivePage'));
 const LenderCommissionPage = lazy(() => import('../pages/LenderCommissionPage'));
 const SubDsaPayoutPage = lazy(() => import('../pages/SubDsaPayoutPage'));
+const MisReportsPage = lazy(() => import('../pages/MisReportsPage'));
 const MyWalletPage = lazy(() => import('../pages/MyWalletPage'));
 const MyTicketsPage = lazy(() => import('../pages/MyTicketsPage'));
 const MyTicketDetailPage = lazy(() => import('../pages/MyTicketDetailPage'));
@@ -422,6 +423,14 @@ const AppRouter = () => (
               element={
                 <ProtectedRoute allowedRoles={['DSA_ADMIN', 'SUB_DSA']}>
                   <SubDsaPayoutPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/financials/mis-reports"
+              element={
+                <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                  <MisReportsPage />
                 </ProtectedRoute>
               }
             />
