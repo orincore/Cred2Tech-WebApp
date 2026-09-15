@@ -504,6 +504,34 @@ function FullCalculationTrace({ ev }) {
 }
 
 // ─── Calculation Breakdown Panel ──────────────────────────────────────────────
+// Production-visible counterpart to FullCalculationTrace's dev-only "Why
+// this scheme is not eligible" box (which dumps ev.failure_reasons raw).
+// This one runs the same scheme's failure_reasons through the canonical
+// master-list mapper so a real DSA/customer only ever sees one of the 11
+// "Final Reason" strings — method-scoping/config-only codes (e.g. GRP
+// profession gating, Salaried-not-applicable) have no master-list entry and
+// are correctly dropped rather than shown or invented.
+function SchemeIneligibilityReasons({ ev }) {
+  if (ev.is_eligible) return null;
+  const reasons = parseIneligibilityReasons((ev.failure_reasons || []).join(' | '));
+  if (reasons.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--error-bg)', border: '1px solid var(--error)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5 }}>
+        Why this scheme is not eligible
+      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {reasons.map((reason, ri) => (
+          <li key={ri} style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: 7, lineHeight: 1.4 }}>
+            <span style={{ color: 'var(--error)', fontWeight: 700, flexShrink: 0 }}>•</span>
+            <span>{reason}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 const CalcBreakdownPanel = ({ evaluations }) => {
   const [open, setOpen] = useState(false);
   const [activeScheme, setActiveScheme] = useState(0);
@@ -657,6 +685,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                     </div>
                   ))}
                 </div>
+                <SchemeIneligibilityReasons ev={ev} />
                 {IS_DEV_BUILD && <FullCalculationTrace ev={ev} />}
               </div>
             </div>
