@@ -148,8 +148,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
   const isMsme = mode === 'MSME_SELF_SERVICE';
 
-  // GST can still be pulling in the background (kicked off on step 2, and
-  // the case-wide GstPullStatusBanner keeps it visible on this step too) —
+  // GST can still be pulling in the background (kicked off on step 2) —
   // generating the ESR against an incomplete GST picture would bake a wrong
   // eligibility number in, so block it until that pull settles one way or
   // the other (finishes or fails).
