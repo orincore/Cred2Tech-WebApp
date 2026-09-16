@@ -2409,6 +2409,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               mode={mode}
               walletBalance={walletBalance}
               bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+              onAddCoApplicant={() => { goToStep(1); setStep1SubPage('coapplicants'); }}
             />
           )}
           {currentStep === 6 && (

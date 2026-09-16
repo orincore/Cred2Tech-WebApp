@@ -111,10 +111,22 @@ const LOAN_TYPES = [
   'Two-Wheeler Loan', 'Education Loan', 'Gold Loan', 'Credit Card', 'Other'
 ];
 
+// A Proprietorship's PAN (and a plain "Individual" applicant's) IS the
+// person's own PAN, so a bureau pull against the primary borrower returns
+// that person's real credit history. Every other constitution (Partnership,
+// LLP, Pvt/Public Ltd, HUF, Trust, AOP/BOI, etc.) is a distinct legal entity
+// with no personal credit file of its own — pulling bureau against it is
+// meaningless, so those cases must get their credit picture from a
+// co-applicant (a director/partner/authorized individual) instead. Matched
+// as a substring, case-insensitively, since the PAN/GST vendor's
+// constitution_of_business text isn't a fixed enum on our side (e.g. "Sole
+// Proprietorship" vs "Proprietorship").
+const BUREAU_ELIGIBLE_ENTITY_RE = /individual|proprietor/i;
+
 // Step 5 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost }) {
+export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, onAddCoApplicant }) {
   const isMobile = useIsMobile();
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
@@ -148,6 +160,13 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const [deletingId, setDeletingId] = useState(null);       // obligation id currently being removed
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
+  // Customer.entity_type (the persisted constitution-of-business, e.g.
+  // "Proprietorship" / "Partnership" / "Private Limited Company") — drives
+  // whether the primary borrower even gets a bureau-pull option below. Null
+  // until the case loads, and stays null for older cases that predate this
+  // field — treated as bureau-eligible (fail open) rather than blocking a
+  // case we genuinely don't know the entity type for.
+  const [entityType, setEntityType] = useState(null);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
   // Applicant ids whose most recent manual pull attempt failed — switches
@@ -168,6 +187,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       ]);
 
       setData(result);
+      setEntityType(caseData.customer?.entity_type || null);
       // Obligations only return a display name that already falls back to a
       // role label ("Primary Borrower") when Applicant.name is unset — pull
       // the PAN-verified name from the full case record so we can show a
@@ -314,7 +334,16 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
     }
   };
 
+  // Recomputed every render off `data`/`entityType` state (both cheap,
+  // already-loaded values) rather than memoized — this page re-renders on
+  // every obligation edit anyway, and a stale flag here would either wrongly
+  // block a case that just added its co-applicant or wrongly let one through.
+  const bureauBlockedForPrimary = !!entityType && !BUREAU_ELIGIBLE_ENTITY_RE.test(entityType);
+  const hasCoApplicant = (data?.grouped || []).some(g => g.applicant.type !== 'PRIMARY');
+  const mustAddCoApplicant = bureauBlockedForPrimary && !hasCoApplicant;
+
   const handleGenerateESR = async () => {
+    if (mustAddCoApplicant) return toast.error(`${entityType} entities have no personal credit history of their own — add a co-applicant before generating the Eligibility Summary Report.`, { duration: 6000 });
     if (gstPending) return toast.error('GST data is still being pulled — please wait for it to finish before generating the ESR.');
     try {
       setGenerating(true);
@@ -420,6 +449,25 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         <span><strong>Review all EMIs carefully.</strong> Obligations directly affect eligibility. Click the EMI field to edit if EMI amounts are different / Loan is closed. Use <strong>+ Add Loan</strong> to include any Loans not shown below.</span>
       </div>
 
+      {/* Co-applicant required notice — only for entities with no personal
+          credit history of their own (see BUREAU_ELIGIBLE_ENTITY_RE). Shown
+          until at least one co-applicant exists on the case. */}
+      {mustAddCoApplicant && (
+        <div style={{ padding: '14px 18px', background: 'var(--error-bg)', border: '1px solid var(--error)', borderRadius: 0, marginBottom: 20, fontSize: 13, color: 'var(--text-primary)', display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <AlertTriangle size={16} color="var(--error)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>Co-applicant required.</strong> {entityType} is a business entity with no personal credit history of its own, so bureau/credit obligations can only be pulled for a co-applicant. Add at least one co-applicant to continue.
+            </span>
+          </div>
+          {onAddCoApplicant && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={onAddCoApplicant} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              + Add Co-Applicant
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Per-applicant cards */}
       {grouped.map(({ applicant, obligations: allObligations, total_emi, active_count }, idx) => {
         const obligations = allObligations.filter(o => Number(o.outstanding_amount) > 0);
@@ -450,25 +498,35 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                   {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
                 </button>
               )}
-              {/* No auto-fetch on mount anymore — this is the only trigger for
-                  pulling bureau score + obligations. It disappears entirely
-                  once the pull succeeds (bureau_fetched flips true); a failed
-                  attempt keeps it visible with a "Retry" label instead. */}
-              {!applicant.bureau_fetched && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handlePullBureau(applicant.id)}
-                  disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
-                  title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
-                  {retryingFor === applicant.id
-                    ? 'Pulling…'
-                    : isMsme
-                      ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
-                      : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
-                </button>
+              {/* Primary borrower of a non-individual/non-proprietor entity has
+                  no personal PAN to pull a credit file against — no button,
+                  no "not fetched" dead-end, just the reason and where to fix
+                  it (the co-applicant-required notice above). */}
+              {applicant.type === 'PRIMARY' && bureauBlockedForPrimary ? (
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 220, textAlign: 'right', lineHeight: 1.4 }}>
+                  Not applicable for {entityType} — pull bureau for a co-applicant instead.
+                </span>
+              ) : (
+                // No auto-fetch on mount anymore — this is the only trigger for
+                // pulling bureau score + obligations. It disappears entirely
+                // once the pull succeeds (bureau_fetched flips true); a failed
+                // attempt keeps it visible with a "Retry" label instead.
+                !applicant.bureau_fetched && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handlePullBureau(applicant.id)}
+                    disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
+                    title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                    {retryingFor === applicant.id
+                      ? 'Pulling…'
+                      : isMsme
+                        ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
+                        : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
+                  </button>
+                )
               )}
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
@@ -622,7 +680,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
               <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
                 {applicant.bureau_fetched
                   ? 'No bureau obligations found for this applicant.'
-                  : 'Bureau data not pulled yet for this applicant — use the button above.'}
+                  : applicant.type === 'PRIMARY' && bureauBlockedForPrimary
+                    ? `Bureau pull isn't available for ${entityType} — no personal credit file exists for this entity.`
+                    : 'Bureau data not pulled yet for this applicant — use the button above.'}
               </span>
             </div>
           )}
@@ -707,14 +767,22 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
           <button
             className="btn btn-primary btn-lg"
             onClick={handleGenerateESR}
-            disabled={generating || gstPending}
-            title={gstPending ? 'GST data is still being pulled — this becomes available once that finishes.' : undefined}
+            disabled={generating || gstPending || mustAddCoApplicant}
+            title={
+              mustAddCoApplicant ? `Add a co-applicant — ${entityType} has no personal credit history of its own.`
+                : gstPending ? 'GST data is still being pulled — this becomes available once that finishes.'
+                : undefined
+            }
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
             {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
           </button>
-          {gstPending && (
+          {mustAddCoApplicant ? (
+            <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={12} /> Add a co-applicant to continue
+            </span>
+          ) : gstPending && (
             <span style={{ fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <AlertTriangle size={12} /> Waiting for GST pull to finish
             </span>
