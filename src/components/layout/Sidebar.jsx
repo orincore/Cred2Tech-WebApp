@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, Search, ChevronUp, MoreHorizontal, MessageSquarePlus, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -20,6 +20,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const canSubmitFeedback = FEEDBACK_SUBMITTER_ROLES.includes(user?.role);
 
@@ -29,6 +30,17 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sidebar lives outside <Outlet> in AppLayout, so it never remounts
+  // across a route change — a query typed here to jump to e.g. "Add
+  // Customer" otherwise stayed in this state for the rest of the session,
+  // silently filtering the whole nav list down to whatever it still
+  // matched (often nothing) on every later page, which read as "the
+  // sidebar went blank." Clearing it on every navigation is what a
+  // remount would have done for free.
+  useEffect(() => {
+    setSearchQuery('');
+  }, [location.pathname]);
 
   // Ticket unread badge — only ever updates when the admin explicitly marks
   // a ticket as read (see AdminTicketsListPage/AdminTicketDetailPage), never
