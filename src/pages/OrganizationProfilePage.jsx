@@ -505,8 +505,8 @@ const OrganizationProfilePage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
               <div>
                 <label style={labelStyle}>Terms of Use</label>
-                <a href="/legal/Terms-of-Use.pdf" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-                  <FileText size={14} /> View PDF
+                <a href="https://cred2tech.com/terms-of-use" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                  <FileText size={14} /> View Page
                 </a>
                 {tenant.terms_accepted_at && (
                   <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>
@@ -516,8 +516,8 @@ const OrganizationProfilePage = () => {
               </div>
               <div>
                 <label style={labelStyle}>Privacy Policy</label>
-                <a href="/legal/Privacy-Policy.pdf" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-                  <FileText size={14} /> View PDF
+                <a href="https://cred2tech.com/privacy-policy" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                  <FileText size={14} /> View Page
                 </a>
                 {tenant.privacy_accepted_at && (
                   <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 4 }}>
@@ -526,7 +526,7 @@ const OrganizationProfilePage = () => {
                 )}
               </div>
               <div>
-                <label style={labelStyle}>DSA Partner Agreement</label>
+                <label style={labelStyle}>Sourcing Partner Agreement</label>
                 {tenant.agreement_accepted_at ? (
                   <>
                     <button

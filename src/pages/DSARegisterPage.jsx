@@ -23,6 +23,12 @@ const initialForm = {
   admin_name: '',
   admin_password: '',
   terms_accepted: false,
+  // Data URL (`data:image/png;base64,...`) captured from the signature pad
+  // on Step 3 — the actual e-signature embedded into the DSA's copy of the
+  // Sourcing Partner Agreement PDF, on top of (not instead of) the OTP
+  // Acceptance the Agreement's own Clause 1(u) already treats as legally
+  // binding. Empty string until the Designated User draws one.
+  signature_data: '',
 };
 
 const companyTypeOptions = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
@@ -374,11 +380,43 @@ function renderBoldRuns(line, keyPrefix) {
   );
 }
 
-// Minimal markdown → JSX for the DSA Agreement preview modal — headers,
-// bold spans, and paragraphs only (matches the small subset the template
-// actually uses). Not a general-purpose renderer; keep the template within
-// this subset when editing it, same constraint the backend's pdfkit
-// renderer (dsaAgreement.service.js) already has.
+// A GFM pipe-table (`| a | b |` header, `|---|---|` separator, body rows)
+// into a plain HTML table — the one bit of structure beyond headers/bold/
+// paragraphs this template actually needs (Schedule I/II), matched to the
+// identical pipe-table convention the backend's pdfkit renderer parses.
+function renderTable(tableLines, key) {
+  const splitRow = (line) => line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  const header = splitRow(tableLines[0]);
+  const rows = tableLines.slice(2).map(splitRow);
+  return (
+    <div key={key} className="overflow-x-auto mb-3 border border-gray-200 dark:border-gray-700 rounded-md">
+      <table className="w-full text-[11.5px] border-collapse">
+        <thead>
+          <tr className="bg-[#2d2159] text-white">
+            {header.map((h, i) => <th key={i} className="text-left px-2.5 py-1.5 font-semibold">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className={ri % 2 === 1 ? 'bg-[#f5f5fa] dark:bg-white/5' : ''}>
+              {r.map((c, ci) => (
+                <td key={ci} className="align-top px-2.5 py-1.5 border-t border-gray-200 dark:border-gray-700 text-[#0a1628] dark:text-[#e6edf7]">{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const SIGNATURE_PLACEHOLDER_MARKER = '@@SIGNATURE_PLACEHOLDER@@';
+
+// Minimal markdown → JSX for the Sourcing Partner Agreement preview modal —
+// headers, bold spans, paragraphs, and pipe-tables (matches the subset the
+// template actually uses). Not a general-purpose renderer; keep the
+// template within this subset when editing it, same constraint the
+// backend's pdfkit renderer (dsaAgreement.service.js) already has.
 function renderAgreementMarkdown(text) {
   const lines = text.split('\n');
   const blocks = [];
@@ -389,29 +427,51 @@ function renderAgreementMarkdown(text) {
     buf = [];
     if (paragraph) blocks.push(<p key={key} className="text-[13px] leading-relaxed text-[#0a1628] dark:text-[#e6edf7] mb-3">{renderBoldRuns(paragraph, key)}</p>);
   };
-  lines.forEach((raw, idx) => {
-    const line = raw.trim();
-    if (line === '') { flush(`p${idx}`); return; }
-    if (line.startsWith('# ')) { flush(`p${idx}`); blocks.push(<h2 key={idx} className="text-[18px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-2 mb-3">{line.slice(2)}</h2>); return; }
-    if (line.startsWith('## ')) { flush(`p${idx}`); blocks.push(<h3 key={idx} className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-4 mb-2">{line.slice(3)}</h3>); return; }
-    if (line.startsWith('### ')) { flush(`p${idx}`); blocks.push(<h4 key={idx} className="text-[13.5px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-3 mb-1.5">{line.slice(4)}</h4>); return; }
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const line = lines[idx].trim();
+    if (line === '') { flush(`p${idx}`); continue; }
+    if (line === SIGNATURE_PLACEHOLDER_MARKER) {
+      flush(`p${idx}`);
+      blocks.push(
+        <div key={idx} className="w-[180px] h-[70px] mb-3 rounded-md border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
+          <span className="text-[11px] text-[#0a1628]/40 dark:text-[#e6edf7]/40">Your signature</span>
+        </div>
+      );
+      continue;
+    }
+    if (line.startsWith('|')) {
+      flush(`p${idx}`);
+      const tableLines = [];
+      let j = idx;
+      while (j < lines.length && lines[j].trim().startsWith('|')) { tableLines.push(lines[j].trim()); j += 1; }
+      blocks.push(renderTable(tableLines, idx));
+      idx = j - 1;
+      continue;
+    }
+    if (line.startsWith('# ')) { flush(`p${idx}`); blocks.push(<h2 key={idx} className="text-[18px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-2 mb-3">{line.slice(2)}</h2>); continue; }
+    if (line.startsWith('## ')) { flush(`p${idx}`); blocks.push(<h3 key={idx} className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-4 mb-2">{line.slice(3)}</h3>); continue; }
+    if (line.startsWith('### ')) { flush(`p${idx}`); blocks.push(<h4 key={idx} className="text-[13.5px] font-bold text-[#0a1628] dark:text-[#e6edf7] mt-3 mb-1.5">{line.slice(4)}</h4>); continue; }
     if (line.startsWith('**[') && line.endsWith(']**')) {
       flush(`p${idx}`);
       blocks.push(<p key={idx} className="text-[12px] italic font-semibold text-amber-600 dark:text-amber-400 mb-3">{line.slice(2, -2)}</p>);
-      return;
+      continue;
     }
     buf.push(line);
-  });
+  }
   flush('tail');
   return blocks;
 }
 
-const DsaAgreementPreviewModal = ({ dsaName, adminName, template, loading, onClose }) => {
+const DsaAgreementPreviewModal = ({ dsaName, adminName, address, mobile, email, template, loading, onClose }) => {
   const substituted = template
     ? template
         .replaceAll('{{DSA_NAME}}', dsaName?.trim() || 'Your Organization')
         .replaceAll('{{AGREEMENT_DATE}}', new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }))
-        .replaceAll('{{ADMIN_NAME}}', adminName?.trim() || 'the registering DSA Admin')
+        .replaceAll('{{ADMIN_NAME}}', adminName?.trim() || 'the registering Designated User')
+        .replaceAll('{{DSA_ADDRESS}}', address?.trim() || 'As entered on Step 2')
+        .replaceAll('{{MOBILE_MASKED}}', mobile?.trim() || 'As verified on Step 1')
+        .replaceAll('{{EMAIL}}', email?.trim() || 'As verified on Step 1')
+        .replaceAll('{{SIGNATURE_BLOCK}}', SIGNATURE_PLACEHOLDER_MARKER)
     : '';
 
   return (
@@ -421,7 +481,7 @@ const DsaAgreementPreviewModal = ({ dsaName, adminName, template, loading, onClo
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">DSA Partner Agreement — Preview</h3>
+          <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">Sourcing Partner Agreement — Preview</h3>
           <button onClick={onClose} className="material-symbols-outlined text-[20px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 cursor-pointer hover:text-[#0a1628] dark:hover:text-[#e6edf7]">close</button>
         </div>
         <div className="px-5 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border-b border-[#c7d2fe]/60 dark:border-[#2d3a6c] shrink-0">
@@ -450,6 +510,111 @@ const DsaAgreementPreviewModal = ({ dsaName, adminName, template, loading, onClo
   );
 };
 
+// Canvas-based e-signature capture for the Designated User signing the
+// Sourcing Partner Agreement — the actual digital signature embedded into
+// the PDF (see dsaAgreement.service.js's SIGNATURE_TOKEN handling on the
+// backend), on top of (not instead of) the OTP Acceptance the Agreement's
+// own Clause 1(u) already treats as the legally binding act. Pointer
+// events (not separate mouse/touch handlers) so one code path covers
+// mouse, touch, and pen input alike. Exports a `data:image/png;base64,...`
+// data URL via onChange on every completed stroke, and an empty string
+// when cleared — the caller (Step 3's hasStepErrors) treats an empty
+// string as "not yet signed" and blocks submission until it's non-empty.
+const SignaturePad = ({ value, onChange }) => {
+  const canvasRef = useRef(null);
+  const drawingRef = useRef(false);
+  const hasStrokeRef = useRef(false);
+
+  // Backing-store resolution scaled for devicePixelRatio so the signature
+  // stays crisp on high-DPI screens, while the CSS size stays fixed —
+  // otherwise a retina capture looks blurry once re-rendered into the PDF
+  // at a larger print size.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth;
+    const cssHeight = canvas.clientHeight;
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0a1628';
+  }, []);
+
+  const getPoint = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const handlePointerDown = (e) => {
+    e.preventDefault();
+    drawingRef.current = true;
+    const ctx = canvasRef.current.getContext('2d');
+    const { x, y } = getPoint(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!drawingRef.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext('2d');
+    const { x, y } = getPoint(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    hasStrokeRef.current = true;
+  };
+
+  const handlePointerUp = () => {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
+    if (hasStrokeRef.current) {
+      onChange(canvasRef.current.toDataURL('image/png'));
+    }
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasStrokeRef.current = false;
+    onChange('');
+  };
+
+  return (
+    <div>
+      <div className="relative w-full h-[150px] rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0a1628]/40 overflow-hidden touch-none">
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full cursor-crosshair touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        />
+        {!value && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="material-symbols-outlined text-[22px] text-[#0a1628]/25 dark:text-[#e6edf7]/25">draw</span>
+            <span className="text-[12px] font-medium text-[#0a1628]/40 dark:text-[#e6edf7]/40 mt-1">Draw your signature here</span>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
+          This is your digital signature on the Sourcing Partner Agreement, in addition to OTP verification.
+        </span>
+        <button type="button" onClick={handleClear} className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 ml-3">
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const DSARegisterPage = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
@@ -460,14 +625,15 @@ const DSARegisterPage = () => {
   const [showPwd, setShowPwd] = useState(false);
   const [isPincodeFetching, setIsPincodeFetching] = useState(false);
 
-  // DSA Agreement preview — the one document of the three that's generated
-  // per-organization (name substituted in), so there's no static PDF to
-  // just link to like Terms of Use / Privacy Policy. Fetches the same
-  // markdown source the backend PDF renderer uses (mirrored to
-  // public/legal/dsa-agreement-template.md — see legal/source/ in the
-  // backend repo) and substitutes the org name client-side, live, so the
-  // preview reflects whatever the user has typed as their organization
-  // name even before a Tenant exists to generate a real PDF for.
+  // Sourcing Partner Agreement preview — the one document of the three
+  // that's generated per-organization (name/address/signature substituted
+  // in), so there's no static PDF to just link to like Terms of Use /
+  // Privacy Policy. Fetches the same markdown source the backend PDF
+  // renderer uses (mirrored to public/legal/dsa-agreement-template.md —
+  // see legal/source/ in the backend repo) and substitutes what's already
+  // known client-side, live, so the preview reflects whatever the user has
+  // typed/signed so far, even before a Tenant exists to generate a real
+  // PDF for.
   const [showAgreementPreview, setShowAgreementPreview] = useState(false);
   const [agreementTemplate, setAgreementTemplate] = useState(null);
   const [agreementLoading, setAgreementLoading] = useState(false);
@@ -830,6 +996,7 @@ const DSARegisterPage = () => {
     if (step === 2 && form.operational_states.length === 0) return true;
     if (step === 3 && !IS_LOCAL_DEV && TURNSTILE_SITE_KEY && !turnstileToken) return true;
     if (step === 3 && !form.terms_accepted) return true;
+    if (step === 3 && !form.signature_data) return true;
     return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
   };
 
@@ -913,6 +1080,7 @@ const DSARegisterPage = () => {
         admin_name: form.admin_name.trim(),
         admin_password: form.admin_password,
         terms_accepted: form.terms_accepted,
+        signature_data: form.signature_data,
         website: '', // honeypot — always empty for real users, see hidden input below
         turnstile_token: turnstileToken || undefined,
         verification_session_id: registrationSessionId.current,
@@ -1338,10 +1506,10 @@ const DSARegisterPage = () => {
                         />
                         <span className="text-[13px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
                           I have read and agree to Cred2Tech's{' '}
-                          <a href="/legal/Terms-of-Use.pdf" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
+                          <a href="https://cred2tech.com/terms-of-use" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
                             Terms of Use
                           </a>{', '}
-                          <a href="/legal/Privacy-Policy.pdf" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
+                          <a href="https://cred2tech.com/privacy-policy" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
                             Privacy Policy
                           </a>{', and the '}
                           <button
@@ -1349,11 +1517,20 @@ const DSARegisterPage = () => {
                             onClick={openAgreementPreview}
                             className="text-indigo-600 dark:text-indigo-400 underline cursor-pointer"
                           >
-                            DSA Partner Agreement
+                            Sourcing Partner Agreement
                           </button>
                           {' '}between Cred2Tech and {form.name.trim() || 'my organization'}. All three will also be emailed to you once registration is complete.
                         </span>
                       </label>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">
+                        Sign the Sourcing Partner Agreement *
+                      </label>
+                      <SignaturePad
+                        value={form.signature_data}
+                        onChange={(dataUrl) => setForm((p) => ({ ...p, signature_data: dataUrl }))}
+                      />
                     </div>
                     {TURNSTILE_SITE_KEY && !IS_LOCAL_DEV && (
                       <div className="md:col-span-2">
@@ -1419,6 +1596,9 @@ const DSARegisterPage = () => {
         <DsaAgreementPreviewModal
           dsaName={form.name}
           adminName={form.admin_name}
+          address={[form.address_line, form.city, form.state, form.pincode].filter(Boolean).join(', ')}
+          mobile={form.mobile ? `${form.mobile_country_code} ${form.mobile}` : ''}
+          email={form.email}
           template={agreementTemplate}
           loading={agreementLoading}
           onClose={() => setShowAgreementPreview(false)}

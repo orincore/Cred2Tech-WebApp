@@ -31,8 +31,9 @@ export const updateTenant = async (id, tenantData) => {
   return response.data;
 };
 
-// The DSA Partner Agreement is generated fresh per request (the tenant's
-// name is substituted in server-side), not a static file — returns a Blob
+// The Sourcing Partner Agreement is generated fresh per request (the
+// tenant's fields and captured signature are substituted in server-side),
+// not a static file — returns a Blob
 // so the caller can preview it (object URL in a new tab) rather than
 // forcing a download, matching how the registration page's Terms of
 // Use/Privacy Policy links open in a new tab too.
