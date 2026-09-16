@@ -49,4 +49,25 @@ export const consentService = {
     const response = await axios.post(`${API_BASE_URL}/consent/${token}/resend-otp`);
     return response.data;
   },
+
+  // Direct MSME self-service (authenticated) — a separate mechanism from
+  // the DSA-side requestConsent/approve/resendOtp above, not a variant of
+  // them: no link is ever sent, and the customer is the one already
+  // logged in, granting their own consent inline (see
+  // AddCustomerWizardPage's self-consent modal) rather than approving on a
+  // separate public page reached via SMS/email.
+  requestSelf: async ({ customer_id, case_id, applicant_id }) => {
+    const response = await api.post('/consent/self/request', { customer_id, case_id, applicant_id });
+    return response.data;
+  },
+
+  approveSelf: async ({ id, otp, case_id }) => {
+    const response = await api.post(`/consent/self/${id}/approve`, { otp, case_id });
+    return response.data;
+  },
+
+  resendOtpSelf: async ({ id, case_id }) => {
+    const response = await api.post(`/consent/self/${id}/resend-otp`, { case_id });
+    return response.data;
+  },
 };

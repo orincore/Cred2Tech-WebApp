@@ -22,6 +22,7 @@ import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
 import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
+import ConsentSelfOtpModal from '../components/ConsentSelfOtpModal';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
@@ -230,6 +231,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // explain itself, not a routine failure. Shared by both the primary
   // customer and co-applicant consent flows below.
   const [identityMismatch, setIdentityMismatch] = useState(null);
+  // Direct MSME self-service consent — a separate mechanism from the
+  // DSA-side link/OTP flow above (consentRequest/handleRequestConsent),
+  // not a variant of it. There's no separate customer to wait on here: the
+  // person consenting is the one already logged in, so instead of sending
+  // an SMS link, this opens a popup on the same page showing the consent
+  // content with an inline OTP entry (see ConsentSelfOtpModal). `target`
+  // is 'primary' or a co-applicant's row index, so one modal instance
+  // (and one set of handlers below) covers both.
+  const [selfConsentModal, setSelfConsentModal] = useState(null);
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
   // Same PAN->GSTIN lookup the primary applicant gets, per self-employed
   // co-applicant — keyed by applicant index (mirrors coappPanVerifyingMap).
@@ -589,6 +599,89 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consentRequest?.id]);
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Direct MSME self-service consent — a separate mechanism from
+  // handleRequestConsent/the subscription effect above, not a variant of
+  // them: the DSA flow above is left untouched. Same identity-verification
+  // chain server-side (still shows ConsentProgressStatus while it runs —
+  // it's the same ~20-90s PAN/GST/BEFISC chain either way), but instead of
+  // texting a link, it opens selfConsentModal with an inline OTP entry and
+  // the consent content shown right there. Approval is a single
+  // synchronous round trip, so there's nothing to subscribe/poll for.
+  // ───────────────────────────────────────────────────────────────────────
+  const handleRequestConsentSelf = async () => {
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
+      return toast.error('Mobile number is required to send the consent OTP.');
+    }
+
+    setConsentRequesting(true);
+    setConsentRequestFailed(false);
+    try {
+      const draft = await ensureDraftSaved();
+      const result = await consentService.requestSelf({
+        customer_id: draft.targetCustomerId,
+        case_id: draft.targetCaseId,
+      });
+      setSelfConsentModal({
+        target: 'primary',
+        id: result.id,
+        caseId: draft.targetCaseId,
+        dataPoints: result.data_points || [],
+        maskedMobile: result.masked_mobile,
+      });
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent OTP';
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: formData.business_pan });
+      } else {
+        toast.error(errMsg);
+      }
+      setConsentRequestFailed(true);
+    } finally {
+      setConsentRequesting(false);
+    }
+  };
+
+  // Shared submit/resend/close for selfConsentModal, whichever target
+  // (primary or a co-applicant row) opened it.
+  const submitSelfConsentOtp = async (otp) => {
+    if (!selfConsentModal) return;
+    setSelfConsentModal((prev) => ({ ...prev, submitting: true, error: '' }));
+    try {
+      await consentService.approveSelf({ id: selfConsentModal.id, otp, case_id: selfConsentModal.caseId });
+      if (selfConsentModal.target === 'primary') {
+        setConsentRequest({ id: selfConsentModal.id, status: 'GRANTED' });
+        setFormData((prev) => ({ ...prev, mobile_verified: true }));
+      } else {
+        const idx = selfConsentModal.target;
+        setCoappConsent((prev) => ({ ...prev, [idx]: { id: selfConsentModal.id, status: 'GRANTED' } }));
+        setFormData((prev) => ({
+          ...prev,
+          applicants: prev.applicants.map((a, i) => (i === idx ? { ...a, otp_verified: true } : a)),
+        }));
+      }
+      toast.success('Consent recorded.');
+      setSelfConsentModal(null);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to record consent';
+      setSelfConsentModal((prev) => (prev ? { ...prev, submitting: false, error: errMsg } : prev));
+    }
+  };
+
+  const resendSelfConsentOtp = async () => {
+    if (!selfConsentModal) return;
+    setSelfConsentModal((prev) => ({ ...prev, resending: true, error: '' }));
+    try {
+      await consentService.resendOtpSelf({ id: selfConsentModal.id, case_id: selfConsentModal.caseId });
+      toast.success('A new OTP has been sent to your mobile number.');
+      setSelfConsentModal((prev) => (prev ? { ...prev, resending: false, resendCooldown: 30 } : prev));
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to resend OTP';
+      setSelfConsentModal((prev) => (prev ? { ...prev, resending: false, error: errMsg } : prev));
+    }
+  };
+
   // Same consent gate as the primary applicant, per co-applicant — a
   // co-applicant is a distinct person and can only consent for their own
   // PAN, so each gets their own request/email/link, keyed by row index
@@ -622,6 +715,50 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: app.pan_number });
+      } else {
+        toast.error(errMsg);
+      }
+    } finally {
+      setCoappConsentRequesting((prev) => ({ ...prev, [index]: false }));
+    }
+  };
+
+  // Direct MSME self-service version of handleRequestCoapplicantConsent
+  // above — same rules (own PAN/mobile required), but opens
+  // selfConsentModal for this co-applicant row instead of texting a link.
+  const handleRequestCoapplicantConsentSelf = async (index) => {
+    const app = formData.applicants[index];
+    if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
+
+    setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
+    try {
+      const { targetCaseId } = await ensureDraftSaved();
+
+      let targetAppId = app.id;
+      if (!targetAppId) {
+        const savedApp = await caseService.addApplicant(targetCaseId, app);
+        targetAppId = savedApp.id;
+        const newArr = [...formData.applicants];
+        newArr[index] = savedApp;
+        setFormData((prev) => ({ ...prev, applicants: newArr }));
+      }
+
+      const result = await consentService.requestSelf({
+        customer_id: formData.customer_id,
+        case_id: targetCaseId,
+        applicant_id: targetAppId,
+      });
+      setSelfConsentModal({
+        target: index,
+        id: result.id,
+        caseId: targetCaseId,
+        dataPoints: result.data_points || [],
+        maskedMobile: result.masked_mobile,
+      });
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent OTP';
       if (err.response?.status === 403) {
         setIdentityMismatch({ message: errMsg, pan: app.pan_number });
       } else {
@@ -1560,7 +1697,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <button
                                     type="button"
                                     className="btn btn-ghost btn-sm"
-                                    onClick={handleRequestConsent}
+                                    onClick={isMsme ? handleRequestConsentSelf : handleRequestConsent}
                                     title="Resend the consent SMS"
                                     style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                                   >
@@ -1572,7 +1709,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <AlertCircle size={13} /> Could not send consent request
                                   </span>
-                                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleRequestConsent}>Retry</button>
+                                  <button type="button" className="btn btn-secondary btn-sm" onClick={isMsme ? handleRequestConsentSelf : handleRequestConsent}>Retry</button>
                                 </div>
                               ) : formData.business_pan?.length === 10 ? (
                                 <PullingIndicator label={formData.mobile_verified ? 'Queued…' : 'Request customer consent to continue…'} />
@@ -1749,12 +1886,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       ) : consentRequest ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <PullingIndicator label="Waiting for customer to approve consent…" />
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={isMsme ? handleRequestConsentSelf : handleRequestConsent} title="Resend the consent SMS">Resend</button>
                         </div>
                       ) : (
                         <button
                           type="button"
-                          onClick={handleRequestConsent}
+                          onClick={isMsme ? handleRequestConsentSelf : handleRequestConsent}
                           disabled={saving || !step1ConsentFieldsValid || (!isMsme && walletBalance < costs.PAN_FETCH)}
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
@@ -1929,13 +2066,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                         ) : coappConsent[realIdx] ? (
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                             <PullingIndicator label="Waiting for approval…" />
-                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
+                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => (isMsme ? handleRequestCoapplicantConsentSelf(realIdx) : handleRequestCoapplicantConsent(realIdx))} title="Resend the consent SMS">Resend</button>
                                           </div>
                                         ) : (
                                           <button
                                             type="button"
                                             className="btn btn-primary btn-sm"
-                                            onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                            onClick={() => (isMsme ? handleRequestCoapplicantConsentSelf(realIdx) : handleRequestCoapplicantConsent(realIdx))}
                                             style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
                                             disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
                                             title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
@@ -2444,6 +2581,18 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         onClose={() => setIdentityMismatch(null)}
         message={identityMismatch?.message}
         pan={identityMismatch?.pan}
+      />
+      <ConsentSelfOtpModal
+        isOpen={!!selfConsentModal}
+        dataPoints={selfConsentModal?.dataPoints}
+        maskedMobile={selfConsentModal?.maskedMobile}
+        submitting={!!selfConsentModal?.submitting}
+        error={selfConsentModal?.error}
+        resending={!!selfConsentModal?.resending}
+        resendCooldown={selfConsentModal?.resendCooldown || 0}
+        onSubmit={submitSelfConsentOtp}
+        onResend={resendSelfConsentOtp}
+        onClose={() => setSelfConsentModal(null)}
       />
     </div>
   );
