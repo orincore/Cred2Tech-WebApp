@@ -16,6 +16,7 @@ import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase, formatDate } from '../utils/helpers';
+import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -92,7 +93,11 @@ const AddSalariedCustomerWizardPage = () => {
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
-    api.get('/wallet/api-costs')
+    // Retried — a transient first-query failure here (see withRetry's own
+    // comment) previously left every cost at its hardcoded 0 default
+    // forever, with only a console.error nobody but a developer would see —
+    // showing a DSA "~0 Cr" for a paid pull that's actually priced normally.
+    withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
         const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
@@ -100,9 +105,12 @@ const AddSalariedCustomerWizardPage = () => {
         const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
         setCosts({ PAN_FETCH: panFetch, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations });
       })
-      .catch(err => console.error(err));
+      .catch(err => {
+        console.error(err);
+        toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
+      });
 
-    api.get('/wallet/balance')
+    withRetry(() => api.get('/wallet/balance'))
       .then(res => setWalletBalance(res.data.balance))
       .catch(console.error);
   }, []);

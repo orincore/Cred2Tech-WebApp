@@ -25,6 +25,7 @@ import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchM
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
+import { withRetry } from '../utils/retryFetch';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
 import EsrStep from './EsrPage';
@@ -156,7 +157,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   useEffect(() => {
     if (isMsme) return; // wallet/credits are DSA-only
 
-    api.get('/wallet/api-costs')
+    // Retried — a transient first-query failure here (see withRetry's own
+    // comment) previously left every cost at its hardcoded 0 default
+    // forever, with only a console.error nobody but a developer would see —
+    // showing a DSA "~0 Cr" for a paid pull that's actually priced normally.
+    withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
         const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
@@ -167,7 +172,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
         setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
       })
-      .catch(err => console.error(err));
+      .catch(err => {
+        console.error(err);
+        toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
+      });
   }, [isMsme]);
 
   // Polled (not fetched once) so the header pill reflects a deduction the
