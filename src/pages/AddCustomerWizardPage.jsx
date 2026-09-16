@@ -20,6 +20,8 @@ import GstPullStatusBanner from '../components/case/GstPullStatusBanner';
 import ItrPullStatusBanner from '../components/case/ItrPullStatusBanner';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
+import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
+import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
@@ -214,6 +216,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [consentRequesting, setConsentRequesting] = useState(false);
   const [consentRequestFailed, setConsentRequestFailed] = useState(false);
   const consentGranted = consentRequest?.status === 'GRANTED';
+  // Set only for the anti-impersonation check's own rejection (backend 403
+  // — "mobile number doesn't match this PAN"), shown as a blocking popup
+  // instead of a toast since it's a security stop that needs room to
+  // explain itself, not a routine failure. Shared by both the primary
+  // customer and co-applicant consent flows below.
+  const [identityMismatch, setIdentityMismatch] = useState(null);
   const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
   // Same PAN->GSTIN lookup the primary applicant gets, per self-employed
   // co-applicant — keyed by applicant index (mirrors coappPanVerifyingMap).
@@ -543,7 +551,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
-      toast.error(errMsg);
+      // The anti-impersonation check's own rejection (backend 403 — nothing
+      // else in this flow returns 403) gets a blocking popup instead of a
+      // toast, since it needs room to explain why and what to do about it.
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: formData.business_pan });
+      } else {
+        toast.error(errMsg);
+      }
       setConsentRequestFailed(true);
     } finally {
       setConsentRequesting(false);
@@ -598,7 +613,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
       toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: app.pan_number });
+      } else {
+        toast.error(errMsg);
+      }
     } finally {
       setCoappConsentRequesting((prev) => ({ ...prev, [index]: false }));
     }
@@ -1525,7 +1545,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <AlertCircle size={13} /> PAN verification failed — fix and re-enter
                                 </span>
                               ) : consentRequesting ? (
-                                <PullingIndicator label="Sending consent request…" />
+                                <ConsentProgressStatus />
                               ) : consentRequest && !consentGranted ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                   <PullingIndicator label="Waiting for customer to approve consent…" />
@@ -1715,7 +1735,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                     {!formData.mobile_verified ? (
                       consentRequesting ? (
-                        <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                        <div className="btn btn-primary btn-lg" style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                          <ConsentProgressStatus color="#fff" />
+                        </div>
                       ) : consentRequest ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <PullingIndicator label="Waiting for customer to approve consent…" />
@@ -1893,7 +1915,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
                                       {!app.otp_verified ? (
                                         coappConsentRequesting[realIdx] ? (
-                                          <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
+                                          <div className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap', pointerEvents: 'none', opacity: 0.9 }}>
+                                            <ConsentProgressStatus color="#fff" style={{ fontSize: 12 }} />
+                                          </div>
                                         ) : coappConsent[realIdx] ? (
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                             <PullingIndicator label="Waiting for approval…" />
@@ -2405,6 +2429,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         </div>
 
       </div>
+
+      <ConsentIdentityMismatchModal
+        isOpen={!!identityMismatch}
+        onClose={() => setIdentityMismatch(null)}
+        message={identityMismatch?.message}
+        pan={identityMismatch?.pan}
+      />
     </div>
   );
 };
