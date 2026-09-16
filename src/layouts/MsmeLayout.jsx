@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { MsmeAuthProvider, useMsmeAuth } from '../context/MsmeAuthContext';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
+import ConfirmModal from '../components/ui/ConfirmModal';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
 
@@ -14,6 +15,7 @@ const LayoutContent = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -69,7 +71,7 @@ const LayoutContent = () => {
         showMobile={showMobileSidebar}
         onClose={() => setShowMobileSidebar(false)}
         user={user}
-        onLogout={logout}
+        onLogout={() => setShowLogoutConfirm(true)}
       />
 
       <div
@@ -171,6 +173,17 @@ const LayoutContent = () => {
           <Outlet />
         </main>
       </div>
+
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You will need to sign in again to access your account."
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        danger
+      />
     </div>
   );
 };
