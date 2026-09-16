@@ -13,50 +13,47 @@ const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
   if (!isOpen) return null;
 
   const steps = [
-    { icon: Smartphone, text: "Confirm the mobile number directly with the customer — it must be the number registered to their own PAN." },
-    { icon: UserCheck, text: 'Update the mobile number above, then click "Request Consent" again.' },
+    { icon: Smartphone, accent: 'var(--info)', accentBg: 'var(--info-bg)', text: "Confirm the mobile number directly with the customer. It must be the number registered to their own PAN." },
+    { icon: UserCheck, accent: 'var(--success)', accentBg: 'var(--success-bg)', text: 'Update the mobile number above, then click "Request Consent" again.' },
   ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
-              width: 42, height: 42,
+              width: 44, height: 44,
               borderRadius: '50%',
               background: 'var(--error-bg)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
-              <ShieldAlert size={20} color="var(--error)" />
+              <ShieldAlert size={22} color="var(--error)" />
             </div>
-            <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>Mobile number doesn't match this PAN</h2>
+            <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>Mobile number doesn't match this PAN</h2>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close">
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close" style={{ flexShrink: 0 }}>
             <X size={18} />
           </button>
         </div>
 
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
-          {message || `We could not verify that this mobile number is registered to PAN ${pan || ''}. For security, consent can only be sent to the PAN holder's own mobile number — this prevents someone else from approving consent on their behalf.`}
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 22, lineHeight: 1.6 }}>
+          {message || `We could not verify that this mobile number is registered to PAN ${pan || ''}. For security, consent can only be sent to the PAN holder's own mobile number, so someone else cannot approve consent on their behalf.`}
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-          {steps.map(({ icon: Icon, text }, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
+          {steps.map(({ icon: Icon, accent, accentBg, text }, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                width: 34, height: 34, borderRadius: '50%',
+                background: accentBg, border: `1px solid ${accent}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)',
+                flexShrink: 0,
               }}>
-                {i + 1}
+                <Icon size={16} color={accent} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 3 }}>
-                <Icon size={15} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{text}</span>
-              </div>
+              <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{text}</span>
             </div>
           ))}
         </div>
