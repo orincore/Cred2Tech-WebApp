@@ -557,6 +557,15 @@ const CalcBreakdownPanel = ({ evaluations }) => {
 
     const availableEvaluations = evaluations.filter((evaluation) =>
       !isSchemeDisabledForLender(evaluation.lender_policy_key, evaluation.scheme_name)
+      // The engine deliberately keeps a method whose employment-type gate
+      // excludes it (dynamicEligibility.service.js's own comment: "keep
+      // those configured methods in the result for policy visibility") —
+      // e.g. every non-Salaried method for a salaried case, or the
+      // standalone Salaried method for a self-employed case. That's useful
+      // for backend/policy auditing but just clutters this tab list with
+      // methods that were never going to run for this applicant, so hide
+      // them here rather than in the engine itself.
+      && evaluation.configuration_status !== 'NOT_APPLICABLE_FOR_PRIMARY_PROFILE'
     );
 
     const compare = (a, b) => {
