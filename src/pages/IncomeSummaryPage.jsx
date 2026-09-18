@@ -27,6 +27,22 @@ const INCOME_TYPES_SALARIED = [
 ];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'None'];
 
+// esr_financials.salaried_income_source (esrFinancials.service.js) has 5
+// real values, not just OCR/MANUAL — a case can have OCR salary slips for
+// one salaried applicant and only a manual entry for another, which is
+// still genuinely OCR-backed and must not read as plain 'Manual'/'—'.
+// Missing this mapping was why a salary that WAS OCR'd (just mixed with a
+// co-applicant's manual entry, or cross-checked against bank credits) showed
+// as an unlabelled dash here — reading exactly like a manual/unverified
+// figure even though OCR was in fact used.
+const SALARY_SOURCE_LABELS = {
+  OCR: 'Salary OCR',
+  OCR_MANUAL: 'Salary OCR + Manual',
+  OCR_BANK: 'Salary OCR + Bank',
+  BANK_STATEMENT: 'Bank Statement',
+  MANUAL: 'Manual'
+};
+
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const useIsMobile = () => {
@@ -172,7 +188,7 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
         label: 'Salary (Annual)', latest: app.salary?.latest, prev: null,
         fyLatest: app.salary?.fy_latest, fyPrev: app.salary?.fy_prev,
         rangeLatest: app.salary?.fy_latest, rangePrev: app.salary?.fy_prev,
-        source: app.salary?.source === 'OCR' ? 'Salary OCR' : (app.salary?.source === 'MANUAL' ? 'Manual' : '—'),
+        source: SALARY_SOURCE_LABELS[app.salary?.source] || '—',
         color: 'var(--success)', bg: 'var(--success-bg)'
       }]
     : [

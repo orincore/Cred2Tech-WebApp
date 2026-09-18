@@ -4,6 +4,7 @@ import { Sun, Moon } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import MsmeSidebar from '../components/layout/MsmeSidebar';
 import VirtualWorkspaceGraceBanner from '../components/VirtualWorkspaceGraceBanner';
+import LowWalletBalanceBanner from '../components/LowWalletBalanceBanner';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -236,6 +237,7 @@ const AppLayout = () => {
         )}
         
         {!isMsme && <VirtualWorkspaceGraceBanner />}
+        {!isMsme && <LowWalletBalanceBanner />}
         <main className="page-content" style={{ padding: isMobile ? 0 : 0 }}>
           <Outlet />
         </main>
