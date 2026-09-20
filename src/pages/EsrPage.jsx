@@ -34,6 +34,13 @@ const formatDynamicTenure = (months) => {
 
 const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 
+// The final amount is part of the eligibility contract. Keep this UI-side
+// guard for older saved ESR payloads that may contain is_eligible=true with
+// a zero-value offer.
+const hasPositiveEligibility = (result) => result?.is_eligible === true
+  && Number.isFinite(Number(result?.final_eligible_loan_amount))
+  && Number(result.final_eligible_loan_amount) > 0;
+
 // Full step-by-step calculation trace is dev-only for now — it surfaces
 // internal field names and legacy-parser warnings not meant for a DSA/
 // customer-facing view yet. Gated on the build-time API target rather than
@@ -512,7 +519,7 @@ function FullCalculationTrace({ ev }) {
 // profession gating, Salaried-not-applicable) have no master-list entry and
 // are correctly dropped rather than shown or invented.
 function SchemeIneligibilityReasons({ ev }) {
-  if (ev.is_eligible) return null;
+  if (hasPositiveEligibility(ev)) return null;
   const reasons = parseIneligibilityReasons((ev.failure_reasons || []).join(' | '));
   if (reasons.length === 0) return null;
   return (
@@ -569,7 +576,9 @@ const CalcBreakdownPanel = ({ evaluations }) => {
     );
 
     const compare = (a, b) => {
-      if (a.is_eligible !== b.is_eligible) return a.is_eligible ? -1 : 1;
+      const aEligible = hasPositiveEligibility(a);
+      const bEligible = hasPositiveEligibility(b);
+      if (aEligible !== bEligible) return aEligible ? -1 : 1;
 
       const loanA = a.final_eligible_loan_amount || 0;
       const loanB = b.final_eligible_loan_amount || 0;
@@ -675,7 +684,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
                       {e.scheme_name}
-                      {e.is_eligible ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
+                      {hasPositiveEligibility(e) ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
                 </div>
@@ -788,7 +797,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
         // than leaving the proposal with no scheme reference at all.
         const r = await caseService.createProposal(caseId, {
           lender_id: lender.lender_id,
-          scheme_id: lender.scheme_evaluations?.find(s => s.is_eligible)?.scheme_id
+          scheme_id: lender.scheme_evaluations?.find(hasPositiveEligibility)?.scheme_id
             || lender.scheme_evaluations?.[0]?.scheme_id
             || null,
         });
@@ -1025,13 +1034,13 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   );
 
   const lenders = esr?.raw_payload?.lenders || [];
-  const eligibleCount   = lenders.filter(l => l.is_eligible).length;
-  const ineligibleCount = lenders.filter(l => !l.is_eligible).length;
+  const eligibleCount   = lenders.filter(hasPositiveEligibility).length;
+  const ineligibleCount = lenders.filter(l => !hasPositiveEligibility(l)).length;
 
   const lenderNames = [...new Set(lenders.map(getLenderDisplayName))].sort();
   const filteredLenders = lenders.filter(l =>
     (lenderFilter === 'all' || getLenderDisplayName(l) === lenderFilter) &&
-    (eligibilityFilter === 'all' || (eligibilityFilter === 'eligible' ? l.is_eligible : !l.is_eligible))
+    (eligibilityFilter === 'all' || (eligibilityFilter === 'eligible' ? hasPositiveEligibility(l) : !hasPositiveEligibility(l)))
   );
 
   return (
@@ -1181,7 +1190,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       {/* Lenders — compact list view */}
       {esr && lenders.length > 0 && (() => {
         const renderRow = (lender, i) => {
-          const eligible = lender.is_eligible;
+          const eligible = hasPositiveEligibility(lender);
           // Same derivation LenderActions uses — the status badges moved up
           // into the identity row, so the card needs them here too.
           const lenderProposals = proposals.filter(p => String(p.lender_id) === String(lender.lender_id));
@@ -1303,8 +1312,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           );
         }
 
-        const visibleEligible   = filteredLenders.filter(l => l.is_eligible);
-        const visibleIneligible = filteredLenders.filter(l => !l.is_eligible);
+        const visibleEligible   = filteredLenders.filter(hasPositiveEligibility);
+        const visibleIneligible = filteredLenders.filter(l => !hasPositiveEligibility(l));
 
         return (
           <div>
