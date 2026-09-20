@@ -1208,12 +1208,27 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // a pincode typed and then left via the stepper was silently never saved.
   // Persisting on blur closes that gap without needing to touch the
   // stepper's own free-navigation behavior.
-  const handlePincodeBlur = async () => {
+  //
+  // Blur alone still isn't enough: a DSA who types the 6th digit and
+  // immediately clicks another control relies on blur firing (and its save
+  // request landing) before that click's own handler reads state — a race a
+  // fast typist/clicker can lose. savePincode is called the instant the
+  // field holds a complete 6-digit value (see the input's onChange below),
+  // well before the user could plausibly click elsewhere; onBlur still
+  // calls it too, as a fallback for a pincode that's shorter than 6 digits
+  // on blur. pincodeSaveSeq guards against an in-flight save's response
+  // landing after a newer edit (e.g. the user immediately corrects a digit,
+  // producing a second complete 6-digit value) — only the latest request is
+  // allowed to write formData.
+  const pincodeSaveSeq = useRef(0);
+  const savePincode = async (value) => {
     if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
     const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.pincode === formData.pincode) return;
+    if (!primaryApp?.id || primaryApp.pincode === value) return;
+    const seq = ++pincodeSaveSeq.current;
     try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: formData.pincode, dob: primaryApp.dob || formData.dob });
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, dob: primaryApp.dob || formData.dob });
+      if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
       setFormData(prev => ({
         ...prev,
         applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
@@ -1221,6 +1236,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save pincode');
     }
+  };
+  const handlePincodeBlur = () => savePincode(formData.pincode);
+  const handlePincodeChange = (value) => {
+    setFormData(prev => ({ ...prev, pincode: value }));
+    if (/^\d{6}$/.test(value)) savePincode(value);
   };
 
   const handleStep1Submit = async (e) => {
@@ -1388,6 +1408,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   };
 
   if (loading) {
+    // A saved/shared link landing directly on step 7 (Prepare Proposal)
+    // used to show THIS generic skeleton first (it has nothing to do with
+    // the Proposal page's actual layout), then — once caseId etc. finish
+    // loading and ProposalStep mounts — its own separate loading state took
+    // over, producing two back-to-back, visually unrelated loading
+    // animations for one navigation. Read directly off the URL rather than
+    // `currentStep` state, since that only gets set once this same load
+    // finishes (see loadCase below) — it isn't available yet at this point.
+    // ProposalPage's own loading state (now a matching skeleton, not a
+    // spinner) is the only loading UI shown for this step now.
+    const stepFromUrl = parseInt(searchParams.get('step'), 10);
+    if (stepFromUrl === 7) return null;
+
     return (
       <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
         <div className="card" style={{ marginBottom: 16 }}>
@@ -1618,7 +1651,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               {duplicateWarning.summary?.itr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> ITR Analytics</div>}
                               {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
                               {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary OCR</div>}
+                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slips</div>}
                             </div>
                           )}
 
@@ -1777,7 +1810,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         </FormField>
 
                         <FormField label="Pincode" name="pincode" required>
-                          <input type="text" value={formData.pincode || ''} onChange={e => setFormData({ ...formData, pincode: e.target.value })} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
+                          <input type="text" value={formData.pincode || ''} onChange={e => handlePincodeChange(e.target.value)} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
                         </FormField>
 
                         <FormField label="Are You A Professional?" name="is_professional">
@@ -1939,7 +1972,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                     {suggestion.bureau_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Bureau Available</span>}
                                     {suggestion.documents_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Documents</span>}
                                     {suggestion.income_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Income</span>}
-                                    {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary OCR</span>}
+                                    {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary Slips</span>}
                                     {suggestion.obligations_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Obligations</span>}
                                   </div>
                                 </div>
@@ -2434,8 +2467,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   {formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED') && (
                     <div className="card">
                       <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                        <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Salary Slip OCR</h3>
-                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 slips — auto-parsed via OCR</span>
+                        <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Salary Slips</h3>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 slips — our tool will extract data automatically</span>
                       </div>
                       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                         {formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.employment_type === 'SALARIED').map((app, idx) => (
@@ -2468,7 +2501,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
                       required
-                      style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
                     >
                       <option value="">— Select a loan product —</option>
                       <option value="LAP">LAP — Loan Against Property</option>

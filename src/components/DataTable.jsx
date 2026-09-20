@@ -41,7 +41,7 @@ const DataTable = ({
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', width: '100%' }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', width: '100%' }}>
       <table style={{
         width: isMobile ? '900px' : '100%',
         borderCollapse: 'collapse',

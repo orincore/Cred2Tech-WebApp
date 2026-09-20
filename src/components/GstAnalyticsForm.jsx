@@ -843,8 +843,19 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                             </div>
                         </div>
                     ) : isDead ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
-                            <AlertCircle size={16} /> {latestRequest.label || (latestRequest.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
+                                <AlertCircle size={16} /> {latestRequest.label || (latestRequest.provider_message?.toLowerCase().includes('cancel') ? 'Request cancelled' : 'GST request failed')}
+                            </div>
+                            {/* Reuses the same delete-then-re-pull mechanism already
+                                offered for a completed pull (handleDeleteRequest's own
+                                comment: "a retry is needed under a different GSTIN") —
+                                a FAILED request previously had no way back to the form
+                                at all short of leaving and reopening this step. */}
+                            <button type="button" onClick={() => handleDeleteRequest(latestRequest.id)} disabled={deleting}
+                                className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <RefreshCw size={14} /> {deleting ? 'Retrying…' : 'Retry'}
+                            </button>
                         </div>
                     ) : !isSuccess ? (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -914,8 +925,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                         <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(latestRequest.turnover_preview.avg_monthly_turnover)}</div>
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Months Filed (12m)</div>
-                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{latestRequest.turnover_preview.months_filed_12m ?? '—'}</div>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                            {latestRequest.turnover_preview.months_filed_24m != null ? 'Months Filed (24m)' : 'Months Filed (12m)'}
+                                        </div>
+                                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>
+                                            {latestRequest.turnover_preview.months_filed_24m ?? latestRequest.turnover_preview.months_filed_12m ?? '—'}
+                                        </div>
                                     </div>
                                 </div>
                             )}

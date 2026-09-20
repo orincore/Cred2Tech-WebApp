@@ -97,6 +97,7 @@ html, body {
   --success: #10B981;
   --success-bg: #ECFDF5;
   --warning: #F59E0B;
+  --warning-dark: #B45309;
   --warning-bg: #FFFBEB;
   --error: #EF4444;
   --error-bg: #FEF2F2;
@@ -178,6 +179,7 @@ html, body {
   --success: #6ee7b7;
   --success-bg: #064e3b;
   --warning: #fcd34d;
+  --warning-dark: #f59e0b;
   --warning-bg: #78350F;
   --error: #fca5a5;
   --error-bg: #7f1d1d;

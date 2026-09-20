@@ -7,16 +7,14 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle } from 'lucide-react';
+import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle, Wallet } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
-import DataPullProgress from '../components/onboarding/DataPullProgress';
 import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
 import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
 import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
-import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
@@ -117,10 +115,22 @@ const AddSalariedCustomerWizardPage = () => {
         console.error(err);
         toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
       });
+  }, []);
 
-    withRetry(() => api.get('/wallet/balance'))
-      .then(res => setWalletBalance(res.data.balance))
-      .catch(console.error);
+  // Polled (not fetched once) so the header pill reflects a deduction the
+  // moment it happens — same convention AddCustomerWizardPage.jsx uses for
+  // its wallet chip, since a PAN/bureau pull kicked off from any step
+  // charges this wallet server-side.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchBalance = () => {
+      api.get('/wallet/balance')
+        .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
+        .catch(console.error);
+    };
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const [panVerifying, setPanVerifying] = useState(false);
@@ -155,36 +165,6 @@ const AddSalariedCustomerWizardPage = () => {
   // same as AddCustomerWizardPage.jsx's own identityMismatch — it needs room
   // to explain why the mobile number was rejected and what to do about it.
   const [identityMismatch, setIdentityMismatch] = useState(null);
-  const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
-  const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
-
-  // Bureau reports (Experian PDF) get ingested into document storage per
-  // applicant at pull time — fetch them once a case exists so a "Download
-  // Report" button can appear next to a completed bureau pull.
-  useEffect(() => {
-    if (!caseId) return;
-    listDocuments({ caseId })
-      .then(docs => {
-        const reports = {};
-        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
-          .forEach(d => { reports[d.applicant_id] = d; });
-        setBureauReports(reports);
-      })
-      .catch(() => { }); // non-fatal — just no download button
-  }, [caseId, formData.applicants]);
-
-  const handleDownloadReport = async (applicantId) => {
-    const doc = bureauReports[applicantId];
-    if (!doc) return;
-    setDownloadingFor(applicantId);
-    try {
-      await downloadDocument(doc.id, doc.original_file_name);
-    } catch (e) {
-      toast.error('Failed to download bureau report');
-    } finally {
-      setDownloadingFor(null);
-    }
-  };
 
   // Applicant.name is often unset for the primary borrower (it lives on
   // formData.business_name instead) — prefer a real name over the generic
@@ -331,7 +311,15 @@ const AddSalariedCustomerWizardPage = () => {
       market_value: caseData.property?.market_value || '',
     });
 
-    if (primaryApp?.otp_verified && restoredApplicants.length > 0) {
+    // Consent (otp_verified) alone isn't enough to skip step 1 on resume —
+    // PAN must actually be verified too. Consent can complete without PAN
+    // auto-verify ever finishing in this tab (e.g. the customer approves the
+    // consent link on their own device, or the DSA reloads mid-verify), and
+    // step 1's auto-verify effect only runs while currentStep === 1 — so
+    // jumping straight to step 2 on otp_verified alone stranded these cases
+    // with no PAN ever fetched and no way back short of manually clicking
+    // "← Back".
+    if (primaryApp?.otp_verified && primaryApp?.pan_verified && restoredApplicants.length > 0) {
       setCurrentStep(2);
     } else {
       setCurrentStep(1);
@@ -518,8 +506,6 @@ const AddSalariedCustomerWizardPage = () => {
     setCoappPanEditUnlockedMap({});
     setDuplicateWarning(null);
     setIdentityMismatch(null);
-    setBureauReports({});
-    setDownloadingFor(null);
     setCoappConsent({});
     setCoappConsentRequesting({});
   }, [urlCaseId, caseId]);
@@ -722,12 +708,28 @@ const AddSalariedCustomerWizardPage = () => {
   // silently never saved — reading back blank the moment applyCaseData
   // repopulates the form from the server, since the server never actually
   // had it. Persisting on blur closes that gap.
-  const handlePincodeBlur = async () => {
+  //
+  // Blur alone still isn't enough on its own: a DSA who types the 6th digit
+  // and immediately clicks "Request Consent" relies on blur firing (and its
+  // save request landing) before that click's own handler reads state — a
+  // race that a fast typist / fast clicker can lose. savePincode is called
+  // the instant the field holds a complete 6-digit value (see the input's
+  // onChange below) so the save is already in flight well before the user
+  // could plausibly click elsewhere; onBlur still calls it too, as a
+  // fallback for a pincode that's shorter than 6 digits on blur.
+  // pincodeSaveSeq guards against an in-flight save's response landing after
+  // a newer edit (e.g. the user immediately corrects a digit, producing a
+  // second complete 6-digit value) — only the latest request is allowed to
+  // write formData.
+  const pincodeSaveSeq = useRef(0);
+  const savePincode = async (value) => {
     if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
     const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.pincode === formData.pincode) return;
+    if (!primaryApp?.id || primaryApp.pincode === value) return;
+    const seq = ++pincodeSaveSeq.current;
     try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: formData.pincode });
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value });
+      if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
       setFormData(prev => ({
         ...prev,
         applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
@@ -735,6 +737,11 @@ const AddSalariedCustomerWizardPage = () => {
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save pincode');
     }
+  };
+  const handlePincodeBlur = () => savePincode(formData.pincode);
+  const handlePincodeChange = (value) => {
+    setFormData(prev => ({ ...prev, pincode: value }));
+    if (/^\d{6}$/.test(value)) savePincode(value);
   };
 
   const handleStep1Submit = async (e) => {
@@ -783,63 +790,12 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  const handleRunBureau = async (applicantId) => {
-    if (!caseId) return toast.error('Case ID missing');
-    if (saving) return;
-    try {
-      setSaving(true);
-      const res = await api.post(`/verification/bureau/run/${caseId}`, { applicantId });
-      const data = res.data;
-
-      if (data.status === 'FAILED') {
-        toast.error(data.errors?.[0]?.error || 'Bureau fetch failed');
-        return;
-      }
-
-      // status can be SUCCESS, PARTIAL_SUCCESS, or FAILED — PARTIAL_SUCCESS
-      // covers "some applicants in this batch succeeded, this one didn't"
-      // (e.g. a vendor-side error for this specific applicant's Experian
-      // pull, which now provides both the score and obligations in one
-      // call — see bureau.controller.js). That's not a completed bureau
-      // check for THIS applicant even though the request as a whole didn't
-      // throw, so success must be judged by whether their score actually
-      // came back — not by the overall status string alone.
-      const targetApp = formData.applicants.find(a => a.id === applicantId);
-      const newScore = targetApp?.type === 'PRIMARY'
-        ? data.applicantScore
-        : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
-
-      if (!newScore) {
-        const pullError = data.errors?.find(e => e.applicantId === applicantId);
-        toast.error(pullError?.error || 'Bureau score not returned for this applicant.');
-        return;
-      }
-
-      toast.success('Bureau pull success!');
-
-      const updatedApps = formData.applicants.map(a => {
-        if (a.id !== applicantId) return a;
-        return { ...a, bureau_fetched: true, cibil_score: newScore };
-      });
-      setFormData(prev => ({ ...prev, applicants: updatedApps }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Bureau fetch failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleStep2Submit = async (e) => {
     e.preventDefault();
-    // a.bureau_fetched is now sourced correctly (see restoredApplicants /
-    // handleRunBureau above) — it only reflects an actual successful score
-    // fetch, not merely an attempted or partially-failed one.
-    const anyBureauReady = formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score);
-
-    if (!anyBureauReady) {
-      return toast.error('Bureau pull must be completed for at least one applicant before proceeding.');
-    }
-
+    // Bureau pull is no longer gated here — it happens exclusively on the
+    // "Bureau & Obligations" step (step 5) further along in the shared
+    // journey (see BureauObligationsPage), which enforces its own
+    // requirements before ESR/proposal.
     setCurrentStep(3);
   };
 
@@ -947,17 +903,24 @@ const AddSalariedCustomerWizardPage = () => {
         .wizard-page .notice {
           border-radius: 0 !important;
         }
-        /* Dark mode: the shared grey text tokens read too low-contrast on
-           this data-heavy page — bump them to white here specifically,
-           without touching the global theme. */
+        /* --text-secondary/--text-tertiary are identical to --text-primary
+           in the global theme (see index.css) — this page used to "fix" the
+           resulting low-contrast labels by forcing both straight to pure
+           white/black, but that just moved the bug: --text-tertiary also
+           drives every placeholder's color (.form-control::placeholder), so
+           a full-strength placeholder became indistinguishable from real
+           typed text across all 3 steps. Same fix as AddCustomerWizardPage's
+           identical override — real, distinct muted tones instead of a
+           blunt full-contrast override — secondary for labels/helper text
+           (still clearly readable), tertiary dimmer still for anything
+           meant to read as "hint, not content" (placeholders included). */
         :root.dark .wizard-page {
-          --text-secondary: #ffffff;
-          --text-tertiary: #ffffff;
+          --text-secondary: #c3cce0;
+          --text-tertiary: #8b98bd;
         }
-        /* Light mode: same low-contrast grey complaint — use black instead. */
         :root:not(.dark) .wizard-page {
-          --text-secondary: #000000;
-          --text-tertiary: #000000;
+          --text-secondary: #334155;
+          --text-tertiary: #64748b;
         }
         .hide-scrollbar {
           scrollbar-width: none;
@@ -992,11 +955,27 @@ const AddSalariedCustomerWizardPage = () => {
               {caseId ? (formData.business_name ? toTitleCase(formData.business_name) : 'Resume Salaried Case') : 'Add Salaried Customer'}
             </h1>
           </div>
-          {caseId && (
-            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Check size={16} /> Auto-saved
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div
+              title="Remaining wallet credits — updates automatically"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px',
+                background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
+                border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
+                borderRadius: 999, fontSize: 13, fontWeight: 700,
+                color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
+              }}
+            >
+              <Wallet size={14} />
+              {walletBalance.toLocaleString('en-IN')} Credits
             </div>
-          )}
+            {caseId && (
+              <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Check size={16} /> Auto-saved
+              </div>
+            )}
+          </div>
         </div>
 
         <CaseWizardStepper
@@ -1056,7 +1035,7 @@ const AddSalariedCustomerWizardPage = () => {
                             <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                               <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
                               {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
+                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slips</div>}
                               {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
                             </div>
                           )}
@@ -1191,7 +1170,7 @@ const AddSalariedCustomerWizardPage = () => {
                           <input
                             type="text"
                             value={formData.pincode || ''}
-                            onChange={e => setFormData({ ...formData, pincode: e.target.value })}
+                            onChange={e => handlePincodeChange(e.target.value)}
                             onBlur={handlePincodeBlur}
                             className="form-control"
                             placeholder="e.g. 400004"
@@ -1439,41 +1418,19 @@ const AddSalariedCustomerWizardPage = () => {
 
           {currentStep === 2 && (
             <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {/* Bureau Verification */}
+              {/* Bureau pull moved to the "Bureau & Obligations" step (step 5,
+                  BureauObligationsPage) — that step already has its own pull
+                  button, CIBIL score display and report download per
+                  applicant, so duplicating a second pull button here just
+                  meant the bureau check could be (and had to be) done twice.
+                  This page no longer gates on bureau_fetched either, since
+                  that's now solely step 5's job. */}
               <div className="card">
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bureau Verification</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Verify credit scores before analysis</p>
-                </div>
-                <div style={{ padding: 24 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {[...formData.applicants].sort((a, b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => (
-                      <DataPullProgress
-                        key={app.id || idx}
-                        label={getApplicantDisplayName(app, idx)}
-                        status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
-                        description={app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'}
-                        score={app.cibil_score}
-                        onDownload={bureauReports[app.id] ? () => handleDownloadReport(app.id) : null}
-                        downloading={downloadingFor === app.id}
-                        onStart={() => handleRunBureau(app.id)}
-                        loading={saving}
-                        cost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
-                        disabled={isBulkInjectedCase || walletBalance < (costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS)}
-                        disabledTitle={isBulkInjectedCase ? undefined : `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}.`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Salary Slip Upload section */}
-              <div className="card">
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <FileText size={15} /> Salary Slip Upload
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1 }}>
+                    <FileText size={15} /> Salary Slips
                   </h3>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 months — OCR auto-extracts data</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1 }}>Last 3 months — our tool will extract data automatically</span>
                 </div>
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {formData.applicants.filter(a => a.id).map((app, idx) => (
@@ -1498,8 +1455,7 @@ const AddSalariedCustomerWizardPage = () => {
                 <button
                   className="btn btn-primary btn-lg"
                   type="submit"
-                  disabled={saving || !formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score)}
-                  title={!formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score) ? 'Complete the bureau pull for at least one applicant before continuing' : undefined}
+                  disabled={saving}
                 >
                   {saving ? 'Saving...' : 'Save & Next'}
                 </button>
@@ -1517,7 +1473,6 @@ const AddSalariedCustomerWizardPage = () => {
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
                       required
-                      style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
                     >
                       <option value="">— Select a loan product —</option>
                       <option value="HL">HL — Home Loan</option>

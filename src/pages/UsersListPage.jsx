@@ -509,7 +509,7 @@ const UsersListPage = () => {
               })}
             </div>
           ) : (
-          <div data-tour="users-results">
+          <div data-tour="users-results" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <DataTable
             columns={[
               { key: 'name', label: 'Name', width: '19%', render: (u) => {
