@@ -6,7 +6,7 @@ import { listDocuments, downloadDocument } from '../api/documentHelper';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
 import { useCasePullStatus } from '../hooks/useCasePullStatus';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -68,6 +68,15 @@ const estimateRemainingTenure = (obl) => {
   // Exact remaining months for amortizing loan: n = log(E / (E - P*r)) / log(1 + r)
   return Math.log(emi / (emi - p * r)) / Math.log(1 + r);
 };
+
+// True once a BUREAU-sourced obligation's EMI has been edited away from the
+// figure the bureau actually reported (original_emi_per_month — null for a
+// MANUAL entry, or for a legacy row from before this field existed and
+// hasn't been re-synced since). Drives showing the "Revert" action in the
+// same slot Delete occupies for a MANUAL row.
+const emiWasEdited = (obl) =>
+  obl.source === 'BUREAU' && obl.original_emi_per_month != null
+  && Number(obl.emi_per_month) !== Number(obl.original_emi_per_month);
 
 const getObligationDetails = (obl) => {
   const details = [];
@@ -174,6 +183,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
     newObl.emi_per_month !== '';
 
   const [deletingId, setDeletingId] = useState(null);       // obligation id currently being removed
+  const [revertingId, setRevertingId] = useState(null);      // obligation id currently being reverted to its bureau-reported EMI
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
   // Customer.entity_type (the persisted constitution-of-business, e.g.
   // "Proprietorship" / "Partnership" / "Private Limited Company") — drives
@@ -260,6 +270,26 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       await refreshObligations();
     } catch (e) {
       toast.error('Failed to update EMI');
+    }
+  };
+
+  // Brings a BUREAU obligation's EMI back to the real bureau-reported figure
+  // (obl.original_emi_per_month — captured once at first sync and never
+  // touched again, see obligations.service.js) after a DSA has edited it away
+  // from that value. Goes through the exact same updateObligation call as a
+  // normal manual edit, so the reverted figure is actually persisted (and
+  // feeds ESR/FOIR like any other edit) rather than just resetting what's
+  // shown on screen.
+  const handleRevertEmi = async (oblId, originalValue) => {
+    setRevertingId(oblId);
+    try {
+      await caseService.updateObligation(caseId, oblId, { emi_per_month: originalValue });
+      toast.success('EMI reverted to the bureau-reported figure');
+      await refreshObligations();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to revert EMI');
+    } finally {
+      setRevertingId(null);
     }
   };
 
@@ -604,8 +634,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     {/* Delete is manual-entry-only — an API-fetched (BUREAU)
                         obligation would just come right back on the next
                         bureau sync, so deleting it here would be silently
-                        undone rather than actually removing it. */}
-                    {obl.source === 'MANUAL' && (
+                        undone rather than actually removing it. A BUREAU row
+                        gets a Revert action in this same slot instead, once
+                        its EMI has actually been edited away from the
+                        bureau-reported figure. */}
+                    {obl.source === 'MANUAL' ? (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                       <button
                         onClick={() => handleDeleteObligation(obl.id)}
@@ -615,6 +648,18 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       >
                         <Trash2 size={14} />
                         {deletingId === obl.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                    ) : emiWasEdited(obl) && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <button
+                        onClick={() => handleRevertEmi(obl.id, obl.original_emi_per_month)}
+                        disabled={revertingId === obl.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--info)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
+                        title={`Revert to the bureau-reported EMI (${fmt(obl.original_emi_per_month)}/mo)`}
+                      >
+                        <RotateCcw size={14} />
+                        {revertingId === obl.id ? 'Reverting…' : 'Revert'}
                       </button>
                     </div>
                     )}
@@ -672,8 +717,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       <td style={{ padding: '12px 14px' }}>
                         {/* Manual-entry-only — see the mobile view's own
                             comment on why an API-fetched (BUREAU) row can't
-                            be deleted here. */}
-                        {obl.source === 'MANUAL' && (
+                            be deleted here. It gets a Revert action in this
+                            same slot instead, once its EMI has actually been
+                            edited away from the bureau-reported figure. */}
+                        {obl.source === 'MANUAL' ? (
                           <button
                             onClick={() => handleDeleteObligation(obl.id)}
                             disabled={deletingId === obl.id}
@@ -681,6 +728,15 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                             title="Remove obligation"
                           >
                             <Trash2 size={15} />
+                          </button>
+                        ) : emiWasEdited(obl) && (
+                          <button
+                            onClick={() => handleRevertEmi(obl.id, obl.original_emi_per_month)}
+                            disabled={revertingId === obl.id}
+                            style={{ background: 'none', border: 'none', color: 'var(--info)', cursor: 'pointer', padding: 4 }}
+                            title={`Revert to the bureau-reported EMI (${fmt(obl.original_emi_per_month)}/mo)`}
+                          >
+                            <RotateCcw size={15} className={revertingId === obl.id ? 'spin' : ''} />
                           </button>
                         )}
                       </td>

@@ -605,6 +605,9 @@ export default function DSALenderContactsPage() {
                                   onChange={e => {
                                     const newSlabs = [...ruleState.volume_slabs];
                                     newSlabs[idx].to_amount = e.target.value;
+                                    if (newSlabs[idx + 1] && e.target.value !== '') {
+                                      newSlabs[idx + 1].from_amount = Number((Number(e.target.value) + 0.01).toFixed(2));
+                                    }
                                     updateRuleEdit(lender.id, activeProduct, { volume_slabs: newSlabs });
                                   }} style={slabInput} />
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -625,7 +628,11 @@ export default function DSALenderContactsPage() {
                               </div>
                             ))}
                             <button onClick={() => {
-                              const newSlabs = [...ruleState.volume_slabs, { from_amount: 0, to_amount: '', percent_rate: 0 }];
+                              const last = ruleState.volume_slabs[ruleState.volume_slabs.length - 1];
+                              const nextFrom = last && last.to_amount !== '' && last.to_amount != null
+                                ? Number((Number(last.to_amount) + 0.01).toFixed(2))
+                                : 0;
+                              const newSlabs = [...ruleState.volume_slabs, { from_amount: nextFrom, to_amount: '', percent_rate: 0 }];
                               updateRuleEdit(lender.id, activeProduct, { volume_slabs: newSlabs });
                             }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
                               <Plus size={14} /> Add Slab
@@ -656,6 +663,9 @@ export default function DSALenderContactsPage() {
                                   onChange={e => {
                                     const newSlabs = [...ruleState.case_count_slabs];
                                     newSlabs[idx].to_cases = e.target.value;
+                                    if (newSlabs[idx + 1] && e.target.value !== '') {
+                                      newSlabs[idx + 1].from_cases = Number(e.target.value) + 1;
+                                    }
                                     updateRuleEdit(lender.id, activeProduct, { case_count_slabs: newSlabs });
                                   }} style={slabInput} />
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -676,7 +686,11 @@ export default function DSALenderContactsPage() {
                               </div>
                             ))}
                             <button onClick={() => {
-                              const newSlabs = [...ruleState.case_count_slabs, { from_cases: 0, to_cases: '', payout_per_case: 0 }];
+                              const last = ruleState.case_count_slabs[ruleState.case_count_slabs.length - 1];
+                              const nextFrom = last && last.to_cases !== '' && last.to_cases != null
+                                ? Number(last.to_cases) + 1
+                                : 0;
+                              const newSlabs = [...ruleState.case_count_slabs, { from_cases: nextFrom, to_cases: '', payout_per_case: 0 }];
                               updateRuleEdit(lender.id, activeProduct, { case_count_slabs: newSlabs });
                             }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content', marginTop: 4 }}>
                               <Plus size={14} /> Add Slab

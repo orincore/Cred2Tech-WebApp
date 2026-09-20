@@ -27,6 +27,22 @@ const INCOME_TYPES_SALARIED = [
 ];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'None'];
 
+// esr_financials.salaried_income_source (esrFinancials.service.js) has 5
+// real values, not just OCR/MANUAL — a case can have OCR salary slips for
+// one salaried applicant and only a manual entry for another, which is
+// still genuinely OCR-backed and must not read as plain 'Manual'/'—'.
+// Missing this mapping was why a salary that WAS OCR'd (just mixed with a
+// co-applicant's manual entry, or cross-checked against bank credits) showed
+// as an unlabelled dash here — reading exactly like a manual/unverified
+// figure even though OCR was in fact used.
+const SALARY_SOURCE_LABELS = {
+  OCR: 'Salary OCR',
+  OCR_MANUAL: 'Salary OCR + Manual',
+  OCR_BANK: 'Salary OCR + Bank',
+  BANK_STATEMENT: 'Bank Statement',
+  MANUAL: 'Manual'
+};
+
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const useIsMobile = () => {
@@ -172,7 +188,7 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
         label: 'Salary (Annual)', latest: app.salary?.latest, prev: null,
         fyLatest: app.salary?.fy_latest, fyPrev: app.salary?.fy_prev,
         rangeLatest: app.salary?.fy_latest, rangePrev: app.salary?.fy_prev,
-        source: app.salary?.source === 'OCR' ? 'Salary OCR' : (app.salary?.source === 'MANUAL' ? 'Manual' : '—'),
+        source: SALARY_SOURCE_LABELS[app.salary?.source] || '—',
         color: 'var(--success)', bg: 'var(--success-bg)'
       }]
     : [
@@ -264,17 +280,28 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</span>
                   <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  <div style={{ marginBottom: 2 }}>Latest Year ({row.rangeLatest || '—'})</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: isSalariedApp ? 0 : 8 }}>
+                  {/* Salary has no rolling/filed-month window to caption
+                      (unlike GST/ITR/Bank) — that line only ever rendered a
+                      meaningless "(—)" for it, so it's skipped entirely here
+                      rather than shown empty. */}
+                  {!isSalariedApp && <div style={{ marginBottom: 2 }}>Latest Year ({row.rangeLatest || '—'})</div>}
                   <strong style={{ fontSize: 14, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  <div style={{ marginBottom: 2 }}>Previous Year ({row.rangePrev || '—'})</div>
-                  <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                  FY: <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
-                </div>
+                {/* Previous Year / FY are meaningless for a single OCR'd
+                    salary figure (no prior-year salary is ever computed) —
+                    shown only for GST/ITR/Bank rows. */}
+                {!isSalariedApp && (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                      <div style={{ marginBottom: 2 }}>Previous Year ({row.rangePrev || '—'})</div>
+                      <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      FY: <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -283,7 +310,11 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)' }}>
-                  {['Item', 'Latest Year', 'Previous Year', 'FY', 'Source'].map(h => (
+                  {/* Salary has no Previous Year/FY concept (a single OCR'd
+                      figure, no prior-year comparison) — those columns are
+                      only shown for a self-employed applicant's GST/ITR/Bank
+                      rows. */}
+                  {(isSalariedApp ? ['Item', 'Latest Year', 'Source'] : ['Item', 'Latest Year', 'Previous Year', 'FY', 'Source']).map(h => (
                     <th
                       key={h}
                       style={{
@@ -310,16 +341,23 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
                         The plain FY label these used to show here now lives
                         in its own FY column instead. */}
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangeLatest || '—'}</div>
+                      {/* Salary has no rolling/filed-month window to caption
+                          (unlike GST/ITR/Bank) — skipped entirely rather than
+                          rendering a meaningless "—". */}
+                      {!isSalariedApp && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangeLatest || '—'}</div>}
                       <strong style={{ fontSize: 13, fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
                     </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangePrev || '—'}</div>
-                      <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
-                    </td>
+                    {!isSalariedApp && (
+                      <>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangePrev || '—'}</div>
+                          <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                          <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
+                        </td>
+                      </>
+                    )}
                     <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
                   </tr>
                 ))}

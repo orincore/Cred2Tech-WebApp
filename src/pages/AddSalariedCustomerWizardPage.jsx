@@ -14,6 +14,8 @@ import DataPullProgress from '../components/onboarding/DataPullProgress';
 import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
 import PullingIndicator from '../components/ui/PullingIndicator';
+import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
+import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
 import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
@@ -37,6 +39,28 @@ const toDateInputValue = (value) => {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 };
 
+// A fresh object every call (not a shared module-level constant) — formData
+// always holds its own `applicants` array reference, and reusing one shared
+// array across resets would let a mutation from one "new case" visit bleed
+// into the next.
+const getBlankFormData = () => ({
+  customer_id: null,
+  business_pan: '',
+  business_name: '',
+  business_mobile: '',
+  business_email: '',
+  pincode: '',
+  dob: '',
+  mobile_verified: false,
+  applicants: [],
+  product_type: '',
+  dsa_notes: '',
+  property_type: '',
+  occupancy_status: 'Self Occupied',
+  ownership_type: 'Sole Owner',
+  market_value: ''
+});
+
 const AddSalariedCustomerWizardPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,23 +83,7 @@ const AddSalariedCustomerWizardPage = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const [formData, setFormData] = useState({
-    customer_id: null,
-    business_pan: '',
-    business_name: '',
-    business_mobile: '',
-    business_email: '',
-    pincode: '',
-    dob: '',
-    mobile_verified: false,
-    applicants: [],
-    product_type: '',
-    dsa_notes: '',
-    property_type: '',
-    occupancy_status: 'Self Occupied',
-    ownership_type: 'Sole Owner',
-    market_value: ''
-  });
+  const [formData, setFormData] = useState(getBlankFormData);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
   // same marker the backend's _isBulkUploadSnapshot() already recognizes)
@@ -142,6 +150,11 @@ const AddSalariedCustomerWizardPage = () => {
   // toggle wouldn't unlock the input by itself. Keyed by applicant array index.
   const [coappPanEditUnlockedMap, setCoappPanEditUnlockedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
+  // Anti-impersonation check's own rejection (backend 403 — nothing else in
+  // this consent flow returns 403) gets a blocking popup instead of a toast,
+  // same as AddCustomerWizardPage.jsx's own identityMismatch — it needs room
+  // to explain why the mobile number was rejected and what to do about it.
+  const [identityMismatch, setIdentityMismatch] = useState(null);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
 
@@ -436,7 +449,14 @@ const AddSalariedCustomerWizardPage = () => {
       toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
-      toast.error(errMsg);
+      // The anti-impersonation check's own rejection (backend 403 — nothing
+      // else in this flow returns 403) gets a blocking popup instead of a
+      // toast, same as AddCustomerWizardPage.jsx's own handleRequestConsent.
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: formData.business_pan });
+      } else {
+        toast.error(errMsg);
+      }
       setConsentRequestFailed(true);
     } finally {
       setConsentRequesting(false);
@@ -465,6 +485,45 @@ const AddSalariedCustomerWizardPage = () => {
   const [coappConsent, setCoappConsent] = useState({});
   const [coappConsentRequesting, setCoappConsentRequesting] = useState({});
 
+  // Defends against this SAME mounted instance of the page being reused for
+  // two different case attempts — e.g. the browser back button returning
+  // here from `?caseId=X` to the bare `/customers/salaried/add` URL
+  // (handleContinueAsNewCase's own navigate() is a normal push, not
+  // `replace`, so back genuinely lands on that earlier blank URL) without
+  // React Router remounting anything, since it's the same route and only the
+  // search string differs. Without this, `caseId`/`formData` kept holding
+  // case X's data — every applicant, property field, PAN/mobile — while the
+  // URL looked like a brand-new, blank case, regardless of how old case X
+  // was (this is a same-tab state leak, not a time-boxed dedupe issue like
+  // case.service.js#createSalariedCase's own idempotency window).
+  // Deliberately one-directional: only resets when the URL LOSES its
+  // caseId while state still has one. The other direction (urlCaseId
+  // gaining a value) is already handled directly by whichever caller just
+  // set that case's data itself (ensureDraftSaved, handleContinueAsNewCase)
+  // — re-fetching here too would reintroduce the exact skeleton-flicker
+  // regression the mount-only restoreSession effect above was fixed to avoid.
+  useEffect(() => {
+    if (urlCaseId || !caseId) return;
+    setCaseId(null);
+    setFormData(getBlankFormData());
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setCoappPanVerifyingMap({});
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setPanEditUnlocked(false);
+    setCoappPanEditUnlockedMap({});
+    setDuplicateWarning(null);
+    setIdentityMismatch(null);
+    setBureauReports({});
+    setDownloadingFor(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
+  }, [urlCaseId, caseId]);
+
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
     if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
@@ -490,7 +549,12 @@ const AddSalariedCustomerWizardPage = () => {
       setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
       toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Failed to send consent request');
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: app.pan_number });
+      } else {
+        toast.error(errMsg);
+      }
     } finally {
       setCoappConsentRequesting((prev) => ({ ...prev, [index]: false }));
     }
@@ -1173,7 +1237,9 @@ const AddSalariedCustomerWizardPage = () => {
                   <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
                     {!formData.mobile_verified ? (
                       consentRequesting ? (
-                        <button type="button" disabled className="btn btn-primary btn-lg">Sending…</button>
+                        <div className="btn btn-primary btn-lg" style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                          <ConsentProgressStatus color="#fff" />
+                        </div>
                       ) : consentRequest ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <PullingIndicator label="Waiting for customer to approve consent…" />
@@ -1315,7 +1381,9 @@ const AddSalariedCustomerWizardPage = () => {
                                       <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
                                       {!app.otp_verified ? (
                                         coappConsentRequesting[realIdx] ? (
-                                          <button type="button" disabled className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap' }}>Sending…</button>
+                                          <div className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap', pointerEvents: 'none', opacity: 0.9 }}>
+                                            <ConsentProgressStatus color="#fff" style={{ fontSize: 12 }} />
+                                          </div>
                                         ) : coappConsent[realIdx] ? (
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                             <PullingIndicator label="Waiting for approval…" />
@@ -1516,6 +1584,12 @@ const AddSalariedCustomerWizardPage = () => {
         </div>
       </div>
 
+      <ConsentIdentityMismatchModal
+        isOpen={!!identityMismatch}
+        onClose={() => setIdentityMismatch(null)}
+        message={identityMismatch?.message}
+        pan={identityMismatch?.pan}
+      />
     </div>
   );
 };
