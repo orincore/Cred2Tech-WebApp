@@ -219,6 +219,8 @@ const ItrAuthPage = () => {
           onChange={(e) => setPan(e.target.value.toUpperCase())}
           placeholder="ABCDE1234F"
           autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck="false"
           disabled={submitting}
           className="w-full px-3 py-2.5 text-[14px] font-medium tracking-[0.08em] bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
         />
@@ -235,6 +237,27 @@ const ItrAuthPage = () => {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter your portal password"
             disabled={submitting}
+            // Explicit opt-out of mobile-keyboard text transforms — without
+            // this, some keyboards (Gboard/Samsung Keyboard etc.) carry over
+            // the all-caps shift state from the PAN field above (which
+            // deliberately sets autoCapitalize="characters"), or apply their
+            // own autocapitalize/autocorrect once this field is shown as
+            // type="text" via the eye toggle (that exemption only reliably
+            // applies to type="password"). A password is case-sensitive, so
+            // a silently auto-capitalized first letter makes a genuinely
+            // correct password fail against the provider on every attempt —
+            // this was reproduced as 8 straight provider "Incorrect Username
+            // or Password" rejections on one real case, on the exact same
+            // credentials the DSA's own desktop direct-entry form accepted
+            // (ItrAnalyticsForm.jsx never hits this — no field before it
+            // forces caps, and desktop keyboards don't autocapitalize).
+            // autoComplete="off" (not "current-password") because this
+            // isn't the customer's account on OUR site — we don't want a
+            // browser suggesting an unrelated saved password here either.
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck="false"
             className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
           />
           <button

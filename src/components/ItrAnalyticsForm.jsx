@@ -618,6 +618,19 @@ const ItrAnalyticsForm = ({
                                         value={password}
                                         onChange={e => setPassword(e.target.value)}
                                         placeholder="Enter portal password"
+                                        // Defense in depth — see ItrAuthPage.jsx's own comment on
+                                        // this same field: without these, a mobile keyboard can
+                                        // autocapitalize/autocorrect this field once shown as
+                                        // type="text" via the eye toggle, silently breaking a
+                                        // case-sensitive password. This form never forces the
+                                        // keyboard into caps the way the PAN field on the public
+                                        // auth-link page does, so it wasn't hit here — but a DSA
+                                        // filling this in from a phone/tablet isn't otherwise
+                                        // protected from it either.
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        autoComplete="off"
+                                        spellCheck="false"
                                         style={{ paddingRight: 36 }}
                                     />
                                     <button
