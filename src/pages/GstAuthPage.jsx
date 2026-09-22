@@ -337,6 +337,12 @@ const GstAuthPage = () => {
           onChange={(e) => setUsername(e.target.value)}
           placeholder="GST portal username"
           autoComplete="off"
+          // See the password field below's comment — same defensive opt-out
+          // of mobile-keyboard text transforms, here in case this username
+          // is itself case-sensitive on the GST portal.
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck="false"
           disabled={submitting}
           className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
         />
@@ -354,6 +360,17 @@ const GstAuthPage = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your portal password"
               autoComplete="new-password"
+              // Explicit opt-out of mobile-keyboard text transforms — see
+              // ItrAuthPage.jsx's identical fix for the same class of bug:
+              // without this, some mobile keyboards autocapitalize/autocorrect
+              // this field once it's shown as type="text" via the eye toggle
+              // (the usual type="password" exemption doesn't survive that).
+              // A portal password is case-sensitive, so a silently
+              // auto-capitalized/auto-corrected character makes a genuinely
+              // correct password fail against the provider on every attempt.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
               disabled={submitting}
               className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
             />

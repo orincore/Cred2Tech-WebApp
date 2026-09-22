@@ -554,6 +554,13 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                         className="form-control"
                                         placeholder="GST portal username"
                                         autoComplete="off"
+                                        // Defense in depth — see the password field below's own
+                                        // comment. Not the trigger for the bug that was fixed
+                                        // (nothing before it forces caps), but a DSA filling this
+                                        // in from a phone/tablet isn't otherwise protected either.
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck="false"
                                         name="gst-username-no-autofill"
                                     />
                                 </FormField>
@@ -568,6 +575,14 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                                 placeholder="GST portal password"
                                                 autoComplete="new-password"
                                                 name="gst-password-no-autofill"
+                                                // See GstAuthPage.jsx's identical fix / ItrAuthPage.jsx's
+                                                // original: without these, a mobile keyboard can
+                                                // autocapitalize/autocorrect this field once shown as
+                                                // type="text" via the eye toggle, silently breaking a
+                                                // case-sensitive password.
+                                                autoCapitalize="none"
+                                                autoCorrect="off"
+                                                spellCheck="false"
                                                 style={{ paddingRight: 36 }}
                                             />
                                             <button
