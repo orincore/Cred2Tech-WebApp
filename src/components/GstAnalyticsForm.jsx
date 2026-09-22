@@ -105,7 +105,16 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // the real GstrAnalyticsRequest row and the ordinary PROCESSING branch
     // below takes back over automatically. Mirrors ItrAnalyticsForm's own
     // isAuthLinkPending.
-    const isAuthLinkPending = latestRequest?.is_auth_link_request && latestRequest?.status === 'AWAITING_CUSTOMER_ACTION';
+    //
+    // Gated on `phase`, NOT `latestRequest.status`: serializeGstAuthLink
+    // always stamps status as the pseudo-value 'AWAITING_CUSTOMER_ACTION'
+    // regardless of the link's real PENDING/REVOKED/EXPIRED state — only
+    // `phase` (from describeGstAuthLink) actually distinguishes a live link
+    // from a dead one. Checking raw `status` here left a revoked/expired
+    // link stuck showing Resend/Cancel forever (Cancel then 400s with
+    // "already REVOKED") instead of falling back to a fresh "Send Auth
+    // Link" button — same bug ItrAnalyticsForm had.
+    const isAuthLinkPending = latestRequest?.is_auth_link_request && phase === 'AWAITING_CUSTOMER';
     const authLinkId = latestRequest?.auth_link_id;
     // GST portal sent the DSA/customer an OTP for this request — the create
     // step already succeeded (Signzy accepted OTP as this GSTIN's login

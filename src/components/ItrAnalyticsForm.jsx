@@ -139,7 +139,15 @@ const ItrAnalyticsForm = ({
     // once the customer submits, livePull becomes the real ItrAnalyticsRequest
     // row (reference_id present) and the ordinary PROCESSING branch below
     // takes back over automatically.
-    const isAuthLinkPending = status === 'AWAITING_CUSTOMER_ACTION' && livePull?.is_auth_link_request;
+    //
+    // Gated on `phase`, NOT the raw `status` field: serializeItrAuthLink
+    // always stamps status as the pseudo-value 'AWAITING_CUSTOMER_ACTION'
+    // regardless of the link's real PENDING/REVOKED/EXPIRED state — only
+    // `phase` (from describeItrAuthLink) actually distinguishes a live link
+    // from a dead one. Checking `status` here left a revoked/expired link
+    // stuck showing Resend/Cancel forever (Cancel then 400s with "already
+    // REVOKED") instead of falling back to a fresh "Send Auth Link" button.
+    const isAuthLinkPending = phase === 'AWAITING_CUSTOMER' && livePull?.is_auth_link_request;
     const authLinkId = livePull?.auth_link_id;
 
     const roleLabel = applicantType === 'PRIMARY' ? 'Primary Borrower' : 'Co-Applicant';
