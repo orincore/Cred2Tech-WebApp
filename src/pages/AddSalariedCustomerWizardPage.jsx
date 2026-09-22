@@ -241,6 +241,38 @@ const AddSalariedCustomerWizardPage = () => {
       // exactly what read as "the page refreshed", even though the
       // underlying data was always correct.
       applyCaseData(res.data);
+
+      // The banner fires on PAN blur, so by the time "Continue as New Case"
+      // is clicked the DSA has usually already typed mobile/email/pincode/
+      // DOB. The new case's own response deliberately blanks contact fields
+      // (per-case consent — see case.service.js#createCaseFromExisting), and
+      // applyCaseData just replaced the whole form with that, silently
+      // discarding what was typed and forcing re-entry. Carry the typed
+      // values over and persist them onto the NEW case so they also survive
+      // a refresh.
+      const typed = {
+        business_mobile: (formData.business_mobile || '').replace(/\D/g, ''),
+        business_email: formData.business_email || '',
+        pincode: formData.pincode || '',
+        dob: formData.dob || ''
+      };
+      const carried = Object.fromEntries(Object.entries(typed).filter(([, v]) => v));
+      if (Object.keys(carried).length > 0) {
+        setFormData(prev => ({ ...prev, ...carried }));
+        try {
+          await customerService.createOrAttach({
+            customer_id: res.data.customer?.id,
+            case_id: res.data.id,
+            business_pan: res.data.customer?.business_pan || formData.business_pan,
+            business_name: formData.business_name,
+            business_mobile: typed.business_mobile,
+            business_email: typed.business_email,
+            dob: typed.dob
+          });
+        } catch (persistErr) {
+          console.error('[handleContinueAsNewCase] carry-over persist failed', persistErr);
+        }
+      }
       toast.success('New case created with existing customer data!');
       setDuplicateWarning(null);
       navigate(`/customers/salaried/add?caseId=${res.data.id}`);
@@ -490,8 +522,18 @@ const AddSalariedCustomerWizardPage = () => {
   // set that case's data itself (ensureDraftSaved, handleContinueAsNewCase)
   // — re-fetching here too would reintroduce the exact skeleton-flicker
   // regression the mount-only restoreSession effect above was fixed to avoid.
+  // Keyed on the URL's own previous value, not just "state has a caseId and
+  // URL doesn't": handleContinueAsNewCase/ensureDraftSaved call setCaseId()
+  // BEFORE navigate() lands (React Router v7 applies navigation inside a
+  // transition), so for a render or two caseId is set while urlCaseId is
+  // still null. Without the prev-value check that window read as "URL lost
+  // its caseId" and wiped the just-populated form back to blank — which
+  // also made the duplicate-PAN banner reappear on the next blur.
+  const prevUrlCaseIdRef = useRef(urlCaseId);
   useEffect(() => {
-    if (urlCaseId || !caseId) return;
+    const prevUrlCaseId = prevUrlCaseIdRef.current;
+    prevUrlCaseIdRef.current = urlCaseId;
+    if (urlCaseId || !prevUrlCaseId || !caseId) return;
     setCaseId(null);
     setFormData(getBlankFormData());
     setCurrentStep(1);

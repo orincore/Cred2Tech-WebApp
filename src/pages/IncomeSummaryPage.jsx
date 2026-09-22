@@ -36,9 +36,9 @@ const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Cred
 // as an unlabelled dash here — reading exactly like a manual/unverified
 // figure even though OCR was in fact used.
 const SALARY_SOURCE_LABELS = {
-  OCR: 'Salary OCR',
-  OCR_MANUAL: 'Salary OCR + Manual',
-  OCR_BANK: 'Salary OCR + Bank',
+  OCR: 'Salary Slip',
+  OCR_MANUAL: 'Salary Slip + Manual',
+  OCR_BANK: 'Salary Slip + Bank',
   BANK_STATEMENT: 'Bank Statement',
   MANUAL: 'Manual'
 };
