@@ -292,7 +292,17 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // Mirrors ItrAnalyticsForm.jsx's own handleSendAuthLink.
     const handleSendAuthLink = async () => {
         if (!formData.gstin) return toast.error("Select or enter a GSTIN first");
-        if (channelMissingContact) {
+        // Only block here when the DSA explicitly chose to send to a
+        // different contact and left that field blank — a known-bad input
+        // right in front of us. When using the contact "on file",
+        // prefillEmail/prefillMobile can read blank purely because this
+        // case's own applicant contact fields haven't been synced yet (see
+        // case.service.js#getCaseById's per-case nulling) even though the
+        // customer's real email/mobile exists — the backend resolves and
+        // validates the authoritative value itself (see gstAuthLink.service.js's
+        // resolveEmail), so defer to it rather than refusing a send here
+        // that would actually have gone through. Mirrors ItrAnalyticsForm.jsx.
+        if (useOtherContact && channelMissingContact) {
             return toast.error(channelNeedsEmail && !effectiveEmail
                 ? 'No email address to send to — enter one, or switch to SMS.'
                 : 'No mobile number to send to — enter one, or switch to Email.');
@@ -673,8 +683,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                     <button
                         type="button"
                         onClick={handleCreateRequest}
+                        // channelMissingContact is NOT a gate here for AUTH_LINK mode — see
+                        // handleSendAuthLink's own comment: prefillEmail/prefillMobile can
+                        // read blank purely from this case's own not-yet-synced applicant
+                        // contact fields, even when the customer's real email/mobile exists
+                        // and the backend will actually resolve and use it.
                         disabled={disabled || loading || sendingLink || !formData.gstin
-                            || (mode === 'AUTH_LINK' && channelMissingContact)
                             || (!isMsme && gstCost != null && walletBalance < gstCost)}
                         className="btn btn-primary"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
@@ -803,8 +817,10 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                         type="button"
                                         className="btn btn-secondary btn-sm"
                                         onClick={handleSendAuthLink}
-                                        disabled={sendingLink || channelMissingContact}
-                                        title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
+                                        // NOT gated on channelMissingContact — see handleSendAuthLink's
+                                        // own comment above.
+                                        disabled={sendingLink}
+                                        title={channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : 'Send a fresh auth link — the current one will be revoked'}
                                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                     >
                                         <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}

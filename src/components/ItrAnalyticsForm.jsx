@@ -157,7 +157,17 @@ const ItrAnalyticsForm = ({
     // pulled by this call itself; it only sends the link and flips this row
     // to "Action needed — waiting for the customer" until they submit it.
     const handleSendAuthLink = async () => {
-        if (channelMissingContact) {
+        // Only block here when the DSA explicitly chose to send to a
+        // different contact and left that field blank — a known-bad input
+        // right in front of us. When using the contact "on file",
+        // prefillEmail/prefillMobile can read blank purely because this
+        // case's own applicant contact fields haven't been synced yet (see
+        // case.service.js#getCaseById's per-case nulling, and the disabled
+        // prop below) even though the customer's real email/mobile exists —
+        // the backend resolves and validates the authoritative value itself
+        // (see itrAuthLink.service.js's resolveEmail), so defer to it rather
+        // than refusing a send here that would actually have gone through.
+        if (useOtherContact && channelMissingContact) {
             return toast.error(channelNeedsEmail && !effectiveEmail
                 ? 'No email address to send to — enter one, or switch to SMS.'
                 : 'No mobile number to send to — enter one, or switch to Email.');
@@ -366,8 +376,19 @@ const ItrAnalyticsForm = ({
                                 type="button"
                                 className="btn btn-secondary btn-sm"
                                 onClick={handleSendAuthLink}
-                                disabled={sendingLink || channelMissingContact}
-                                title={channelMissingContact ? 'Missing contact info for the selected channel' : 'Send a fresh auth link — the current one will be revoked'}
+                                // NOT gated on channelMissingContact — prefillEmail/prefillMobile
+                                // reflect this CASE's own applicant contact fields, which
+                                // case.service.js#getCaseById deliberately leaves blank on a
+                                // case created via "Continue as New Case" (or never re-synced
+                                // because this step loaded before step 1's own email field ran)
+                                // even though the customer's real contact info still exists and
+                                // is exactly what the backend actually resolves and sends to —
+                                // see itrAuthLink.service.js's resolveEmail. Hard-disabling here
+                                // blocked a send that would genuinely have worked. handleSendAuthLink
+                                // above already gives a clear, actionable toast in the one case
+                                // where there's truly no contact info anywhere to send to.
+                                disabled={sendingLink}
+                                title={channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : 'Send a fresh auth link — the current one will be revoked'}
                                 style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                             >
                                 <RefreshCw size={13} /> {sendingLink ? 'Resending…' : 'Resend Link'}
@@ -472,8 +493,13 @@ const ItrAnalyticsForm = ({
                                         type="button"
                                         className="btn btn-secondary btn-sm"
                                         onClick={handleSendAuthLink}
-                                        disabled={disabled || sendingLink || channelMissingContact}
-                                        title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'Missing contact info for the selected channel' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
+                                        // NOT gated on channelMissingContact — see handleSendAuthLink's
+                                        // own comment: prefillEmail/prefillMobile can read blank purely
+                                        // from this case's own not-yet-synced applicant contact fields,
+                                        // even when the customer's real email/mobile exists and the
+                                        // backend will actually resolve and use it.
+                                        disabled={disabled || sendingLink}
+                                        title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
                                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                     >
                                         <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
