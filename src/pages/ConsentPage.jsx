@@ -179,8 +179,8 @@ const ConsentPage = () => {
 
       <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
         {details?.requested_by_name || 'A representative'}
-        {details?.requesting_org ? ` from ${details.requesting_org}` : ''} on the Cred2Tech platform is requesting your consent to proceed
-        {details?.customer_name ? ` with the loan application for ${details.customer_name}` : ' with your loan application'}.
+        {details?.requesting_org ? ` from ${details.requesting_org}` : ''}, through the Cred2Tech platform, is requesting your consent to access the following information to evaluate your loan eligibility and identify suitable lending options
+        {details?.customer_name ? ` for ${details.customer_name}` : ''}.
       </p>
 
       <div className="bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-4 mb-6">
@@ -198,11 +198,11 @@ const ConsentPage = () => {
       </div>
 
       <p className="text-[12px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 leading-relaxed mb-6">
-        Nothing will be pulled from any of the above sources unless you explicitly approve this request. You can
-        review Cred2Tech's terms of use and privacy policy at{' '}
+        No data will be accessed unless you explicitly approve this request. You can review Cred2Tech's{' '}
         <a href="https://cred2tech.com" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
-          cred2tech.com
-        </a>.
+          Terms of Use and Privacy Policy
+        </a>{' '}
+        before providing your consent.
       </p>
 
       {submitError && (
@@ -227,8 +227,8 @@ const ConsentPage = () => {
           className="mt-0.5 w-4 h-4 accent-indigo-600 shrink-0 cursor-pointer"
         />
         <span className="text-[13px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
-          I have read and understood what data will be requested, and I agree to allow {details?.requesting_org || 'this platform'}
-          {details?.requested_by_name ? ` (${details.requested_by_name})` : ''} to access it as described above.
+          I have read and understood what data will be requested, and I consent to {details?.requesting_org || 'this platform'}
+          {details?.requested_by_name ? ` (${details.requested_by_name})` : ''} accessing the above information through Cred2Tech to assess my eligibility for a loan.
         </span>
       </label>
 
