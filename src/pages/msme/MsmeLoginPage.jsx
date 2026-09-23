@@ -186,7 +186,7 @@ const MsmeLoginPage = () => {
                 {/* Info banner */}
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-8 text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">
                   <span className="material-symbols-outlined text-[15px]">sms</span>
-                  OTP will be sent to your registered mobile number and email address
+                  OTP will be sent to your registered mobile number
                 </div>
 
                 {/* Mobile */}
@@ -292,7 +292,7 @@ const MsmeLoginPage = () => {
               className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[14px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-[17px]">badge</span>
-              DSA Partner? Login here
+              Sourcing Partner? Login here
             </button>
           </div>
         </div>

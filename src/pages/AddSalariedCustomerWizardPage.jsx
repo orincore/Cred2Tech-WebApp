@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { caseService } from '../api/caseService';
 import { customerService } from '../api/customerService';
-import { otpService } from '../api/otpService';
+import { consentService } from '../api/consentService';
+import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
-import OtpInput from '../components/OtpInput';
 import { toast } from 'react-hot-toast';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb } from 'lucide-react';
+import Skeleton from '../components/ui/Skeleton';
+import { Search, CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle, Wallet } from 'lucide-react';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
-import DataPullProgress from '../components/onboarding/DataPullProgress';
 import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
 import Panel from '../components/ui/Panel';
-import { listDocuments, downloadDocument } from '../api/documentHelper';
-import { toTitleCase } from '../utils/helpers';
+import PullingIndicator from '../components/ui/PullingIndicator';
+import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
+import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
+import { toTitleCase, formatDate } from '../utils/helpers';
+import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -34,6 +36,28 @@ const toDateInputValue = (value) => {
   const d = new Date(value);
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 };
+
+// A fresh object every call (not a shared module-level constant) — formData
+// always holds its own `applicants` array reference, and reusing one shared
+// array across resets would let a mutation from one "new case" visit bleed
+// into the next.
+const getBlankFormData = () => ({
+  customer_id: null,
+  business_pan: '',
+  business_name: '',
+  business_mobile: '',
+  business_email: '',
+  pincode: '',
+  dob: '',
+  mobile_verified: false,
+  applicants: [],
+  product_type: '',
+  dsa_notes: '',
+  property_type: '',
+  occupancy_status: 'Self Occupied',
+  ownership_type: 'Sole Owner',
+  market_value: ''
+});
 
 const AddSalariedCustomerWizardPage = () => {
   const navigate = useNavigate();
@@ -57,23 +81,7 @@ const AddSalariedCustomerWizardPage = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const [formData, setFormData] = useState({
-    customer_id: null,
-    business_pan: '',
-    business_name: '',
-    business_mobile: '',
-    business_email: '',
-    pincode: '',
-    dob: '',
-    mobile_verified: false,
-    applicants: [],
-    product_type: '',
-    dsa_notes: '',
-    property_type: '',
-    occupancy_status: 'Self Occupied',
-    ownership_type: 'Sole Owner',
-    market_value: ''
-  });
+  const [formData, setFormData] = useState(getBlankFormData);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
   // same marker the backend's _isBulkUploadSnapshot() already recognizes)
@@ -82,7 +90,65 @@ const AddSalariedCustomerWizardPage = () => {
   // trigger on this page is disabled for them.
   const isBulkInjectedCase = /\[(BULK|LEGACY) UPLOAD\]/i.test(formData.dsa_notes || '');
 
+  // Credit cost/wallet display — same convention AddCustomerWizardPage
+  // already uses for its own paid pulls (Request Consent, Bureau, GST, ITR,
+  // Bank). This page is DSA-only (see AppRouter's allowedRoles for
+  // /customers/salaried/add), so unlike that page there's no isMsme branch
+  // to skip the wallet gate for.
+  const [costs, setCosts] = useState({ PAN_FETCH: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0 });
+  const [walletBalance, setWalletBalance] = useState(0);
+
+  useEffect(() => {
+    // Retried — a transient first-query failure here (see withRetry's own
+    // comment) previously left every cost at its hardcoded 0 default
+    // forever, with only a console.error nobody but a developer would see —
+    // showing a DSA "~0 Cr" for a paid pull that's actually priced normally.
+    withRetry(() => api.get('/wallet/api-costs'))
+      .then(res => {
+        const data = res.data;
+        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
+        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
+        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
+        setCosts({ PAN_FETCH: panFetch, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations });
+      })
+      .catch(err => {
+        console.error(err);
+        toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
+      });
+  }, []);
+
+  // Polled (not fetched once) so the header pill reflects a deduction the
+  // moment it happens — same convention AddCustomerWizardPage.jsx uses for
+  // its wallet chip, since a PAN/bureau pull kicked off from any step
+  // charges this wallet server-side.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchBalance = () => {
+      api.get('/wallet/balance')
+        .then(res => { if (!cancelled) setWalletBalance(res.data.balance); })
+        .catch(console.error);
+    };
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
   const [panVerifying, setPanVerifying] = useState(false);
+  const [panVerifyFailed, setPanVerifyFailed] = useState(false);
+  // Per-co-applicant-row PAN verify-in-flight state — separate from the
+  // primary's panVerifying so one co-applicant's auto-verify (or the
+  // primary's) never shows every other row as "Verifying…" too. Same
+  // convention AddCustomerWizardPage.jsx already uses.
+  const [coappPanVerifyingMap, setCoappPanVerifyingMap] = useState({});
+
+  // Customer consent gate — replaces the old mobile-OTP step entirely (see
+  // handleRequestConsent below). Approval sets formData.mobile_verified, so
+  // the existing "Verify PAN" button (already gated on that flag) needs no
+  // further changes.
+  const [consentRequest, setConsentRequest] = useState(null);
+  const [consentRequesting, setConsentRequesting] = useState(false);
+  const [consentRequestFailed, setConsentRequestFailed] = useState(false);
+
   // PAN here locks on `!!caseId || mobile_verified` — a compound condition
   // (not just "PAN itself verified"), so a plain "reset pan_verified"
   // toggle (like the main wizard uses) wouldn't actually unlock the input.
@@ -94,36 +160,11 @@ const AddSalariedCustomerWizardPage = () => {
   // toggle wouldn't unlock the input by itself. Keyed by applicant array index.
   const [coappPanEditUnlockedMap, setCoappPanEditUnlockedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
-  const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
-  const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
-
-  // Bureau reports (Experian PDF) get ingested into document storage per
-  // applicant at pull time — fetch them once a case exists so a "Download
-  // Report" button can appear next to a completed bureau pull.
-  useEffect(() => {
-    if (!caseId) return;
-    listDocuments({ caseId })
-      .then(docs => {
-        const reports = {};
-        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
-          .forEach(d => { reports[d.applicant_id] = d; });
-        setBureauReports(reports);
-      })
-      .catch(() => { }); // non-fatal — just no download button
-  }, [caseId, formData.applicants]);
-
-  const handleDownloadReport = async (applicantId) => {
-    const doc = bureauReports[applicantId];
-    if (!doc) return;
-    setDownloadingFor(applicantId);
-    try {
-      await downloadDocument(doc.id, doc.original_file_name);
-    } catch (e) {
-      toast.error('Failed to download bureau report');
-    } finally {
-      setDownloadingFor(null);
-    }
-  };
+  // Anti-impersonation check's own rejection (backend 403 — nothing else in
+  // this consent flow returns 403) gets a blocking popup instead of a toast,
+  // same as AddCustomerWizardPage.jsx's own identityMismatch — it needs room
+  // to explain why the mobile number was rejected and what to do about it.
+  const [identityMismatch, setIdentityMismatch] = useState(null);
 
   // Applicant.name is often unset for the primary borrower (it lives on
   // formData.business_name instead) — prefer a real name over the generic
@@ -134,19 +175,21 @@ const AddSalariedCustomerWizardPage = () => {
     return app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Applicant #${idx}`;
   };
 
-  const [otpModal, setOtpModal] = useState({
-    isOpen: false,
-    targetType: null,
-    targetId: null,
-    mobile: '',
-    purpose: '',
-    otpInput: '',
-    loading: false
-  });
 
+  // Mount-only ([] deps, matching AddCustomerWizardPage.jsx's own identical
+  // effect) — NOT [urlCaseId]. That used to re-fire restoreSession() (a full
+  // fetch + setLoading(true) skeleton cycle) every time the URL's caseId
+  // changed for ANY reason, including right after handleContinueAsNewCase
+  // above already applied the new case's data instantly via applyCaseData —
+  // confirmed live: the mobile field updated correctly at the moment the
+  // create-from-existing response landed, then ~100ms later the skeleton
+  // appeared anyway and stayed, from this effect's own redundant, pointless
+  // second fetch of the exact same data. ensureDraftSaved's own navigate()
+  // (the only other same-route caseId change) already sets state directly
+  // too, so nothing here was ever depending on this effect re-firing.
   useEffect(() => {
     restoreSession();
-  }, [urlCaseId]);
+  }, []);
 
   const checkPanDuplicate = async (pan) => {
     if (!pan || pan.length !== 10) return;
@@ -178,17 +221,157 @@ const AddSalariedCustomerWizardPage = () => {
     try {
       setSaving(true);
       const res = await api.post('/cases/create-from-existing', {
-        customer_id: duplicateWarning.id
+        customer_id: duplicateWarning.id,
+        // Without this, the backend defaulted to whatever category the
+        // customer's OWN most recent case happened to be — a DSA starting a
+        // new SALARIED case here for a customer whose last case was MSME
+        // silently got an MSME case back instead (confirmed live: case
+        // created via this exact flow had category flip to MSME).
+        category: 'SALARIED'
       });
-      const newCaseId = res.data.id;
+      // The response is now the FULLY populated case (see
+      // case.controller.js#createFromExisting) — apply it directly, with no
+      // second getCaseById fetch and no loading/skeleton flip at all. Same
+      // fix as AddCustomerWizardPage.jsx's own handleContinueAsNewCase —
+      // this used to rely entirely on restoreSession's own
+      // [urlCaseId]-keyed effect re-firing after navigate() below, which
+      // DID correctly reload the data (unlike the business wizard's
+      // mount-only effect) but did so through a full setLoading(true)
+      // teardown-and-rebuild of the whole page — confirmed, live, to be
+      // exactly what read as "the page refreshed", even though the
+      // underlying data was always correct.
+      applyCaseData(res.data);
+
+      // The banner fires on PAN blur, so by the time "Continue as New Case"
+      // is clicked the DSA has usually already typed mobile/email/pincode/
+      // DOB. The new case's own response deliberately blanks contact fields
+      // (per-case consent — see case.service.js#createCaseFromExisting), and
+      // applyCaseData just replaced the whole form with that, silently
+      // discarding what was typed and forcing re-entry. Carry the typed
+      // values over and persist them onto the NEW case so they also survive
+      // a refresh.
+      const typed = {
+        business_mobile: (formData.business_mobile || '').replace(/\D/g, ''),
+        business_email: formData.business_email || '',
+        pincode: formData.pincode || '',
+        dob: formData.dob || ''
+      };
+      const carried = Object.fromEntries(Object.entries(typed).filter(([, v]) => v));
+      if (Object.keys(carried).length > 0) {
+        setFormData(prev => ({ ...prev, ...carried }));
+        try {
+          await customerService.createOrAttach({
+            customer_id: res.data.customer?.id,
+            case_id: res.data.id,
+            business_pan: res.data.customer?.business_pan || formData.business_pan,
+            business_name: formData.business_name,
+            business_mobile: typed.business_mobile,
+            business_email: typed.business_email,
+            dob: typed.dob
+          });
+        } catch (persistErr) {
+          console.error('[handleContinueAsNewCase] carry-over persist failed', persistErr);
+        }
+      }
       toast.success('New case created with existing customer data!');
       setDuplicateWarning(null);
-      navigate(`/customers/salaried/add?caseId=${newCaseId}`);
+      navigate(`/customers/salaried/add?caseId=${res.data.id}`);
     } catch (error) {
       console.error('[handleContinueAsNewCase]', error);
       toast.error(error.response?.data?.error || 'Failed to create new case from existing customer.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Pure state-setting half of restoreSession below — no fetch, no loading
+  // toggle. See AddCustomerWizardPage.jsx's own applyCaseData for why this
+  // split exists: handleContinueAsNewCase above already has a full case
+  // payload in hand and applies it directly, instantly, with none of this
+  // function's setLoading(true) skeleton cycle.
+  const applyCaseData = (caseData) => {
+    setCaseId(caseData.id);
+
+    const applicants = caseData.applicants || [];
+    const primaryApp = applicants.find(a => a.type === 'PRIMARY');
+
+    const restoredApplicants = applicants.map(app => ({
+      ...app,
+      // `bureau_checks.length > 0` is true even for a FAILED pull attempt
+      // (it's just "a row exists in bureau_verifications"), and
+      // `obligations.length > 0` reflects the independent Experian pull,
+      // not the credit score check — neither means the CIBIL score was
+      // actually retrieved. The server's own `bureau_fetched` is only set
+      // true on a successful score fetch; `cibil_score` presence is kept
+      // as a defensive fallback for older records.
+      bureau_fetched: app.bureau_fetched === true || !!app.cibil_score,
+      has_ocr: app.salary_ocr_results?.length > 0
+    }));
+
+    setFormData({
+      customer_id: caseData.customer?.id,
+      business_pan: caseData.customer?.business_pan || '',
+      // proprietor_name/pan_holder_name are always set from the plain PAN-verify
+      // API's own name field, regardless of anything GST-derived — business_name
+      // can end up holding a stale legal_business_name/trade_name (a GST artifact,
+      // sometimes even a raw GST TRN placeholder string) left over from a
+      // different flow, which is never applicable to a salaried customer.
+      business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
+      business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
+      business_email: caseData.customer?.business_email || '',
+      pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
+      dob: toDateInputValue(caseData.customer?.dob),
+      // Sourced from THIS case's own primary Applicant row, not
+      // caseData.customer.mobile_verified — that field lives on the shared
+      // Customer record and is reused across every case for the same PAN,
+      // which let a brand-new salaried case silently inherit "Consented"
+      // from a completely different, unrelated case for the same customer.
+      // Consent must be explicit per case (see the same fix already applied
+      // in AddCustomerWizardPage.jsx, and case.service.js/consent.service.js).
+      mobile_verified: primaryApp?.otp_verified || false,
+      pan_verified: !!primaryApp?.pan_verified,
+      applicants: restoredApplicants.map(app => ({
+        ...app,
+        mobile: (app.mobile || '').replace(/\D/g, ''),
+        dob: toDateInputValue(app.dob)
+      })),
+      product_type: caseData.product_type || '',
+      dsa_notes: caseData.dsa_notes || '',
+      property_type: caseData.property?.property_type || '',
+      occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
+      ownership_type: caseData.property?.ownership_type || 'Sole Owner',
+      market_value: caseData.property?.market_value || '',
+    });
+
+    // Consent (otp_verified) alone isn't enough to skip step 1 on resume —
+    // PAN must actually be verified too. Consent can complete without PAN
+    // auto-verify ever finishing in this tab (e.g. the customer approves the
+    // consent link on their own device, or the DSA reloads mid-verify), and
+    // step 1's auto-verify effect only runs while currentStep === 1 — so
+    // jumping straight to step 2 on otp_verified alone stranded these cases
+    // with no PAN ever fetched and no way back short of manually clicking
+    // "← Back".
+    if (primaryApp?.otp_verified && primaryApp?.pan_verified && restoredApplicants.length > 0) {
+      setCurrentStep(2);
+    } else {
+      setCurrentStep(1);
+    }
+
+    // Rehydrate any consent request that's still live for THIS case — same
+    // fix as AddCustomerWizardPage.jsx's own restoreSession, which this
+    // page never had at all: consentRequest only ever got set locally, in
+    // memory, right after actually sending one — never restored from the
+    // server. Without this, a page refresh (or reopening the case) while a
+    // request was genuinely still pending lost that state entirely and fell
+    // straight back to a fresh "Request Consent" button, even though the
+    // customer hadn't done anything — reading as "consent status reset".
+    // Best-effort: a failure here shouldn't block the rest of the case from
+    // loading, so a fresh "Request Consent" is the worst case, not a
+    // broken page.
+    if (!primaryApp?.otp_verified && caseData.customer?.id && caseData.id) {
+      consentService.getLatest({ customer_id: caseData.customer.id, case_id: caseData.id })
+        .then((latest) => { if (latest) setConsentRequest({ id: latest.id, status: latest.status }); })
+        .catch(() => { });
     }
   };
 
@@ -198,62 +381,11 @@ const AddSalariedCustomerWizardPage = () => {
       const targetCaseId = urlCaseId;
 
       if (!targetCaseId) {
-        setLoading(false);
         return;
       }
 
       const caseData = await caseService.getCaseById(targetCaseId);
-
-      setCaseId(caseData.id);
-
-      const applicants = caseData.applicants || [];
-      const primaryApp = applicants.find(a => a.type === 'PRIMARY');
-
-      const restoredApplicants = applicants.map(app => ({
-        ...app,
-        // `bureau_checks.length > 0` is true even for a FAILED pull attempt
-        // (it's just "a row exists in bureau_verifications"), and
-        // `obligations.length > 0` reflects the independent Experian pull,
-        // not the credit score check — neither means the CIBIL score was
-        // actually retrieved. The server's own `bureau_fetched` is only set
-        // true on a successful score fetch; `cibil_score` presence is kept
-        // as a defensive fallback for older records.
-        bureau_fetched: app.bureau_fetched === true || !!app.cibil_score,
-        has_ocr: app.salary_ocr_results?.length > 0
-      }));
-
-      setFormData({
-        customer_id: caseData.customer?.id,
-        business_pan: caseData.customer?.business_pan || '',
-        // proprietor_name/pan_holder_name are always set from the plain PAN-verify
-        // API's own name field, regardless of anything GST-derived — business_name
-        // can end up holding a stale legal_business_name/trade_name (a GST artifact,
-        // sometimes even a raw GST TRN placeholder string) left over from a
-        // different flow, which is never applicable to a salaried customer.
-        business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
-        business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
-        business_email: caseData.customer?.business_email || '',
-        pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
-        dob: toDateInputValue(caseData.customer?.dob),
-        mobile_verified: caseData.customer?.mobile_verified || false,
-        applicants: restoredApplicants.map(app => ({
-          ...app,
-          mobile: (app.mobile || '').replace(/\D/g, ''),
-          dob: toDateInputValue(app.dob)
-        })),
-        product_type: caseData.product_type || '',
-        dsa_notes: caseData.dsa_notes || '',
-        property_type: caseData.property?.property_type || '',
-        occupancy_status: caseData.property?.occupancy_status || 'Self Occupied',
-        ownership_type: caseData.property?.ownership_type || 'Sole Owner',
-        market_value: caseData.property?.market_value || '',
-      });
-
-      if (caseData.customer?.mobile_verified && restoredApplicants.length > 0) {
-        setCurrentStep(2);
-      } else {
-        setCurrentStep(1);
-      }
+      applyCaseData(caseData);
     } catch (error) {
       console.error('[restoreSession]', error);
       toast.error('Failed to restore case draft.');
@@ -298,6 +430,11 @@ const AddSalariedCustomerWizardPage = () => {
     } else {
       await customerService.createOrAttach({
         customer_id: formData.customer_id,
+        // Lets the backend also sync THIS case's own primary applicant
+        // mobile/email — see AddCustomerWizardPage.jsx's identical call for
+        // why (case.service.js#getCaseById reads contact info per-case, not
+        // from the shared customer row).
+        case_id: caseId,
         business_pan: formData.business_pan,
         business_name: formData.business_name,
         business_mobile: formData.business_mobile,
@@ -310,33 +447,117 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  const handleSendPrimaryOtp = async () => {
-    try {
-      setSaving(true);
-      const { targetCustomerId } = await ensureDraftSaved();
-      const res = await otpService.sendOtp({
-        mobile: formData.business_mobile,
-        purpose: 'PRIMARY_APPLICANT',
-        target_type: 'CUSTOMER',
-        target_id: targetCustomerId
-      });
-      if (res.otp) toast.success(`[DEV] OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('OTP sent');
+  // Replaces the old "Send OTP" button entirely — there is no separate
+  // mobile OTP step anymore, it's folded into this one. Texts the customer
+  // an OTP + consent link via SMS and opens a live subscription for the
+  // approval, same as the business wizard.
+  const handleRequestConsent = async () => {
+    const mobile = formData.business_mobile?.trim();
+    if (!mobile) {
+      return toast.error('Mobile number is required to send the consent request.');
+    }
 
-      setOtpModal({ isOpen: true, targetType: 'CUSTOMER', targetId: targetCustomerId, mobile: formData.business_mobile, purpose: 'PRIMARY_APPLICANT', otpInput: '', loading: false });
-    } catch (e) {
-      toast.error(e.response?.data?.error || e.message);
+    setConsentRequesting(true);
+    setConsentRequestFailed(false);
+    try {
+      const draft = await ensureDraftSaved();
+      const result = await consentService.requestConsent({
+        customer_id: draft.targetCustomerId,
+        case_id: draft.targetCaseId,
+      });
+      setConsentRequest({ id: result.id, status: result.status });
+      toast.success(`Consent OTP sent via SMS to ${mobile}. Waiting for the customer to approve.`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      // The anti-impersonation check's own rejection (backend 403 — nothing
+      // else in this flow returns 403) gets a blocking popup instead of a
+      // toast, same as AddCustomerWizardPage.jsx's own handleRequestConsent.
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: formData.business_pan });
+      } else {
+        toast.error(errMsg);
+      }
+      setConsentRequestFailed(true);
     } finally {
-      setSaving(false);
+      setConsentRequesting(false);
     }
   };
 
-  const handleSendCoapplicantOtp = async (index) => {
-    const app = formData.applicants[index];
-    if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required for Co-Applicant OTP');
+  // Live: the moment the customer approves, this sets mobile_verified — the
+  // same flag the old OTP-verify step used to set — so the "Verify PAN"
+  // button (gated on mobile_verified) becomes available, unchanged.
+  useEffect(() => {
+    if (!consentRequest?.id || consentRequest.status === 'GRANTED') return;
+    const unsubscribe = subscribeToConsentRequest(consentRequest.id, (payload) => {
+      if (payload.status === 'GRANTED') {
+        setConsentRequest((prev) => (prev ? { ...prev, status: 'GRANTED' } : prev));
+        setFormData((prev) => ({ ...prev, mobile_verified: true }));
+        toast.success('Customer approved — you can now verify PAN.');
+      }
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consentRequest?.id]);
 
+  // Same consent gate as the primary applicant, per co-applicant — a
+  // co-applicant is a distinct person and can only consent for their own
+  // PAN, so each gets their own request/email/link, keyed by row index.
+  const [coappConsent, setCoappConsent] = useState({});
+  const [coappConsentRequesting, setCoappConsentRequesting] = useState({});
+
+  // Defends against this SAME mounted instance of the page being reused for
+  // two different case attempts — e.g. the browser back button returning
+  // here from `?caseId=X` to the bare `/customers/salaried/add` URL
+  // (handleContinueAsNewCase's own navigate() is a normal push, not
+  // `replace`, so back genuinely lands on that earlier blank URL) without
+  // React Router remounting anything, since it's the same route and only the
+  // search string differs. Without this, `caseId`/`formData` kept holding
+  // case X's data — every applicant, property field, PAN/mobile — while the
+  // URL looked like a brand-new, blank case, regardless of how old case X
+  // was (this is a same-tab state leak, not a time-boxed dedupe issue like
+  // case.service.js#createSalariedCase's own idempotency window).
+  // Deliberately one-directional: only resets when the URL LOSES its
+  // caseId while state still has one. The other direction (urlCaseId
+  // gaining a value) is already handled directly by whichever caller just
+  // set that case's data itself (ensureDraftSaved, handleContinueAsNewCase)
+  // — re-fetching here too would reintroduce the exact skeleton-flicker
+  // regression the mount-only restoreSession effect above was fixed to avoid.
+  // Keyed on the URL's own previous value, not just "state has a caseId and
+  // URL doesn't": handleContinueAsNewCase/ensureDraftSaved call setCaseId()
+  // BEFORE navigate() lands (React Router v7 applies navigation inside a
+  // transition), so for a render or two caseId is set while urlCaseId is
+  // still null. Without the prev-value check that window read as "URL lost
+  // its caseId" and wiped the just-populated form back to blank — which
+  // also made the duplicate-PAN banner reappear on the next blur.
+  const prevUrlCaseIdRef = useRef(urlCaseId);
+  useEffect(() => {
+    const prevUrlCaseId = prevUrlCaseIdRef.current;
+    prevUrlCaseIdRef.current = urlCaseId;
+    if (urlCaseId || !prevUrlCaseId || !caseId) return;
+    setCaseId(null);
+    setFormData(getBlankFormData());
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setCoappPanVerifyingMap({});
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setPanEditUnlocked(false);
+    setCoappPanEditUnlockedMap({});
+    setDuplicateWarning(null);
+    setIdentityMismatch(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
+  }, [urlCaseId, caseId]);
+
+  const handleRequestCoapplicantConsent = async (index) => {
+    const app = formData.applicants[index];
+    if (!app.pan_number || !app.mobile) return toast.error('PAN and Mobile required before requesting consent');
+
+    setCoappConsentRequesting((prev) => ({ ...prev, [index]: true }));
     try {
-      setSaving(true);
       const { targetCaseId } = await ensureDraftSaved();
 
       let targetAppId = app.id;
@@ -345,25 +566,45 @@ const AddSalariedCustomerWizardPage = () => {
         targetAppId = savedApp.id;
         const newArr = [...formData.applicants];
         newArr[index] = savedApp;
-        setFormData(prev => ({ ...prev, applicants: newArr }));
+        setFormData((prev) => ({ ...prev, applicants: newArr }));
       }
 
-      const res = await otpService.sendOtp({
-        mobile: app.mobile,
-        purpose: 'CO_APPLICANT',
-        target_type: 'APPLICANT',
-        target_id: targetAppId
+      const result = await consentService.requestConsent({
+        customer_id: formData.customer_id,
+        case_id: targetCaseId,
+        applicant_id: targetAppId,
       });
-      if (res.otp) toast.success(`[DEV] OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('OTP sent');
-
-      setOtpModal({ isOpen: true, targetType: 'APPLICANT', targetId: targetAppId, mobile: app.mobile, purpose: 'CO_APPLICANT', otpInput: '', loading: false });
+      setCoappConsent((prev) => ({ ...prev, [index]: { id: result.id, status: result.status } }));
+      toast.success(`Consent OTP sent via SMS to ${app.mobile}. Waiting for them to approve.`);
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Failed to send OTP');
+      const errMsg = err.response?.data?.error || err.message || 'Failed to send consent request';
+      if (err.response?.status === 403) {
+        setIdentityMismatch({ message: errMsg, pan: app.pan_number });
+      } else {
+        toast.error(errMsg);
+      }
     } finally {
-      setSaving(false);
+      setCoappConsentRequesting((prev) => ({ ...prev, [index]: false }));
     }
   };
+
+  useEffect(() => {
+    const unsubscribes = Object.entries(coappConsent).map(([idx, req]) => {
+      if (!req?.id || req.status === 'GRANTED') return null;
+      return subscribeToConsentRequest(req.id, (payload) => {
+        if (payload.status !== 'GRANTED') return;
+        setCoappConsent((prev) => ({ ...prev, [idx]: { ...prev[idx], status: 'GRANTED' } }));
+        setFormData((prev) => {
+          const list = [...prev.applicants];
+          if (list[idx]) list[idx] = { ...list[idx], otp_verified: true };
+          return { ...prev, applicants: list };
+        });
+        toast.success('Co-applicant approved — you can now verify their PAN.');
+      });
+    }).filter(Boolean);
+    return () => unsubscribes.forEach((fn) => fn());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coappConsent]);
 
   const handleVerifyPan = async (isCoapplicant = false, idx = null) => {
     if (typeof isCoapplicant === 'object') {
@@ -371,9 +612,11 @@ const AddSalariedCustomerWizardPage = () => {
       idx = null;
     }
 
-    if (!formData.business_pan || formData.business_pan.length < 10) return toast.error('Valid PAN required');
+    const pan = isCoapplicant && idx !== null ? formData.applicants[idx]?.pan_number : formData.business_pan;
+    if (!pan || pan.length < 10) return toast.error('Valid PAN required');
 
-    setPanVerifying(true);
+    if (isCoapplicant && idx !== null) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: true }));
+    else { setPanVerifying(true); setPanVerifyFailed(false); }
 
     try {
       // Always persist the current PAN before verifying it — not just for a
@@ -396,7 +639,7 @@ const AddSalariedCustomerWizardPage = () => {
       }
 
       const res = await api.post('/external/pan/verify', {
-        pan: isCoapplicant ? formData.applicants[idx].pan_number : formData.business_pan,
+        pan,
         customer_id: targetCustomerId,
         case_id: targetCaseId,
         is_coapplicant: isCoapplicant,
@@ -424,56 +667,61 @@ const AddSalariedCustomerWizardPage = () => {
     } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to verify PAN';
       toast.error(errMsg);
+      if (!isCoapplicant) setPanVerifyFailed(true);
     } finally {
-      setPanVerifying(false);
+      if (isCoapplicant && idx !== null) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: false }));
+      else setPanVerifying(false);
     }
   };
 
-  const handleVerifyOtpSubmit = async () => {
-    if (otpModal.otpInput.length < 6) return toast.error('Enter valid 6-digit OTP');
-    try {
-      setOtpModal(prev => ({ ...prev, loading: true }));
-      await otpService.verifyOtp({
-        otp: otpModal.otpInput,
-        target_type: otpModal.targetType,
-        target_id: otpModal.targetId
-      });
+  // Auto-verify the primary applicant's PAN the instant consent is granted —
+  // no manual "Verify PAN" click needed, same as AddCustomerWizardPage's
+  // auto-verify effect. Guarded by a ref (not formData) so a failed attempt
+  // doesn't retry in a tight loop; re-editing the PAN value clears the guard.
+  const panAutoVerifyAttempted = useRef(null);
+  useEffect(() => {
+    if (currentStep > 1) return;
+    const pan = formData.business_pan;
+    const ready = pan && pan.length === 10 && formData.mobile_verified && !isBulkInjectedCase;
+    if (
+      ready &&
+      !formData.pan_verified &&
+      !panVerifying &&
+      panAutoVerifyAttempted.current !== pan
+    ) {
+      panAutoVerifyAttempted.current = pan;
+      handleVerifyPan();
+    } else if (!pan || pan.length !== 10) {
+      panAutoVerifyAttempted.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.business_pan, formData.mobile_verified, formData.pan_verified, panVerifying]);
 
-      toast.success('Verified Successfully!');
-
-      if (otpModal.targetType === 'CUSTOMER') {
-        setFormData(prev => ({ ...prev, mobile_verified: true }));
-      } else {
-        const newArr = [...formData.applicants].map(a =>
-          a.id === otpModal.targetId ? { ...a, otp_verified: true } : a
-        );
-        setFormData(prev => ({ ...prev, applicants: newArr }));
+  // Auto-verify each co-applicant's PAN once their own consent is granted —
+  // same no-manual-click pattern as the primary above, guarded per-index so a
+  // failed attempt doesn't retry in a tight loop.
+  const coappPanAutoVerifyAttempted = useRef({});
+  useEffect(() => {
+    if (currentStep > 1 || isBulkInjectedCase) return;
+    formData.applicants.forEach((app, idx) => {
+      if (app.type !== 'CO_APPLICANT') return;
+      const pan = app.pan_number;
+      if (
+        pan && pan.length === 10 &&
+        app.otp_verified &&
+        !app.pan_verified &&
+        !coappPanVerifyingMap[idx] &&
+        coappPanAutoVerifyAttempted.current[idx] !== pan
+      ) {
+        coappPanAutoVerifyAttempted.current[idx] = pan;
+        handleVerifyPan(true, idx);
+      } else if (!pan || pan.length !== 10) {
+        coappPanAutoVerifyAttempted.current[idx] = null;
       }
-      setOtpModal({ isOpen: false, targetType: null, targetId: null, mobile: '', purpose: '', otpInput: '', loading: false });
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Invalid OTP');
-    } finally {
-      setOtpModal(prev => ({ ...prev, loading: false }));
-    }
-  };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.applicants, coappPanVerifyingMap]);
 
-  const handleResendOtp = async () => {
-    try {
-      setOtpModal(prev => ({ ...prev, loading: true }));
-      const res = await otpService.resendOtp({
-        mobile: otpModal.mobile,
-        purpose: otpModal.purpose,
-        target_type: otpModal.targetType,
-        target_id: otpModal.targetId
-      });
-      if (res.otp) toast.success(`[DEV] New OTP: ${res.otp}`, { duration: 10000 });
-      else toast.success('New OTP sent');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to resend');
-    } finally {
-      setOtpModal(prev => ({ ...prev, loading: false }));
-    }
-  };
 
   const addCoApplicantRow = () => {
     setFormData(prev => ({
@@ -492,6 +740,50 @@ const AddSalariedCustomerWizardPage = () => {
     const arr = [...formData.applicants];
     arr.splice(index, 1);
     setFormData(prev => ({ ...prev, applicants: arr }));
+  };
+
+  // Same fix as AddCustomerWizardPage.jsx's own handlePincodeBlur — pincode
+  // otherwise only ever reached the backend via handleStep1Submit, which
+  // fires solely from "Save & Next". A DSA who types a pincode and then
+  // clicks "Request Consent" instead (staying on step 1 to wait for the
+  // customer, exactly when a page reopen/refresh is most likely) had it
+  // silently never saved — reading back blank the moment applyCaseData
+  // repopulates the form from the server, since the server never actually
+  // had it. Persisting on blur closes that gap.
+  //
+  // Blur alone still isn't enough on its own: a DSA who types the 6th digit
+  // and immediately clicks "Request Consent" relies on blur firing (and its
+  // save request landing) before that click's own handler reads state — a
+  // race that a fast typist / fast clicker can lose. savePincode is called
+  // the instant the field holds a complete 6-digit value (see the input's
+  // onChange below) so the save is already in flight well before the user
+  // could plausibly click elsewhere; onBlur still calls it too, as a
+  // fallback for a pincode that's shorter than 6 digits on blur.
+  // pincodeSaveSeq guards against an in-flight save's response landing after
+  // a newer edit (e.g. the user immediately corrects a digit, producing a
+  // second complete 6-digit value) — only the latest request is allowed to
+  // write formData.
+  const pincodeSaveSeq = useRef(0);
+  const savePincode = async (value) => {
+    if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
+    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
+    if (!primaryApp?.id || primaryApp.pincode === value) return;
+    const seq = ++pincodeSaveSeq.current;
+    try {
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value });
+      if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
+      }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save pincode');
+    }
+  };
+  const handlePincodeBlur = () => savePincode(formData.pincode);
+  const handlePincodeChange = (value) => {
+    setFormData(prev => ({ ...prev, pincode: value }));
+    if (/^\d{6}$/.test(value)) savePincode(value);
   };
 
   const handleStep1Submit = async (e) => {
@@ -540,62 +832,12 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  const handleRunBureau = async (applicantId) => {
-    if (!caseId) return toast.error('Case ID missing');
-    if (saving) return;
-    try {
-      setSaving(true);
-      const res = await api.post(`/verification/bureau/run/${caseId}`, { applicantId });
-      const data = res.data;
-
-      if (data.status === 'FAILED') {
-        toast.error(data.errors?.[0]?.error || 'Bureau fetch failed');
-        return;
-      }
-
-      // status can be SUCCESS, PARTIAL_SUCCESS, or FAILED — PARTIAL_SUCCESS
-      // covers "the independent obligations pull succeeded but the credit
-      // score call itself failed" (e.g. a vendor-side error for this
-      // applicant). That's not a completed CIBIL check, even though the
-      // request as a whole didn't throw, so success must be judged by
-      // whether THIS applicant's score actually came back — not by the
-      // overall status string alone.
-      const targetApp = formData.applicants.find(a => a.id === applicantId);
-      const newScore = targetApp?.type === 'PRIMARY'
-        ? data.applicantScore
-        : data.coApplicantScores?.find(cs => cs.applicantId === applicantId)?.score;
-
-      if (!newScore) {
-        const scoreError = data.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
-        toast.error(scoreError?.error || 'Bureau score not returned — CIBIL check incomplete for this applicant.');
-        return;
-      }
-
-      toast.success('Bureau pull success!');
-
-      const updatedApps = formData.applicants.map(a => {
-        if (a.id !== applicantId) return a;
-        return { ...a, bureau_fetched: true, cibil_score: newScore };
-      });
-      setFormData(prev => ({ ...prev, applicants: updatedApps }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Bureau fetch failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleStep2Submit = async (e) => {
     e.preventDefault();
-    // a.bureau_fetched is now sourced correctly (see restoredApplicants /
-    // handleRunBureau above) — it only reflects an actual successful score
-    // fetch, not merely an attempted or partially-failed one.
-    const anyBureauReady = formData.applicants.some(a => a.bureau_fetched || !!a.cibil_score);
-
-    if (!anyBureauReady) {
-      return toast.error('Bureau pull must be completed for at least one applicant before proceeding.');
-    }
-
+    // Bureau pull is no longer gated here — it happens exclusively on the
+    // "Bureau & Obligations" step (step 5) further along in the shared
+    // journey (see BureauObligationsPage), which enforces its own
+    // requirements before ESR/proposal.
     setCurrentStep(3);
   };
 
@@ -629,7 +871,69 @@ const AddSalariedCustomerWizardPage = () => {
     }
   };
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}><LoadingSpinner size={40} /></div>;
+  // Everything the customer can actually fill in BEFORE consent exists —
+  // gates the Request Consent button itself. business_name/dob are
+  // deliberately excluded: they're read-only, auto-fetched by PAN
+  // verification, which itself only auto-fires once mobile_verified flips
+  // true (see the panAutoVerifyAttempted-style effect for this page) —
+  // requiring business_name here used to create an unbreakable deadlock
+  // where consent could never be requested because business_name didn't
+  // exist yet, and business_name could never exist because consent hadn't
+  // been requested yet. Mirrors AddCustomerWizardPage's identical fix
+  // (step1ConsentFieldsValid/step1BusinessFieldsValid).
+  const step1ConsentFieldsValid = !!formData.business_pan
+    && !!formData.business_mobile
+    && !!formData.business_email
+    && !!formData.pincode;
+  // Everything above, PLUS business_name — by the time this is checked
+  // (once consent is granted), PAN auto-verify has already run and filled
+  // it in, so this only ever gates the *next* step (Save & Next), never
+  // Request Consent.
+  const step1FieldsValid = step1ConsentFieldsValid && !!formData.business_name;
+  const step1Valid = step1FieldsValid && !!formData.mobile_verified;
+
+  // A bare centered spinner (the old version of this) replaces the ENTIRE
+  // wizard — header, stepper, form, everything — with empty space for the
+  // duration of every restoreSession() call, not just the very first page
+  // load. Since restoreSession also re-runs after "Continue as New Case"
+  // (this page's own useEffect deps include urlCaseId, unlike
+  // AddCustomerWizardPage.jsx's mount-only one — see that page's own
+  // restoreSession comment on why IT needed an explicit-caseId fix instead),
+  // every one of those transitions looked and felt like the browser had
+  // done a full page reload, which is exactly what was reported. A skeleton
+  // shaped like the real Step 1 layout — matching AddCustomerWizardPage.jsx's
+  // own loading state — reads as "this page's content is updating," not
+  // "this page just reloaded."
+  if (loading) return (
+    <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
+      <div style={{ maxWidth: WIZARD_MAX_WIDTH, margin: '0 auto', paddingBottom: 40 }}>
+        <Skeleton width={220} height={24} style={{ marginBottom: 24 }} />
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={160} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i}>
+                  <Skeleton width={100} height={10} style={{ marginBottom: 8 }} />
+                  <Skeleton height={38} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <Skeleton width={140} height={16} />
+          </div>
+          <div style={{ padding: 24 }}>
+            <Skeleton height={90} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
@@ -641,17 +945,24 @@ const AddSalariedCustomerWizardPage = () => {
         .wizard-page .notice {
           border-radius: 0 !important;
         }
-        /* Dark mode: the shared grey text tokens read too low-contrast on
-           this data-heavy page — bump them to white here specifically,
-           without touching the global theme. */
+        /* --text-secondary/--text-tertiary are identical to --text-primary
+           in the global theme (see index.css) — this page used to "fix" the
+           resulting low-contrast labels by forcing both straight to pure
+           white/black, but that just moved the bug: --text-tertiary also
+           drives every placeholder's color (.form-control::placeholder), so
+           a full-strength placeholder became indistinguishable from real
+           typed text across all 3 steps. Same fix as AddCustomerWizardPage's
+           identical override — real, distinct muted tones instead of a
+           blunt full-contrast override — secondary for labels/helper text
+           (still clearly readable), tertiary dimmer still for anything
+           meant to read as "hint, not content" (placeholders included). */
         :root.dark .wizard-page {
-          --text-secondary: #ffffff;
-          --text-tertiary: #ffffff;
+          --text-secondary: #c3cce0;
+          --text-tertiary: #8b98bd;
         }
-        /* Light mode: same low-contrast grey complaint — use black instead. */
         :root:not(.dark) .wizard-page {
-          --text-secondary: #000000;
-          --text-tertiary: #000000;
+          --text-secondary: #334155;
+          --text-tertiary: #64748b;
         }
         .hide-scrollbar {
           scrollbar-width: none;
@@ -686,11 +997,27 @@ const AddSalariedCustomerWizardPage = () => {
               {caseId ? (formData.business_name ? toTitleCase(formData.business_name) : 'Resume Salaried Case') : 'Add Salaried Customer'}
             </h1>
           </div>
-          {caseId && (
-            <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Check size={16} /> Auto-saved
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div
+              title="Remaining wallet credits — updates automatically"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px',
+                background: walletBalance <= 0 ? 'var(--error-bg)' : 'var(--bg-elevated)',
+                border: `1px solid ${walletBalance <= 0 ? 'var(--error)' : 'var(--outline)'}`,
+                borderRadius: 999, fontSize: 13, fontWeight: 700,
+                color: walletBalance <= 0 ? 'var(--error)' : 'var(--text-primary)',
+              }}
+            >
+              <Wallet size={14} />
+              {walletBalance.toLocaleString('en-IN')} Credits
             </div>
-          )}
+            {caseId && (
+              <div style={{ color: 'var(--success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Check size={16} /> Auto-saved
+              </div>
+            )}
+          </div>
         </div>
 
         <CaseWizardStepper
@@ -750,7 +1077,7 @@ const AddSalariedCustomerWizardPage = () => {
                             <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                               <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
                               {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slip OCR</div>}
+                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slips</div>}
                               {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
                             </div>
                           )}
@@ -802,17 +1129,24 @@ const AddSalariedCustomerWizardPage = () => {
                                   <Pencil size={13} /> Edit
                                 </button>
                               </div>
+                            ) : panVerifying ? (
+                              <PullingIndicator label="Verifying PAN…" />
+                            ) : panVerifyFailed ? (
+                              <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <AlertCircle size={13} /> PAN verification failed — fix and re-enter
+                              </span>
                             ) : formData.mobile_verified ? (
-                              // Only reachable once mobile OTP is verified — matches the
-                              // co-applicant section just below, which already hides its
-                              // own Verify PAN button behind app.otp_verified. This button
-                              // previously had no such gate: nothing stopped Verify PAN
-                              // (a real bureau pull of the applicant's name/DOB) from being
-                              // clicked before the applicant had proven they own the
-                              // mobile number on file.
-                              <button type="button" onClick={handleVerifyPan} disabled={panVerifying || !formData.business_pan || isBulkInjectedCase} className="btn btn-secondary" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
-                                {panVerifying ? 'Wait...' : 'Verify PAN'}
-                              </button>
+                              // Reachable the instant the customer approves the
+                              // consent request sent from the Mobile Number field
+                              // below (mobile_verified is now set on consent
+                              // grant) — the panAutoVerifyAttempted effect fires
+                              // Verify PAN automatically from here, same as
+                              // AddCustomerWizardPage's primary PAN auto-verify.
+                              // No manual click needed (and none was ever safe
+                              // before consent was granted, since that would pull
+                              // the applicant's real name/DOB before they'd
+                              // consented to it).
+                              !isBulkInjectedCase && <PullingIndicator label="Queued…" />
                             ) : null}
                           </div>
                         </FormField>
@@ -830,9 +1164,7 @@ const AddSalariedCustomerWizardPage = () => {
                               placeholder="9820012345"
                               disabled={formData.mobile_verified}
                             />
-                            {!formData.mobile_verified ? (
-                              <button type="button" onClick={handleSendPrimaryOtp} disabled={saving || !formData.business_mobile || !formData.business_pan} className="btn btn-primary" style={{ padding: '0 20px' }}>Send OTP</button>
-                            ) : (
+                            {formData.mobile_verified && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
                                   <CheckCircle2 size={18} /> Verified
@@ -840,8 +1172,8 @@ const AddSalariedCustomerWizardPage = () => {
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-sm"
-                                  onClick={() => setFormData({ ...formData, mobile_verified: false })}
-                                  title="Edit mobile number"
+                                  onClick={() => { setFormData({ ...formData, mobile_verified: false }); setConsentRequest(null); }}
+                                  title="Edit mobile number (you'll need to request consent again)"
                                   style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                                 >
                                   <Pencil size={13} /> Edit
@@ -852,54 +1184,110 @@ const AddSalariedCustomerWizardPage = () => {
                         </FormField>
                       </div>
 
-                      <div className="grid-2" style={{ marginBottom: 24 }}>
-                        <FormField label="Full Name (As Per PAN)" name="business_name" required>
-                          <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Arjun Sharma" disabled={!!caseId} />
-                        </FormField>
-
-                        <FormField label="Date Of Birth" name="dob">
-                          <input
-                            type="date"
-                            value={formData.dob || ''}
-                            onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                            className="form-control"
-                          />
-                        </FormField>
-                      </div>
-
                       <div className="grid-2">
                         <FormField label="Email Address" name="business_email" required>
-                          <input
-                            type="email"
-                            value={formData.business_email}
-                            onChange={e => setFormData({ ...formData, business_email: e.target.value })}
-                            className="form-control"
-                            placeholder="arjun@example.com"
-                          />
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <input
+                              type="email"
+                              value={formData.business_email}
+                              onChange={e => setFormData({ ...formData, business_email: e.target.value })}
+                              className="form-control"
+                              placeholder="arjun@example.com"
+                              style={{ flex: 1, minWidth: 160 }}
+                            />
+                            {/* The actual Request Consent action (and its
+                          sending/waiting/resend states) now lives in this
+                          sub-page's footer, in the same slot the Save & Next
+                          button occupies once consent is granted — this
+                          field just mirrors the end result once it lands. */}
+                            {formData.mobile_verified && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontWeight: 600, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                                <CheckCircle2 size={18} /> Consented
+                              </div>
+                            )}
+                          </div>
                         </FormField>
 
                         <FormField label="Pincode" name="pincode" required>
                           <input
                             type="text"
                             value={formData.pincode || ''}
-                            onChange={e => setFormData({ ...formData, pincode: e.target.value })}
+                            onChange={e => handlePincodeChange(e.target.value)}
+                            onBlur={handlePincodeBlur}
                             className="form-control"
-                            placeholder="e.g. 560026"
+                            placeholder="e.g. 400004"
                             maxLength={6}
                           />
                         </FormField>
                       </div>
+
+                      {/* Hidden until consent is actually granted — before that,
+                    business_name/dob are always empty (they're only ever
+                    auto-fetched by PAN verification, which itself only
+                    fires once mobile_verified flips true), so showing two
+                    permanently-blank "Autofetched via PAN" fields up front
+                    was just noise. Reusing index.css's existing slideUp
+                    keyframe for the reveal keeps this consistent with the
+                    rest of the app rather than introducing a new animation. */}
+                      {formData.mobile_verified && (
+                        <div className="grid-2" style={{ marginTop: 24, animation: 'slideUp 0.35s ease' }}>
+                          <FormField label="Full Name (As Per PAN)" name="business_name" disabled>
+                            <input type="text" value={formData.business_name} onChange={e => setFormData({ ...formData, business_name: e.target.value })} className="form-control" placeholder="Autofetched via PAN" disabled />
+                          </FormField>
+
+                          {/* Never user-editable — always auto-fetched by PAN
+                        verification by the time this is visible at all — so
+                        a plain read-only text field (not a date-picker,
+                        which implies an editable value) showing a
+                        human-formatted date. */}
+                          <FormField label="Date Of Birth" name="dob" disabled>
+                            <input
+                              type="text"
+                              value={formData.dob ? formatDate(formData.dob) : ''}
+                              className="form-control"
+                              placeholder="Autofetched via PAN"
+                              disabled
+                              readOnly
+                            />
+                          </FormField>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-lg"
-                      onClick={() => setStep1SubPage('coapplicants')}
-                    >
-                      Next: Co-Applicants →
-                    </button>
+                    {!formData.mobile_verified ? (
+                      consentRequesting ? (
+                        <div className="btn btn-primary btn-lg" style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                          <ConsentProgressStatus color="#fff" />
+                        </div>
+                      ) : consentRequest ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <PullingIndicator label="Waiting for customer to approve consent…" />
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={handleRequestConsent} title="Resend the consent SMS">Resend</button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRequestConsent}
+                          disabled={saving || !step1ConsentFieldsValid || walletBalance < costs.PAN_FETCH}
+                          className="btn btn-primary btn-lg"
+                          title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                        >
+                          {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-lg"
+                        onClick={() => setStep1SubPage('coapplicants')}
+                        disabled={!step1Valid}
+                        title={!step1Valid ? 'Complete every required field before continuing' : undefined}
+                      >
+                        Save & Next
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -956,10 +1344,14 @@ const AddSalariedCustomerWizardPage = () => {
                                             <Pencil size={12} /> Edit
                                           </button>
                                         </div>
-                                      ) : app.otp_verified ? (
-                                        <button type="button" onClick={() => handleVerifyPan(true, realIdx)} disabled={panVerifying || isBulkInjectedCase} className="btn btn-secondary btn-sm" title={isBulkInjectedCase ? 'Live PAN verification is disabled for this test/injected case.' : undefined}>
-                                          {panVerifying ? 'Wait...' : 'Verify PAN'}
-                                        </button>
+                                      ) : coappPanVerifyingMap[realIdx] ? (
+                                        <PullingIndicator label="Verifying PAN…" />
+                                      ) : app.otp_verified && !isBulkInjectedCase && (app.pan_number || '').length === 10 ? (
+                                        // Auto-verified the instant this co-applicant's own
+                                        // consent is granted (coappPanAutoVerifyAttempted
+                                        // effect) — no manual click needed, same as the
+                                        // primary applicant above.
+                                        <PullingIndicator label="Queued…" />
                                       ) : null}
                                     </div>
                                   </FormField>
@@ -969,16 +1361,14 @@ const AddSalariedCustomerWizardPage = () => {
                                         const val = e.target.value.replace(/\D/g, '');
                                         updateApplicantRow(realIdx, 'mobile', val);
                                       }} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
-                                      {!app.otp_verified ? (
-                                        <button type="button" className="btn btn-primary" onClick={() => handleSendCoapplicantOtp(realIdx)} style={{ padding: '0 16px', whiteSpace: 'nowrap' }} disabled={saving}>Send OTP</button>
-                                      ) : (
+                                      {app.otp_verified && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, padding: '0 8px', whiteSpace: 'nowrap', fontSize: 12 }}>
                                           <CheckCircle2 size={16} /> Verified
                                           <button
                                             type="button"
                                             className="btn btn-ghost btn-sm"
-                                            onClick={() => updateApplicantRow(realIdx, 'otp_verified', false)}
-                                            title="Edit mobile number"
+                                            onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
+                                            title="Edit mobile number (you'll need to request consent again)"
                                             style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
                                           >
                                             <Pencil size={12} /> Edit
@@ -1003,12 +1393,41 @@ const AddSalariedCustomerWizardPage = () => {
                                       value={app.pincode || ''}
                                       onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)}
                                       className="form-control"
-                                      placeholder="560026"
+                                      placeholder="400004"
                                       maxLength={6}
                                     />
                                   </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
-                                    <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" />
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
+                                      {!app.otp_verified ? (
+                                        coappConsentRequesting[realIdx] ? (
+                                          <div className="btn btn-primary btn-sm" style={{ padding: '0 12px', whiteSpace: 'nowrap', pointerEvents: 'none', opacity: 0.9 }}>
+                                            <ConsentProgressStatus color="#fff" style={{ fontSize: 12 }} />
+                                          </div>
+                                        ) : coappConsent[realIdx] ? (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                            <PullingIndicator label="Waiting for approval…" />
+                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRequestCoapplicantConsent(realIdx)} title="Resend the consent SMS">Resend</button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            onClick={() => handleRequestCoapplicantConsent(realIdx)}
+                                            style={{ padding: '0 12px', whiteSpace: 'nowrap' }}
+                                            disabled={saving || walletBalance < costs.PAN_FETCH}
+                                            title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
+                                          >
+                                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                          </button>
+                                        )
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', fontSize: 12 }}>
+                                          <CheckCircle2 size={16} /> Consented
+                                        </div>
+                                      )}
+                                    </div>
                                   </FormField>
                                 </div>
 
@@ -1031,7 +1450,7 @@ const AddSalariedCustomerWizardPage = () => {
                   <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
                     <button type="button" className="btn btn-ghost" onClick={() => setStep1SubPage('business')}>← Back to Personal Details</button>
                     <button className="btn btn-primary btn-lg" type="submit" disabled={saving || !formData.mobile_verified}>
-                      {saving ? 'Processing...' : 'Continue to Financials →'}
+                      {saving ? 'Processing...' : 'Save & Next'}
                     </button>
                   </div>
                 </>
@@ -1041,39 +1460,19 @@ const AddSalariedCustomerWizardPage = () => {
 
           {currentStep === 2 && (
             <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              {/* Bureau Verification */}
+              {/* Bureau pull moved to the "Bureau & Obligations" step (step 5,
+                  BureauObligationsPage) — that step already has its own pull
+                  button, CIBIL score display and report download per
+                  applicant, so duplicating a second pull button here just
+                  meant the bureau check could be (and had to be) done twice.
+                  This page no longer gates on bureau_fetched either, since
+                  that's now solely step 5's job. */}
               <div className="card">
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700 }}>Bureau Verification</h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4 }}>Verify credit scores before analysis</p>
-                </div>
-                <div style={{ padding: 24 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {[...formData.applicants].sort((a, b) => a.type === 'PRIMARY' ? -1 : 1).map((app, idx) => (
-                      <DataPullProgress
-                        key={app.id || idx}
-                        label={getApplicantDisplayName(app, idx)}
-                        status={app.bureau_fetched ? 'COMPLETE' : 'NOT_STARTED'}
-                        description={app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'}
-                        score={app.cibil_score}
-                        onDownload={bureauReports[app.id] ? () => handleDownloadReport(app.id) : null}
-                        downloading={downloadingFor === app.id}
-                        onStart={() => handleRunBureau(app.id)}
-                        loading={saving}
-                        disabled={isBulkInjectedCase}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Salary Slip Upload section */}
-              <div className="card">
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <FileText size={15} /> Salary Slip Upload
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1 }}>
+                    <FileText size={15} /> Salary Slips
                   </h3>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Last 3 months — OCR auto-extracts data</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', lineHeight: 1 }}>Last 3 months — our tool will extract data automatically</span>
                 </div>
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                   {formData.applicants.filter(a => a.id).map((app, idx) => (
@@ -1095,7 +1494,13 @@ const AddSalariedCustomerWizardPage = () => {
 
               <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 10 }}>
                 <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(1)}>← Back</button>
-                <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>Continue to Product Selection →</button>
+                <button
+                  className="btn btn-primary btn-lg"
+                  type="submit"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save & Next'}
+                </button>
               </div>
             </form>
           )}
@@ -1110,7 +1515,6 @@ const AddSalariedCustomerWizardPage = () => {
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
                       required
-                      style={{ border: formData.product_type ? '2px solid var(--warning)' : undefined, background: formData.product_type ? 'var(--warning-bg)' : undefined, color: formData.product_type ? 'var(--warning)' : undefined, fontWeight: 600 }}
                     >
                       <option value="">— Select a loan product —</option>
                       <option value="HL">HL — Home Loan</option>
@@ -1148,7 +1552,7 @@ const AddSalariedCustomerWizardPage = () => {
                         <FormField label="Market Value (₹)" name="market_value" required>
                           <input type="number" className="form-control" placeholder="e.g. 8500000" value={formData.market_value} onChange={e => setFormData({ ...formData, market_value: e.target.value })} required min="1" />
                         </FormField>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>DSA estimate — lender does independent valuation</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Sourcing Partner estimate — lender does independent valuation</div>
                       </div>
                     </>
                   )}
@@ -1164,8 +1568,12 @@ const AddSalariedCustomerWizardPage = () => {
 
               <div className="wizard-footer-actions" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
                 <button className="btn btn-ghost" type="button" onClick={() => setCurrentStep(2)}>← Back</button>
-                <button className="btn btn-primary btn-lg" type="submit" disabled={saving}>
-                  {saving ? 'Saving...' : 'Complete Salaried Customer Profile →'}
+                <button
+                  className="btn btn-primary btn-lg"
+                  type="submit"
+                  disabled={saving || !formData.product_type || (PROPERTY_REQUIRED.includes(formData.product_type) && (!formData.property_type || !formData.market_value))}
+                >
+                  {saving ? 'Saving...' : 'Save & Next'}
                 </button>
               </div>
             </form>
@@ -1173,40 +1581,12 @@ const AddSalariedCustomerWizardPage = () => {
         </div>
       </div>
 
-      {/* OTP Modal */}
-      {otpModal.isOpen && (
-        <div className="modal-overlay">
-          <div className="modal-box hide-scrollbar" style={{ width: 'min(480px, calc(100vw - 32px))', maxWidth: 480, padding: '32px 40px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700 }}>Verify Mobile OTP</h3>
-            </div>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 14 }}>
-              We've sent a 6-digit verification code to <strong>{otpModal.mobile}</strong>.
-            </p>
-            <FormField label="Enter 6-Digit OTP" name="otpInput">
-              <OtpInput
-                length={6}
-                value={otpModal.otpInput}
-                onChange={(v) => setOtpModal(prev => ({ ...prev, otpInput: v }))}
-                onEnter={handleVerifyOtpSubmit}
-              />
-            </FormField>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28 }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={handleResendOtp} disabled={otpModal.loading}>
-                Resend OTP
-              </button>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setOtpModal(prev => ({ ...prev, isOpen: false }))} disabled={otpModal.loading}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn-primary" onClick={handleVerifyOtpSubmit} disabled={otpModal.loading || otpModal.otpInput.length < 6}>
-                  {otpModal.loading ? 'Verifying...' : 'Verify →'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConsentIdentityMismatchModal
+        isOpen={!!identityMismatch}
+        onClose={() => setIdentityMismatch(null)}
+        message={identityMismatch?.message}
+        pan={identityMismatch?.pan}
+      />
     </div>
   );
 };

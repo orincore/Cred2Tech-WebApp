@@ -6,7 +6,7 @@ import { createTenant } from '../api/tenantService';
 import { createUser } from '../api/userService';
 import { getRoles } from '../api/roleService';
 import { getErrorMessage } from '../utils/helpers';
-import { TENANT_TYPES } from '../constants/roles';
+import { TENANT_TYPES, formatTenantType } from '../constants/roles';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
@@ -368,13 +368,13 @@ const CreateTenantPage = () => {
         }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
-          <PageHeader title="Create DSA Organization" subtitle="Onboard a new DSA or Team ecosystem with an initial admin user" />
+          <PageHeader title="Create Sourcing Partner Organization" subtitle="Onboard a new Sourcing Partner or Team ecosystem with an initial admin user" />
 
           {/* Success banner */}
           {success && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13, fontWeight: 500, background: 'var(--success-bg)', border: '1px solid var(--success)', color: 'var(--success)' }}>
               <CheckCircle size={16} />
-              DSA and admin user created successfully! Redirecting…
+              Sourcing Partner and admin user created successfully! Redirecting…
             </div>
           )}
 
@@ -390,7 +390,7 @@ const CreateTenantPage = () => {
             {/* Organization Details */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 20 }}>
-                DSA Organization Details
+                Sourcing Partner Organization Details
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
                 <div>
@@ -464,7 +464,7 @@ const CreateTenantPage = () => {
                     onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
                     onBlur={e => e.target.style.borderBottomColor = errors.type ? 'var(--error)' : 'var(--outline)'}
                   >
-                    {TENANT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    {TENANT_TYPES.map((t) => <option key={t} value={t}>{formatTenantType(t)}</option>)}
                   </select>
                   {errors.type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.type}</div>}
                 </div>
@@ -602,7 +602,7 @@ const CreateTenantPage = () => {
                 </h3>
               </div>
               <p style={{ fontSize: 13, color: 'var(--on-muted)', marginBottom: 20 }}>
-                This user will be created as <strong>DSA Admin</strong> for the new organization and will be able to log in immediately.
+                This user will be created as <strong>Sourcing Partner Admin</strong> for the new organization and will be able to log in immediately.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
                 <div>
@@ -713,7 +713,7 @@ const CreateTenantPage = () => {
                     <span style={{ marginLeft: 4 }}>{stepLabel}</span>
                   </div>
                 ) : (
-                  <span>Create DSA & Admin</span>
+                  <span>Create Sourcing Partner & Admin</span>
                 )}
               </TravelingBorderButton>
             </div>

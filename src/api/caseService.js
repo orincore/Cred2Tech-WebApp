@@ -209,9 +209,14 @@ export const caseService = {
     const disposition = response.headers?.['content-disposition'] || '';
     const utf8FileName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     const quotedFileName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+    // Falls back to the same "Case <id> Loan Application Summary.xlsx" name
+    // the backend itself builds (see buildReportFileName) — this only ever
+    // triggers if content-disposition somehow isn't readable client-side
+    // (e.g. a proxy stripping it), so it should still carry the case number
+    // instead of a bare generic name with no way to tell cases apart.
     const fileName = utf8FileName
       ? decodeURIComponent(utf8FileName)
-      : (quotedFileName || 'Loan Application Summary.xlsx');
+      : (quotedFileName || `Case ${caseId} Loan Application Summary.xlsx`);
 
     const blob = new Blob([response.data], {
       type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -243,9 +248,10 @@ export const caseService = {
     window.URL.revokeObjectURL(url);
   },
 
-  uploadBulkCases: async (file) => {
+  uploadBulkCases: async (file, options = {}) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (options.overwrite) formData.append('overwrite', 'true');
     const response = await axiosInstance.post('/cases/bulk-upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });

@@ -55,7 +55,7 @@ const SuperadminWalletDetail = () => {
          const res = await api.get(`/admin/wallet/tenants/${dsaId}/wallet`);
          setDetail(res.data);
       } catch (err) {
-         toast.error("Failed to load DSA wallet detail");
+         toast.error("Failed to load Sourcing Partner wallet detail");
       } finally {
          setLoading(false);
       }
@@ -82,7 +82,7 @@ const SuperadminWalletDetail = () => {
    const handleAllocate = async (e) => {
       e.preventDefault();
       if (!allocation.credits || allocation.credits <= 0) return toast.error("Enter valid positive credits");
-      if (!allocation.remarks) return toast.error("Select a reason");
+      if (!allocation.remarks) return toast.error("Enter a reason");
 
       try {
          setAllocation(prev => ({ ...prev, loading: true }));
@@ -142,7 +142,7 @@ const SuperadminWalletDetail = () => {
                   onClick={() => navigate('/admin/wallets')}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '4px 0', fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
                >
-                  <ArrowLeft size={14} /> All DSA Wallets
+                  <ArrowLeft size={14} /> All Sourcing Partner Wallets
                </button>
                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
                   {tenant.name}
@@ -162,7 +162,7 @@ const SuperadminWalletDetail = () => {
          <div style={{ borderBottom: '1px solid var(--outline)', padding: '12px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <ShieldAlert size={16} color="var(--primary)" />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>
-               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Allocate free credits, review transaction history, and monitor API usage for this DSA.
+               <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Allocate free credits, review transaction history, and monitor API usage for this Sourcing Partner.
             </p>
          </div>
 
@@ -214,13 +214,7 @@ const SuperadminWalletDetail = () => {
                                  <input type="number" min="1" className="form-control" placeholder="e.g. 500" value={allocation.credits} onChange={e => setAllocation({ ...allocation, credits: e.target.value })} />
                               </FormField>
                               <FormField label="Reason *">
-                                 <select className="form-control" value={allocation.remarks} onChange={e => setAllocation({ ...allocation, remarks: e.target.value })}>
-                                    <option value="">— Select reason (mandatory) —</option>
-                                    <option value="Trial / Onboarding support">Trial / Onboarding support</option>
-                                    <option value="Compensation for failed API">Compensation for failed API</option>
-                                    <option value="Volume discount bonus">Volume discount bonus</option>
-                                    <option value="Manual correction">Manual correction</option>
-                                 </select>
+                                 <input type="text" className="form-control" placeholder="Enter reason for allocation" value={allocation.remarks} onChange={e => setAllocation({ ...allocation, remarks: e.target.value })} />
                               </FormField>
                            </div>
                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -232,7 +226,7 @@ const SuperadminWalletDetail = () => {
                      </div>
                   </SectionCard>
 
-                  <SectionCard title="Free Credit Log for this DSA">
+                  <SectionCard title="Free Credit Log for this Sourcing Partner">
                      <DataTable
                         columns={[
                            { key: 'created_at', label: 'Date', render: (l) => new Date(l.created_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }) },

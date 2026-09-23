@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cred2Tech | You're Offline</title>
+<link rel="icon" type="image/png" href="/logos/favicon.png" />
+<style>
+  /*
+    Static, dependency-free twin of src/components/OfflineOverlay.jsx.
+
+    This file is served by the service worker (sw.js) in place of the
+    browser's own "no internet" page whenever a navigation fails offline —
+    at that point React/Vite haven't loaded at all yet, so the real overlay
+    component can't run. It intentionally re-implements the same design in
+    plain HTML/CSS/JS (no build step, no bundled JS/CSS chunks — those are
+    content-hashed per deploy and may not be cached) so the two states look
+    and behave like one product instead of a themed page falling back to a
+    generic one.
+  */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    background: #eef4ff;
+    transition: background 0.2s ease;
+  }
+  html.dark, html.dark body { background: #0a1628; }
+
+  .wrap {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .card-outer {
+    width: 100%;
+    max-width: 448px;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fade-in-up 0.3s ease forwards;
+  }
+  @keyframes fade-in-up {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .logo-row { display: flex; justify-content: center; margin-bottom: 32px; }
+  .logo-row img { height: 40px; width: auto; max-width: 160px; object-fit: contain; }
+  .logo-row img.dark-logo { display: none; }
+  html.dark .logo-row img.light-logo { display: none; }
+  html.dark .logo-row img.dark-logo { display: block; }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid rgba(199, 210, 254, 0.6);
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+    padding: 40px 32px;
+    text-align: center;
+  }
+  html.dark .card {
+    background: #162048;
+    border-color: #2d3a6c;
+  }
+
+  .icon-wrap { position: relative; margin: 0 auto 24px; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; }
+  .radar-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1.5px solid #4f46e5;
+    animation: radar-ping 2.7s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  }
+  .radar-ring:nth-child(2) { animation-delay: 0.9s; }
+  .radar-ring:nth-child(3) { animation-delay: 1.8s; }
+  @keyframes radar-ping {
+    0% { transform: scale(0.4); opacity: 0.55; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .icon-circle {
+    position: relative;
+    width: 64px; height: 64px;
+    border-radius: 9999px;
+    background: #eef2ff;
+    color: #4f46e5;
+    display: flex; align-items: center; justify-content: center;
+  }
+  html.dark .icon-circle { background: rgba(99, 102, 241, 0.15); color: #818CF8; }
+  .icon-circle.success { background: #ecfdf5; color: #059669; }
+  html.dark .icon-circle.success { background: rgba(6, 95, 70, 0.3); color: #34d399; }
+
+  h1 { font-size: 22px; font-weight: 700; color: #0a1628; margin: 0 0 8px; }
+  html.dark h1 { color: #e6edf7; }
+
+  p.desc { font-size: 13px; font-weight: 500; line-height: 1.6; color: rgba(10, 22, 40, 0.7); margin: 0 0 24px; }
+  html.dark p.desc { color: rgba(230, 237, 247, 0.7); }
+
+  .status-row {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    color: #4f46e5; margin-bottom: 24px;
+  }
+  html.dark .status-row { color: #818CF8; }
+  .status-row span.label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .dots { display: inline-flex; gap: 4px; align-items: center; }
+  .dots i {
+    width: 6px; height: 6px; border-radius: 9999px; background: currentColor; display: inline-block;
+    animation: dot-bounce 0.9s ease-in-out infinite;
+  }
+  .dots i:nth-child(2) { animation-delay: 0.15s; }
+  .dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes dot-bounce {
+    0%, 100% { opacity: 0.25; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-3px); }
+  }
+
+  button.retry {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; font-size: 13px; font-weight: 700;
+    color: #ffffff; background: #4f46e5; border: none; cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  button.retry:hover { background: #4338ca; }
+  button.retry:disabled { opacity: 0.6; cursor: not-allowed; }
+  button.retry svg { animation: none; }
+  button.retry.spinning svg { animation: spin 0.6s ease-in-out; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .refresh-row { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 500; color: rgba(10, 22, 40, 0.7); }
+  html.dark .refresh-row { color: rgba(230, 237, 247, 0.7); }
+  .refresh-row svg { animation: spin 0.9s linear infinite; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card-outer">
+      <div class="logo-row">
+        <img class="light-logo" src="/logos/black-logo.png" alt="Cred2Tech" />
+        <img class="dark-logo" src="/logos/white-logo.png" alt="Cred2Tech" />
+      </div>
+
+      <div class="card">
+        <!-- Offline state -->
+        <div id="offlineState">
+          <div class="icon-wrap">
+            <span class="radar-ring"></span>
+            <span class="radar-ring"></span>
+            <span class="radar-ring"></span>
+            <div class="icon-circle">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h.01" /><path d="M8.5 16.429a5 5 0 0 1 7 0" />
+                <path d="M5 12.859a10 10 0 0 1 5.17-2.69" /><path d="M19 12.859a10 10 0 0 0-2.007-1.523" />
+                <path d="M2 8.82a15 15 0 0 1 4.177-2.643" /><path d="M22 8.82a15 15 0 0 0-11.288-3.764" />
+                <path d="m2 2 20 20" />
+              </svg>
+            </div>
+          </div>
+
+          <h1>You're Offline</h1>
+          <p class="desc">No internet connection detected. Stay on this page — we'll bring you right back the moment it's restored, no manual refresh needed.</p>
+
+          <div class="status-row">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="label">Searching for connection</span>
+          </div>
+
+          <button type="button" class="retry" id="retryBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" />
+            </svg>
+            <span id="retryLabel">Try Again</span>
+          </button>
+        </div>
+
+        <!-- Restored state -->
+        <div id="restoredState" hidden>
+          <div class="icon-wrap" style="width:64px;height:64px;">
+            <div class="icon-circle success">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.801 10A10 10 0 1 1 17 3.335" /><path d="m9 11 3 3L22 4" />
+              </svg>
+            </div>
+          </div>
+          <h1>Back Online!</h1>
+          <div class="refresh-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" />
+            </svg>
+            Refreshing your page…
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Same theme convention as ThemeContext.jsx: an explicit localStorage
+  // choice wins, otherwise fall back to the OS preference.
+  (function applyTheme() {
+    var saved = null;
+    try { saved = localStorage.getItem('theme'); } catch (e) {}
+    var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  })();
+
+  // Same reachability contract as OfflineOverlay.jsx: navigator.onLine only
+  // means "a network interface exists", not "the internet is reachable", so
+  // "back online" is only ever decided by an actual fetch of the same
+  // same-origin version.json every deploy writes.
+  var PING_URL = '/version.json';
+  var POLL_INTERVAL_MS = 4000;
+  var RESTORED_DISPLAY_MS = 1200;
+  var pollTimer = null;
+  var restoring = false;
+
+  function verifyReachable() {
+    var opts = { cache: 'no-store' };
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+      opts.signal = AbortSignal.timeout(5000);
+    }
+    return fetch(PING_URL + '?_=' + Date.now(), opts)
+      .then(function (res) { return res.ok; })
+      .catch(function () { return false; });
+  }
+
+  function showRestored() {
+    document.getElementById('offlineState').hidden = true;
+    document.getElementById('restoredState').hidden = false;
+  }
+
+  function attemptRestore() {
+    if (restoring) return;
+    return verifyReachable().then(function (reachable) {
+      if (!reachable) return;
+      restoring = true;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      showRestored();
+      // Reloading the exact URL the user was already on is the whole point —
+      // this page only ever replaces a failed navigation to it.
+      setTimeout(function () { window.location.reload(); }, RESTORED_DISPLAY_MS);
+    });
+  }
+
+  window.addEventListener('online', attemptRestore);
+  pollTimer = setInterval(attemptRestore, POLL_INTERVAL_MS);
+  // A stray load while actually online (e.g. a cached copy opened directly)
+  // should recover immediately rather than wait for the first poll tick.
+  attemptRestore();
+
+  var retryBtn = document.getElementById('retryBtn');
+  var retryLabel = document.getElementById('retryLabel');
+  retryBtn.addEventListener('click', function () {
+    retryBtn.disabled = true;
+    retryBtn.classList.add('spinning');
+    retryLabel.textContent = 'Checking…';
+    attemptRestore().then(function () {
+      retryBtn.disabled = false;
+      retryBtn.classList.remove('spinning');
+      retryLabel.textContent = 'Try Again';
+    });
+  });
+</script>
+</body>
+</html>

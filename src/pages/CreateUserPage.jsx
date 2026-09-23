@@ -464,7 +464,7 @@ const CreateUserPage = () => {
                   <option value="">None (root level)</option>
                   {HIERARCHY_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
-                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>For internal employees (L1, L2, L3…) — not needed for a Sub-DSA Partner</div>
+                <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>For internal employees (L1, L2, L3…) — not needed for a Sub-Sourcing Partner</div>
               </div>
               <div>
                 <label style={labelStyle}>Manager</label>

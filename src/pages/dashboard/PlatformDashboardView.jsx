@@ -36,7 +36,7 @@ const PlatformDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const kpis = summary && [
-    { title: 'Active DSAs', value: summary.active_dsas, trendPct: summary.active_dsas_trend_pct, subtitle: summary.active_dsas_new_period != null ? `${summary.active_dsas_new_period} new this period` : undefined, icon: Building2, color: 'var(--primary)' },
+    { title: 'Active Sourcing Partners', value: summary.active_dsas, trendPct: summary.active_dsas_trend_pct, subtitle: summary.active_dsas_new_period != null ? `${summary.active_dsas_new_period} new this period` : undefined, icon: Building2, color: 'var(--primary)' },
     { title: 'Active Clients', value: summary.active_clients, trendPct: summary.active_clients_trend_pct, icon: Users, color: 'var(--info)' },
     { title: 'Total API Calls', value: summary.total_api_calls, trendPct: summary.total_api_calls_trend_pct, icon: Activity, color: 'var(--warning)' },
     { title: 'Amount Disbursed', value: summary.amount_disbursed, isCurrency: true, trendPct: summary.amount_disbursed_trend_pct, icon: Banknote, color: 'var(--success)' },
@@ -137,17 +137,17 @@ const PlatformDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-        <SectionCard title="Top DSAs" subtitle="By activity this period" delay={0.2}>
+        <SectionCard title="Top Sourcing Partners" subtitle="By activity this period" delay={0.2}>
           {loadingTables ? (
             <TableSkeleton rows={5} columns={4} />
           ) : topDsas.length === 0 ? (
-            <EmptyState icon={Inbox} title="No DSA activity" description="No DSA activity recorded in this period." />
+            <EmptyState icon={Inbox} title="No Sourcing Partner activity" description="No Sourcing Partner activity recorded in this period." />
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: isMobile ? 420 : '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--outline)' }}>
-                    {['DSA', 'API Calls', 'Applications', 'Status'].map((h) => (
+                    {['Sourcing Partner', 'API Calls', 'Applications', 'Status'].map((h) => (
                       <th key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 800, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left' }}>{h}</th>
                     ))}
                   </tr>

@@ -17,6 +17,9 @@ const MsmePaymentGate = ({ children }) => {
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentConfig, setPaymentConfig] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoError, setPromoError] = useState('');
 
   useEffect(() => {
     loadGate();
@@ -39,11 +42,42 @@ const MsmePaymentGate = ({ children }) => {
     }
   };
 
+  // Preview-only — never reserves a redemption slot (dryRun on the backend),
+  // safe to call as many times as the user edits the code.
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoChecking(true);
+    setPromoError('');
+    try {
+      const configRes = await msmeApi.getPaymentConfig(promoCode.trim());
+      if (configRes.data.promo_valid === false) {
+        setPromoError(configRes.data.promo_error || 'This promo code is not valid');
+        // Reload the un-discounted config so the price shown resets.
+        const base = await msmeApi.getPaymentConfig();
+        setPaymentConfig(base.data);
+      } else {
+        setPaymentConfig(configRes.data);
+      }
+    } catch (err) {
+      setPromoError(getErrorMessage(err) || 'Failed to check promo code');
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const clearPromo = async () => {
+    setPromoCode('');
+    setPromoError('');
+    const base = await msmeApi.getPaymentConfig();
+    setPaymentConfig(base.data);
+  };
+
   const handlePayment = async () => {
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
-      const res = await msmeApi.createPaymentOrder();
+      const appliedPromo = promoCode.trim() && !promoError ? promoCode.trim() : null;
+      const res = await msmeApi.createPaymentOrder(false, appliedPromo);
       const { order_id, amount_paise, currency, key_id } = res.data;
 
       const options = {
@@ -158,10 +192,47 @@ const MsmePaymentGate = ({ children }) => {
               }}
             >
               <div style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Assessment Fee</div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--on-surface)' }}>₹{paymentConfig.amount_inr}</div>
+              {paymentConfig.promo_valid && paymentConfig.discounted_amount_inr != null ? (
+                <>
+                  <div style={{ fontSize: 15, color: 'var(--on-muted)', textDecoration: 'line-through' }}>₹{paymentConfig.amount_inr}</div>
+                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--success)' }}>₹{paymentConfig.discounted_amount_inr}</div>
+                  <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 2 }}>You save ₹{paymentConfig.discount_amount_inr}</div>
+                </>
+              ) : (
+                <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--on-surface)' }}>₹{paymentConfig.amount_inr}</div>
+              )}
               <div style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 8 }}>One-time payment. Valid for 90 days.</div>
             </motion.div>
           )}
+
+          <div style={{ maxWidth: 300, margin: '0 auto 20px', textAlign: 'left' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }}
+                placeholder="Promo code (optional)"
+                disabled={promoChecking || actionLoading}
+                className="form-control"
+                style={{ flex: 1, borderRadius: 0, textTransform: 'uppercase' }}
+              />
+              {paymentConfig?.promo_valid ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={clearPromo} style={{ borderRadius: 0 }}>Remove</button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleApplyPromo}
+                  disabled={!promoCode.trim() || promoChecking}
+                  style={{ borderRadius: 0, whiteSpace: 'nowrap' }}
+                >
+                  {promoChecking ? 'Checking…' : 'Apply'}
+                </button>
+              )}
+            </div>
+            {promoError && <p style={{ color: 'var(--error)', fontSize: 11, marginTop: 6 }}>{promoError}</p>}
+            {paymentConfig?.promo_valid && <p style={{ color: 'var(--success)', fontSize: 11, marginTop: 6 }}>Promo code applied!</p>}
+          </div>
 
           <button
             onClick={handlePayment}
@@ -169,7 +240,7 @@ const MsmePaymentGate = ({ children }) => {
             className="btn btn-primary btn-lg"
             style={{ width: '100%', justifyContent: 'center', borderRadius: 0 }}
           >
-            {actionLoading ? 'Processing...' : `Pay ₹${paymentConfig?.amount_inr ?? '...'} to Continue`}
+            {actionLoading ? 'Processing...' : `Pay ₹${paymentConfig?.discounted_amount_inr ?? paymentConfig?.amount_inr ?? '...'} to Continue`}
           </button>
         </motion.div>
       </div>

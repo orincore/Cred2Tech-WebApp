@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, UploadCloud,
@@ -14,15 +15,29 @@ import { uploadDocument, deleteDocument } from '../api/documentHelper';
 import { useAuth } from '../context/AuthContext';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
+// Every currency figure on this page renders to exactly 2 decimal places,
+// consistently across all three magnitude brackets (Cr/L was previously
+// 2/1 decimals respectively, and anything under ₹1L had none at all).
 const fmtINR = (n, fallback = '—') => {
   if (n == null || n === '') return fallback;
   const num = Number(n);
   if (isNaN(num)) return fallback;
   if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)}Cr`;
-  if (num >= 100000) return `₹${(num / 100000).toFixed(1)}L`;
-  return `₹${num.toLocaleString('en-IN')}`;
+  if (num >= 100000) return `₹${(num / 100000).toFixed(2)}L`;
+  return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
-const fmtNum = (n, fallback = '—') => (n == null ? fallback : Number(n).toLocaleString('en-IN'));
+
+// esr_financials.salaried_income_source is a raw internal enum
+// (esrFinancials.service.js) describing which data source(s) fed the
+// salary figure — never meant to be shown to a DSA verbatim.
+const SALARY_SOURCE_LABELS = {
+  OCR: 'Salary Slip',
+  MANUAL: 'Manual Entry',
+  BANK_STATEMENT: 'Bank Statement',
+  OCR_MANUAL: 'Salary Slip + Manual Entry',
+  OCR_BANK: 'Salary Slip + Bank Statement',
+};
+const fmtSalarySource = (source) => (source ? (SALARY_SOURCE_LABELS[source] || source) : '—');
 
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -35,7 +50,7 @@ const useIsMobile = () => {
 };
 
 const STATUS_CFG = {
-  draft: { label: 'Draft', color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)', Icon: Clock },
+  draft: { label: 'Draft', color: 'var(--warning)', bg: 'var(--warning-bg)', Icon: Clock },
   submitted: { label: 'Submitted', color: 'var(--info)', bg: 'var(--info-bg)', Icon: Send },
   accepted: { label: 'Accepted', color: 'var(--success)', bg: 'var(--success-bg)', Icon: CheckCircle2 },
   rejected: { label: 'Rejected', color: 'var(--error)', bg: 'var(--error-bg)', Icon: XCircle },
@@ -56,11 +71,12 @@ function ProposalStatusBadge({ status, size = 12 }) {
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
-function Section({ icon: Icon, title, subtitle, children, rightSlot }) {
+function Section({ id, icon: Icon, title, subtitle, children, rightSlot }) {
   return (
-    <div style={{
+    <div id={id} style={{
       background: 'var(--bg-surface)', border: '1px solid var(--border)',
-      borderRadius: 0, marginBottom: 20, overflow: 'hidden'
+      borderRadius: 0, marginBottom: 20, overflow: 'hidden',
+      scrollMarginTop: 20,
     }}>
       <div style={{
         padding: '16px 22px', borderBottom: '1px solid var(--border)',
@@ -92,7 +108,7 @@ const hintStyle = { fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 };
 // previously conflated into one prop each, which meant the fields silently
 // re-displayed the ESR ceiling instead of the DSA's saved edits on every
 // reload — a save always worked, it just never showed.
-function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, initialTenorYears, maxTenure, canOverrideRoi, onChange }) {
+function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, initialTenorYears, maxTenure, onChange }) {
   const [amount, setAmount] = useState(initialAmount ? (initialAmount / 100000).toFixed(2) : '');
   const [tenor, setTenor] = useState(() => initialTenorYears ? String(initialTenorYears) : (maxTenure ? String(maxTenure) : '12'));
   const [rate, setRate] = useState(roi || '');
@@ -127,15 +143,17 @@ function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, i
       const interest = bal * r;
       const principal = emi - interest;
       bal -= principal;
-      schedule.push({ month: i, emi: emi.toFixed(0), interest: interest.toFixed(0), principal: principal.toFixed(0), balance: Math.max(0, bal).toFixed(0) });
+      schedule.push({ month: i, emi: emi.toFixed(2), interest: interest.toFixed(2), principal: principal.toFixed(2), balance: Math.max(0, bal).toFixed(2) });
     }
     return { emi, totalInterest, totalRepayment, emiFoirPct, schedule };
   }, [amount, tenor, rate, monthlyIncome]);
 
   return (
     <div>
-      {/* Inputs */}
-      <div className="pp-grid-3" style={{ marginBottom: 20 }}>
+      {/* Inputs — rate of interest is intentionally not shown/editable here;
+          `rate` is still seeded from the `roi` prop (ESR/lender eligibility)
+          purely to drive the EMI math below. */}
+      <div className="pp-grid-2" style={{ marginBottom: 20 }}>
         <div>
           <label style={labelStyle}>LOAN AMOUNT (₹ LAKHS) *</label>
           <input value={amount} onChange={e => setAmount(e.target.value)}
@@ -154,17 +172,6 @@ function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, i
             <div style={hintStyle}>Max eligible: {maxTenure} years</div>
           )}
         </div>
-        <div>
-          <label style={labelStyle}>INDICATIVE RATE (% P.A.)</label>
-          <input value={rate} onChange={e => setRate(e.target.value)} type="number" step="0.01" placeholder="e.g. 10.50"
-            style={inputStyle} />
-          {roi != null && (
-            <div style={hintStyle}>ESR indicative: {roi}% p.a.</div>
-          )}
-          {!canOverrideRoi && (
-            <div style={hintStyle}>Calculator preview only — admin permission required to save a rate change</div>
-          )}
-        </div>
       </div>
 
       {/* EMI Result Cards */}
@@ -175,7 +182,7 @@ function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, i
         }}>
           <div style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700, marginBottom: 4 }}>Monthly EMI</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--primary-dark)' }}>
-            {emi > 0 ? `₹${Math.round(emi).toLocaleString('en-IN')}` : '—'}
+            {emi > 0 ? fmtINR(emi) : '—'}
           </div>
         </div>
         <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: '14px 18px', textAlign: 'center' }}>
@@ -203,7 +210,13 @@ function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, i
                     {['Month', 'EMI', 'Principal', 'Interest', 'Balance'].map(h => (
                       <th key={h} style={{
                         padding: '6px 10px', textAlign: 'right', fontWeight: 700,
-                        color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border)'
+                        color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border)',
+                        // The global `thead th` rule lowercases every header
+                        // then re-capitalizes only its first letter — turning
+                        // the "EMI" acronym into "Emi". Overridden just for
+                        // this one header rather than the whole table, since
+                        // Month/Principal/Interest/Balance read fine as-is.
+                        ...(h === 'EMI' ? { textTransform: 'uppercase' } : null),
                       }}>{h}</th>
                     ))}
                   </tr>
@@ -214,7 +227,7 @@ function EMICalculator({ initialAmount, maxEligibleAmount, roi, monthlyIncome, i
                       <td style={tdStyle}>{row.month}</td>
                       <td style={tdStyle}>{fmtINR(row.emi)}</td>
                       <td style={tdStyle}>{fmtINR(row.principal)}</td>
-                      <td style={{ ...tdStyle, color: 'var(--warning)' }}>{fmtINR(row.interest)}</td>
+                      <td style={{ ...tdStyle, color: 'var(--warning-dark)' }}>{fmtINR(row.interest)}</td>
                       <td style={tdStyle}>{fmtINR(row.balance)}</td>
                     </tr>
                   ))}
@@ -290,10 +303,39 @@ function InfoCell({ label, value, valueColor }) {
 
 // ─── Financial Summary ────────────────────────────────────────────────────────
 function FinancialSummary({ summary, prefill, isSalaried = false }) {
-  const { gst, itr_years, bank_accounts } = summary || {};
+  const { salary, gst, itr_years, bank_accounts } = summary || {};
 
   return (
     <div>
+      {/* Salary — the salaried counterpart to GST/ITR/Bank below, sourced from
+          esr_financials.salaried_income (OCR'd salary slips + any manual
+          income entries). Previously never rendered at all: a purely
+          salaried case had nowhere on this page to show salary, and fell
+          straight through to the "no financial data" empty state below. */}
+      {isSalaried && salary && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 800, color: 'var(--primary-dark)', background: 'var(--primary-subtle)',
+              padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
+            }}>SALARY</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>SALARY SUMMARY</span>
+          </div>
+          <div className="pp-grid-5">
+            {[
+              { label: 'Monthly Income', value: fmtINR(salary.monthly) },
+              { label: 'Annual Income', value: fmtINR(salary.annual) },
+              { label: 'Source', value: fmtSalarySource(salary.source) },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 6, lineHeight: 1.3 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary-dark)' }}>{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* GST — never applicable to a salaried employee, who has no business turnover to report */}
       {!isSalaried && (
         <div style={{ marginBottom: 24 }}>
@@ -302,14 +344,18 @@ function FinancialSummary({ summary, prefill, isSalaried = false }) {
               fontSize: 10, fontWeight: 800, color: 'var(--success)', background: 'var(--success-bg)',
               padding: '3px 10px', borderRadius: 0, letterSpacing: '1px'
             }}>GST</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST TURNOVER SUMMARY</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>GST RETURN FILED SUMMARY</span>
           </div>
           <div className="pp-grid-5">
             {[
               { label: 'Avg Monthly Turnover', value: fmtINR(gst?.avg_monthly_turnover) },
               { label: `Annual Turnover (${gst?.fy_latest || 'FY Latest'})`, value: fmtINR(gst?.turnover_latest) },
               { label: `Annual Turnover (${gst?.fy_previous || 'FY Previous'})`, value: fmtINR(gst?.turnover_previous) },
-              { label: 'Months Filed (12M)', value: gst?.months_filed != null ? `${gst.months_filed} / 12` : '—' },
+              {
+                label: gst?.months_filed_24m != null ? 'Months Filed (24M)' : 'Months Filed (12M)',
+                value: gst?.months_filed_24m != null ? `${gst.months_filed_24m} / 24`
+                  : gst?.months_filed != null ? `${gst.months_filed} / 12` : '—',
+              },
               {
                 label: 'Nil Return Months', value: gst?.nil_months != null ? String(gst.nil_months) : '—',
                 red: gst?.nil_months > 0
@@ -382,14 +428,30 @@ function FinancialSummary({ summary, prefill, isSalaried = false }) {
               }}>
                 <div style={{
                   fontSize: 12, fontWeight: 700, color: i === 0 ? 'var(--info)' : 'var(--text-secondary)',
-                  marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6
-                }}><Landmark size={13} /> {i === 0 ? 'Primary Current Account' : acc.label}</div>
+                  marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap'
+                }}>
+                  <Landmark size={13} />
+                  {/* No generic "Account"/"Primary Account" text at all now —
+                      the bank name is the actual useful identifier, and the
+                      PRIMARY badge below already covers what acc.label used
+                      to say in words. Only falls back to a bare "Account N"
+                      when bank_name itself couldn't be extracted. */}
+                  {acc.bank_name || `Account ${i + 1}`}
+                  {acc.statement_period && (
+                    <span style={{ fontWeight: 500, color: 'var(--text-tertiary)', fontSize: 11 }}>({acc.statement_period})</span>
+                  )}
+                  {i === 0 && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 0,
+                      border: '1px solid var(--info)', color: 'var(--info)'
+                    }}>PRIMARY</span>
+                  )}
+                </div>
                 {[
-                  ['Bank & Branch', acc.bank_name],
                   ['Account Number', acc.account_number],
                   ['Avg Monthly Credit', fmtINR(acc.avg_monthly_credit)],
                   ['Avg Monthly Debit', fmtINR(acc.avg_monthly_debit)],
-                  ['Avg Closing Balance', fmtINR(acc.avg_closing_balance || acc.avg_balance_latest)],
+                  ['Average Bank Balance', fmtINR(acc.avg_closing_balance || acc.avg_balance_latest)],
                   ['Cheque Bounces (12M)', acc.cheque_bounces != null ? (acc.cheque_bounces === 0 ? 'Nil' : acc.cheque_bounces) : '—'],
                   ['Statement Period', acc.statement_period],
                 ].map(([label, val]) => val != null && val !== '—' ? (
@@ -409,11 +471,11 @@ function FinancialSummary({ summary, prefill, isSalaried = false }) {
         </div>
       )}
 
-      {(isSalaried || !gst?.turnover_latest) && !itr_years?.length && !bank_accounts?.length && (
+      {(isSalaried ? !salary : !gst?.turnover_latest) && !itr_years?.length && !bank_accounts?.length && (
         <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: 13 }}>
           <Info size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
           {isSalaried
-            ? 'Financial data will appear here once ITR/Bank analytics are completed for this case.'
+            ? 'Financial data will appear here once salary/Bank analytics are completed for this case.'
             : 'Financial data will appear here once GST/ITR/Bank analytics are completed for this case.'}
         </div>
       )}
@@ -475,7 +537,7 @@ function AddressSection({ addresses, onChange, readOnly, isSalaried = false, can
             }}>{candidates.length} found</span>
           </div>
           <div style={{ padding: '6px 16px 4px', fontSize: 11, color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border)' }}>
-            Tick which field each address applies to — one address can cover more than one field.
+            Tick which field each address applies to. One address can cover more than one field.
           </div>
           {candidates.map(c => {
             const isActive = ['residential', 'office', 'property'].some(f => addresses[f] === c.text);
@@ -548,7 +610,7 @@ function AddressSection({ addresses, onChange, readOnly, isSalaried = false, can
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Current residential address" />
           <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
-            {residentialSource ? 'Selected from reported addresses above — editable' : (candidates.length > 0 ? 'None selected above — enter manually' : 'Not available from bureau data — enter manually')}
+            {residentialSource ? 'Selected from reported addresses above (editable)' : (candidates.length > 0 ? 'None selected above, enter manually' : 'Not available from bureau data, enter manually')}
           </div>
         </div>
         <div>
@@ -565,7 +627,7 @@ function AddressSection({ addresses, onChange, readOnly, isSalaried = false, can
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             placeholder="Office / business address" />
           <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
-            {officeSource ? `Selected from reported addresses above — editable` : (candidates.length > 0 ? 'None selected above — enter manually' : (isSalaried ? 'No GST/bureau office address found — enter manually' : 'Not available — enter manually'))}
+            {officeSource ? `Selected from reported addresses above (editable)` : (candidates.length > 0 ? 'None selected above, enter manually' : (isSalaried ? 'No GST/bureau office address found, enter manually' : 'Not available, enter manually'))}
           </div>
         </div>
       </div>
@@ -583,7 +645,7 @@ function AddressSection({ addresses, onChange, readOnly, isSalaried = false, can
           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
           placeholder="Survey no., plot no., full address of the collateral property" />
         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 3 }}>
-          {propertySource ? 'Selected from reported addresses above — editable' : (candidates.length > 0 ? 'None selected above — enter manually' : 'Not available — enter manually')}
+          {propertySource ? 'Selected from reported addresses above (editable)' : (candidates.length > 0 ? 'None selected above, enter manually' : 'Not available, enter manually')}
         </div>
       </div>
     </div>
@@ -1035,7 +1097,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
         <div style={{ fontSize: 11, fontWeight: 700, color: uploaded ? 'var(--success)' : required ? 'var(--error)' : 'var(--text-tertiary)' }}>
           {uploaded
             ? `✓ ${doc?.original_file_name || 'Uploaded'}`
-            : required ? '△ Pending' : '— Optional'}
+            : required ? '△ Pending' : 'Optional'}
         </div>
       </div>
       <div style={{ padding: '6px 8px', borderTop: `1px solid var(--border)`, background: 'var(--bg-elevated)' }}>
@@ -1130,6 +1192,33 @@ const tdStyle = { padding: '6px 10px', textAlign: 'right', fontSize: 11 };
 export default function ProposalPage({ caseId, proposalId, onBack, isMsme = false, isSalaried = false }) {
   const isMobile = useIsMobile();
   const { hasRole } = useAuth();
+  // The sticky footer's real height varies (mobile wraps to more rows,
+  // desktop is single-row, and either can reflow further depending on
+  // content) — measured live rather than guessed, so the side nav rail
+  // (which spans down to the bottom of the viewport) can stop exactly
+  // above it instead of running underneath it.
+  //
+  // A callback ref, not a plain useRef + useEffect(..., []) — this
+  // component early-returns a loading skeleton on its first render (see
+  // `if (loading) return` below), so the footer <div> doesn't exist in the
+  // DOM yet the one time a []-deps effect would have run; footerRef.current
+  // was permanently null and the observer never actually attached even
+  // once the real footer mounted moments later. A callback ref fires
+  // exactly when the node itself is attached/detached, regardless of how
+  // many earlier renders returned something else instead.
+  const [footerHeight, setFooterHeight] = useState(0);
+  const footerObserverRef = useRef(null);
+  const footerRef = useCallback((node) => {
+    if (footerObserverRef.current) {
+      footerObserverRef.current.disconnect();
+      footerObserverRef.current = null;
+    }
+    if (node && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(([entry]) => setFooterHeight(entry.contentRect.height));
+      ro.observe(node);
+      footerObserverRef.current = ro;
+    }
+  }, []);
   // roi_min/roi_max are backend-enforced override fields (see
   // updateProposalDraft's overrideFields check) — only DSA_ADMIN/SUPER_ADMIN
   // may persist them. Sending roi_min as anyone else rejects the *entire*
@@ -1144,7 +1233,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const [sendConfirmResult, setSendConfirmResult] = useState(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [form, setForm] = useState({
-    loan_purpose: '', remarks: '', preferred_banking_program: ''
+    loan_purpose: '', remarks: ''
   });
   // Loan Details (EMICalculator amount/tenor) — kept separate from `form`
   // since it's persisted as requested_amount (paise-equivalent rupees) /
@@ -1180,7 +1269,6 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         loan_purpose: p.loan_purpose || '',
         remarks: p.remarks || '',
         additional_notes: p.additional_notes || '',
-        preferred_banking_program: p.preferred_banking_program || '',
       });
       // Parse addresses + references from additional_notes JSON; fall back to
       // prefill defaults when nothing was saved yet — office from the
@@ -1241,7 +1329,6 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         loan_purpose: form.loan_purpose,
         remarks: form.remarks,
         additional_notes: additionalNotesPayload,
-        preferred_banking_program: form.preferred_banking_program,
         ...loanTermsPayload,
       });
       if (!silent) toast.success('Draft saved');
@@ -1290,9 +1377,46 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     } catch { toast.error('Failed to update document'); }
   };
 
+  // Shaped like this page's own real content (header, Loan Details,
+  // Applicant Profile, Financial Summary) rather than a bare spinner — and
+  // now the ONLY loading animation shown when navigating here, since
+  // AddCustomerWizardPage's own outer loading skeleton is skipped for step 7
+  // specifically (see its own comment) to avoid two unrelated loading
+  // animations back to back for one page.
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <LoadingSpinner size={40} />
+    <div>
+      <Skeleton width={200} height={24} style={{ marginBottom: 20 }} />
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+          <Skeleton width={140} height={16} />
+        </div>
+        <div style={{ padding: 24 }}>
+          <div className="pp-grid-2" style={{ marginBottom: 20 }}>
+            <Skeleton height={54} />
+            <Skeleton height={54} />
+          </div>
+          <div className="pp-grid-2">
+            <Skeleton height={70} />
+            <Skeleton height={70} />
+          </div>
+        </div>
+      </div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+          <Skeleton width={160} height={16} />
+        </div>
+        <div style={{ padding: 24 }}>
+          <Skeleton height={90} />
+        </div>
+      </div>
+      <div className="card">
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+          <Skeleton width={180} height={16} />
+        </div>
+        <div style={{ padding: 24 }}>
+          <Skeleton height={110} />
+        </div>
+      </div>
     </div>
   );
   if (!data) return (
@@ -1331,7 +1455,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const pendingKyc = countKycPending(applicants, allDocs, isSalaried);
 
   return (
-    <div className="proposal-page">
+    <div className="proposal-page" style={{ '--pp-footer-height': `${footerHeight}px` }}>
       <style>{`
         /* Responsive grids — collapse fixed columns on smaller screens */
         .proposal-page .pp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -1356,31 +1480,110 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
              container. */
           .proposal-page { padding-bottom: 220px !important; }
         }
+        /* Vertical section-jump rail. Spans the full workable viewport
+           height — below the app topbar, down to (not under) the sticky
+           Send/Save footer at the bottom, whose real height is measured
+           live via ResizeObserver into --pp-footer-height (it varies:
+           mobile wraps to more rows, desktop is single-row, either can
+           reflow further) — rather than a short fixed-height block
+           centered with dead space above and below it. The button list is
+           centered *within* that full height (justify-content: center)
+           when it fits, and scrolls within the same full height, rather
+           than a separately-capped box, once it doesn't. Scrollbar hidden
+           but still functional (thumb-scrollable/swipeable) so it doesn't
+           look like a stray scrollbar bolted onto the side of the page. */
+        .pp-side-nav {
+          position: fixed; right: 0;
+          top: var(--topbar-height, 0px);
+          bottom: var(--pp-footer-height, 0px);
+          overflow-y: auto; scrollbar-width: none;
+          display: flex; flex-direction: column; justify-content: center;
+          z-index: 40;
+          background: var(--bg-elevated); border: 1px solid var(--border-strong);
+          border-right: none; box-shadow: -2px 0 10px rgba(0,0,0,0.12);
+        }
+        .pp-side-nav::-webkit-scrollbar { display: none; }
+        .pp-side-nav button {
+          writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg);
+          border: none; border-top: 1px solid var(--border); border-radius: 0;
+          background: transparent; color: var(--text-primary);
+          padding: 14px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+          cursor: pointer; flex-shrink: 0; white-space: nowrap;
+          transition: background 150ms ease, color 150ms ease, padding-right 150ms ease;
+        }
+        .pp-side-nav button:first-child { border-top: none; }
+        .pp-side-nav button:hover {
+          background: var(--primary); color: #fff; padding-right: 11px;
+        }
+        @media (max-width: 640px) {
+          .pp-side-nav button { padding: 10px 6px; font-size: 10px; }
+        }
       `}</style>
+
+      {/* ── Side nav: one-click jump to any section ──────────────────── */}
+      <div className="pp-side-nav">
+        {[
+          { id: 'pp-section-loan-details', label: 'Loan Details' },
+          { id: 'pp-section-applicant', label: 'Applicant' },
+          ...(co_applicants.length > 0 ? [{ id: 'pp-section-coapplicants', label: 'Co-Applicants' }] : []),
+          { id: 'pp-section-financial', label: 'Financial Summary' },
+          { id: 'pp-section-addresses', label: 'Addresses' },
+          { id: 'pp-section-kyc', label: 'KYC Documents' },
+          { id: 'pp-section-remarks', label: 'Remarks' },
+          { id: 'pp-section-references', label: 'References' },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            title={`Jump to ${label}`}
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── Page Header ────────────────────────────────────────────────── */}
       <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        marginBottom: 22, flexWrap: 'wrap', gap: 12
+        border: '1px solid var(--border)', borderRadius: 0, padding: '18px 22px',
+        marginBottom: 22, background: 'var(--bg-surface)'
       }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>Prepare Proposal</h1>
-          <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 4 }}>
-            Step 7 of 7 — Loan details, documents, addresses &amp; references
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>{prefill?.entity_name || 'Entity'}</strong>
-            {' '}—{' '}
-            <span style={{ color: 'var(--text-tertiary)' }}>CASE-{caseId}</span>
-            {' · '}
-            Sending to:{' '}
-            <strong style={{ color: 'var(--primary)' }}>{lenderName}</strong>
-          </div>
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12, marginBottom: 14
+        }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Prepare Proposal</h1>
+          <ProposalStatusBadge status={proposal.lender_submission_status || proposal.proposal_status} />
         </div>
-        <ProposalStatusBadge status={proposal.lender_submission_status || proposal.proposal_status} />
+
+        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.2 }}>
+          {prefill?.entity_name || 'Entity'}
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '5px 12px', borderRadius: 0, border: '1px solid var(--border-strong)',
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+            fontSize: 12, fontWeight: 700, fontFamily: "'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace"
+          }}>
+            <FolderOpen size={13} /> CASE-{caseId}
+          </span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '5px 12px', borderRadius: 0, border: '1px solid var(--primary)',
+            background: 'var(--primary-subtle)', color: 'var(--primary-dark)',
+            fontSize: 12, fontWeight: 700
+          }}>
+            <Landmark size={13} />
+            <span style={{ fontWeight: 500 }}>Sending to</span>
+            {lenderName}
+          </span>
+        </div>
       </div>
 
       {/* ── 1. Loan Details (EMI Calculator) ────────────────────────── */}
-      <Section icon={IndianRupee} title="Loan Details"
+      <Section id="pp-section-loan-details" icon={IndianRupee} title="Loan Details"
         subtitle="Enter the Proposed loan amount and tenor for this application">
         <EMICalculator
           initialAmount={initialLoanAmount}
@@ -1389,46 +1592,50 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
           monthlyIncome={prefill?.monthly_income}
           initialTenorYears={initialTenorYears}
           maxTenure={maxTenureYears}
-          canOverrideRoi={canOverrideRoi}
           onChange={v => setLoanTerms(lt => ({ ...lt, ...v }))}
         />
       </Section>
 
-      {/* ── 2. Co-Applicant Profiles ─────────────────────────────────── */}
-      <Section icon={Users} title="Co-Applicant Profiles"
-        subtitle="Relationship with the company / promoter — included in proposal"
-        rightSlot={co_applicants.length > 0 ? (
-          <span style={{
-            fontSize: 12, color: 'var(--info)', fontWeight: 700, background: 'var(--info-bg)',
-            padding: '3px 10px', borderRadius: 0, border: '1px solid var(--info)'
-          }}>
-            {co_applicants.length} Co-Applicant{co_applicants.length > 1 ? 's' : ''}
-          </span>
-        ) : null}>
-        {applicants.length === 0 ? (
+      {/* ── 2. Applicant Profile ─────────────────────────────────────── */}
+      <Section id="pp-section-applicant" icon={Users} title="Applicant Profile"
+        subtitle="Primary borrower on this case">
+        {applicants.filter(a => a.type === 'PRIMARY').length === 0 ? (
           <div style={{ color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
-            No applicant profiles found for this case.
+            No applicant profile found for this case.
           </div>
         ) : (
-          <>
-            {applicants.filter(a => a.type === 'PRIMARY').map((a, i) => (
-              <ApplicantCard key={a.id} applicant={a} isPrimary={true} index={i} />
-            ))}
-            {co_applicants.map((a, i) => (
-              <ApplicantCard key={a.id} applicant={a} isPrimary={false} index={i + 1} />
-            ))}
-          </>
+          applicants.filter(a => a.type === 'PRIMARY').map((a, i) => (
+            <ApplicantCard key={a.id} applicant={a} isPrimary={true} index={i} />
+          ))
         )}
       </Section>
 
-      {/* ── 3. Financial Summary ─────────────────────────────────────── */}
-      <Section icon={BarChart3} title="Financial Summary"
+      {/* ── 3. Co-Applicant Profiles ─────────────────────────────────── */}
+      {co_applicants.length > 0 && (
+        <Section id="pp-section-coapplicants" icon={Users} title="Co-Applicant Profiles"
+          subtitle="Relationship with the company / promoter (included in proposal)"
+          rightSlot={
+            <span style={{
+              fontSize: 12, color: 'var(--info)', fontWeight: 700, background: 'var(--info-bg)',
+              padding: '3px 10px', borderRadius: 0, border: '1px solid var(--info)'
+            }}>
+              {co_applicants.length} Co-Applicant{co_applicants.length > 1 ? 's' : ''}
+            </span>
+          }>
+          {co_applicants.map((a, i) => (
+            <ApplicantCard key={a.id} applicant={a} isPrimary={false} index={i + 1} />
+          ))}
+        </Section>
+      )}
+
+      {/* ── 4. Financial Summary ─────────────────────────────────────── */}
+      <Section id="pp-section-financial" icon={BarChart3} title="Financial Summary"
         subtitle={isSalaried ? 'Auto-compiled from ITR and Bank Statement data' : 'Auto-compiled from GST, ITR and Bank Statement data'}>
         <FinancialSummary summary={financial_summary} prefill={prefill} isSalaried={isSalaried} />
       </Section>
 
-      {/* ── 4. Addresses ─────────────────────────────────────────────── */}
-      <Section icon={MapPin} title="Addresses"
+      {/* ── 5. Addresses ─────────────────────────────────────────────── */}
+      <Section id="pp-section-addresses" icon={MapPin} title="Addresses"
         subtitle="Select from reported bureau/GST addresses, or enter manually">
         <AddressSection
           addresses={addresses}
@@ -1439,8 +1646,8 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         />
       </Section>
 
-      {/* ── 5. KYC Documents ─────────────────────────────────────────── */}
-      <Section icon={FolderOpen} title="KYC Documents"
+      {/* ── 6. KYC Documents ─────────────────────────────────────────── */}
+      <Section id="pp-section-kyc" icon={FolderOpen} title="KYC Documents"
         rightSlot={pendingKyc > 0 ? (
           <span style={{
             fontSize: 11, color: 'var(--error)', fontWeight: 700,
@@ -1467,22 +1674,15 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         />
       </Section>
 
-      {/* ── 6. Remarks ───────────────────────────────────────────────── */}
-      <Section icon={MessageSquare} title="Remarks &amp; Loan Purpose">
+      {/* ── 7. Remarks ───────────────────────────────────────────────── */}
+      <Section id="pp-section-remarks" icon={MessageSquare} title="Remarks &amp; Loan Purpose">
         <div className="pp-grid-2">
-          <div>
+          <div className="pp-span-2">
             <label style={labelStyle}>LOAN PURPOSE</label>
             <textarea rows={3} value={form.loan_purpose}
               onChange={e => setForm(f => ({ ...f, loan_purpose: e.target.value }))}
               disabled={isSubmitted} style={{ ...inputStyle, resize: 'vertical' }}
               placeholder="e.g. Purchase of residential property at Survey No..." />
-          </div>
-          <div>
-            <label style={labelStyle}>PREFERRED BANKING PROGRAM</label>
-            <input value={form.preferred_banking_program}
-              onChange={e => setForm(f => ({ ...f, preferred_banking_program: e.target.value }))}
-              disabled={isSubmitted} style={inputStyle}
-              placeholder="e.g. Salaried, SENP, SEP, NRI..." />
           </div>
           <div className="pp-span-2">
             <label style={labelStyle}>ADDITIONAL REMARKS / NOTES FOR LENDER</label>
@@ -1494,8 +1694,8 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         </div>
       </Section>
 
-      {/* ── 7. References ────────────────────────────────────────────── */}
-      <Section icon={Contact} title="References"
+      {/* ── 8. References ────────────────────────────────────────────── */}
+      <Section id="pp-section-references" icon={Contact} title="References"
         subtitle="Personal or professional references for the applicant"
         rightSlot={
           <span style={{
@@ -1572,7 +1772,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
 
       {/* ── Sticky Footer ─────────────────────────────────────────────── */}
       {!isSubmitted ? (
-        <div style={{
+        <div ref={footerRef} style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
           boxShadow: '0 -4px 24px rgba(0,0,0,0.12)'
         }}>
@@ -1955,8 +2155,22 @@ function SendConfirmationModal({ isOpen, onClose, result }) {
                 <strong style={{ display: 'block', marginBottom: 2 }}>Subject:</strong>
                 {result.subject}
               </div>
+              {result.attachments_count != null && (
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  {result.attachments_count} document{result.attachments_count === 1 ? '' : 's'} attached
+                  {result.loan_summary_attached && ', including the Loan Application Summary'}
+                </div>
+              )}
             </div>
           </div>
+          {result.failed_attachments_count > 0 && (
+            <div style={{ border: '1px solid var(--warning)', borderRadius: 0, background: 'var(--warning-bg)', padding: '10px 16px', fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                {result.failed_attachments_count} document{result.failed_attachments_count === 1 ? '' : 's'} failed to attach and were not included in the email. Please check and resend if needed.
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', background: 'var(--bg-elevated)' }}>
           <button onClick={onClose} style={{ padding: '9px 24px', borderRadius: 0, fontWeight: 700, fontSize: 14, background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer' }}>Done</button>

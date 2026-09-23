@@ -49,8 +49,35 @@ export const walletService = {
   },
 
   // ── Recharge (Razorpay top-up) ─────────────────────────────────────────
-  createTopupOrder: async (amountInr) => {
-    const response = await api.post('/wallet/topups/create-order', { amount_inr: amountInr });
+  // Amount-independent lookup — the first call the Recharge Wallet modal
+  // makes when a code is typed in, before any amount exists. Tells the
+  // frontend which UI to show: a FREEBIE code needs no amount input at all
+  // (see redeemFreebiePromo), DISCOUNT/CASHBACK keep the normal flow.
+  getPromoInfo: async (promoCode) => {
+    const response = await api.get('/wallet/topups/promo-info', { params: { promo_code: promoCode } });
+    return response.data;
+  },
+
+  // Read-only preview (dryRun promo check) — used to show the volume-
+  // discount bonus tier and, once a code is typed in, its effect (discount
+  // or cashback bonus), before the DSA commits to Checkout.
+  getTopupPreview: async (amountInr, promoCode = null) => {
+    const params = { amount_inr: amountInr };
+    if (promoCode) params.promo_code = promoCode;
+    const response = await api.get('/wallet/topups/preview', { params });
+    return response.data;
+  },
+
+  createTopupOrder: async (amountInr, promoCode = null) => {
+    const response = await api.post('/wallet/topups/create-order', { amount_inr: amountInr, promo_code: promoCode });
+    return response.data;
+  },
+
+  // FREEBIE codes only — no amount, no Razorpay, no checkout. The credited
+  // amount always comes from the code's own server-side-defined value;
+  // there is nothing to pass here beyond the code itself.
+  redeemFreebiePromo: async (promoCode) => {
+    const response = await api.post('/wallet/topups/redeem-freebie', { promo_code: promoCode });
     return response.data;
   },
 
@@ -67,6 +94,22 @@ export const walletService = {
   downloadInvoice: async (topupId, invoiceNumber) => {
     const response = await api.get(`/wallet/topups/${topupId}/invoice`, { responseType: 'blob' });
     downloadBlob(response, `${invoiceNumber || `invoice-${topupId}`}.pdf`);
+  },
+
+  // ── Employee credit allocation (DSA_ADMIN) ─────────────────────────────
+  getEmployees: async () => {
+    const response = await api.get('/wallet/employees');
+    return response.data;
+  },
+
+  allocateEmployeeCredits: async (userId, credits, note) => {
+    const response = await api.post(`/wallet/employees/${userId}/allocate`, { credits, note });
+    return response.data;
+  },
+
+  revokeEmployeeCredits: async (userId, credits, note) => {
+    const response = await api.post(`/wallet/employees/${userId}/revoke`, { credits, note });
+    return response.data;
   },
 };
 

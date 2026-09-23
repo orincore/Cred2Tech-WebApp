@@ -9,6 +9,7 @@ import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import DataTable from '../components/DataTable';
 import { formatDateTime, toTitleCase } from '../utils/helpers';
+import { roleLabel } from '../constants/roles';
 import { ticketService } from '../api/ticketService';
 import AdminCaseFeedbackTab from './AdminCaseFeedbackTab';
 
@@ -115,7 +116,7 @@ const AdminTicketsListPage = () => {
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{t.subject}</div>
             <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-              {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({toTitleCase(t.created_by_role)}) · {formatDateTime(t.created_at)}
+              {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)}) · {formatDateTime(t.created_at)}
             </div>
           </div>
         </div>
@@ -150,8 +151,8 @@ const AdminTicketsListPage = () => {
         <PageHeader
           title="Feedback & Tickets"
           subtitle={activeTab === 'tickets'
-            ? 'Everything submitted via the Feedback button, from both the MSME portal and the DSA app.'
-            : 'Star ratings and comments DSAs leave on a case when it reaches full or partial disbursement.'}
+            ? 'Everything submitted via the Feedback button, from both the MSME portal and the Sourcing Partner app.'
+            : 'Star ratings and comments Sourcing Partners leave on a case when it reaches full or partial disbursement.'}
           compact={isMobile}
           actions={activeTab === 'tickets' ? (
             <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => navigate('/admin/ticket-recipients')}>
@@ -216,7 +217,7 @@ const AdminTicketsListPage = () => {
             </select>
             <select style={{ ...compactField, maxWidth: 150 }} value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
               <option value="">All submitters</option>
-              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{toTitleCase(r)}</option>)}
+              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
             </select>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="checkbox" checked={unreadOnly} onChange={(e) => { setUnreadOnly(e.target.checked); setPage(1); }} />
@@ -236,7 +237,7 @@ const AdminTicketsListPage = () => {
           {loading ? (
             <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
           ) : rows.length === 0 ? (
-            <EmptyState icon={MessageSquare} title="No feedback or tickets found" description="Submissions from the MSME portal and DSA app will show up here." />
+            <EmptyState icon={MessageSquare} title="No feedback or tickets found" description="Submissions from the MSME portal and Sourcing Partner app will show up here." />
           ) : isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {rows.map((t, idx) => (
@@ -253,7 +254,7 @@ const AdminTicketsListPage = () => {
                           {t.subject}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-                          {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({toTitleCase(t.created_by_role)})
+                          {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)})
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 1 }}>{formatDateTime(t.created_at)}</div>
                       </div>

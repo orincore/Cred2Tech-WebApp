@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
-import { PlusCircle, Trash2, ChevronRight, BarChart3, PenLine } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronRight, User, Users, Info } from 'lucide-react';
 
 const INCOME_TYPES_MSME = [
   'Director Salary', "Partner's Salary", 'Interest on Capital',
@@ -12,12 +12,36 @@ const INCOME_TYPES_MSME = [
   'Dividend Income', 'Agriculture Income', 'Professional Fees', 'Other'
 ];
 // A salaried employee has no business/directorial income concepts — swap
-// those out for a plain Salary/Bonus entry instead.
+// those out for a plain Salary/Incentive/Bonus entry instead. Incentive and
+// Bonus are kept as SEPARATE options (not one combined "Bonus / Incentive"
+// choice): the ESR engine treats them differently (incentive is a recurring
+// 3-month average, bonus is a single latest-year figure) and a combined
+// label couldn't be matched to either bucket, so it was silently excluded
+// from every lender's income calculation. Agriculture Income was previously
+// only offered on the MSME side even though a salaried applicant can
+// legitimately have agricultural land income too.
 const INCOME_TYPES_SALARIED = [
-  'Salary', 'Bonus / Incentive', 'Rental Income — Bank', 'Rental Income — Cash',
+  'Salary', 'Incentive', 'Bonus', 'Agriculture Income',
+  'Rental Income — Bank', 'Rental Income — Cash',
   'Interest Income', 'Dividend Income', 'Other'
 ];
-const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'Bank Credit', 'None'];
+const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'None'];
+
+// esr_financials.salaried_income_source (esrFinancials.service.js) has 5
+// real values, not just OCR/MANUAL — a case can have OCR salary slips for
+// one salaried applicant and only a manual entry for another, which is
+// still genuinely OCR-backed and must not read as plain 'Manual'/'—'.
+// Missing this mapping was why a salary that WAS OCR'd (just mixed with a
+// co-applicant's manual entry, or cross-checked against bank credits) showed
+// as an unlabelled dash here — reading exactly like a manual/unverified
+// figure even though OCR was in fact used.
+const SALARY_SOURCE_LABELS = {
+  OCR: 'Salary Slip',
+  OCR_MANUAL: 'Salary Slip + Manual',
+  OCR_BANK: 'Salary Slip + Bank',
+  BANK_STATEMENT: 'Bank Statement',
+  MANUAL: 'Manual'
+};
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -31,6 +55,422 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+// Shared by every applicant block (and the Entity-Level block) below — same
+// inline form markup the page always had, just no longer needing its own
+// "Applicant" dropdown: whoever renders this already knows which
+// applicant_id (or null, for Entity Level) the entry belongs to.
+const AddEntryInlineForm = ({ show, incomeTypes, saving, isMobile, onSubmit }) => {
+  const [draft, setDraft] = useState({ income_type: '', annual_amount: '', supporting_doc_type: 'CA Certificate', remarks: '' });
+  const gridCols = isMobile ? '1fr' : '2fr 1fr 1.5fr 2fr auto';
+
+  const submit = async () => {
+    if (!draft.income_type) return toast.error('Select income type');
+    if (!draft.annual_amount) return toast.error('Enter annual amount');
+    const ok = await onSubmit(draft);
+    if (ok) setDraft({ income_type: '', annual_amount: '', supporting_doc_type: 'CA Certificate', remarks: '' });
+  };
+
+  return (
+    <AnimatePresence initial={false}>
+      {show && (
+        <motion.div
+          key="add-entry-form"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div className="add-entry-row" style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12, alignItems: 'end' }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
+                <select className="form-control" value={draft.income_type} onChange={e => setDraft({ ...draft, income_type: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {incomeTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ANNUAL AMOUNT (₹) *</label>
+                <input type="number" className="form-control" placeholder="e.g. 840000" value={draft.annual_amount} onChange={e => setDraft({ ...draft, annual_amount: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>SUPPORTING DOC</label>
+                <select className="form-control" value={draft.supporting_doc_type} onChange={e => setDraft({ ...draft, supporting_doc_type: e.target.value })}>
+                  {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>REMARKS</label>
+                <input className="form-control" placeholder="Optional note" value={draft.remarks} onChange={e => setDraft({ ...draft, remarks: e.target.value })} />
+              </div>
+              <button className="btn btn-primary" onClick={submit} disabled={saving} style={{ whiteSpace: 'nowrap', height: 38 }}>
+                {saving ? '...' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+// GST's own "latest year" AMOUNT is a trailing 12-month window, not a clean
+// financial year (it routinely straddles two — see gst.parser.js's own
+// comment), so it's shown under Latest/Previous Year with its real "Aug 2025
+// – Jul 2026"-style range as the period caption (rangeLatest/rangePrev
+// below) rather than a bare FY label — labeling a cross-FY sum with one FY
+// would misrepresent the amount next to it.
+// The FY column is a different, narrower question: "which closed Indian FY
+// does this pull's data belong to". For GST that's answered from the same
+// pull's own per-FY summaries (income.service.js's fy_turnover_latest_label/
+// fy_turnover_previous_label, sourced from gstAnalyticsSnapshot.service.js's
+// meaningfulFys — a real, >=6-months-filed closed FY, never fabricated).
+// Falls back to fy_latest/fy_prev (only ever a bare label for ITR/Bank, see
+// isBareFyLabel below) for the other two rows, which don't have a separate
+// closed-FY concept to prefer instead.
+const isBareFyLabel = (v) => typeof v === 'string' && /^FY\s?\d{4}-\d{2}$/i.test(v.trim());
+const fyColumnValue = (v) => (isBareFyLabel(v) ? v : '—');
+
+// One FY-column entry: the label, plus — only when the row supplies its own
+// FY-specific amount (currently just GST's fyAmountLatest/fyAmountPrev,
+// since that row's Latest/Previous Year amount above is a rolling-window
+// sum that doesn't equal this FY's own turnover) — the real value for that
+// FY right underneath it, so the column is self-contained instead of naming
+// a year with no way to tell what it was worth. ITR/Bank rows have no
+// fyAmount* (their Latest/Previous Year amount already IS this FY's own
+// figure), so they keep showing just the label, as before.
+const FyCellValue = ({ label, amount }) => {
+  const shown = fyColumnValue(label);
+  if (shown === '—') return '—';
+  return (
+    <>
+      {shown}
+      {amount != null && <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(amount)}</div>}
+    </>
+  );
+};
+
+// One block per applicant on the case, reusing the exact same two tables
+// (API Pulls, Manual Entries) the page always had — just repeated once per
+// applicant instead of shown once for the whole case. Income used to be a
+// single blended figure (the primary/business's own API-pulled numbers,
+// with every applicant's manual entries mixed into one flat table
+// distinguished only by a text label column); a co-applicant's own salary/
+// GST/ITR/bank data had no place to show up at all. `data.applicants`
+// (income.service.js#getIncomeSummary) already scopes every figure to the
+// one applicant it actually belongs to — this renders that per applicant.
+const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTypes, saving }) => {
+  const [adding, setAdding] = useState(false);
+  const isSalariedApp = String(app.employment_type || '').toUpperCase() === 'SALARIED';
+
+  // Each row carries its OWN fyLatest/fyPrev — GST, ITR and Bank each come
+  // from a separate pull and can genuinely have different periods (e.g. GST's
+  // latest figure is a trailing-12-month window like "Sep 2025 – Aug 2026"
+  // while ITR's is a clean "FY 2024-25"). A single period blended across all
+  // three rows (picking whichever metric's fy_latest happened to be non-null
+  // first) showed the wrong period next to at least two of the three values
+  // whenever their real periods didn't match.
+  // Each row now carries TWO period concepts, kept deliberately separate:
+  // - rangeLatest/rangePrev: the real from-to month span the Latest/Previous
+  //   Year value was actually computed over (e.g. "Apr 2024 – Nov 2024" for
+  //   a partially-filed year) — shown right under each amount, replacing
+  //   the bare FY label that used to sit there and implied a full Apr–Mar
+  //   year even when the real filed months didn't cover one.
+  // - fyLatest/fyPrev: the plain FY label ("FY 2024-25") on its own, now in
+  //   its own FY column instead of doubling as the amount's period caption.
+  // GST/Bank ranges reflect actually-filed months (see gst.parser.js /
+  // bankParser.service.js's trackMonthRange); ITR's is a straight FY->range
+  // conversion (income.service.js#fyLabelToRange) since a filed return
+  // always covers the complete Apr-Mar year, unlike GST/bank filings.
+  const apiRows = isSalariedApp
+    ? [{
+        label: 'Salary (Annual)', latest: app.salary?.latest, prev: null,
+        fyLatest: app.salary?.fy_latest, fyPrev: app.salary?.fy_prev,
+        rangeLatest: app.salary?.fy_latest, rangePrev: app.salary?.fy_prev,
+        source: SALARY_SOURCE_LABELS[app.salary?.source] || '—',
+        color: 'var(--success)', bg: 'var(--success-bg)'
+      }]
+    : [
+        {
+          label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev,
+          // FY column prefers the genuine closed-FY label (fy_turnover_*_label)
+          // over the rolling row's own fy_latest/fy_prev (a date range, not a
+          // bare label — always blanked by fyColumnValue below anyway). Falls
+          // back to fy_latest/fy_prev only when this pull has too little filed
+          // history to have produced a closed-FY summary at all.
+          fyLatest: app.gst_turnover?.fy_turnover_latest_label || app.gst_turnover?.fy_latest,
+          fyPrev: app.gst_turnover?.fy_turnover_previous_label || app.gst_turnover?.fy_prev,
+          // The FY column's own amount — genuinely different from
+          // latest/prev above (the rolling-window sum), so it's carried
+          // separately and rendered under the FY label itself rather than
+          // implying the two numbers are the same figure.
+          fyAmountLatest: app.gst_turnover?.fy_turnover_latest,
+          fyAmountPrev: app.gst_turnover?.fy_turnover_previous,
+          rangeLatest: app.gst_turnover?.fy_latest_range || app.gst_turnover?.fy_latest,
+          rangePrev: app.gst_turnover?.fy_prev_range || app.gst_turnover?.fy_prev,
+          source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)'
+        },
+        {
+          label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev,
+          fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev,
+          // Unlike GST's rolling-window row, ITR's Latest Year amount above
+          // already IS this FY's own PAT (a filed return always covers the
+          // complete Apr-Mar year — see this file's own comment further up),
+          // so it's safe to reuse the same value as the FY column's amount
+          // rather than needing a separate closed-FY figure the way GST does.
+          fyAmountLatest: app.net_profit?.latest,
+          rangeLatest: app.net_profit?.fy_latest_range || app.net_profit?.fy_latest,
+          rangePrev: app.net_profit?.fy_prev_range || app.net_profit?.fy_prev,
+          source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)'
+        },
+        {
+          label: 'Average Monthly Bank Balance', latest: app.avg_bank_balance?.latest, prev: app.avg_bank_balance?.prev,
+          // Bank ABB's own period is a real filed-month range (see
+          // rangeLatest/rangePrev below), same trailing-window situation as
+          // GST's rolling turnover — not a clean single FY, so the FY column
+          // is deliberately left blank ("—" via fyColumnValue) rather than
+          // showing a range there too.
+          fyLatest: null, fyPrev: null,
+          rangeLatest: app.avg_bank_balance?.fy_latest_range || app.avg_bank_balance?.fy_latest,
+          rangePrev: app.avg_bank_balance?.fy_prev_range || app.avg_bank_balance?.fy_prev,
+          source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)'
+        }
+      ];
+
+  const manualEntries = app.manual_entries || [];
+
+  return (
+    <Panel
+      icon={app.type === 'PRIMARY' ? User : Users}
+      accentColor={app.type === 'PRIMARY' ? 'var(--success)' : 'var(--info)'}
+      title={app.name}
+      subtitle={`${app.type === 'PRIMARY' ? 'Primary Applicant' : 'Co-Applicant'} · ${isSalariedApp ? 'Salaried' : 'Self-Employed'}`}
+      bodyPadding={0}
+      delay={delay}
+      className="mb-24"
+      style={{ marginBottom: 24 }}
+      headerRight={
+        <button className="btn btn-secondary btn-sm" onClick={() => setAdding(v => !v)}>
+          <PlusCircle size={14} /> {adding ? 'Cancel' : 'Add Entry'}
+        </button>
+      }
+    >
+      {/* "Income not considered" (employment_type) — a DSA marking this
+          co-applicant as not being assessed for income at all. Still gets
+          its own block on this page (so the exclusion reads as deliberate,
+          not a missing pull) but shows this note instead of an income table
+          that would otherwise just be full of dashes. */}
+      {app.income_not_considered ? (
+        <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: '1px solid var(--border)' }}>
+          <Info size={16} color="var(--text-tertiary)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            "Income not considered" is selected for this applicant, so no income summary is shown for them.
+          </span>
+        </div>
+      ) : (
+      <>
+      {/* Income from API Pulls — same table as before, this applicant's own rows only. */}
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
+        {isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {apiRows.map((row, i) => (
+              <div key={i} style={{ padding: '14px 12px', borderBottom: i < apiRows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</span>
+                  <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: isSalariedApp ? 0 : 8 }}>
+                  {/* Salary has no rolling/filed-month window to caption
+                      (unlike GST/ITR/Bank) — that line only ever rendered a
+                      meaningless "(—)" for it, so it's skipped entirely here
+                      rather than shown empty. */}
+                  {!isSalariedApp && <div style={{ marginBottom: 2 }}>Latest Year ({row.rangeLatest || '—'})</div>}
+                  <strong style={{ fontSize: 14, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
+                </div>
+                {/* Previous Year / FY are meaningless for a single OCR'd
+                    salary figure (no prior-year salary is ever computed) —
+                    shown only for GST/ITR/Bank rows. */}
+                {!isSalariedApp && (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                      <div style={{ marginBottom: 2 }}>Previous Year ({row.rangePrev || '—'})</div>
+                      <strong style={{ fontSize: 14 }}>{fmt(row.prev)}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      FY: <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto', minWidth: 0 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-elevated)' }}>
+                  {/* Salary has no Previous Year/FY concept (a single OCR'd
+                      figure, no prior-year comparison) — those columns are
+                      only shown for a self-employed applicant's GST/ITR/Bank
+                      rows. */}
+                  {(isSalariedApp ? ['Item', 'Latest Year', 'Source'] : ['Item', 'Latest Year', 'Previous Year', 'FY', 'Source']).map(h => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)',
+                        borderBottom: '1px solid var(--border)', fontSize: 12,
+                        // Global thead-th CSS force-lowercases everything but
+                        // the first letter (index.css) — right for ordinary
+                        // words, wrong for the "FY" acronym, which it turns
+                        // into "Fy". Override just this header back to as-typed.
+                        ...(h === 'FY' ? { textTransform: 'none' } : {})
+                      }}
+                    >{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {apiRows.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
+                    {/* Period shown above its own value is the real from-to
+                        month range the figure was computed over — each row's
+                        period comes from that row's own source (GST/ITR/
+                        Bank), not a single period shared across every row.
+                        The plain FY label these used to show here now lives
+                        in its own FY column instead. */}
+                    <td style={{ padding: '12px 16px' }}>
+                      {/* Salary has no rolling/filed-month window to caption
+                          (unlike GST/ITR/Bank) — skipped entirely rather than
+                          rendering a meaningless "—". */}
+                      {!isSalariedApp && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangeLatest || '—'}</div>}
+                      <strong style={{ fontSize: 13, fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
+                    </td>
+                    {!isSalariedApp && (
+                      <>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>{row.rangePrev || '—'}</div>
+                          <strong style={{ fontSize: 13, fontWeight: 600 }}>{fmt(row.prev)}</strong>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                          <FyCellValue label={row.fyLatest} amount={row.fyAmountLatest} />
+                        </td>
+                      </>
+                    )}
+                    <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      </>
+      )}
+
+      <AddEntryInlineForm
+        show={adding}
+        incomeTypes={incomeTypes}
+        saving={saving}
+        isMobile={isMobile}
+        onSubmit={async (draft) => {
+          const ok = await onAdd(app.applicant_id, draft);
+          if (ok) setAdding(false);
+          return ok;
+        }}
+      />
+
+      {/* Manual Income Addition — same table as before, this applicant's own entries only. */}
+      {manualEntries.length > 0 ? (
+        isMobile ? (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <AnimatePresence initial={false}>
+              {manualEntries.map((entry, i) => (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ padding: '14px 12px', borderBottom: i < manualEntries.length - 1 ? '1px solid var(--border)' : 'none' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.income_type}</span>
+                    <button onClick={() => onDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, flexShrink: 0 }} title="Delete">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Annual Amount</span>
+                    <strong style={{ color: 'var(--success)' }}>{fmt(entry.annual_amount)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: entry.remarks ? 4 : 0 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Supporting Doc</span>
+                    <span>{entry.supporting_doc_type || '—'}</span>
+                  </div>
+                  {entry.remarks && (
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{entry.remarks}</div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto', minWidth: 0 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-elevated)' }}>
+                  {['Income Type', 'Annual Amount', 'Supporting Doc', 'Remarks', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {manualEntries.map(entry => (
+                    <motion.tr
+                      key={entry.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ borderBottom: '1px solid var(--border)' }}
+                    >
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{entry.income_type}</td>
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--success)' }}>{fmt(entry.annual_amount)}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.supporting_doc_type || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--text-tertiary)', fontSize: 12 }}>{entry.remarks || '—'}</td>
+                      <td style={{ padding: '8px 16px' }}>
+                        <button onClick={() => onDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }} title="Delete">
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+          No manual entries yet for {app.name}.
+        </div>
+      )}
+
+      {manualEntries.length > 0 && (
+        <div className="manual-total-row" style={{ padding: '12px 24px', background: 'var(--success-bg)', borderTop: '1px solid var(--success)' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
+            Manual Income Total: {fmt(app.manual_total)}
+          </span>
+        </div>
+      )}
+    </Panel>
+  );
+};
+
+
 // Step 4 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext as props instead of
 // reading useParams()/navigating itself.
@@ -40,22 +480,12 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState(null);
-  const [applicants, setApplicants] = useState([]);
-  const [newEntry, setNewEntry] = useState({
-    income_type: '', applicant_id: '', applicant_label: '',
-    annual_amount: '', supporting_doc_type: 'CA Certificate', remarks: ''
-  });
-  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [summary, caseData] = await Promise.all([
-        caseService.getIncomeSummary(caseId),
-        caseService.getCaseById(caseId)
-      ]);
+      const summary = await caseService.getIncomeSummary(caseId);
       setData(summary);
-      setApplicants(caseData.applicants || []);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to load income summary');
     } finally {
@@ -65,23 +495,26 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
 
   useEffect(() => { load(); }, [load]);
 
-  const handleAddEntry = async () => {
-    if (!newEntry.income_type) return toast.error('Select income type');
-    if (!newEntry.annual_amount) return toast.error('Enter annual amount');
+  // Each applicant block (and the Entity-Level block) has its own Add Entry
+  // control now — applicant_id is implicit (whichever block called this, or
+  // null for Entity Level) instead of a shared dropdown. Returns whether it
+  // succeeded so the calling block knows whether to close its own form.
+  const handleAddEntryForApplicant = async (applicantId, draft) => {
     try {
       setSaving(true);
-      const entry = {
-        ...newEntry,
-        applicant_id: newEntry.applicant_id || null,
-        annual_amount: parseFloat(newEntry.annual_amount)
-      };
-      await caseService.addIncomeEntry(caseId, entry);
+      await caseService.addIncomeEntry(caseId, {
+        income_type: draft.income_type,
+        applicant_id: applicantId,
+        annual_amount: parseFloat(draft.annual_amount),
+        supporting_doc_type: draft.supporting_doc_type,
+        remarks: draft.remarks
+      });
       toast.success('Entry added');
-      setNewEntry({ income_type: '', applicant_id: '', applicant_label: '', annual_amount: '', supporting_doc_type: 'CA Certificate', remarks: '' });
-      setAdding(false);
       await load();
+      return true;
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to add entry');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -110,9 +543,15 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
   };
 
   if (loading) {
+    // Sharp corners set inline here, not via the page's own scoped
+    // `.income-summary-page .card { border-radius: 0 }` <style> block below
+    // — that block only exists in the loaded return, so a cold first load
+    // briefly rendered these with the global .card class's default rounded
+    // corners (var(--radius-lg)) instead. Matches BureauObligationsPage's
+    // loading skeleton, which has the same fix for the same reason.
     return (
       <div className="income-summary-page">
-        <div className="card mb-24" style={{ marginBottom: 24 }}>
+        <div className="card mb-24" style={{ marginBottom: 24, borderRadius: 0 }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
             <Skeleton width={200} height={15} />
           </div>
@@ -127,7 +566,7 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
             ))}
           </div>
         </div>
-        <div className="card">
+        <div className="card" style={{ borderRadius: 0 }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
             <Skeleton width={160} height={15} />
           </div>
@@ -140,17 +579,9 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
     );
   }
 
-  const api = data?.api_data || {};
-  const manualTotal = data?.manual_total || 0;
   const combined = data?.combined_annual_income || 0;
 
-  // Derive FY labels from whichever source has them, with fallback defaults
-  const fyLatestLabel = api.gst_turnover?.fy_latest || api.net_profit?.fy_latest || api.avg_bank_balance?.fy_latest || 'Latest Year';
-  const fyPrevLabel   = api.gst_turnover?.fy_prev   || api.net_profit?.fy_prev   || api.avg_bank_balance?.fy_prev   || 'Previous Year';
-
   const incomeTypes = isSalaried ? INCOME_TYPES_SALARIED : INCOME_TYPES_MSME;
-
-  const addEntryGridCols = isMobile ? '1fr' : '2fr 1.5fr 1fr 1.5fr 2fr auto';
 
   return (
     <div className="income-summary-page">
@@ -170,246 +601,55 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
           --text-secondary: #000000;
           --text-tertiary: #000000;
         }
+        /* One card per applicant now (was one card total) — the same
+           padding/row-height that felt right for a single table reads as
+           bloated repeated N times, so this page overrides it tighter than
+           Panel's own defaults everywhere, not just on mobile. The
+           !important on each rule beats the inline styles the table
+           cells/header set directly. */
+        .income-summary-page .card.mb-24 { margin-bottom: 14px !important; }
+        .income-summary-page .card > div:first-child { padding: 12px 16px !important; }
+        .income-summary-page table th,
+        .income-summary-page table td { padding: 7px 12px !important; }
+        .income-summary-page table th { font-size: 11px !important; }
+        .income-summary-page table td { font-size: 12px !important; }
+        .income-summary-page .add-entry-row { padding: 14px !important; }
+        .income-summary-page .manual-total-row { padding: 8px 16px !important; }
         @media (max-width: 768px) {
           /* Matches the JS isMobile breakpoint (also 768px) that switches
-             tables to stacked cards below — Panel header/body padding is
-             fixed for desktop, so tighten it here too for the phone view. */
-          .income-summary-page .card > div:first-child { padding: 14px 12px !important; }
-          .income-summary-page .add-entry-row { padding: 14px 12px !important; }
-          .income-summary-page .manual-total-row { padding: 10px 12px !important; }
+             tables to stacked cards below. */
+          .income-summary-page .card > div:first-child { padding: 12px !important; }
+          .income-summary-page .add-entry-row { padding: 12px !important; }
+          .income-summary-page .manual-total-row { padding: 8px 12px !important; }
         }
       `}</style>
 
-      {/* API-Pulled Income Table — GST/ITR/Bank are self-employed/business
-          concepts; a salaried employee's only income source is their salary,
-          which is captured entirely via the salary-slip OCR step + Manual
-          Income Addition below, so this panel doesn't apply to them at all. */}
-      {!isSalaried && (
-      <Panel
-        icon={BarChart3}
-        accentColor="var(--success)"
-        title="Income from API Pulls"
-        bodyPadding={0}
-        delay={0}
-        className="mb-24"
-        style={{ marginBottom: 24 }}
-      >
-        {(() => {
-          const rows = [
-            { label: 'Gross Turnover / Receipts', latest: api.gst_turnover?.latest, prev: api.gst_turnover?.prev, source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)' },
-            { label: 'Net Profit (PAT)', latest: api.net_profit?.latest, prev: api.net_profit?.prev, source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)' },
-            { label: 'Average Monthly Bank Balance', latest: api.avg_bank_balance?.latest, prev: api.avg_bank_balance?.prev, source: 'Bank Stmt', color: 'var(--warning)', bg: 'var(--warning-bg)' }
-          ];
-          // Phones get stacked label/value cards instead of a table — a table
-          // that "fits" a phone by shrinking columns just becomes unreadable,
-          // and one that scrolls sideways is easy to miss/mistake as cut off.
-          if (isMobile) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {rows.map((row, i) => (
-                  <div key={i} style={{ padding: '14px 12px', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{row.label}</span>
-                      <span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{row.source}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      <span>Latest Year ({fyLatestLabel})</span>
-                      <strong style={{ color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      <span>Previous Year ({fyPrevLabel})</span>
-                      <strong>{fmt(row.prev)}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          }
-          return (
-            <div style={{ overflowX: 'auto', minWidth: 0 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['Item', `Latest Year (${fyLatestLabel})`, `Previous Year (${fyPrevLabel})`, 'Source'].map(h => (
-                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{row.label}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 700, color: row.latest ? 'var(--success)' : 'var(--text-tertiary)' }}>{fmt(row.latest)}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{fmt(row.prev)}</td>
-                      <td style={{ padding: '12px 16px' }}><span style={{ background: row.bg, color: row.color, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{row.source}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        })()}
-      </Panel>
-      )}
+      {/* One block per applicant — each shows only that applicant's own
+          income (salary for a salaried applicant, GST/ITR/bank for a
+          self-employed one) plus their own manual entries, instead of one
+          blended entity-level table that only ever reflected the primary. */}
+      {(data?.applicants || []).map((app, i) => (
+        <ApplicantIncomeBlock
+          key={app.applicant_id}
+          app={app}
+          isMobile={isMobile}
+          delay={i * 0.05}
+          onDelete={handleDelete}
+          onAdd={handleAddEntryForApplicant}
+          incomeTypes={incomeTypes}
+          saving={saving}
+        />
+      ))}
 
-      {/* Manual Income Addition */}
-      <Panel
-        icon={PenLine}
-        title="Manual Income Addition"
-        subtitle={isSalaried
-          ? 'Add income not captured via OCR — additional salary, bonus, rental, other'
-          : 'Add income not captured via API — Director salary, rental, agriculture, other'}
-        bodyPadding={0}
-        delay={0.08}
-        style={{ marginBottom: 24 }}
-        headerRight={
-          <button className="btn btn-secondary btn-sm" onClick={() => setAdding(v => !v)}>
-            <PlusCircle size={14} /> {adding ? 'Cancel' : 'Add Entry'}
-          </button>
-        }
-      >
-        {/* Add new entry inline form */}
-        <AnimatePresence initial={false}>
-          {adding && (
-            <motion.div
-              key="add-entry-form"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              style={{ overflow: 'hidden' }}
-            >
-              <div className="add-entry-row" style={{ padding: 20, borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: addEntryGridCols, gap: 12, alignItems: 'end' }}>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
-                    <select className="form-control" value={newEntry.income_type} onChange={e => setNewEntry({ ...newEntry, income_type: e.target.value })}>
-                      <option value="">— Select —</option>
-                      {incomeTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>APPLICANT</label>
-                    <select className="form-control" value={newEntry.applicant_id} onChange={e => {
-                      const app = applicants.find(a => a.id === parseInt(e.target.value));
-                      setNewEntry({ ...newEntry, applicant_id: e.target.value, applicant_label: app ? (app.name || app.pan_number || app.type) : '' });
-                    }}>
-                      <option value="">Entity Level</option>
-                      {applicants.map(a => <option key={a.id} value={a.id}>{a.name || a.pan_number || a.type}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ANNUAL AMOUNT (₹) *</label>
-                    <input type="number" className="form-control" placeholder="e.g. 840000" value={newEntry.annual_amount} onChange={e => setNewEntry({ ...newEntry, annual_amount: e.target.value })} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>SUPPORTING DOC</label>
-                    <select className="form-control" value={newEntry.supporting_doc_type} onChange={e => setNewEntry({ ...newEntry, supporting_doc_type: e.target.value })}>
-                      {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>REMARKS</label>
-                    <input className="form-control" placeholder="Optional note" value={newEntry.remarks} onChange={e => setNewEntry({ ...newEntry, remarks: e.target.value })} />
-                  </div>
-                  <button className="btn btn-primary" onClick={handleAddEntry} disabled={saving} style={{ whiteSpace: 'nowrap', height: 38 }}>
-                    {saving ? '...' : 'Add'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Existing entries */}
-        {data?.manual_entries?.length > 0 ? (
-          isMobile ? (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <AnimatePresence initial={false}>
-                {data.manual_entries.map((entry, i) => (
-                  <motion.div
-                    key={entry.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    style={{ padding: '14px 12px', borderBottom: i < data.manual_entries.length - 1 ? '1px solid var(--border)' : 'none' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.income_type}</span>
-                      <button onClick={() => handleDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, flexShrink: 0 }} title="Remove">
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>{entry.applicant_label || 'Entity'}</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Annual Amount</span>
-                      <strong style={{ color: 'var(--success)' }}>{fmt(entry.annual_amount)}</strong>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: entry.remarks ? 4 : 0 }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Supporting Doc</span>
-                      <span>{entry.supporting_doc_type || '—'}</span>
-                    </div>
-                    {entry.remarks && (
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{entry.remarks}</div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          ) : (
-          <div style={{ overflowX: 'auto', minWidth: 0 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-elevated)' }}>
-                  {['Income Type', 'Applicant', 'Annual Amount', 'Supporting Doc', 'Remarks', ''].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <AnimatePresence initial={false}>
-                  {data.manual_entries.map(entry => (
-                    <motion.tr
-                      key={entry.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{ borderBottom: '1px solid var(--border)' }}
-                    >
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{entry.income_type}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.applicant_label || 'Entity'}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--success)' }}>{fmt(entry.annual_amount)}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{entry.supporting_doc_type || '—'}</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--text-tertiary)', fontSize: 12 }}>{entry.remarks || '—'}</td>
-                      <td style={{ padding: '8px 16px' }}>
-                        <button onClick={() => handleDelete(entry.id)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }} title="Remove">
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              </tbody>
-            </table>
-          </div>
-          )
-        ) : !adding ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-            No manual entries yet. Click <strong>Add Entry</strong> to record {isSalaried ? 'additional salary, bonus, rental income, etc.' : 'Director salary, rental income, etc.'}
-          </div>
-        ) : null}
-
-        {/* Manual total footer */}
-        {data?.manual_entries?.length > 0 && (
-          <div className="manual-total-row" style={{ padding: '12px 24px', background: 'var(--success-bg)', borderTop: '1px solid var(--success)' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
-              Manual Income Total: {fmt(manualTotal)} &nbsp;·&nbsp; Combined ESR Income: {fmt(combined)}
-            </span>
-          </div>
-        )}
-      </Panel>
+      {/* Combined ESR income — the actual eligibility input, computed
+          case-wide from every applicant's income together (not a simple
+          sum of the per-applicant figures above — see
+          income.service.js#getIncomeSummary for the real dedup rules). */}
+      <div style={{ padding: '14px 20px', marginBottom: 24, background: 'var(--success-bg)', border: '1px solid var(--success)' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
+          Combined ESR Income: {fmt(combined)}
+        </span>
+      </div>
 
       {/* Bottom nav */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>

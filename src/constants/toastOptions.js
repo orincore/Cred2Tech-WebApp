@@ -31,4 +31,7 @@ export const TOAST_OPTIONS = {
     style: { ...baseStyle, borderLeftColor: 'var(--primary)' },
     iconTheme: { primary: 'var(--primary)', secondary: 'var(--surface)' },
   },
+  notification: {
+    style: { ...baseStyle, borderLeftColor: 'var(--primary)' },
+  },
 };

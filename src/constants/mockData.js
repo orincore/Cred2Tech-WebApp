@@ -17,13 +17,13 @@ export const MOCK_USERS = [
   },
   {
     id: 2,
-    name: 'DSA Administrator',
+    name: 'Sourcing Partner Administrator',
     email: 'admin@dsacompany.com',
     mobile: '9900002222',
     role: { id: 2, name: 'DSA_ADMIN' },
     role_id: 2,
     dsa_id: 1,
-    dsa: { id: 1, name: 'Test DSA Company', email: 'dsa@company.com' },
+    dsa: { id: 1, name: 'Test Sourcing Partner Company', email: 'dsa@company.com' },
     hierarchy_level: null,
     manager_id: 1,
     hierarchy_path: '/1/2/',
@@ -38,7 +38,7 @@ export const MOCK_USERS = [
     role: { id: 3, name: 'DSA_MEMBER' },
     role_id: 3,
     dsa_id: 1,
-    dsa: { id: 1, name: 'Test DSA Company', email: 'dsa@company.com' },
+    dsa: { id: 1, name: 'Test Sourcing Partner Company', email: 'dsa@company.com' },
     hierarchy_level: 'L1',
     manager_id: 2,
     hierarchy_path: '/1/2/3/',
@@ -53,7 +53,7 @@ export const MOCK_USERS = [
     role: { id: 3, name: 'DSA_MEMBER' },
     role_id: 3,
     dsa_id: 1,
-    dsa: { id: 1, name: 'Test DSA Company', email: 'dsa@company.com' },
+    dsa: { id: 1, name: 'Test Sourcing Partner Company', email: 'dsa@company.com' },
     hierarchy_level: 'L2',
     manager_id: 3,
     hierarchy_path: '/1/2/3/4/',
@@ -63,7 +63,7 @@ export const MOCK_USERS = [
 ];
 
 export const MOCK_DSA_ACCOUNTS = [
-  { id: 1, name: 'Test DSA Company', email: 'dsa@company.com', mobile: '1234567890', status: 'ACTIVE' },
+  { id: 1, name: 'Test Sourcing Partner Company', email: 'dsa@company.com', mobile: '1234567890', status: 'ACTIVE' },
 ];
 
 export const MOCK_TENANTS = [
@@ -76,7 +76,7 @@ export const MOCK_TENANTS = [
   },
   {
     id: 'TEN-002',
-    name: 'Sample DSA Partner',
+    name: 'Sample Sourcing Partner',
     type: 'DSA',
     status: 'ACTIVE',
     created_at: '2025-01-02T00:00:00.000Z',

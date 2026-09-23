@@ -97,3 +97,23 @@ export const listTrustedDevices = () => api.get('/auth/trusted-devices').then((r
 
 export const revokeTrustedDevice = (deviceId) =>
   api.post(`/auth/trusted-devices/${deviceId}/revoke`).then((r) => r.data);
+
+// ---- Active sessions (Profile page) — distinct from trusted devices above:
+// a session is a real login checked on every request, revoking one logs
+// that device out immediately rather than just re-requiring MFA next time.
+export const listSessions = () => api.get('/auth/sessions').then((r) => r.data);
+
+export const revokeSession = (sessionId) =>
+  api.post(`/auth/sessions/${sessionId}/revoke`).then((r) => r.data);
+
+// "Ban Device" — revokes the session AND blocks that device's IP from
+// logging back into this account at all.
+export const banSessionDevice = (sessionId) =>
+  api.post(`/auth/sessions/${sessionId}/ban`).then((r) => r.data);
+
+// ---- Blocked devices (Profile page) — everything Ban Device has blocked,
+// with an Unban option to reverse it.
+export const listBlockedDevices = () => api.get('/auth/blocked-devices').then((r) => r.data);
+
+export const unbanDevice = (blockedIpId) =>
+  api.post(`/auth/blocked-devices/${blockedIpId}/unban`).then((r) => r.data);

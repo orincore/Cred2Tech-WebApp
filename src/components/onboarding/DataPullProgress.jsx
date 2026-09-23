@@ -20,7 +20,8 @@ const DataPullProgress = ({
   score = null,
   onDownload = null,
   downloading = false,
-  disabled = false
+  disabled = false,
+  disabledTitle = 'Live data pulls are disabled for this test/injected case.'
 }) => {
   const getStatusConfig = () => {
     switch (status) {
@@ -111,7 +112,7 @@ const DataPullProgress = ({
             className={`btn btn-sm ${status === 'FAILED' ? 'btn-secondary' : 'btn-primary'}`}
             disabled={disabled || loading || status === 'PROCESSING'}
             onClick={status === 'FAILED' ? onRetry : onStart}
-            title={disabled ? 'Live data pulls are disabled for this test/injected case.' : undefined}
+            title={disabled ? disabledTitle : undefined}
           >
             {loading ? (
               <Loader2 size={14} className="animate-spin" />

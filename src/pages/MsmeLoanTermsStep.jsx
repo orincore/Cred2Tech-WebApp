@@ -98,7 +98,7 @@ export default function MsmeLoanTermsStep({ caseId, lender, onBack }) {
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Apply with {lender.lender_name}</h1>
         <p style={{ color: 'var(--text-tertiary)', marginTop: 4, fontSize: 13 }}>
-          Tell us how much you need - our team will allocate this to a DSA partner who prepares your actual proposal for {lender.lender_name}.
+          Tell us how much you need - our team will allocate this to a Sourcing Partner who prepares your actual proposal for {lender.lender_name}.
         </p>
       </div>
 

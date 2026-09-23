@@ -359,7 +359,7 @@ const EditUserPage = () => {
                 {isSelfEdit && <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 4 }}>You cannot change your own status.</div>}
               </div>
               <div>
-                <label style={labelStyle}>DSA ID</label>
+                <label style={labelStyle}>Sourcing Partner ID</label>
                 <input
                   type="text"
                   name="tenant_id"

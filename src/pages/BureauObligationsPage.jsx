@@ -6,7 +6,7 @@ import { listDocuments, downloadDocument } from '../api/documentHelper';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
 import { useCasePullStatus } from '../hooks/useCasePullStatus';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -15,8 +15,8 @@ const GST_LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATIN
 
 const getCibilColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
-  if (score >= 750) return 'var(--success)';
-  if (score >= 700) return 'var(--warning)';
+  if (score >= 700) return 'var(--success)';
+  if (score >= 650) return 'var(--warning)';
   return 'var(--error)';
 };
 
@@ -24,24 +24,85 @@ const MONTH_MS = 1000 * 60 * 60 * 24 * 30.44; // average month length
 
 // Two independent facts per obligation, not a single status:
 //  - "Availed within X months" — how recently the loan was taken (loan_start_date vs today)
-//  - "O/s < X months" — approximate remaining tenure, estimated as
-//    outstanding_amount / emi_per_month (a flat, interest-free estimate —
-//    there's no stored maturity/tenure field to compute this exactly, this
-//    is the agreed quick-screening heuristic)
+//  - "O/s < X months" — approximate remaining tenure, accurately estimated using
+//    standard amortizing loan math (log formula) based on product ROI defaults.
 // Each side always shows a label when the underlying data exists — including
 // a "12+" fallback once a loan ages/outlasts both thresholds — so a row only
 // goes blank on a side when that side's source data is genuinely missing
 // (no loan_start_date, or EMI unverified/zero so remaining tenure can't be
 // estimated at all).
+const estimateRemainingTenure = (obl) => {
+  const p = obl.outstanding_amount;
+  const emi = obl.emi_per_month;
+  
+  if (!p || p <= 0 || !emi || emi <= 0) return 0;
+  
+  const TERMS_MAP = {
+    "Loan Against Property": 9.50,
+    "Housing Loan": 8.00,
+    "Business Loan": 16.00,
+    "Personal Loan": 13.00,
+    "Auto Loan": 9.00,
+    "Two Wheeler Loan": 9.00,
+    "Commercial Vehicle": 9.00,
+    "Consumer Loan": 8.00,
+    "Agri Loan": 10.00,
+    "Education Loan": 9.00,
+    "Term loan": 9.50
+  };
+  
+  const roi = TERMS_MAP[obl.loan_type];
+  
+  // Fall back to flat division for non-amortizing types or unknown types
+  if (!roi || obl.loan_type === 'Credit Card' || obl.loan_type === 'Overdraft') {
+    return p / emi;
+  }
+  
+  const r = (roi / 100) / 12;
+  
+  // Protect against negative amortization / bad data (EMI < Interest)
+  if (emi <= p * r) {
+    return p / emi;
+  }
+  
+  // Exact remaining months for amortizing loan: n = log(E / (E - P*r)) / log(1 + r)
+  return Math.log(emi / (emi - p * r)) / Math.log(1 + r);
+};
+
+// True once a BUREAU-sourced obligation's EMI has been edited away from the
+// figure the bureau actually reported (original_emi_per_month — null for a
+// MANUAL entry, or for a legacy row from before this field existed and
+// hasn't been re-synced since). Drives showing the "Revert" action in the
+// same slot Delete occupies for a MANUAL row.
+const emiWasEdited = (obl) =>
+  obl.source === 'BUREAU' && obl.original_emi_per_month != null
+  && Number(obl.emi_per_month) !== Number(obl.original_emi_per_month);
+
 const getObligationDetails = (obl) => {
+  const details = [];
+
+  // Flagged ahead of the manual-source early return below so it's never
+  // suppressed regardless of source — a row the backend decided not to
+  // count toward the totals (because the bureau reported the same loan
+  // again elsewhere) must stay visible here, not silently disappear from
+  // the number while still showing in the list with no explanation.
+  if (obl.is_counted === false) {
+    details.push({
+      label: 'Duplicate — not counted',
+      color: 'var(--warning)',
+      bg: 'var(--warning-bg)',
+      title: obl.duplicate_info?.note
+        ? `${obl.duplicate_info.note} Review row #${obl.duplicate_info.paired_with_id} — if this is actually a separate loan, edit this row's EMI to include it.`
+        : undefined
+    });
+  }
+
   // Manual entries never have a loan_start_date — the "Add Loan Not in
   // Bureau" form doesn't collect one — so only the O/s-remaining half of
   // this heuristic could ever fire for them, showing a lopsided badge
   // instead of the "recency + remaining tenure" pair this column means to
   // convey. Show the plain "—" fallback for these instead.
-  if (obl.source === 'MANUAL') return [];
-
-  const details = [];
+  if (obl.source === 'MANUAL') return details;
 
   if (obl.loan_start_date) {
     const monthsSinceStart = (Date.now() - new Date(obl.loan_start_date).getTime()) / MONTH_MS;
@@ -51,7 +112,7 @@ const getObligationDetails = (obl) => {
   }
 
   if (obl.emi_per_month > 0 && obl.outstanding_amount != null) {
-    const monthsRemaining = obl.outstanding_amount / obl.emi_per_month;
+    const monthsRemaining = estimateRemainingTenure(obl);
     if (monthsRemaining <= 6) details.push({ label: 'O/s < 6 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else if (monthsRemaining <= 12) details.push({ label: 'O/s < 12 months', color: 'var(--success)', bg: 'var(--success-bg)' });
     else details.push({ label: 'O/s 12+ months', color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' });
@@ -75,17 +136,28 @@ const LOAN_TYPES = [
   'Two-Wheeler Loan', 'Education Loan', 'Gold Loan', 'Credit Card', 'Other'
 ];
 
+// A Proprietorship's PAN (and a plain "Individual" applicant's) IS the
+// person's own PAN, so a bureau pull against the primary borrower returns
+// that person's real credit history. Every other constitution (Partnership,
+// LLP, Pvt/Public Ltd, HUF, Trust, AOP/BOI, etc.) is a distinct legal entity
+// with no personal credit file of its own — pulling bureau against it is
+// meaningless, so those cases must get their credit picture from a
+// co-applicant (a director/partner/authorized individual) instead. Matched
+// as a substring, case-insensitively, since the PAN/GST vendor's
+// constitution_of_business text isn't a fixed enum on our side (e.g. "Sole
+// Proprietorship" vs "Proprietorship").
+const BUREAU_ELIGIBLE_ENTITY_RE = /individual|proprietor/i;
+
 // Step 5 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost }) {
+export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, onAddCoApplicant }) {
   const isMobile = useIsMobile();
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
   const isMsme = mode === 'MSME_SELF_SERVICE';
 
-  // GST can still be pulling in the background (kicked off on step 2, and
-  // the case-wide GstPullStatusBanner keeps it visible on this step too) —
+  // GST can still be pulling in the background (kicked off on step 2) —
   // generating the ESR against an incomplete GST picture would bake a wrong
   // eligibility number in, so block it until that pull settles one way or
   // the other (finishes or fails).
@@ -111,7 +183,15 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
     newObl.emi_per_month !== '';
 
   const [deletingId, setDeletingId] = useState(null);       // obligation id currently being removed
+  const [revertingId, setRevertingId] = useState(null);      // obligation id currently being reverted to its bureau-reported EMI
   const [applicantNames, setApplicantNames] = useState({}); // { [applicantId]: verifiedName }
+  // Customer.entity_type (the persisted constitution-of-business, e.g.
+  // "Proprietorship" / "Partnership" / "Private Limited Company") — drives
+  // whether the primary borrower even gets a bureau-pull option below. Null
+  // until the case loads, and stays null for older cases that predate this
+  // field — treated as bureau-eligible (fail open) rather than blocking a
+  // case we genuinely don't know the entity type for.
+  const [entityType, setEntityType] = useState(null);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
   // Applicant ids whose most recent manual pull attempt failed — switches
@@ -132,25 +212,29 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       ]);
 
       setData(result);
+      setEntityType(caseData.customer?.entity_type || null);
       // Obligations only return a display name that already falls back to a
       // role label ("Primary Borrower") when Applicant.name is unset — pull
       // the PAN-verified name from the full case record so we can show a
       // real name instead of that placeholder wherever it's available.
       const names = {};
+      const reports = {};
       (caseData.applicants || []).forEach(a => {
         if (a.name || a.pan_verified_name) names[a.id] = a.name || a.pan_verified_name;
       });
       setApplicantNames(names);
 
-      // The bureau vendor (Experian, via Signzy) hands back the actual report
-      // file at pull time, which gets ingested into document storage per
-      // applicant (see experian.service.js) — surface it here rather than
-      // regenerating anything client-side.
+      // Every bureau pull (BEFISC, Signzy CIBIL fallback, or the older
+      // Experian flow) snapshots its report into S3-backed document storage
+      // at pull time — see befiscBureau.service.js / signzyCibil.service.js.
+      // The vendor's own link (BEFISC's webtoken URL especially) is single-use
+      // and expires within hours, so the stored document is the only copy
+      // that stays downloadable/shareable later. listDocuments returns newest
+      // first, so the first match per applicant is always their latest report.
       try {
         const docs = await listDocuments({ caseId });
-        const reports = {};
-        docs.filter(d => d.original_file_name?.startsWith('Experian_Report_'))
-          .forEach(d => { reports[d.applicant_id] = d; });
+        docs.filter(d => d.document_type === 'CIBIL_REPORT_PDF' || d.original_file_name?.startsWith('Experian_Report_'))
+          .forEach(d => { if (!reports[d.applicant_id]) reports[d.applicant_id] = d; });
         setBureauReports(reports);
       } catch (docErr) {
         // Non-fatal — obligations already loaded fine, just no download button.
@@ -186,6 +270,26 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       await refreshObligations();
     } catch (e) {
       toast.error('Failed to update EMI');
+    }
+  };
+
+  // Brings a BUREAU obligation's EMI back to the real bureau-reported figure
+  // (obl.original_emi_per_month — captured once at first sync and never
+  // touched again, see obligations.service.js) after a DSA has edited it away
+  // from that value. Goes through the exact same updateObligation call as a
+  // normal manual edit, so the reverted figure is actually persisted (and
+  // feeds ESR/FOIR like any other edit) rather than just resetting what's
+  // shown on screen.
+  const handleRevertEmi = async (oblId, originalValue) => {
+    setRevertingId(oblId);
+    try {
+      await caseService.updateObligation(caseId, oblId, { emi_per_month: originalValue });
+      toast.success('EMI reverted to the bureau-reported figure');
+      await refreshObligations();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to revert EMI');
+    } finally {
+      setRevertingId(null);
     }
   };
 
@@ -236,9 +340,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       const freshApplicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
       const after = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.obligations?.length || 0;
 
-      // bureau_fetched only flips true once the credit-score call itself
-      // succeeds — that's what decides whether the pull button disappears
-      // (per applicant) or switches to a "Retry" label.
+      // bureau_fetched only flips true once the Experian pull actually
+      // returns a usable score — that's what decides whether the pull
+      // button disappears (per applicant) or switches to a "Retry" label.
       setBureauFailedFor(prev => {
         const next = new Set(prev);
         if (freshApplicant?.bureau_fetched) next.delete(applicantId);
@@ -246,15 +350,13 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         return next;
       });
 
-      // Score and obligations are two independent vendor calls now (see
-      // bureau.controller.js) — a failure in one no longer means the other
-      // never ran, so check specifically what actually failed instead of
-      // guessing at a PAN/DOB problem whenever the count comes back flat.
-      const scoreError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'SCORE');
+      // Score and obligations both come from one Experian pull now (see
+      // bureau.controller.js — the separate CIBIL score check was dropped),
+      // so a single vendor error covers both; check what actually failed
+      // instead of guessing at a PAN/DOB problem whenever the count comes
+      // back flat.
       const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (scoreError) {
-        toast.error(`Bureau score check failed: ${scoreError.error}`, { duration: 8000 });
-      } else if (after > before) {
+      if (after > before) {
         toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
@@ -277,7 +379,16 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
     }
   };
 
+  // Recomputed every render off `data`/`entityType` state (both cheap,
+  // already-loaded values) rather than memoized — this page re-renders on
+  // every obligation edit anyway, and a stale flag here would either wrongly
+  // block a case that just added its co-applicant or wrongly let one through.
+  const bureauBlockedForPrimary = !!entityType && !BUREAU_ELIGIBLE_ENTITY_RE.test(entityType);
+  const hasCoApplicant = (data?.grouped || []).some(g => g.applicant.type !== 'PRIMARY');
+  const mustAddCoApplicant = bureauBlockedForPrimary && !hasCoApplicant;
+
   const handleGenerateESR = async () => {
+    if (mustAddCoApplicant) return toast.error(`${entityType} entities have no personal credit history of their own — add a co-applicant before generating the Eligibility Summary Report.`, { duration: 6000 });
     if (gstPending) return toast.error('GST data is still being pulled — please wait for it to finish before generating the ESR.');
     try {
       setGenerating(true);
@@ -293,7 +404,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleDownloadReport = async (applicantId) => {
     const doc = bureauReports[applicantId];
-    if (!doc) return;
+    if (!doc?.id) return;
+
+    // Always the S3-stored copy — BEFISC's webtoken URL and any raw vendor
+    // pdfUrl are single-use/short-lived, so this document is the only thing
+    // that stays downloadable (or shareable) after the pull itself.
     setDownloadingFor(applicantId);
     try {
       await downloadDocument(doc.id, doc.original_file_name);
@@ -379,6 +494,25 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         <span><strong>Review all EMIs carefully.</strong> Obligations directly affect eligibility. Click the EMI field to edit if EMI amounts are different / Loan is closed. Use <strong>+ Add Loan</strong> to include any Loans not shown below.</span>
       </div>
 
+      {/* Co-applicant required notice — only for entities with no personal
+          credit history of their own (see BUREAU_ELIGIBLE_ENTITY_RE). Shown
+          until at least one co-applicant exists on the case. */}
+      {mustAddCoApplicant && (
+        <div style={{ padding: '14px 18px', background: 'var(--error-bg)', border: '1px solid var(--error)', borderRadius: 0, marginBottom: 20, fontSize: 13, color: 'var(--text-primary)', display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <AlertTriangle size={16} color="var(--error)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>Co-applicant required.</strong> {entityType} is a business entity with no personal credit history of its own, so bureau/credit obligations can only be pulled for a co-applicant. Add at least one co-applicant to continue.
+            </span>
+          </div>
+          {onAddCoApplicant && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={onAddCoApplicant} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              + Add Co-Applicant
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Per-applicant cards */}
       {grouped.map(({ applicant, obligations: allObligations, total_emi, active_count }, idx) => {
         const obligations = allObligations.filter(o => Number(o.outstanding_amount) > 0);
@@ -397,7 +531,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 self-service journeys (same component, rendered inline by
                 AddCustomerWizardPage for each). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-              {bureauReports[applicant.id] && (
+              {bureauReports[applicant.id]?.id && (
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleDownloadReport(applicant.id)}
@@ -409,25 +543,35 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                   {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
                 </button>
               )}
-              {/* No auto-fetch on mount anymore — this is the only trigger for
-                  pulling bureau score + obligations. It disappears entirely
-                  once the pull succeeds (bureau_fetched flips true); a failed
-                  attempt keeps it visible with a "Retry" label instead. */}
-              {!applicant.bureau_fetched && (
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handlePullBureau(applicant.id)}
-                  disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
-                  title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
-                  {retryingFor === applicant.id
-                    ? 'Pulling…'
-                    : isMsme
-                      ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
-                      : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
-                </button>
+              {/* Primary borrower of a non-individual/non-proprietor entity has
+                  no personal PAN to pull a credit file against — no button,
+                  no "not fetched" dead-end, just the reason and where to fix
+                  it (the co-applicant-required notice above). */}
+              {applicant.type === 'PRIMARY' && bureauBlockedForPrimary ? (
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 220, textAlign: 'right', lineHeight: 1.4 }}>
+                  Not applicable for {entityType} — pull bureau for a co-applicant instead.
+                </span>
+              ) : (
+                // No auto-fetch on mount anymore — this is the only trigger for
+                // pulling bureau score + obligations. It disappears entirely
+                // once the pull succeeds (bureau_fetched flips true); a failed
+                // attempt keeps it visible with a "Retry" label instead.
+                !applicant.bureau_fetched && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handlePullBureau(applicant.id)}
+                    disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
+                    title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                    {retryingFor === applicant.id
+                      ? 'Pulling…'
+                      : isMsme
+                        ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
+                        : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
+                  </button>
+                )
               )}
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: getCibilColor(applicant.cibil_score) }}>{applicant.cibil_score || '—'}</div>
@@ -470,7 +614,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>Obligation Details</span>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                         {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
-                          <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                          <span key={d.label} title={d.title} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
                         )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                       </div>
                     </div>
@@ -487,17 +631,38 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
                       </div>
                     </div>
+                    {/* Delete is manual-entry-only — an API-fetched (BUREAU)
+                        obligation would just come right back on the next
+                        bureau sync, so deleting it here would be silently
+                        undone rather than actually removing it. A BUREAU row
+                        gets a Revert action in this same slot instead, once
+                        its EMI has actually been edited away from the
+                        bureau-reported figure. */}
+                    {obl.source === 'MANUAL' ? (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                       <button
                         onClick={() => handleDeleteObligation(obl.id)}
                         disabled={deletingId === obl.id}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
-                        title="Remove obligation"
+                        title="Delete obligation"
                       >
                         <Trash2 size={14} />
-                        {deletingId === obl.id ? 'Removing…' : 'Remove'}
+                        {deletingId === obl.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </div>
+                    ) : emiWasEdited(obl) && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <button
+                        onClick={() => handleRevertEmi(obl.id, obl.original_emi_per_month)}
+                        disabled={revertingId === obl.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--info)', cursor: 'pointer', padding: 4, fontSize: 12, fontWeight: 600 }}
+                        title={`Revert to the bureau-reported EMI (${fmt(obl.original_emi_per_month)}/mo)`}
+                      >
+                        <RotateCcw size={14} />
+                        {revertingId === obl.id ? 'Reverting…' : 'Revert'}
+                      </button>
+                    </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -521,7 +686,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                           {getObligationDetails(obl).length > 0 ? getObligationDetails(obl).map(d => (
-                            <span key={d.label} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
+                            <span key={d.label} title={d.title} style={{ background: d.bg, color: d.color, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{d.label}</span>
                           )) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                         </div>
                       </td>
@@ -550,14 +715,30 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <button
-                          onClick={() => handleDeleteObligation(obl.id)}
-                          disabled={deletingId === obl.id}
-                          style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }}
-                          title="Remove obligation"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {/* Manual-entry-only — see the mobile view's own
+                            comment on why an API-fetched (BUREAU) row can't
+                            be deleted here. It gets a Revert action in this
+                            same slot instead, once its EMI has actually been
+                            edited away from the bureau-reported figure. */}
+                        {obl.source === 'MANUAL' ? (
+                          <button
+                            onClick={() => handleDeleteObligation(obl.id)}
+                            disabled={deletingId === obl.id}
+                            style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: 4 }}
+                            title="Remove obligation"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        ) : emiWasEdited(obl) && (
+                          <button
+                            onClick={() => handleRevertEmi(obl.id, obl.original_emi_per_month)}
+                            disabled={revertingId === obl.id}
+                            style={{ background: 'none', border: 'none', color: 'var(--info)', cursor: 'pointer', padding: 4 }}
+                            title={`Revert to the bureau-reported EMI (${fmt(obl.original_emi_per_month)}/mo)`}
+                          >
+                            <RotateCcw size={15} className={revertingId === obl.id ? 'spin' : ''} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -570,7 +751,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
               <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
                 {applicant.bureau_fetched
                   ? 'No bureau obligations found for this applicant.'
-                  : 'Bureau data not pulled yet for this applicant — use the button above.'}
+                  : applicant.type === 'PRIMARY' && bureauBlockedForPrimary
+                    ? `Bureau pull isn't available for ${entityType} — no personal credit file exists for this entity.`
+                    : 'Bureau data not pulled yet for this applicant — use the button above.'}
               </span>
             </div>
           )}
@@ -655,14 +838,22 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
           <button
             className="btn btn-primary btn-lg"
             onClick={handleGenerateESR}
-            disabled={generating || gstPending}
-            title={gstPending ? 'GST data is still being pulled — this becomes available once that finishes.' : undefined}
+            disabled={generating || gstPending || mustAddCoApplicant}
+            title={
+              mustAddCoApplicant ? `Add a co-applicant — ${entityType} has no personal credit history of its own.`
+                : gstPending ? 'GST data is still being pulled — this becomes available once that finishes.'
+                : undefined
+            }
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
             {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
           </button>
-          {gstPending && (
+          {mustAddCoApplicant ? (
+            <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <AlertTriangle size={12} /> Add a co-applicant to continue
+            </span>
+          ) : gstPending && (
             <span style={{ fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <AlertTriangle size={12} /> Waiting for GST pull to finish
             </span>

@@ -126,7 +126,7 @@ function SummaryRow({ label, data }) {
 
 function EmployeeCard({ employee, ledgers, onUpdate, isAdmin }) {
   const [expanded, setExpanded] = useState(true);
-  const totalVolume = ledgers.reduce((s, l) => s + parseFloat(l.base_amount || 0), 0);
+  const totalVolume = ledgers.reduce((s, l) => s + parseFloat(l.true_disbursed_amount || 0), 0);
   const totalPayout = ledgers.reduce((s, l) => s + parseFloat(l.calculated_incentive || 0), 0);
   const hasPending = ledgers.some(l => l.status === 'CALCULATED');
 
@@ -171,7 +171,7 @@ function EmployeeCard({ employee, ledgers, onUpdate, isAdmin }) {
                     <td data-label="Case ID" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{caseNum}</td>
                     <td data-label="Customer">{l.customer_name || '—'}</td>
                     <td data-label="Product">{l.product_type || l.case_entity?.product_type || '—'}</td>
-                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.base_amount)}</td>
+                    <td data-label="Disb. Amt" style={{ textAlign: 'right' }}>{fmt(l.true_disbursed_amount)}</td>
                     <td data-label="Payout" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>{fmt(payout)}</td>
                     <td data-label="Status" style={{ textAlign: 'center' }}><StatusBadge status={l.status} /></td>
                     {isAdmin && (
@@ -447,8 +447,6 @@ export default function SalesIncentivePage() {
                   <select value={ruleForm.calculation_base} onChange={e => setRuleForm({ ...ruleForm, calculation_base: e.target.value })} className="form-control">
                     <option value="DISBURSED_AMOUNT">Disbursed Amount</option>
                     <option value="LENDER_COMMISSION">Lender Commission</option>
-                    <option value="DSA_NET_COMMISSION">DSA Net Commission</option>
-                    <option value="PROCESSING_FEE">Processing Fee</option>
                     <option value="FIXED_PER_CASE">Fixed Per Case</option>
                   </select>
                 </div>

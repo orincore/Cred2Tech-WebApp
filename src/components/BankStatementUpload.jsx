@@ -3,9 +3,36 @@ import { toast } from 'react-hot-toast';
 import { AlertCircle, UploadCloud, Plus, X, Download, Trash2 } from 'lucide-react';
 import PullStatusTracker from './ui/PullStatusTracker';
 import Skeleton from './ui/Skeleton';
+import FileLimitModal from './ui/FileLimitModal';
 import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
+
+// Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
+// download-report entitlement gap (confirmed broken on both preprod — bad
+// credentials — and production — 403 not entitled — 2026-09-02). Never shown
+// in a real production build; exists so the raw provider error is visible
+// on-screen for a Signzy support escalation instead of only in server logs.
+// Same pattern as EsrPage.jsx's IS_DEV_BUILD — import.meta.env.DEV alone
+// misses the deployed dev server (still a production Vite build).
+const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
+
+// Rounded off for the preview grid — these are summary figures, not inputs
+// (ESR pulls the unrounded values directly from the backend), so the
+// paise-level decimals just added noise to a quick-glance amount.
+const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString('en-IN')}` : '—';
+
+// Client-side-only cap, tighter than Signzy's own per-file limit on the
+// bank-analyze API (20MB) and the platform's pipe (50MB — nginx
+// client_max_body_size, app.js's JSON limit) — enforced here so an oversized
+// file is rejected instantly with clear next-step guidance instead of
+// round-tripping to the server first. Deliberately set below what the
+// backend/vendor would actually accept; this is a product choice, not a
+// reflection of either of their real caps.
+const MAX_STATEMENT_FILE_MB = 5;
+const formatFileSize = (bytes) => bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
@@ -16,6 +43,23 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
+
+    // Escape hatch for the `existingStatus === undefined` skeleton below: the
+    // comment on that guard assumes the parent always hands this component a
+    // resolved prop (never undefined) by the time it mounts, but a case
+    // reached by switching tabs client-side (ITR -> Bank, no full page load)
+    // never gets a second chance to re-derive it if that assumption is ever
+    // wrong for any reason — there's nothing else that flips it away from
+    // undefined, so the skeleton would otherwise sit there until the user
+    // manually refreshes the page. This caps that wait instead of trusting
+    // it never happens.
+    const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
+    useEffect(() => {
+        if (existingStatus !== undefined) return;
+        const timer = setTimeout(() => setSkeletonTimedOut(true), 4000);
+        return () => clearTimeout(timer);
+    }, [existingStatus]);
+
     // Live server-pushed status for this case (see hooks/useCasePullStatus).
     // The server now owns the whole "analysing → generating report files →
     // ready" loop, including the retry that used to run here as AWAITING_LINKS,
@@ -36,6 +80,23 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         excel: existingStatus?.report_excel_url || null,
         json: existingStatus?.report_json_url || null,
     });
+    // Preview figures — same idea as GstAnalyticsForm's turnover_preview, but
+    // sourced from `existingStatus` only (case.service.js#getCaseById), not
+    // the realtime socket snapshot: unlike GST's turnover (backed by a
+    // pre-parsed FY summary table, cheap to look up on every tick),
+    // avg_monthly_credit/total_credits only exist by parsing the raw vendor
+    // JSON, which casePullSnapshot.service.js deliberately never selects on
+    // every socket tick (see its own BANK_SELECT comment on why). These are
+    // static once a pull completes, so a snapshot-per-poll isn't needed —
+    // one read at page load is enough.
+    const [localPreview, setLocalPreview] = useState({
+        avg_bank_balance_latest_year: existingStatus?.avg_bank_balance_latest_year ?? null,
+        avg_bank_balance_previous_year: existingStatus?.avg_bank_balance_previous_year ?? null,
+        financial_year_latest: existingStatus?.financial_year_latest ?? null,
+        financial_year_previous: existingStatus?.financial_year_previous ?? null,
+        avg_monthly_credit: existingStatus?.avg_monthly_credit ?? null,
+        total_credits: existingStatus?.total_credits ?? null,
+    });
 
     const status = livePull?.status || localStatus;
     const reportId = livePull?.report_id || localReportId;
@@ -45,6 +106,19 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     const sourceUrls = livePull
         ? { excel: livePull.report_excel_url || null, json: livePull.report_json_url || null }
         : localSourceUrls;
+    // Live balance figures on top of localPreview (2026-09-11) — previously
+    // the FY-balance preview only ever came from `existingStatus`, read once
+    // at mount, so it sat blank until a full page reload re-fetched the
+    // case: the pull would finish, `status` would flip to COMPLETED live via
+    // the socket (correctly showing "Bank statement analysed"/Excel/Delete),
+    // but the balance grid right below it stayed hidden because
+    // `localPreview` itself was never touched again. The server now pushes
+    // these same four fields live (casePullSnapshot.service.js's
+    // `balance_preview`, cheap plain columns — see its own comment);
+    // avg_monthly_credit/total_credits aren't part of that push (they need
+    // the full raw vendor JSON parsed, not a cheap column read), so those
+    // two still only ever come from localPreview/existingStatus.
+    const preview = { ...localPreview, ...(livePull?.balance_preview || {}) };
     const phase = livePull?.phase
         || (localStatus === 'COMPLETED' ? 'COMPLETED'
             : localStatus === 'FAILED' ? 'FAILED'
@@ -71,11 +145,26 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             excel: existingStatus.report_excel_url || null,
             json: existingStatus.report_json_url || null,
         });
+        setLocalPreview({
+            avg_bank_balance_latest_year: existingStatus.avg_bank_balance_latest_year ?? null,
+            avg_bank_balance_previous_year: existingStatus.avg_bank_balance_previous_year ?? null,
+            financial_year_latest: existingStatus.financial_year_latest ?? null,
+            financial_year_previous: existingStatus.financial_year_previous ?? null,
+            avg_monthly_credit: existingStatus.avg_monthly_credit ?? null,
+            total_credits: existingStatus.total_credits ?? null,
+        });
     }, [existingStatus, localReportId]);
 
     usePhaseTransition(livePull ? phase : null, {
         COMPLETED: () => toast.success('Bank analysis completed.'),
-        FAILED: () => toast.error('Bank statement analysis failed at provider'),
+        // Prefer the real vendor reason (e.g. "File exceeds max limit of 80
+        // pages allowed in Custom Plan") when the server has one — it's the
+        // difference between a dead end and the user knowing exactly what to
+        // fix and re-upload.
+        FAILED: () => toast.error(
+            livePull?.provider_message ? `Bank statement analysis failed: ${livePull.provider_message}` : 'Bank statement analysis failed at provider',
+            { duration: 8000 }
+        ),
     });
 
     const notifiedRef = React.useRef(false);
@@ -87,12 +176,23 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     }, [phase]);
 
     // Store physical file data
-    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '' }]);
+    const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const [loading, setLoading] = useState(false);
+    // Index of the file row currently being validated server-side — between
+    // picking a file and it either sticking or getting rejected.
+    const [validatingIndex, setValidatingIndex] = useState(null);
+    // A rejected file (over the 5MB per-file limit) gets a blocking popup
+    // with the fix, not a toast — there's no room in a toast to actually
+    // walk someone through splitting and re-adding the statement.
+    const [fileLimitModal, setFileLimitModal] = useState({ open: false, fileName: '', reasonDetail: '' });
 
     // UI state
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    // Dev-only — raw Signzy error from the last failed retrieve-work-order/
+    // download-report call, kept on screen (not just a transient toast) for
+    // a Signzy support escalation. See IS_DEV_BUILD above.
+    const [providerError, setProviderError] = useState(null);
 
     const handleFileChange = (index, field, value) => {
         const newFiles = [...files];
@@ -104,18 +204,77 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         const file = e.target.files[0];
         if (!file) return;
 
+        // Compare against the size rounded to 1 decimal MB — the same
+        // rounding formatFileSize uses for the rejection message below.
+        // Without this, a file of e.g. 5,250,000 bytes fails a raw-byte
+        // check against MAX_STATEMENT_FILE_BYTES (5,242,880) yet its own
+        // rejection toast, built from that same rounded display value,
+        // reads "is 5.0 MB — over the 5MB-per-file limit" — a
+        // self-contradiction that looks exactly like "it's under 5MB but
+        // still errors". Rounding first keeps the check and the message
+        // it produces in agreement at the boundary.
+        const roundedFileMB = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+        if (roundedFileMB > MAX_STATEMENT_FILE_MB) {
+            // Reject before ever reading the file — no point base64-encoding
+            // a file we already know Signzy will refuse. Clears whatever was
+            // in this slot before (so a stale "Attached" checkmark from a
+            // prior valid selection can't linger) and resets the input so
+            // re-picking the SAME oversized file fires onChange again.
+            e.target.value = '';
+            const newFiles = [...files];
+            newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
+            setFiles(newFiles);
+            setFileLimitModal({
+                open: true,
+                fileName: file.name,
+                reasonDetail: `it's ${formatFileSize(file.size)}, over the ${MAX_STATEMENT_FILE_MB}MB-per-file limit`,
+            });
+            return;
+        }
+
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = () => {
+        reader.onload = async () => {
             const base64Data = reader.result.split(',')[1];
-            const newFiles = [...files];
-            newFiles[index].fileName = file.name;
-            newFiles[index].fileBase64 = base64Data;
-            setFiles(newFiles);
+
+            // Server-side validation (file size; page count for PDFs is
+            // returned for display only, no limit enforced on it) — runs
+            // after the free client-side size check above, before this file
+            // is allowed to stick, so a rejected file gets the same instant,
+            // actionable rejection as an oversized one instead of only
+            // failing minutes later once actually submitted to Signzy.
+            setValidatingIndex(index);
+            try {
+                const res = await api.post('/external/bank/validate-file', {
+                    fileBase64: base64Data,
+                    fileName: file.name,
+                    password: files[index]?.password || undefined,
+                });
+                if (!res.data.valid) {
+                    e.target.value = '';
+                    const newFiles = [...files];
+                    newFiles[index] = { ...newFiles[index], fileName: '', fileBase64: '', fileSize: null, pages: null };
+                    setFiles(newFiles);
+                    setFileLimitModal({ open: true, fileName: file.name, reasonDetail: res.data.detail || res.data.reason });
+                    return;
+                }
+                const newFiles = [...files];
+                newFiles[index] = { ...newFiles[index], fileName: file.name, fileBase64: base64Data, fileSize: file.size, pages: res.data.pages ?? null };
+                setFiles(newFiles);
+            } catch (err) {
+                // The check itself failing (network blip, etc.) shouldn't
+                // block a legitimate upload — Signzy remains the final
+                // authority on whether the file is usable either way.
+                const newFiles = [...files];
+                newFiles[index] = { ...newFiles[index], fileName: file.name, fileBase64: base64Data, fileSize: file.size, pages: null };
+                setFiles(newFiles);
+            } finally {
+                setValidatingIndex(null);
+            }
         };
     };
 
-    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '' }]);
+    const addFile = () => setFiles([...files, { fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const removeFile = (index) => setFiles(files.filter((_, i) => i !== index));
 
     const handleAnalyze = async () => {
@@ -124,6 +283,9 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             return toast.error("Please select a physical PDF or Excel file to upload.");
         }
 
+        // No combined-size cap here by design — each file is already checked
+        // against MAX_STATEMENT_FILE_MB above, and that per-file limit alone
+        // is what governs regardless of how many files are added together.
         setLoading(true);
         try {
             const payload = {
@@ -143,7 +305,33 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             // Collapse the wait for the next server tick.
             refresh();
         } catch (error) {
-            toast.error(error.response?.data?.error || error.message);
+            // The per-file pre-check above makes a real 413 unlikely from a
+            // single file, but with no combined-size cap, several files
+            // added together can still hit the platform's own pipe limit
+            // (nginx client_max_body_size / app.js's JSON limit) — surface
+            // something actionable instead of axios's raw "Network Error"
+            // (which is what a 413/oversized-body rejection looks like from
+            // here — no JSON body to read a message out of).
+            const providerMessage = error.response?.data?.error || '';
+            if (error.response?.status === 413 || (!error.response && /network/i.test(error.message || ''))) {
+                toast.error(
+                    'The upload was rejected as too large. Split the statement into smaller parts '
+                    + `(under ${MAX_STATEMENT_FILE_MB}MB each) and add each part separately.`,
+                    { duration: 8000 }
+                );
+            } else if (/name match failed/i.test(providerMessage)) {
+                // Signzy validates that every file in one submission belongs
+                // to the same account holder before it'll produce a single
+                // consolidated report — a mismatch here means two different
+                // people's statements were added as parts of the same pull.
+                toast.error(
+                    `${providerMessage} — every file added to one submission must be a statement for the same account holder. `
+                    + `Remove the mismatched file and submit it as a separate pull instead.`,
+                    { duration: 9000 }
+                );
+            } else {
+                toast.error(providerMessage || error.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -169,6 +357,36 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
         }
     };
 
+    // Manual escape hatch for the ANALYZING phase itself (2026-09-11) —
+    // distinct from fetchDownloads below, which only covers the later
+    // COMPLETED-but-files-not-ready gap. Bank/GST no longer have any active
+    // background poll (see socket supervisor notes); a request only ever
+    // advances via Signzy's own webhook callback. If that single callback
+    // is ever missed or interrupted server-side (a deploy restarting the
+    // process mid-request, a dropped connection, etc.) a request can sit in
+    // ANALYZING indefinitely with nothing to nudge it — this button calls
+    // the same status-reconciliation endpoint the (currently disabled)
+    // background worker would, so a stuck pull always has a one-click way
+    // out instead of requiring a manual DB/ops fix.
+    const [syncing, setSyncing] = useState(false);
+    const syncNow = async () => {
+        if (!reportId) return;
+        setSyncing(true);
+        try {
+            const res = await api.post('/external/bank/sync', { report_id: reportId });
+            const data = res.data;
+            if (data.status) setLocalStatus(data.status);
+            if (data.status === 'COMPLETED') toast.success('Bank analysis completed.');
+            else if (data.status === 'FAILED') toast.error('Bank statement analysis failed at the provider.');
+            else toast('Still processing at the provider — try again shortly.');
+            refresh();
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Could not check status — try again shortly.');
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     // Manual escape hatch only. The provider can take minutes to finish
     // generating the report files after analysis itself completes; the server's
     // per-case supervisor now retries that automatically (and keeps retrying
@@ -184,12 +402,20 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 return;
             }
 
+            setProviderError(null);
             setLocalDocumentIds(data.documentIds || { excel: null, json: null });
             setLocalSourceUrls(data.sourceUrls || { excel: null, json: null });
             setLocalStatus('COMPLETED');
             refresh();
         } catch (error) {
             toast.error(error.response?.data?.error || error.message);
+            if (IS_DEV_BUILD) {
+                setProviderError({
+                    endpoint: 'POST /external/bank/download → Signzy statementanalysis/retrieve-work-order + download-report',
+                    status: error.response?.status,
+                    message: error.response?.data?.error || error.message,
+                });
+            }
         }
     };
 
@@ -200,8 +426,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // very first render in the normal case, no artificial delay. Guards the
     // rare tick where it genuinely hasn't arrived yet, showing a skeleton
     // instead of a default "Upload PDF" state that would otherwise flash
-    // before snapping to the real one.
-    if (existingStatus === undefined) {
+    // before snapping to the real one. Falls through to the real UI (as
+    // "not started") after skeletonTimedOut regardless — see that state's
+    // own comment.
+    if (existingStatus === undefined && !skeletonTimedOut) {
         return (
             <div style={{ border: '1px solid var(--border)', borderRadius: 0, overflow: 'hidden', padding: isMobile ? '14px 16px' : '16px 24px' }}>
                 <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
@@ -212,6 +440,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     // RENDER HORIZONTAL ROW
     return (
+        <>
         <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--warning)', borderRadius: 0, overflow: 'hidden' }}>
             {/* Summary Row */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: isMobile ? 10 : 16, alignItems: 'center', padding: isMobile ? '14px 16px' : '16px 24px', backgroundColor: 'var(--bg-base)' }}>
@@ -261,7 +490,29 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                                 <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete'}
                             </button>
                         </div>
-                    ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? null : (
+                    ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            {/* Usually redundant with the live push from the webhook —
+                                this only matters when that single callback never
+                                arrives/completes. See syncNow's own comment above. */}
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={syncNow} disabled={syncing}>
+                                {syncing ? 'Checking…' : 'Check status'}
+                            </button>
+                            {/* Last resort when "Check status" itself can't recover
+                                it (e.g. the provider-side retrieve-work-order call
+                                failing independently of our own bug) — resets this
+                                request back to INITIATED so the panel returns to
+                                the normal upload flow. Re-uses the same
+                                handleDelete the COMPLETED state already exposes;
+                                nothing bank-specific is lost by resetting since a
+                                stuck ANALYZING request never had any data ingested
+                                in the first place. */}
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={handleDelete} disabled={deleting}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Trash2 size={14} /> {deleting ? 'Resetting…' : 'Reset & re-upload'}
+                            </button>
+                        </div>
+                    ) : (
                         <button
                             type="button"
                             className="btn btn-primary btn-sm"
@@ -275,12 +526,53 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 </div>
             </div>
 
+            {/* Turnover-preview-style summary — same idea and layout as
+                GstAnalyticsForm's own preview grid, so GST and Bank read as
+                one consistent design instead of GST alone having a preview.
+                `preview` prefers the live socket push (see its own comment
+                above) so this appears the instant the pull completes, not
+                only after a page reload. */}
+            {status === 'COMPLETED' && (preview.avg_bank_balance_latest_year != null || preview.total_credits != null) && (
+                <div style={{
+                    display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14,
+                    padding: isMobile ? '14px 16px' : '16px 24px', borderTop: '1px solid var(--border)',
+                }}>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Daily Average Balance</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(preview.avg_bank_balance_latest_year)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>{preview.financial_year_latest || '—'}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last 12 Months Bank Credit</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>{formatInr(preview.total_credits)}</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Dev-only diagnostic — Signzy retrieve-work-order/download-report
+                entitlement gap, kept visible (not just a toast) for a vendor
+                escalation. Never renders in a production build. */}
+            {IS_DEV_BUILD && providerError && (
+                <div style={{ margin: '0 16px 16px', padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 12, fontFamily: 'monospace', border: '1px dashed var(--error)' }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                        [DEV ONLY] Signzy provider call failed (manual "Check now"){providerError.status ? ` — HTTP ${providerError.status}` : ''}
+                    </div>
+                    <div>{providerError.endpoint}</div>
+                    <div style={{ marginTop: 4 }}>{providerError.message}</div>
+                </div>
+            )}
+
             {/* Expando File UI (Only visible when isUploadOpen is true) */}
             {isUploadOpen && (
                 <div style={{ padding: '24px', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <UploadCloud size={18} color="var(--text-tertiary)" />
                         <span style={{ fontWeight: 600, fontSize: 14 }}>Upload Statements Securely</span>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+                        Each file must be under <span style={{ color: 'var(--warning)' }}>{MAX_STATEMENT_FILE_MB}MB</span>. If your statement is larger, split it
+                        into smaller parts (e.g. one file per half-year) and add each part below with
+                        "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
 
                     {!isMsme && walletBalance < analyzeCost && (
@@ -294,15 +586,28 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             <div key={index} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--bg-base)', padding: 16, borderRadius: 0, border: '1px solid var(--border)' }}>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Select Bank Statement</label>
+                                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                            Select Bank Statement <span style={{ fontWeight: 700, color: 'var(--warning)' }}>(Max {MAX_STATEMENT_FILE_MB}MB)</span>
+                                        </label>
                                         <input
                                             type="file"
                                             accept=".pdf,.xlsx,.xls"
                                             className="form-control"
+                                            title={`Max file size: ${MAX_STATEMENT_FILE_MB}MB`}
+                                            disabled={validatingIndex === index}
                                             onChange={e => handleFileUpload(index, e)}
                                             style={{ backgroundColor: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', padding: '10px' }}
                                         />
-                                        {file.fileName && <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>✓ Attached: {file.fileName}</div>}
+                                        {validatingIndex === index && (
+                                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                                                Checking file size and page count…
+                                            </div>
+                                        )}
+                                        {file.fileName && (
+                                            <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 4 }}>
+                                                ✓ Attached: {file.fileName}{file.fileSize != null ? ` (${formatFileSize(file.fileSize)}${file.pages != null ? `, ${file.pages} pages` : ''})` : ''}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <input
@@ -328,14 +633,21 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </button>
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
         </div>
+        <FileLimitModal
+            isOpen={fileLimitModal.open}
+            fileName={fileLimitModal.fileName}
+            reasonDetail={fileLimitModal.reasonDetail}
+            onClose={() => setFileLimitModal({ open: false, fileName: '', reasonDetail: '' })}
+        />
+        </>
     );
 };
 

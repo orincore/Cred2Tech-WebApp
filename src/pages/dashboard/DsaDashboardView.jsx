@@ -112,7 +112,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
+      <div data-tour="dsa-kpi-cards" style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
         {kpis.map((k, i) => {
           const d = summary?.[k.key];
           return (
@@ -138,6 +138,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : `1fr ${isTablet ? '280px' : '320px'}`, gap: 20, alignItems: 'start' }}>
+        <div data-tour="dsa-cases-table">
         <SectionCard
           title="Cases"
           subtitle="Your pipeline this period"
@@ -195,8 +196,9 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
             </div>
           )}
         </SectionCard>
+        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div data-tour="dsa-quick-actions" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <SectionCard title="Quick Actions" delay={0.15}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 16 }}>
               <QuickAction icon={Plus} label="Add New Customer" desc="Start a new case" color="var(--success)" onClick={() => setIsTypeModalOpen(true)} delay={0.05} />
@@ -208,6 +210,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
         </div>
       </div>
 
+      <div data-tour="dsa-stage-summary">
       <SectionCard title="Stage Summary" subtitle="Cases by pipeline stage, this period" delay={0.2}>
         {loadingSummary ? (
           <TableSkeleton rows={4} columns={1} />
@@ -219,6 +222,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
           </div>
         )}
       </SectionCard>
+      </div>
 
       <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />
     </div>

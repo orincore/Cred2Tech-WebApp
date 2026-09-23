@@ -1,15 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
-import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Upload, Trash2 } from 'lucide-react';
+import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Trash2 } from 'lucide-react';
+
+const MONO_FONT = "'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace";
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// The extraction vendor returns month as a zero-padded number ("08"), not a
+// name — render it the same way the manual-entry dropdown's options read
+// ("August") instead of surfacing the raw numeric string.
+const formatSlipPeriod = (month, year) => {
+  if (!month || !year) return null;
+  const asNumber = parseInt(month, 10);
+  const monthName = Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= 12
+    ? MONTH_NAMES[asNumber - 1]
+    : month;
+  return `${monthName} ${year}`;
+};
+
+// A single extracted-field readout inside a completed slip's preview panel —
+// lets the DSA actually verify the figures against the physical payslip
+// instead of trusting the one net-salary number in the row header.
+const MiniStat = ({ label, value }) => (
+  <div style={{ minWidth: 92 }}>
+    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
+      {label}
+    </div>
+    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFamily: MONO_FONT }}>
+      {value}
+    </div>
+  </div>
+);
 
 const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 640);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
   const [months, setMonths] = useState([
     { id: 'm1', label: 'Month 1', file: null, ocrStatus: 'PENDING', result: null, isUploaded: false, documentId: null, fileName: null },
     { id: 'm2', label: 'Month 2', file: null, ocrStatus: 'PENDING', result: null, isUploaded: false, documentId: null, fileName: null },
@@ -17,7 +41,6 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   ]);
   const [loadingMonth, setLoadingMonth] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [runningAllOcr, setRunningAllOcr] = useState(false);
 
   const fileInputRef = useRef(null);
   const [currentUploadMonth, setCurrentUploadMonth] = useState(null);
@@ -60,10 +83,20 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         // same "duplicate period" rejection, which isn't useful to
         // redisplay as if it were a real, distinct slip — a fresh upload is
         // the right recovery path for those.
+        // The API orders these by extracted year/month DESC (most recent pay
+        // period first, see getSalarySummary), which has nothing to do with
+        // which slot a slip was uploaded into — a July payslip uploaded
+        // first and a March one uploaded second would otherwise swap
+        // positions here the moment the March one's extraction completed.
+        // document_id is assigned in upload order, so re-sorting on it keeps
+        // slot 1/2/3 stable regardless of which slip finished processing
+        // first or which calendar month it turned out to cover.
         const restorable = [
           ...completed,
           ...all.filter(r => r.ocr_status === 'PENDING' || r.ocr_status === 'PROCESSING'),
-        ].slice(0, 3);
+        ]
+          .sort((a, b) => a.document_id - b.document_id)
+          .slice(0, 3);
 
         const newMonths = [...months];
         restorable.forEach((r, idx) => {
@@ -149,10 +182,10 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
           if (status === 'COMPLETED') {
             clearInterval(interval);
             if (monthIndex === -1) {
-              toast.success('Batch OCR Extracted successfully!');
+              toast.success('All uploaded slips extracted successfully!');
               setRunningAllOcr(false);
             } else {
-              toast.success(`OCR Extracted successfully for ${months[monthIndex].label}`);
+              toast.success(`Data extracted successfully for ${months[monthIndex].label}`);
               setMonths(prev => {
                 const newM = [...prev];
                 newM[monthIndex].ocrStatus = 'COMPLETED';
@@ -165,10 +198,10 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
           } else if (status === 'FAILED') {
             clearInterval(interval);
             if (monthIndex === -1) {
-              toast.error(res.data.data.error_message || 'Batch OCR processing failed.');
+              toast.error(res.data.data.error_message || 'Extraction failed for the uploaded slips.');
               setRunningAllOcr(false);
             } else {
-              toast.error(res.data.data.error_message || 'Vendor OCR processing failed.');
+              toast.error(res.data.data.error_message || 'Extraction failed. Please try again.');
               setMonths(prev => {
                 const newM = [...prev];
                 newM[monthIndex].ocrStatus = 'FAILED';
@@ -178,14 +211,14 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
             setLoadingMonth(null);
           } else if (attempts >= maxAttempts) {
             clearInterval(interval);
-            toast.error('OCR polling timed out. Please try again.');
+            toast.error('Extraction timed out. Please try again.');
             setLoadingMonth(null);
             if (monthIndex === -1) setRunningAllOcr(false);
           }
         }
       } catch (err) {
         clearInterval(interval);
-        toast.error('Error checking OCR status.');
+        toast.error('Error checking extraction status.');
         setLoadingMonth(null);
         if (monthIndex === -1) setRunningAllOcr(false);
       }
@@ -217,41 +250,70 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
     const monthIndex = months.findIndex(m => m.id === currentUploadMonth);
     if (monthIndex === -1) return;
 
+    // Captured before the upload overwrites this slot's tracked documentId
+    // below — a re-upload ("Change"/"Re-upload") creates a brand new
+    // Document row for the same slot, and this old one otherwise never gets
+    // cleaned up: it just silently stops being tracked here (see the state
+    // update below), but stays ACTIVE in the DB with its file still in S3 —
+    // invisible on this page (only the latest per slot is shown/deletable)
+    // yet still listed under "Income Documents" on the Prepare Proposal
+    // page, which lists every active SALARY_SLIP document for the case.
+    const previousDocumentId = months[monthIndex].documentId;
+
     setLoadingMonth(currentUploadMonth);
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('document_type', 'SALARY_SLIP');
 
+    let documentId;
     try {
       const uploadRes = await api.post(`/cases/${caseId}/applicants/${applicantId}/salary-slips`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      const documentId = uploadRes.data?.data?.id;
+      documentId = uploadRes.data?.data?.id;
       if (!documentId) throw new Error('Upload failed to return document ID');
 
       toast.success(`Salary slip uploaded for ${months[monthIndex].label}`);
+
+      // Clean up the slip this one just replaced — same endpoint the
+      // explicit delete button uses, which soft-deletes the Document row
+      // AND removes the file from S3 (documentService.deleteDocument).
+      // Best-effort/fire-and-forget: it must never block or fail the
+      // upload the DSA is actually waiting on.
+      if (previousDocumentId && previousDocumentId !== documentId) {
+        api.delete(`/cases/${caseId}/applicants/${applicantId}/salary-slips/${previousDocumentId}`)
+          .catch(err => console.error('Failed to clean up replaced salary slip document:', err));
+      }
 
       const newMonths = [...months];
       newMonths[monthIndex].isUploaded = true;
       newMonths[monthIndex].documentId = documentId;
       newMonths[monthIndex].fileName = file.name;
       // A re-upload replaces the file for this slot with a brand new
-      // Document row, so any previous OCR result no longer applies - without
-      // resetting these, a slot that was already COMPLETED (or a stale
-      // PENDING one mislabeled COMPLETED, see fetchSummary) stayed marked
-      // COMPLETED and "Run OCR on Uploaded Slips" silently skipped it forever.
+      // Document row, so any previous extraction result no longer applies -
+      // without resetting these, a slot that was already COMPLETED (or a
+      // stale PENDING one mislabeled COMPLETED, see fetchSummary) stayed
+      // marked COMPLETED and the automatic re-extraction below would have
+      // skipped it.
       newMonths[monthIndex].ocrStatus = 'PENDING';
       newMonths[monthIndex].result = null;
       setMonths(newMonths);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to upload salary slip');
       console.error(error);
-    } finally {
       setLoadingMonth(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    // Extraction now starts the instant the upload finishes — no separate
+    // manual "Extract Data" click. loadingMonth stays set the whole time
+    // (it now means "extracting" rather than "uploading"); startExtraction /
+    // pollOcrStatus clear it once the result actually lands.
+    await startExtraction(monthIndex, documentId);
   };
 
   const handleDeleteSlip = async (monthId) => {
@@ -280,32 +342,25 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
     }
   };
 
-  const handleRunAllOcr = async () => {
-    setRunningAllOcr(true);
-
-    const docsToProcess = months
-      .map((m, i) => ({ documentId: m.documentId, month: `M${i + 1}`, year: new Date().getFullYear().toString(), isUploaded: m.isUploaded, ocrStatus: m.ocrStatus, id: m.id, label: m.label }))
-      .filter(m => m.isUploaded && m.ocrStatus !== 'COMPLETED' && m.documentId);
-
-    if (docsToProcess.length === 0) {
-      setRunningAllOcr(false);
-      return;
-    }
-
+  // Fires the extraction vendor call for exactly the slip that was just
+  // uploaded (see handleFileChange) and starts polling it. loadingMonth is
+  // already set to this slot's id by the caller before this runs, so the
+  // row reads "Extracting…" and stays disabled with no gap between upload
+  // finishing and extraction starting.
+  const startExtraction = async (monthIndex, documentId) => {
     try {
-      setLoadingMonth('batch');
       const ocrRes = await api.post(`/cases/${caseId}/applicants/${applicantId}/salary-slips/ocr-batch`, {
-        documentIds: docsToProcess.map(d => ({ documentId: d.documentId, month: d.month, year: d.year }))
+        documentIds: [{ documentId, month: `M${monthIndex + 1}`, year: new Date().getFullYear().toString() }]
       });
 
       if (ocrRes.data?.success) {
-        toast('Processing batch OCR... This might take a moment.', { icon: '⏳' });
-        pollOcrStatus(docsToProcess[0].documentId, -1);
+        pollOcrStatus(documentId, monthIndex);
+      } else {
+        setLoadingMonth(null);
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to start batch OCR');
+      toast.error(err.response?.data?.error || 'Failed to start data extraction');
       setLoadingMonth(null);
-      setRunningAllOcr(false);
     }
   };
 
@@ -333,7 +388,46 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
   const employerName = summary?.find(s => s.employer_name)?.employer_name || null;
 
   return (
-    <div>
+    <div className="salary-ocr">
+      <style>{`
+        .salary-ocr { animation: salaryOcrIn 400ms cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes salaryOcrIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .salary-ocr button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .salary-ocr .mode-tab { transition: background 150ms ease, color 150ms ease; }
+        .salary-ocr .mode-tab:not(.active):hover { background: var(--bg-surface); color: var(--text-primary); }
+        .salary-ocr .slip-row { transition: border-color 150ms ease, box-shadow 150ms ease; animation: salaryOcrIn 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+        .salary-ocr .slip-row:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+        .salary-ocr .slip-action-danger { color: var(--text-secondary); }
+        .salary-ocr .slip-action-danger:hover:not(:disabled) { background: var(--error-bg); color: var(--error); }
+        /* iOS Safari auto-zooms the page on focusing any input/select whose
+           font-size is under 16px — the global .form-control is 14px, which
+           is what was actually causing the "zooms in when tapping" report. */
+        .salary-ocr .form-control, .salary-ocr select.form-control { font-size: 16px; }
+        /* Real media queries instead of the old JS-computed isMobile flag
+           for anything layout-critical — more predictable on an actual
+           device than a resize-event-driven inline style, and Apple HIG's
+           44x44pt minimum touch target applies specifically here. */
+        .salary-ocr button { -webkit-tap-highlight-color: transparent; }
+        /* Base (desktop) flex behavior lives here, in CSS, rather than as an
+           inline style — an inline style always wins over a plain stylesheet
+           rule regardless of specificity, which silently defeated the
+           max-width override below the first time this was written inline
+           (the row never actually wrapped on mobile, so "Re-upload" + the
+           delete button had no room and got squeezed/cut off). Keeping both
+           the default and the override in CSS avoids that trap entirely. */
+        .salary-ocr .slip-row-main { flex: 1 1 auto; }
+        .salary-ocr .salary-summary-net { margin-left: auto; }
+        @media (max-width: 640px) {
+          .salary-ocr .slip-row-header { flex-wrap: wrap; }
+          .salary-ocr .slip-row-main { flex-basis: 100%; }
+          .salary-ocr .slip-row-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
+          .salary-ocr .manual-modal-row { flex-direction: column; }
+          .salary-ocr .btn-sm { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+          .salary-ocr .btn-icon { width: 44px !important; height: 44px !important; }
+          .salary-ocr .mode-tab { min-height: 44px; }
+          .salary-ocr .salary-summary-net { flex-basis: 100%; margin-left: 0; margin-top: 4px; }
+        }
+      `}</style>
       <input
         type="file"
         ref={fileInputRef}
@@ -342,28 +436,32 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         accept="application/pdf,image/jpeg,image/png"
       />
 
-      <div style={{ display: 'inline-flex', gap: 4, marginBottom: 10, border: '1px solid var(--border)', padding: 2 }}>
+      <div style={{ display: 'inline-flex', gap: 4, marginBottom: 14, background: 'var(--bg-elevated)', borderRadius: 0, padding: 4 }}>
         <button
           type="button"
+          className={`mode-tab${mode === 'OCR' ? ' active' : ''}`}
           onClick={() => setMode('OCR')}
+          aria-pressed={mode === 'OCR'}
           style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', border: 'none', borderRadius: 0,
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', border: 'none', borderRadius: 0,
             background: mode === 'OCR' ? 'var(--primary)' : 'transparent', color: mode === 'OCR' ? '#fff' : 'var(--text-secondary)',
-            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}
         >
-          <FileText size={12} /> Upload OCR
+          <FileText size={14} /> Auto Extract
         </button>
         <button
           type="button"
+          className={`mode-tab${mode === 'MANUAL' ? ' active' : ''}`}
           onClick={() => setMode('MANUAL')}
+          aria-pressed={mode === 'MANUAL'}
           style={{
-            display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', border: 'none', borderRadius: 0,
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', border: 'none', borderRadius: 0,
             background: mode === 'MANUAL' ? 'var(--primary)' : 'transparent', color: mode === 'MANUAL' ? '#fff' : 'var(--text-secondary)',
-            fontSize: 11, fontWeight: 700, cursor: 'pointer',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}
         >
-          <PenLine size={12} /> Manual Entry
+          <PenLine size={14} /> Manual Entry
         </button>
       </div>
 
@@ -374,7 +472,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               Manual Salary Entry ({months.find(m => m.id === manualEntryMonth)?.label})
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div className="manual-modal-row" style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Month</label>
                   <select required value={manualForm.month} onChange={e => setManualForm({ ...manualForm, month: e.target.value })} className="form-control">
@@ -425,114 +523,152 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
         </div>
       )}
 
-      {/* One compact row per slot instead of three large padded cards — same
-          three states (empty / uploaded-pending / completed), same actions,
-          a fraction of the height. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+      {/* One row per slot — same three states (empty / uploaded-pending /
+          completed), same actions, sized for comfortable reading and
+          touch/click targets rather than shoehorned into a dense strip. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
         {months.map((m) => {
           const isCompleted = m.ocrStatus === 'COMPLETED';
           const isPending = !isCompleted && m.isUploaded;
+          // Extraction now kicks off automatically right after upload (see
+          // handleFileChange/startExtraction) — loadingMonth stays set for
+          // this slot the whole time it's in flight, so "isPending AND
+          // currently loading" means "extracting", not "just sitting there
+          // uploaded and untouched" (the old, manual-trigger meaning).
+          const isExtracting = isPending && loadingMonth === m.id;
+          const r = m.result;
+          // Once extraction actually tells us which real calendar month this
+          // slip is for, that's far more useful than the generic slot
+          // placeholder ("Month 1") — show it instead everywhere this slot
+          // is labeled.
+          const displayLabel = (isCompleted && formatSlipPeriod(r?.month, r?.year)) || m.label;
           const Icon = isCompleted ? CheckCircle2 : isPending ? FileCheck2 : ClipboardList;
           const iconColor = isCompleted ? 'var(--success)' : isPending ? 'var(--info)' : 'var(--text-tertiary)';
-          const statusText = isCompleted
-            ? (m.fileName || 'Document attached')
-            : isPending
+          const iconBg = isCompleted ? 'var(--success-bg)' : isPending ? 'var(--info-bg)' : 'var(--bg-elevated)';
+          const statusText = isExtracting
+            ? 'Extracting data…'
+            : isCompleted
               ? (m.fileName || 'Document attached')
-              : (mode === 'OCR' ? 'Not uploaded' : 'Not entered');
+              : isPending
+                ? (m.fileName || 'Document attached')
+                : (mode === 'OCR' ? 'Not uploaded' : 'Not entered');
           const primaryLabel = isCompleted
             ? (mode === 'OCR' ? 'Re-upload' : 'Edit')
-            : isPending
-              ? (mode === 'OCR' ? 'Change' : 'Enter')
-              : (loadingMonth === m.id ? (mode === 'OCR' ? 'Uploading…' : 'Saving…') : (mode === 'OCR' ? 'Upload' : 'Enter'));
+            : isExtracting
+              ? 'Extracting…'
+              : isPending
+                ? (mode === 'OCR' ? 'Change' : 'Enter')
+                : (loadingMonth === m.id ? (mode === 'OCR' ? 'Uploading…' : 'Saving…') : (mode === 'OCR' ? 'Upload' : 'Enter'));
 
           return (
             <div
               key={m.id}
+              className="slip-row"
               style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
                 border: '1px solid var(--border)', borderRadius: 0,
-                background: isCompleted ? 'var(--success-bg)' : isPending ? 'var(--info-bg)' : 'var(--bg-elevated)',
-                flexWrap: isMobile ? 'wrap' : 'nowrap',
+                background: 'var(--bg-surface)', overflow: 'hidden',
               }}
             >
-              <Icon size={15} color={iconColor} style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0, minWidth: 52 }}>{m.label}</span>
-              <span
-                style={{ flex: '1 1 100px', minWidth: 0, fontSize: 11, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                title={m.fileName || undefined}
-              >
-                {statusText}
-              </span>
-              {isCompleted && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', flexShrink: 0 }}>
-                  ₹{m.result?.net_salary?.toLocaleString('en-IN') || 0}
-                </span>
-              )}
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: isMobile ? 'auto' : 0 }}>
-                <button
-                  type="button"
-                  style={{ padding: '3px 9px', fontSize: 11, fontWeight: 700, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-secondary)', borderRadius: 0, cursor: 'pointer' }}
-                  onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
-                  disabled={loadingMonth !== null || runningAllOcr}
-                >
-                  {primaryLabel}
-                </button>
-                {m.isUploaded && (
+              <div className="slip-row-header" style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+              }}>
+                <div className="slip-row-main" style={{
+                  display: 'flex', alignItems: 'center', gap: 12, minWidth: 0,
+                }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    width: 34, height: 34, borderRadius: 0, background: iconBg,
+                  }}>
+                    <Icon size={17} color={iconColor} />
+                  </div>
+                  <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{displayLabel}</div>
+                    <div
+                      style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={m.fileName || undefined}
+                    >
+                      {statusText}
+                    </div>
+                  </div>
+                </div>
+                <div className="slip-row-actions" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button
                     type="button"
-                    title={`Remove ${m.label} salary slip`}
-                    aria-label={`Remove ${m.label} salary slip`}
-                    style={{ padding: '3px 7px', border: '1px solid var(--error)', background: 'var(--bg-surface)', color: 'var(--error)', borderRadius: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                    onClick={() => handleDeleteSlip(m.id)}
-                    disabled={loadingMonth !== null || runningAllOcr}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => mode === 'OCR' ? handleUploadClick(m.id) : handleManualClick(m.id)}
+                    disabled={loadingMonth !== null}
                   >
-                    <Trash2 size={12} />
+                    {primaryLabel}
                   </button>
-                )}
+                  {m.isUploaded && (
+                    <button
+                      type="button"
+                      className="btn btn-icon slip-action-danger"
+                      title={`Remove ${displayLabel} salary slip`}
+                      aria-label={`Remove ${displayLabel} salary slip`}
+                      onClick={() => handleDeleteSlip(m.id)}
+                      disabled={loadingMonth !== null}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Extracted-data preview — lets the DSA verify the figures
+                  against the physical payslip right here instead of trusting
+                  a single net-salary number, and fills what would otherwise
+                  be a lot of empty space per completed slot. */}
+              {isCompleted && r && (
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 16px',
+                  borderTop: '1px dashed var(--border)', background: 'var(--bg-elevated)',
+                }}>
+                  <div style={{ marginRight: 12 }}>
+                    <MiniStat label="Employer" value={r.employer_name || 'Not detected'} />
+                  </div>
+                  <MiniStat label="Gross Salary" value={`₹${(r.gross_salary || 0).toLocaleString('en-IN')}`} />
+                  <MiniStat label="Deductions" value={`₹${(r.deductions || 0).toLocaleString('en-IN')}`} />
+                  <MiniStat label="Net Salary" value={`₹${(r.net_salary || 0).toLocaleString('en-IN')}`} />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {mode === 'OCR' && months.some(m => m.isUploaded && m.ocrStatus !== 'COMPLETED') && (
-        <button
-          type="button"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%',
-            padding: '6px 12px', marginBottom: 10, border: 'none', borderRadius: 0,
-            background: 'var(--primary)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          }}
-          onClick={handleRunAllOcr}
-          disabled={runningAllOcr || loadingMonth !== null}
-        >
-          {runningAllOcr ? 'Processing OCR…' : <>Run OCR on Uploaded Slips <Upload size={13} /></>}
-        </button>
-      )}
-
-      {/* Single inline strip instead of a boxed 2x2 grid of sub-cards — same
-          four figures (employer, avg gross, avg deductions, net take-home),
-          read left-to-right in one line instead of a padded block. */}
+      {/* Two-tier summary card instead of one long wrapping sentence — a
+          status header (badge + employer) that reflows cleanly on narrow
+          screens, then a stat row with Net Take-Home visually emphasized as
+          the one figure that actually matters most here. */}
       {completedCount > 0 && summary && summary.length > 0 && (
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 14px',
-          padding: '6px 10px', background: 'var(--success-bg)', border: '1px solid var(--success)', fontSize: 11,
-        }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: 'var(--success)', flexShrink: 0 }}>
-            <CheckCircle2 size={12} /> {completedCount}/3 processed
-          </span>
-          <span style={{ color: 'var(--text-tertiary)' }}>
-            Employer: <strong style={{ color: 'var(--text-primary)' }}>{employerName || 'Not detected'}</strong>
-          </span>
-          <span style={{ color: 'var(--text-tertiary)' }}>
-            Avg Gross: <strong style={{ color: 'var(--text-primary)' }}>₹{avgGross.toLocaleString('en-IN')}</strong>
-          </span>
-          <span style={{ color: 'var(--text-tertiary)' }}>
-            Avg Deductions: <strong style={{ color: 'var(--text-primary)' }}>₹{avgDeductions.toLocaleString('en-IN')}</strong>
-          </span>
-          <span style={{ color: 'var(--success)', fontWeight: 700, marginLeft: 'auto' }}>
-            Net Take-Home: ₹{avgNet.toLocaleString('en-IN')}/mo
-          </span>
+        <div style={{ border: '1px solid var(--success)', borderRadius: 0, overflow: 'hidden' }}>
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px',
+            padding: '10px 16px', background: 'var(--success-bg)',
+          }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, color: 'var(--success)', fontSize: 13, flexShrink: 0 }}>
+              <CheckCircle2 size={15} /> {completedCount}/3 processed
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Employer: <strong style={{ color: 'var(--text-primary)' }}>{employerName || 'Not detected'}</strong>
+            </span>
+          </div>
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 20,
+            padding: '12px 16px', background: 'var(--bg-elevated)', borderTop: '1px dashed var(--success)',
+          }}>
+            <MiniStat label="Avg Gross" value={`₹${avgGross.toLocaleString('en-IN')}`} />
+            <MiniStat label="Avg Deductions" value={`₹${avgDeductions.toLocaleString('en-IN')}`} />
+            <div className="salary-summary-net">
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
+                Net Take-Home / mo
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success)', fontFamily: MONO_FONT }}>
+                ₹{avgNet.toLocaleString('en-IN')}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

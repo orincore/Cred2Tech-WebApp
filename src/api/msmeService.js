@@ -30,8 +30,8 @@ export const msmeApi = {
   updateBusinessDetails: (data) => api.put('/msme/case/business-details', data),
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
-  getPaymentConfig: () => api.get('/msme/payment/config'),
-  createPaymentOrder: (forceNew = false) => api.post('/msme/payment/create-order', { forceNew }),
+  getPaymentConfig: (promoCode = null) => api.get('/msme/payment/config', { params: promoCode ? { promo_code: promoCode } : {} }),
+  createPaymentOrder: (forceNew = false, promoCode = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
   runEligibility: () => api.post('/msme/eligibility/run'),

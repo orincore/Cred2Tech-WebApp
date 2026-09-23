@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
@@ -172,7 +173,25 @@ export default function CaseDetailPage() {
     amount: '', disbursement_date: new Date().toISOString().split('T')[0],
     next_disbursement_due_date: '', remarks: '', pdd_pending: false,
     pdd_documents: [{ document_name: '', due_date: '' }], loan_account_number: '',
+    subvention_amount: '',
   });
+
+  // A case can only take subvention once, in whichever tranche it's first
+  // entered — later tranches (and DISBURSED after a PARTLY_DISBURSED one)
+  // must not offer the field again.
+  const hasExistingSubvention = disbursementSummary?.disbursements?.some(
+    (d) => d.subvention_amount && Number(d.subvention_amount) > 0
+  );
+
+  // Auto-resolve tenant_lender_id if it's missing but lender_name is locked
+  useEffect(() => {
+    if (sanctionForm.lender_name && !sanctionForm.tenant_lender_id && tenantLenders.length > 0) {
+      const match = tenantLenders.find(l => l.lender_name === sanctionForm.lender_name);
+      if (match) {
+        setSanctionForm(prev => ({ ...prev, tenant_lender_id: String(match.id) }));
+      }
+    }
+  }, [sanctionForm.lender_name, sanctionForm.tenant_lender_id, tenantLenders]);
 
   const fetchDisbursementSummary = useCallback(async () => {
     try {
@@ -249,7 +268,7 @@ export default function CaseDetailPage() {
     if (!allocateUserId) return toast.error('Please select an employee.');
     try {
       await caseService.allocateDsaUser(id, allocateUserId);
-      toast.success('Case successfully allocated');
+      toast.success(caseData?.assigned_dsa_user_id ? 'Case successfully reallocated' : 'Case successfully allocated');
       setShowAllocateModal(false);
       fetchCase();
     } catch (err) {
@@ -302,7 +321,7 @@ export default function CaseDetailPage() {
 
     try {
       if (isBackward) {
-        if (!hasRole('DSA_ADMIN')) return toast.error('Only DSA Admin can rollback financial stages.');
+        if (!hasRole('DSA_ADMIN')) return toast.error('Only Sourcing Partner Admin can rollback financial stages.');
         if (!rollbackReason) return toast.error('Rollback reason is required.');
         if (!rollbackConfirmation) return toast.error('Please confirm the rollback action.');
         await caseService.rollbackCaseStage(id, { target_stage: selectedStage, reason: rollbackReason, confirmation: rollbackConfirmation });
@@ -310,6 +329,15 @@ export default function CaseDetailPage() {
       } else if (selectedStage === 'APPROVED') {
         if (caseData.stage !== 'ESR_GENERATED' && caseData.stage !== 'APPROVED') {
           return toast.error('Case must be Login Done before sanction.');
+        }
+        if (!sanctionForm.lender_name) return toast.error('Lender is required.');
+        if (!sanctionForm.sanctioned_amount) return toast.error('Sanctioned amount is required.');
+        if (!sanctionForm.sanction_date) return toast.error('Sanction date is required.');
+        if (sanctionForm.confirmed_roi === '' || sanctionForm.confirmed_roi === null || sanctionForm.confirmed_roi === undefined) {
+          return toast.error('Confirmed ROI (%) is required.');
+        }
+        if (sanctionForm.processing_fee === '' || sanctionForm.processing_fee === null || sanctionForm.processing_fee === undefined) {
+          return toast.error('Processing Fee (₹) is required.');
         }
         await caseService.sanctionCase(id, sanctionForm);
         toast.success('Case sanctioned successfully');
@@ -381,6 +409,8 @@ export default function CaseDetailPage() {
   // from a purged case, since a bookmarked/typed URL could otherwise bypass
   // this button being disabled.
   const isPurged = !!caseData.data_purged_at;
+  const isLenderLocked = !!(disbursementSummary?.sanction?.lender_name || caseData?.lender_name);
+  const isProductTypeLocked = !!(disbursementSummary?.sanction?.product_type || caseData?.product_type);
 
   return (
     <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
@@ -406,13 +436,13 @@ export default function CaseDetailPage() {
             {isPurged && <DataPurgedBadge />}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
-            {caseData.lender_name || 'Unassigned'} · {caseData.product_type || 'N/A'} · {formatCurrency(caseData.loan_amount)}
+            {caseData.lender_name || 'Unassigned'} · {caseData.product_type || 'N/A'} · {formatCurrency(caseData.loan_amount || caseData.sanctioned_amount || 0)}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {hasRole('DSA_ADMIN') && caseData?.lead_source === 'DIRECT_MSME' && (
-            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick} disabled={isPurged}><Users size={13} /> Allocate to Employee</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleAllocateClick} disabled={isPurged}><Users size={13} /> {caseData.assigned_dsa_user_id ? 'Reallocate Employee' : 'Allocate to Employee'}</button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => navigate(wizardPath)} disabled={isPurged}>Open Wizard</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowPropertyModal(true)} disabled={isPurged}>Edit Property Details</button>
@@ -531,8 +561,8 @@ export default function CaseDetailPage() {
               <DataRow label="Business Vintage" value={caseData.customer?.business_vintage ? `${caseData.customer.business_vintage} Years` : 'N/A'} />
               <DataRow label="Bureau Score" value={caseData.cibil_score || 'Pending'} valueColor={caseData.cibil_score >= 700 ? 'var(--success)' : 'var(--warning)'} />
               <DataRow label="Lender" value={caseData.lender_name || 'Not Selected'} />
-              <DataRow label="Loan Amount" value={formatCurrency(caseData.loan_amount)} />
-              <DataRow label="DSA Notes" value={caseData.dsa_notes || '—'} />
+              <DataRow label="Loan Amount" value={formatCurrency(caseData.loan_amount || caseData.sanctioned_amount || 0)} />
+              <DataRow label="Sourcing Partner Notes" value={caseData.dsa_notes || '—'} />
             </div>
           </div>
 
@@ -547,10 +577,10 @@ export default function CaseDetailPage() {
                 <DataRow label="Occupancy" value={caseData.property?.occupancy_status || 'N/A'} />
                 <DataRow label="Property Value" value={caseData.property?.market_value ? `₹${Number(caseData.property.market_value).toLocaleString('en-IN')}` : 'N/A'} />
                 <DataRow label="Location" value={caseData.property?.address || 'N/A'} />
-                <DataRow label="LTV Ratio" value={(caseData.loan_amount && caseData.property?.market_value) ? `${((caseData.loan_amount / caseData.property.market_value) * 100).toFixed(1)}%` : '—'} />
+                <DataRow label="LTV Ratio" value={((caseData.loan_amount || caseData.sanctioned_amount) && caseData.property?.market_value) ? `${(((caseData.loan_amount || caseData.sanctioned_amount) / caseData.property.market_value) * 100).toFixed(1)}%` : '—'} />
               </div>
               <div className="notice" style={{ background: 'var(--primary-subtle)', color: 'var(--primary-dark)', border: '1px solid var(--primary-light)' }}>
-                Property value entered by DSA. Lender will conduct independent property valuation during underwriting.
+                Property value entered by Sourcing Partner. Lender will conduct independent property valuation during underwriting.
               </div>
             </div>
           </div>
@@ -749,7 +779,7 @@ export default function CaseDetailPage() {
                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Backward Stage Rollback</h4>
                   </div>
                   {!hasRole('DSA_ADMIN') ? (
-                    <div style={{ fontWeight: 600 }}>Only DSA Admin can perform a backward stage rollback. Please contact your administrator.</div>
+                    <div style={{ fontWeight: 600 }}>Only Sourcing Partner Admin can perform a backward stage rollback. Please contact your administrator.</div>
                   ) : (
                     <>
                       <p style={{ margin: '0 0 16px 0', lineHeight: 1.5 }}>
@@ -776,9 +806,9 @@ export default function CaseDetailPage() {
                     <div className="form-group">
                       <label className="form-label">
                         Lender Name
-                        {sanctionForm.lender_name && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
+                        {isLenderLocked && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
                       </label>
-                      {sanctionForm.lender_name ? (
+                      {isLenderLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.lender_name}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
@@ -800,9 +830,9 @@ export default function CaseDetailPage() {
                     <div className="form-group">
                       <label className="form-label">
                         Product Type
-                        {sanctionForm.product_type && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
+                        {isProductTypeLocked && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '1px 6px' }}>AUTO-FILLED</span>}
                       </label>
-                      {sanctionForm.product_type ? (
+                      {isProductTypeLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.product_type}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
@@ -816,19 +846,19 @@ export default function CaseDetailPage() {
                       <input type="text" className="form-control" value={sanctionForm.loan_account_number} onChange={(e) => setSanctionForm({ ...sanctionForm, loan_account_number: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Sanctioned Amount (₹)</label>
+                      <label className="form-label">Sanctioned Amount (₹) *</label>
                       <input type="number" className="form-control" value={sanctionForm.sanctioned_amount} onChange={(e) => setSanctionForm({ ...sanctionForm, sanctioned_amount: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Sanction Date</label>
+                      <label className="form-label">Sanction Date *</label>
                       <input type="date" className="form-control" value={sanctionForm.sanction_date} onChange={(e) => setSanctionForm({ ...sanctionForm, sanction_date: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Confirmed ROI (%)</label>
+                      <label className="form-label">Confirmed ROI (%) *</label>
                       <input type="number" step="0.01" className="form-control" value={sanctionForm.confirmed_roi} onChange={(e) => setSanctionForm({ ...sanctionForm, confirmed_roi: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Processing Fee (₹)</label>
+                      <label className="form-label">Processing Fee (₹) *</label>
                       <input type="number" className="form-control" value={sanctionForm.processing_fee} onChange={(e) => setSanctionForm({ ...sanctionForm, processing_fee: e.target.value })} />
                     </div>
                   </div>
@@ -846,7 +876,7 @@ export default function CaseDetailPage() {
                       <input
                         type="text" className="form-control"
                         value={disbursementSummary?.sanction?.loan_account_number || disbursementForm.loan_account_number || ''}
-                        disabled={!!disbursementSummary?.sanction?.loan_account_number || selectedStage === 'DISBURSED'}
+                        disabled={!!disbursementSummary?.sanction?.loan_account_number}
                         onChange={(e) => setDisbursementForm({ ...disbursementForm, loan_account_number: e.target.value })}
                         placeholder="e.g. LN123456789"
                       />
@@ -872,6 +902,18 @@ export default function CaseDetailPage() {
                         <label className="form-label">Next Disbursement Due Date</label>
                         <input type="date" className="form-control" value={disbursementForm.next_disbursement_due_date} onChange={(e) => setDisbursementForm({ ...disbursementForm, next_disbursement_due_date: e.target.value })} />
                         <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 4 }}>Expected date for the remaining balance</div>
+                      </div>
+                    )}
+                    {!hasExistingSubvention && (
+                      <div className="form-group">
+                        <label className="form-label">Subvention Amount (₹)</label>
+                        <input type="number" className="form-control" value={disbursementForm.subvention_amount} onChange={(e) => setDisbursementForm({ ...disbursementForm, subvention_amount: e.target.value })} placeholder="e.g. 5000" />
+                        <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 4 }}>Deducted from Lender Commission</div>
+                      </div>
+                    )}
+                    {hasExistingSubvention && (
+                      <div style={{ gridColumn: 'span 2', fontSize: 11, color: 'var(--text-tertiary)', fontStyle: 'italic', padding: '8px 0' }}>
+                        * Subvention was already applied in a previous tranche. It can only be taken once per case.
                       </div>
                     )}
                     <div style={{ gridColumn: 'span 2', marginTop: 8 }}>
@@ -942,19 +984,19 @@ export default function CaseDetailPage() {
       {showAllocateModal && (
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAllocateModal(false); }}>
           <form onSubmit={handleAllocateSubmit} className="modal-box" style={{ maxWidth: 450, width: '92vw' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Allocate Case to Employee</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>{caseData?.assigned_dsa_user_id ? 'Reallocate Case to Employee' : 'Allocate Case to Employee'}</h3>
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Select Employee</label>
               {loadingUsers ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading users...</p> : (
                 <select className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
                   <option value="">- Select -</option>
-                  {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role?.name})</option>)}
+                  {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name)})</option>)}
                 </select>
               )}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-ghost" onClick={() => setShowAllocateModal(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={loadingUsers || !allocateUserId}>Allocate</button>
+              <button type="submit" className="btn btn-primary" disabled={loadingUsers || !allocateUserId}>{caseData?.assigned_dsa_user_id ? 'Reallocate' : 'Allocate'}</button>
             </div>
           </form>
         </div>

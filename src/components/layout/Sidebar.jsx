@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, Search, ChevronUp, MoreHorizontal, MessageSquarePlus, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -20,6 +20,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const canSubmitFeedback = FEEDBACK_SUBMITTER_ROLES.includes(user?.role);
 
@@ -29,6 +30,17 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sidebar lives outside <Outlet> in AppLayout, so it never remounts
+  // across a route change — a query typed here to jump to e.g. "Add
+  // Customer" otherwise stayed in this state for the rest of the session,
+  // silently filtering the whole nav list down to whatever it still
+  // matched (often nothing) on every later page, which read as "the
+  // sidebar went blank." Clearing it on every navigation is what a
+  // remount would have done for free.
+  useEffect(() => {
+    setSearchQuery('');
+  }, [location.pathname]);
 
   // Ticket unread badge — only ever updates when the admin explicitly marks
   // a ticket as read (see AdminTicketsListPage/AdminTicketDetailPage), never
@@ -61,9 +73,25 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [hasRole]);
 
+  // Virtual Workspace gate — a DSA-role user only sees the nav items in
+  // virtual_workspace_restricted_nav_item_ids when it's a real array;
+  // null means unrestricted (sees everything their role allows). auth.
+  // controller.js#getMe computes which list this actually is: the
+  // platform-wide Free-tier list when the workspace isn't active at all,
+  // or the tenant's subscribed PLAN's own feature_nav_item_ids when it's
+  // active and that plan restricts something (a lower paid tier can limit
+  // features too, not just Free) — Sidebar.jsx itself doesn't need to know
+  // which case it is, just apply whatever list (or lack of one) it got.
+  // Scoped explicitly to DSA roles so SUPER_ADMIN/CRED2TECH_MEMBER nav is
+  // never affected by a tenant's VW flag, regardless of what it says.
+  const isDsaRole = hasRole(['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']);
+  const restrictedNavItemIds = isDsaRole ? user?.virtual_workspace_restricted_nav_item_ids : null;
+  const isVirtualWorkspaceGated = Array.isArray(restrictedNavItemIds);
+
   const visibleItems = NAV_ITEMS
     .filter((item) => {
       if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
+      if (isVirtualWorkspaceGated && !restrictedNavItemIds.includes(item.id)) return false;
       if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })
@@ -108,10 +136,12 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 8,
       }}>
         <Logo size="medium" />
         {canSubmitFeedback && (
           <button
+            data-tour="sidebar-feedback"
             onClick={() => setIsFeedbackOpen(true)}
             title="Submit feedback or report an issue"
             aria-label="Submit feedback or report an issue"
@@ -135,7 +165,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </div>
 
       {/* Search Bar & Theme Toggle */}
-      <div style={{ padding: '0 12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div data-tour="sidebar-search" style={{ padding: '0 12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -181,6 +211,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
 
         {/* Theme Toggle */}
         <button
+          data-tour="sidebar-theme-toggle"
           onClick={toggleTheme}
           style={{
             width: 34,
@@ -217,7 +248,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }} className="custom-scrollbar">
+      <nav data-tour="sidebar-nav-list" style={{ flex: 1, padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }} className="custom-scrollbar">
         {visibleItems.map((item) => {
           const Icon = item.icon;
           // NavLink's default matching is prefix-based, so a parent path like
@@ -265,7 +296,9 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
       </nav>
 
       {/* User section */}
-      <div style={{
+      <div
+        data-tour="sidebar-profile"
+        style={{
         padding: '16px 20px',
         borderTop: '1px solid var(--sidebar-border)',
         display: 'flex',
@@ -280,7 +313,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         <div style={{
           width: 32,
           height: 32,
-          borderRadius: '50%',
+          borderRadius: 0,
           background: 'var(--on-surface)',
           display: 'flex',
           alignItems: 'center',

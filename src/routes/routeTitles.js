@@ -21,7 +21,7 @@ export const ROUTE_TITLES = [
   { path: '/login', title: 'Login' },
   { path: '/forgot-password', title: 'Forgot Password' },
   { path: '/reset-password', title: 'Reset Password' },
-  { path: '/register-dsa', title: 'DSA Registration' },
+  { path: '/register-dsa', title: 'Sourcing Partner Registration' },
   { path: '/unauthorized', title: 'Unauthorized' },
 
   // MSME Direct Portal
@@ -38,7 +38,7 @@ export const ROUTE_TITLES = [
   { path: '/organization', title: 'Organization Profile' },
   { path: '/users/create', title: 'Create User' },
   { path: '/users/:id/edit', title: 'Edit User' },
-  { path: '/users/:id/payout-setup', title: 'Sub-DSA Payout Setup' },
+  { path: '/users/:id/payout-setup', title: 'Sub-Sourcing Partner Payout Setup' },
   { path: '/users/:id', title: 'User Details' },
   { path: '/users', title: 'Users' },
   { path: '/tenants/create', title: 'Create Tenant' },
@@ -52,6 +52,7 @@ export const ROUTE_TITLES = [
   { path: '/admin/wallets', title: 'Wallets' },
   { path: '/admin/logs', title: 'API Logs' },
   { path: '/admin/system-status', title: 'System Status' },
+  { path: '/admin/bureau-providers', title: 'Bureau API Settings' },
   { path: '/admin/lenders', title: 'Lender Configuration' },
   { path: '/admin/msme-cases', title: 'MSME Cases' },
   { path: '/admin/transactions', title: 'Transactions' },
@@ -69,7 +70,7 @@ export const ROUTE_TITLES = [
   { path: '/pdd-management', title: 'PDD Management' },
   { path: '/financials/sales-incentive', title: 'Sales Incentive' },
   { path: '/financials/lender-commission', title: 'Lender Commission' },
-  { path: '/financials/sub-dsa-payout', title: 'Sub-DSA Payout' },
+  { path: '/financials/sub-dsa-payout', title: 'Sub-Sourcing Partner Payout' },
   { path: '/wallet', title: 'My Wallet' },
 
   // Fallbacks — must stay last so nothing above is shadowed by the wildcard.
