@@ -531,7 +531,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 self-service journeys (same component, rendered inline by
                 AddCustomerWizardPage for each). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-              {bureauReports[applicant.id]?.id && (
+              {bureauReports[applicant.id]?.id ? (
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleDownloadReport(applicant.id)}
@@ -541,6 +541,20 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 >
                   <FileDown size={13} />
                   {downloadingFor === applicant.id ? 'Downloading…' : 'Download Report'}
+                </button>
+              ) : applicant.bureau_fetched && (
+                /* Bureau was pulled but the PDF snapshot failed (Puppeteer/S3
+                   error at pull time). Re-pulling fetches a fresh vendor token
+                   and attempts the snapshot again — same flow as the first pull. */
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handlePullBureau(applicant.id)}
+                  disabled={retryingFor === applicant.id}
+                  title="Report PDF was not saved during the original pull — click to re-pull and capture it"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'var(--warning)', color: 'var(--warning)' }}
+                >
+                  <RotateCcw size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                  {retryingFor === applicant.id ? 'Re-pulling…' : 'Re-pull Report'}
                 </button>
               )}
               {/* Primary borrower of a non-individual/non-proprietor entity has
