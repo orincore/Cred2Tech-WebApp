@@ -10,6 +10,7 @@ import Logo from '../../components/Logo';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
 import OtpInput from '../../components/OtpInput';
 
+import { IS_DEV_BUILD } from '../../utils/devBuild';
 const stepVariants = {
   enter: (dir) => ({ opacity: 0, x: dir > 0 ? 48 : -48 }),
   center: { opacity: 1, x: 0 },
@@ -52,7 +53,7 @@ const MsmeLoginPage = () => {
     try {
       const res = await msmeAuthApi.sendOtp(mobile);
       toast.success(res.data.message || 'OTP sent successfully');
-      if (res.data.otp) {
+      if (IS_DEV_BUILD && res.data.otp) {
         toast(`Dev OTP: ${res.data.otp}`, { icon: '🛠️', duration: 6000 });
       }
       setDirection(1);

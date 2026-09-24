@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, RefreshCw, UserPlus, Edit, Users, ShieldCheck, Wallet } from 'lucide-react';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { getUsers } from '../api/userService';
-import { MOCK_USERS } from '../constants/mockData';
 import { ROLE_OPTIONS, STATUS_OPTIONS } from '../constants/roles';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import PageHeader from '../components/ui/PageHeader';
@@ -56,10 +55,10 @@ const UsersListPage = () => {
     setLoading(true); setError('');
     try {
       const data = await getUsers();
-      setUsers(Array.isArray(data) ? data : data.users || MOCK_USERS);
+      setUsers(Array.isArray(data) ? data : data.users || []);
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to load users. Showing demo data.');
-      setUsers(MOCK_USERS);
+      setError(err?.response?.data?.message || 'Failed to load users.');
+      setUsers([]);
     } finally { setLoading(false); }
   };
 

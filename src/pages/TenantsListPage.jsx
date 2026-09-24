@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, Eye, Edit, Building, RefreshCw, MapPin, Hash, Wallet, Activity, Building2, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { getTenants, updateTenantVirtualWorkspace } from '../api/tenantService';
-import { MOCK_TENANTS } from '../constants/mockData';
 import { STATUS_OPTIONS, formatTenantType } from '../constants/roles';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';

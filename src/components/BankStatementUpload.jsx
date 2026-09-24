@@ -8,6 +8,7 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
+import { IS_DEV_BUILD } from '../utils/devBuild';
 // Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
 // download-report entitlement gap (confirmed broken on both preprod — bad
 // credentials — and production — 403 not entitled — 2026-09-02). Never shown
@@ -15,7 +16,6 @@ import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '.
 // on-screen for a Signzy support escalation instead of only in server logs.
 // Same pattern as EsrPage.jsx's IS_DEV_BUILD — import.meta.env.DEV alone
 // misses the deployed dev server (still a production Vite build).
-const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
 // Rounded off for the preview grid — these are summary figures, not inputs
 // (ESR pulls the unrounded values directly from the backend), so the
