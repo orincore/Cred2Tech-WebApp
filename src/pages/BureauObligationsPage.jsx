@@ -7,11 +7,8 @@ import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
-import { useCasePullStatus } from '../hooks/useCasePullStatus';
 
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
-
-const GST_LIVE_PHASES = ['QUEUED', 'AWAITING_CUSTOMER', 'PROCESSING', 'GENERATING_REPORT', 'FINALIZING'];
 
 const getCibilColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
@@ -156,13 +153,6 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
   const isMsme = mode === 'MSME_SELF_SERVICE';
-
-  // GST can still be pulling in the background (kicked off on step 2) —
-  // generating the ESR against an incomplete GST picture would bake a wrong
-  // eligibility number in, so block it until that pull settles one way or
-  // the other (finishes or fails).
-  const { snapshot: pullSnapshot } = useCasePullStatus(caseId);
-  const gstPending = GST_LIVE_PHASES.includes(pullSnapshot?.gst?.overall?.phase);
 
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
@@ -389,7 +379,6 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleGenerateESR = async () => {
     if (mustAddCoApplicant) return toast.error(`${entityType} entities have no personal credit history of their own — add a co-applicant before generating the Eligibility Summary Report.`, { duration: 6000 });
-    if (gstPending) return toast.error('GST data is still being pulled — please wait for it to finish before generating the ESR.');
     try {
       setGenerating(true);
       await caseService.generateESR(caseId);
@@ -852,12 +841,8 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
           <button
             className="btn btn-primary btn-lg"
             onClick={handleGenerateESR}
-            disabled={generating || gstPending || mustAddCoApplicant}
-            title={
-              mustAddCoApplicant ? `Add a co-applicant — ${entityType} has no personal credit history of its own.`
-                : gstPending ? 'GST data is still being pulled — this becomes available once that finishes.'
-                : undefined
-            }
+            disabled={generating || mustAddCoApplicant}
+            title={mustAddCoApplicant ? `Add a co-applicant — ${entityType} has no personal credit history of its own.` : undefined}
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
@@ -867,11 +852,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <AlertTriangle size={12} /> Add a co-applicant to continue
             </span>
-          ) : gstPending && (
-            <span style={{ fontSize: 12, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <AlertTriangle size={12} /> Waiting for GST pull to finish
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
