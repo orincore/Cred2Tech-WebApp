@@ -14,6 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
 import { subscribeToCasePulls } from '../lib/realtime';
 import PageTour from '../components/tour/PageTour';
+import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
 
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
@@ -562,14 +563,16 @@ const CustomersListPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</span>
                       <span style={{
                         fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
                         color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
                         background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
                       }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
                     </div>
-                    {c.parent_case_id && (
+                    {/* The .N suffix already names the parent; the note only earns its
+                        place for older copies that have no sequence number. */}
+                    {c.parent_case_id && !childCaseSuffix(c) && (
                       <div style={{ fontSize: 11, color: mutedColor, marginTop: 2 }}>↳ From CASE-{c.parent_case_id}</div>
                     )}
                   </div>
@@ -661,7 +664,7 @@ const CustomersListPage = () => {
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>CASE-{c.id}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</div>
                       <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
                         <span style={{
                           fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
@@ -669,7 +672,7 @@ const CustomersListPage = () => {
                           background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
                         }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
                       </div>
-                      {c.parent_case_id && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
+                      {c.parent_case_id && !childCaseSuffix(c) && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
