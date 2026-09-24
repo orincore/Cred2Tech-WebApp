@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import toast from 'react-hot-toast';
 import { Bell, Check, ChevronRight, Settings, ShieldCheck, X } from 'lucide-react';
 import { notificationsService } from '../api/notificationsService';
 import { listenToNotifications, listenToNotificationUnreadCount, initFocusTracking } from '../lib/realtime';
 import { useAuth } from './AuthContext';
+import { DSA_TOUR_ROLES } from '../constants/roles';
+import { subscribeTours, toursInProgress } from '../lib/tourCoordinator';
 import { enablePush, getLocalPushPreference, getNotificationPermission, isPushSupported } from '../lib/pushNotifications';
 
 /**
@@ -50,7 +52,7 @@ const savePushPromptSeen = (userId) => {
 };
 
 export function NotificationProvider({ children }) {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -59,6 +61,31 @@ export function NotificationProvider({ children }) {
   const [pushPrompt, setPushPrompt] = useState(null); // 'ask' | 'steps' | null
   const [pushPromptLoading, setPushPromptLoading] = useState(false);
   const cursorRef = useRef(null);
+
+  // The browser-notification prompt is a full-screen blurred modal, so for a
+  // brand-new user it used to pile on top of the first-time walkthrough
+  // (PageTour) and any other popup at once. Hold it back until every
+  // walkthrough is finished/skipped, then a short settle delay so back-to-back
+  // tours (global nav -> page tour) don't flash it in between.
+  const toursBusy = useSyncExternalStore(subscribeTours, toursInProgress, () => false);
+  // A new DSA user's first walkthrough ("global-nav") hasn't registered yet
+  // for a moment after login — expect it, but only for a few seconds, so a
+  // tour that can never run (targets missing) can't suppress the prompt.
+  const expectsIntroTour = !!user?.id && hasRole(DSA_TOUR_ROLES) && !user?.tour_flags?.['global-nav'];
+  const [introGraceOver, setIntroGraceOver] = useState(false);
+  useEffect(() => {
+    setIntroGraceOver(false);
+    if (!user?.id) return undefined;
+    const t = setTimeout(() => setIntroGraceOver(true), 8000);
+    return () => clearTimeout(t);
+  }, [user?.id]);
+  const tourBlocking = toursBusy || (expectsIntroTour && !introGraceOver);
+  const [promptReady, setPromptReady] = useState(false);
+  useEffect(() => {
+    if (tourBlocking) { setPromptReady(false); return undefined; }
+    const t = setTimeout(() => setPromptReady(true), 700);
+    return () => clearTimeout(t);
+  }, [tourBlocking]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -274,7 +301,7 @@ export function NotificationProvider({ children }) {
       }}
     >
       {children}
-      {pushPrompt && (
+      {pushPrompt && promptReady && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(15,23,42,0.48)', backdropFilter: 'blur(3px)' }}>
           <div role="dialog" aria-modal="true" aria-labelledby="push-prompt-title" style={{ width: 'min(440px, 100%)', background: 'var(--surface)', border: '1px solid var(--outline)', borderRadius: 0, boxShadow: 'var(--shadow-lg)', color: 'var(--on-surface)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 22px 16px', borderBottom: '1px solid var(--outline)' }}>

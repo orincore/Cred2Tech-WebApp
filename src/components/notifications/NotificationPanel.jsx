@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Bell, Check, CheckCheck, Copy, ExternalLink, Loader2, FileText, Coins, CheckCircle2, XCircle, LockKeyhole, Shield, CreditCard, Building2, Ticket, TrendingUp, File, Monitor, MapPin } from 'lucide-react';
+import { X, Bell, Check, CheckCheck, Copy, ExternalLink, FileText, Coins, CheckCircle2, XCircle, LockKeyhole, Shield, CreditCard, Building2, Ticket, TrendingUp, File, Monitor, MapPin } from 'lucide-react';
 import { FaApple, FaAndroid, FaWindows, FaLinux } from 'react-icons/fa6';
 import toast from 'react-hot-toast';
 import { useNotifications } from '../../context/NotificationContext';
@@ -663,7 +663,7 @@ const NotificationPanel = () => {
                     >
                       {isLoading && (
                         <>
-                          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                          <span className="skeleton-inline" style={{ width: 16, height: 16 }} />
                           Loading more…
                         </>
                       )}

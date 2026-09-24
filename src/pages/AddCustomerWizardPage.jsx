@@ -27,7 +27,7 @@ import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '
 import { withRetry } from '../utils/retryFetch';
 import IncomeSummaryStep from './IncomeSummaryPage';
 import BureauObligationsStep from './BureauObligationsPage';
-import EsrStep from './EsrPage';
+import EsrStep, { EsrSkeleton } from './EsrPage';
 import ProposalStep from './ProposalPage';
 import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
@@ -1420,6 +1420,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // spinner) is the only loading UI shown for this step now.
     const stepFromUrl = parseInt(searchParams.get('step'), 10);
     if (stepFromUrl === 7) return null;
+
+    // Step 6 (ESR): same idea — its own skeleton, not the step-1 form one
+    // below, so a direct link doesn't flash an unrelated layout first.
+    if (stepFromUrl === 6) {
+      return (
+        <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>
+          <EsrSkeleton />
+        </div>
+      );
+    }
 
     return (
       <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '84px 16px 24px' : '24px 20px' }}>

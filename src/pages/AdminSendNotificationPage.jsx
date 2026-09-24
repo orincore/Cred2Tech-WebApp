@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Send, Loader2, Users, Info, Bell } from 'lucide-react';
+import { Send, Users, Info, Bell } from 'lucide-react';
 import { showTestBrowserNotification } from '../lib/pushNotifications';
 import PageHeader from '../components/ui/PageHeader';
 
@@ -350,7 +350,7 @@ const AdminSendNotificationPage = () => {
             disabled={sending || !title.trim() || !message.trim()}
             style={{ display: 'flex', alignItems: 'center', gap: 8 }}
           >
-            {sending ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={15} />}
+            {sending ? <span className="skeleton-inline" style={{ width: 15, height: 15 }} /> : <Send size={15} />}
             {sending ? 'Sending…' : 'Send Notification'}
           </button>
           <button
@@ -360,7 +360,7 @@ const AdminSendNotificationPage = () => {
             disabled={testingBrowserNotification}
             style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}
           >
-            {testingBrowserNotification ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Bell size={15} />}
+            {testingBrowserNotification ? <span className="skeleton-inline" style={{ width: 15, height: 15 }} /> : <Bell size={15} />}
             {testingBrowserNotification ? 'Testing…' : 'Test Browser Notification'}
           </button>
         </form>

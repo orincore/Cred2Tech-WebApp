@@ -5,6 +5,7 @@ import { X, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { DSA_TOUR_ROLES } from '../../constants/roles';
+import { registerTour, unregisterTour } from '../../lib/tourCoordinator';
 
 // Same custom-decelerate curve ProfilePage's modal chrome already uses
 // everywhere — reused here so this overlay's motion reads as part of the
@@ -107,6 +108,12 @@ const PageTour = ({ pageKey, steps, delay = 900 }) => {
     if (!eligible || !steps?.length || alreadySeen) return undefined;
     let cancelled = false;
     let pollId;
+    let misses = 0;
+
+    // Tell other overlays (e.g. the browser-notification prompt) that a
+    // walkthrough is coming, from mount — not just once it's on screen — so
+    // they wait for it instead of appearing on top of it.
+    registerTour(pageKey);
 
     const tryClaim = () => {
       if (cancelled) return;
@@ -114,11 +121,15 @@ const PageTour = ({ pageKey, steps, delay = 900 }) => {
       if (pollId) clearInterval(pollId);
       const found = steps.filter((s) => document.querySelector(s.target));
       if (found.length) {
+        registerTour(pageKey);
         setResolvedSteps(found);
         setStepIndex(0);
         setActive(true);
       } else {
         releaseTour(pageKey); // nothing resolvable right now — don't hold the floor for no reason
+        // Targets that never render (role/viewport) must not hold other
+        // popups back forever: stop announcing this tour after ~6s of misses.
+        if (++misses >= 15) unregisterTour(pageKey);
       }
     };
 
@@ -131,6 +142,7 @@ const PageTour = ({ pageKey, steps, delay = 900 }) => {
       cancelled = true;
       clearTimeout(startTimer);
       if (pollId) clearInterval(pollId);
+      unregisterTour(pageKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eligible, pageKey, alreadySeen]);
@@ -186,6 +198,7 @@ const PageTour = ({ pageKey, steps, delay = 900 }) => {
 
   const finish = useCallback(() => {
     setActive(false);
+    unregisterTour(pageKey);
     persistTourSeen(pageKey);
   }, [persistTourSeen, pageKey]);
 

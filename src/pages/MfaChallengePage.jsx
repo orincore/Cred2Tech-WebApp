@@ -251,7 +251,7 @@ const MfaChallengePage = () => {
         <TravelingBorderButton onClick={handleVerify} disabled={status === 'verifying'} className="w-full py-3.5 text-[15px] rounded-[10px]">
           {status === 'verifying' ? (
             <div className="flex justify-center items-center w-full h-full">
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
             </div>
           ) : 'Verify & Continue'}
         </TravelingBorderButton>

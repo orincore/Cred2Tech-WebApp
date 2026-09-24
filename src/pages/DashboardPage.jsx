@@ -124,7 +124,7 @@ const DashboardPage = () => {
                 cursor: 'pointer',
               }}
             >
-              <RefreshCw size={15} color="var(--on-surface)" style={spinning ? { animation: 'spin 0.7s linear infinite' } : undefined} />
+              <RefreshCw size={15} color="var(--on-surface)" className={spinning ? 'icon-loading' : undefined} />
             </button>
           </div>
         </div>

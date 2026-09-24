@@ -6,7 +6,8 @@ import {
 import { toast } from 'react-hot-toast';
 import { listMisReports, getMisFilterOptions, getMisReport, exportMisReport } from '../api/misService';
 import PageHeader from '../components/ui/PageHeader';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
+import TableSkeleton from '../components/ui/TableSkeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Panel from '../components/ui/Panel';
 
@@ -43,6 +44,8 @@ const fmtPercent = (v) => {
   return isNaN(n) ? '—' : `${(n * 100).toFixed(2)}%`;
 };
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString('en-IN') : '—');
+
+const isNumericCol = (col) => ['currency', 'percent', 'number'].includes(col.type);
 
 function cellDisplay(value, col) {
   if (value === null || value === undefined || value === '') return '—';
@@ -178,7 +181,7 @@ export default function MisReportsPage() {
 
   const renderFilterControl = (key) => {
     const commonProps = {
-      className: 'form-control', style: { padding: '6px 10px', fontSize: 12.5 },
+      className: 'form-control', style: { padding: '0 10px', fontSize: 12.5, height: 34 },
     };
     const value = draftFilters[key] ?? 'all';
     const set = (v) => setDraftFilters(prev => ({ ...prev, [key]: v }));
@@ -276,7 +279,44 @@ export default function MisReportsPage() {
   };
 
   if (loading) return (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LoadingSpinner size={36} /></div>
+    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }} role="status" aria-label="Loading MIS reports">
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px' }}>
+        <PageHeader title="MIS Reports" subtitle="Filterable, exportable detail behind every headline number on the platform" />
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div className="card" style={{ width: 280, maxWidth: '100%', flexShrink: 0, borderRadius: 0, padding: '8px 0' }}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px' }}>
+                <Skeleton width={15} height={15} />
+                <Skeleton width={`${55 + ((i * 17) % 35)}%`} height={12} />
+              </div>
+            ))}
+          </div>
+          <div style={{ flex: '1 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="card" style={{ borderRadius: 0 }}>
+              <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)' }}>
+                <Skeleton width={180} height={15} style={{ marginBottom: 8 }} />
+                <Skeleton width={300} height={11} />
+              </div>
+              <div style={{ padding: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} style={{ minWidth: 140 }}>
+                    <Skeleton width={80} height={10} style={{ marginBottom: 6 }} />
+                    <Skeleton width={140} height={34} />
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                  <Skeleton width={110} height={34} />
+                  <Skeleton width={120} height={34} />
+                </div>
+              </div>
+            </div>
+            <div className="card" style={{ borderRadius: 0 }}>
+              <TableSkeleton rows={8} columns={6} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   const ActiveIcon = REPORT_ICONS[activeId];
@@ -298,7 +338,11 @@ export default function MisReportsPage() {
         .mis-page th, .mis-page td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border); }
         .mis-page th { background: var(--bg-elevated); font-weight: 700; color: var(--text-secondary); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; position: sticky; top: 0; }
         .mis-page tbody tr:hover td { background: var(--bg-elevated); }
-        .mis-page tr.totals-row td { font-weight: 700; background: var(--bg-elevated); }
+        .mis-page th.num, .mis-page td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .mis-page tr.totals-row td { font-weight: 700; background: var(--bg-elevated); border-top: 2px solid var(--border-strong, var(--border)); }
+        .mis-page .result-meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 11.5px; font-weight: 600; color: var(--text-tertiary); }
+        .mis-page .result-meta-stale { color: var(--warning, var(--primary)); }
+        .mis-page .filter-bar-actions .btn { height: 34px; }
         .mis-page tr.totals-row:hover td { background: var(--bg-elevated); }
         .mis-page .filter-field .form-label { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
         @media (max-width: 900px) {
@@ -386,29 +430,35 @@ export default function MisReportsPage() {
 
             <Panel bodyPadding={0} style={{ flex: 1 }}>
               {fetching ? (
-                <div style={{ padding: 60, display: 'flex', justifyContent: 'center' }}><LoadingSpinner size={30} /></div>
+                <div role="status" aria-label="Loading report"><TableSkeleton rows={8} columns={Math.min(6, activeReport?.filters?.length ? 6 : 5)} /></div>
               ) : !data || data.rows.length === 0 ? (
                 <EmptyState title="No data for this filter selection" description="Try widening the period or clearing a filter." />
               ) : (
-                <div className="table-wrapper" style={{ overflowX: 'auto', maxHeight: 620, overflowY: 'auto' }}>
-                  <table>
-                    <thead>
-                      <tr>{data.columns.map(c => <th key={c.key}>{c.label}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {data.rows.map((row, i) => (
-                        <tr key={i}>
-                          {data.columns.map(c => <td key={c.key} data-label={c.label}>{cellDisplay(row[c.key], c)}</td>)}
-                        </tr>
-                      ))}
-                      {data.totals && (
-                        <tr className="totals-row">
-                          {data.columns.map(c => <td key={c.key} data-label={c.label}>{cellDisplay(data.totals[c.key], c)}</td>)}
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="result-meta">
+                    <span>{data.rows.length.toLocaleString('en-IN')} {data.rows.length === 1 ? 'row' : 'rows'}</span>
+                    {hasPendingFilterChanges && <span className="result-meta-stale">Filters changed — click Run Report to refresh</span>}
+                  </div>
+                  <div className="table-wrapper" style={{ overflowX: 'auto', maxHeight: 620, overflowY: 'auto' }}>
+                    <table>
+                      <thead>
+                        <tr>{data.columns.map(c => <th key={c.key} className={isNumericCol(c) ? 'num' : undefined}>{c.label}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {data.rows.map((row, i) => (
+                          <tr key={i}>
+                            {data.columns.map(c => <td key={c.key} data-label={c.label} className={isNumericCol(c) ? 'num' : undefined}>{cellDisplay(row[c.key], c)}</td>)}
+                          </tr>
+                        ))}
+                        {data.totals && (
+                          <tr className="totals-row">
+                            {data.columns.map(c => <td key={c.key} data-label={c.label} className={isNumericCol(c) ? 'num' : undefined}>{cellDisplay(data.totals[c.key], c)}</td>)}
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </Panel>
           </div>

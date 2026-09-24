@@ -123,7 +123,11 @@ const ConsentPage = () => {
     return (
       <PageShell>
         <div className="flex flex-col items-center justify-center py-8">
-          <div className="w-8 h-8 border-2 border-indigo-200 dark:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin mb-4" />
+          <div className="flex flex-col gap-3 w-full mb-4">
+            <div className="skeleton" style={{ height: 14, width: '60%', borderRadius: 0 }} />
+            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
+            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
+          </div>
           <p className="text-[13px] font-medium text-[#0a1628]/60 dark:text-[#e6edf7]/60">Loading your request…</p>
         </div>
       </PageShell>
@@ -269,7 +273,7 @@ const ConsentPage = () => {
       >
         {submitting ? (
           <div className="flex justify-center items-center w-full h-full">
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
           </div>
         ) : (
           <span>Submit</span>

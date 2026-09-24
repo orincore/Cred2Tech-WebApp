@@ -129,7 +129,7 @@ const SystemStatusPage = () => {
             cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
-          <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+          <RefreshCw size={13} className={loading ? 'icon-loading' : undefined} />
           Refresh now
         </button>
       </div>

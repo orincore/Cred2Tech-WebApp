@@ -217,7 +217,7 @@ const LoginPage = () => {
           >
             {loginState === 'loading' ? (
               <div className="flex justify-center items-center w-full h-full">
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
               </div>
             ) : loginState === 'success' ? (
               <div className="flex items-center justify-center gap-2 w-full h-full">

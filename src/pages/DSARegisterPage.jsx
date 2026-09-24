@@ -1215,7 +1215,7 @@ const DSARegisterPage = () => {
                       <div className="relative">
                         <input name="pan_number" placeholder={panCaptchaRequired ? 'Complete verification above first' : 'ABCDE1234F'} disabled={panCaptchaRequired} value={form.pan_number} onChange={handleChange} onBlur={() => handleFieldBlur('pan_number')} style={{ textTransform: 'uppercase' }} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pan_number ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${panCaptchaRequired ? 'opacity-50 cursor-not-allowed' : ''}`} />
                         {panLookup.status === 'loading' && (
-                          <div className="absolute right-0 bottom-3 w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+                          <span className="skeleton-inline" style={{ position: 'absolute', right: 0, bottom: 12, width: 32, height: 10, color: '#4f46e5' }} />
                         )}
                       </div>
                       {errors.pan_number && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pan_number}</span>}
@@ -1336,7 +1336,7 @@ const DSARegisterPage = () => {
                         <div className="relative">
                           <input name="pincode" placeholder={addressFieldsLocked ? 'Waiting…' : '123 456'} maxLength={6} value={form.pincode} disabled={addressFieldsLocked} onChange={handleChange} onBlur={(e) => handleFieldBlur('pincode', e.target.value)} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.pincode ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0 ${addressFieldsLocked ? 'opacity-50 cursor-not-allowed' : ''}`} />
                           {isPincodeFetching && (
-                            <div className="absolute right-0 bottom-3 w-4 h-4 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+                            <span className="skeleton-inline" style={{ position: 'absolute', right: 0, bottom: 12, width: 32, height: 10, color: '#4f46e5' }} />
                           )}
                         </div>
                         {errors.pincode && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pincode}</span>}

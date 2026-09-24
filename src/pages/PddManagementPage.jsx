@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Search, Clock, CheckCircle, XCircle, FileText, AlertCircle, X, RefreshCw,
+  Search, Clock, CheckCircle, XCircle, FileText, AlertCircle, X,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { getPddTasks, updatePddStatus } from '../api/pddService';
@@ -409,7 +409,7 @@ export default function PddManagementPage() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                 <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting} style={{ minWidth: 130, justifyContent: 'center' }}>
-                  {submitting ? <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Save Status'}
+                  {submitting ? <span className="skeleton-inline" style={{ width: 56, height: 10 }} /> : 'Save Status'}
                 </button>
               </div>
             </form>

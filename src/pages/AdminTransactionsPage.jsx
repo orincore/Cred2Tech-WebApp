@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import {
   Receipt, IndianRupee, CheckCircle2, Clock, XCircle, AlertTriangle,
-  Search, SlidersHorizontal, FileSpreadsheet, FileText, RefreshCw,
+  Search, SlidersHorizontal, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
@@ -312,14 +312,14 @@ const AdminTransactionsPage = () => {
                 disabled={exportingExcel}
                 style={{ ...compactField, display: 'flex', alignItems: 'center', gap: 6, cursor: exportingExcel ? 'not-allowed' : 'pointer', border: '1px solid var(--outline)' }}
               >
-                {exportingExcel ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileSpreadsheet size={13} />} Excel
+                {exportingExcel ? <span className="skeleton-inline" style={{ width: 13, height: 13 }} /> : <FileSpreadsheet size={13} />} Excel
               </button>
               <button
                 onClick={handleExportPdf}
                 disabled={exportingPdf}
                 style={{ ...compactField, display: 'flex', alignItems: 'center', gap: 6, cursor: exportingPdf ? 'not-allowed' : 'pointer', border: '1px solid var(--outline)' }}
               >
-                {exportingPdf ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={13} />} PDF
+                {exportingPdf ? <span className="skeleton-inline" style={{ width: 13, height: 13 }} /> : <FileText size={13} />} PDF
               </button>
             </div>
           </div>
