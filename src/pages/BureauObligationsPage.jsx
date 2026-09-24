@@ -553,7 +553,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                   title="Report PDF was not saved during the original pull — click to re-pull and capture it"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'var(--warning)', color: 'var(--warning)' }}
                 >
-                  <RotateCcw size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                  <RotateCcw size={13} className={retryingFor === applicant.id ? 'icon-loading' : ''} />
                   {retryingFor === applicant.id ? 'Re-pulling…' : 'Re-pull Report'}
                 </button>
               )}
