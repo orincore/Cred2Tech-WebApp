@@ -23,12 +23,6 @@ const initialForm = {
   admin_name: '',
   admin_password: '',
   terms_accepted: false,
-  // Data URL (`data:image/png;base64,...`) captured from the signature pad
-  // on Step 3 — the actual e-signature embedded into the DSA's copy of the
-  // Sourcing Partner Agreement PDF, on top of (not instead of) the OTP
-  // Acceptance the Agreement's own Clause 1(u) already treats as legally
-  // binding. Empty string until the Designated User draws one.
-  signature_data: '',
 };
 
 const companyTypeOptions = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
@@ -510,110 +504,48 @@ const DsaAgreementPreviewModal = ({ dsaName, adminName, address, mobile, email, 
   );
 };
 
-// Canvas-based e-signature capture for the Designated User signing the
-// Sourcing Partner Agreement — the actual digital signature embedded into
-// the PDF (see dsaAgreement.service.js's SIGNATURE_TOKEN handling on the
-// backend), on top of (not instead of) the OTP Acceptance the Agreement's
-// own Clause 1(u) already treats as the legally binding act. Pointer
-// events (not separate mouse/touch handlers) so one code path covers
-// mouse, touch, and pen input alike. Exports a `data:image/png;base64,...`
-// data URL via onChange on every completed stroke, and an empty string
-// when cleared — the caller (Step 3's hasStepErrors) treats an empty
-// string as "not yet signed" and blocks submission until it's non-empty.
-const SignaturePad = ({ value, onChange }) => {
-  const canvasRef = useRef(null);
-  const drawingRef = useRef(false);
-  const hasStrokeRef = useRef(false);
+// Auto-signature: renders the Designated User's typed name in a script
+// font onto a canvas and returns a `data:image/png;base64,...` data URL, the
+// same payload the backend/PDF already expects for `signature_data`. Replaces
+// the old hand-drawn signature pad.
+const SIGNATURE_FONT = '"Snell Roundhand", "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive';
 
-  // Backing-store resolution scaled for devicePixelRatio so the signature
-  // stays crisp on high-DPI screens, while the CSS size stays fixed —
-  // otherwise a retina capture looks blurry once re-rendered into the PDF
-  // at a larger print size.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const cssWidth = canvas.clientWidth;
-    const cssHeight = canvas.clientHeight;
-    canvas.width = cssWidth * dpr;
-    canvas.height = cssHeight * dpr;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#0a1628';
-  }, []);
-
-  const getPoint = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const handlePointerDown = (e) => {
-    e.preventDefault();
-    drawingRef.current = true;
-    const ctx = canvasRef.current.getContext('2d');
-    const { x, y } = getPoint(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  };
-
-  const handlePointerMove = (e) => {
-    if (!drawingRef.current) return;
-    e.preventDefault();
-    const ctx = canvasRef.current.getContext('2d');
-    const { x, y } = getPoint(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    hasStrokeRef.current = true;
-  };
-
-  const handlePointerUp = () => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    if (hasStrokeRef.current) {
-      onChange(canvasRef.current.toDataURL('image/png'));
-    }
-  };
-
-  const handleClear = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    hasStrokeRef.current = false;
-    onChange('');
-  };
-
-  return (
-    <div>
-      <div className="relative w-full h-[150px] rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-[#0a1628]/40 overflow-hidden touch-none">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full cursor-crosshair touch-none"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-        />
-        {!value && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="material-symbols-outlined text-[22px] text-[#0a1628]/25 dark:text-[#e6edf7]/25">draw</span>
-            <span className="text-[12px] font-medium text-[#0a1628]/40 dark:text-[#e6edf7]/40 mt-1">Draw your signature here</span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
-          This is your digital signature on the Sourcing Partner Agreement, in addition to OTP verification.
-        </span>
-        <button type="button" onClick={handleClear} className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 ml-3">
-          Clear
-        </button>
-      </div>
-    </div>
-  );
+const generateSignatureDataUrl = (name) => {
+  const text = (name || '').trim();
+  if (!text) return '';
+  const canvas = document.createElement('canvas');
+  const width = 600;
+  const height = 200;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  let size = 90;
+  ctx.font = `italic ${size}px ${SIGNATURE_FONT}`;
+  while (ctx.measureText(text).width > width - 40 && size > 24) {
+    size -= 4;
+    ctx.font = `italic ${size}px ${SIGNATURE_FONT}`;
+  }
+  ctx.fillStyle = '#0a1628';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, width / 2, height / 2);
+  return canvas.toDataURL('image/png');
 };
+
+const AutoSignature = ({ name }) => (
+  <div>
+    <div className="w-full h-[110px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0a1628]/40 flex items-center justify-center overflow-hidden px-4">
+      {name.trim() ? (
+        <span className="text-[38px] text-[#0a1628] dark:text-[#e6edf7] italic truncate" style={{ fontFamily: SIGNATURE_FONT }}>{name.trim()}</span>
+      ) : (
+        <span className="text-[12px] text-[#0a1628]/40 dark:text-[#e6edf7]/40">Enter your full name above to generate your signature</span>
+      )}
+    </div>
+    <span className="block mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
+      Your name is applied automatically as your digital signature on the Sourcing Partner Agreement, in addition to OTP verification.
+    </span>
+  </div>
+);
 
 const DSARegisterPage = () => {
   const navigate = useNavigate();
@@ -996,7 +928,6 @@ const DSARegisterPage = () => {
     if (step === 2 && form.operational_states.length === 0) return true;
     if (step === 3 && !IS_LOCAL_DEV && TURNSTILE_SITE_KEY && !turnstileToken) return true;
     if (step === 3 && !form.terms_accepted) return true;
-    if (step === 3 && !form.signature_data) return true;
     return stepFields[step].some(f => errors[f]) || (step === 3 && !allPasswordRequirementsMet(form.admin_password));
   };
 
@@ -1080,7 +1011,7 @@ const DSARegisterPage = () => {
         admin_name: form.admin_name.trim(),
         admin_password: form.admin_password,
         terms_accepted: form.terms_accepted,
-        signature_data: form.signature_data,
+        signature_data: generateSignatureDataUrl(form.admin_name),
         website: '', // honeypot — always empty for real users, see hidden input below
         turnstile_token: turnstileToken || undefined,
         verification_session_id: registrationSessionId.current,
@@ -1527,10 +1458,7 @@ const DSARegisterPage = () => {
                       <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">
                         Sign the Sourcing Partner Agreement *
                       </label>
-                      <SignaturePad
-                        value={form.signature_data}
-                        onChange={(dataUrl) => setForm((p) => ({ ...p, signature_data: dataUrl }))}
-                      />
+                      <AutoSignature name={form.admin_name} />
                     </div>
                     {TURNSTILE_SITE_KEY && !IS_LOCAL_DEV && (
                       <div className="md:col-span-2">
