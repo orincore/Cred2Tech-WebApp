@@ -216,7 +216,7 @@ const MsmeLoginPage = () => {
                 >
                   {loading ? (
                     <div className="flex justify-center items-center w-full h-full">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
                     </div>
                   ) : (
                     <span>Send OTP</span>
@@ -274,7 +274,7 @@ const MsmeLoginPage = () => {
                 >
                   {loading ? (
                     <div className="flex justify-center items-center w-full h-full">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
                     </div>
                   ) : (
                     <span>Verify OTP &amp; Login</span>

@@ -171,7 +171,7 @@ const OfflineOverlay = () => {
                     Back Online!
                   </h1>
                   <p className="text-[13px] font-medium text-[#0a1628]/70 dark:text-[#e6edf7]/70 flex items-center justify-center gap-2">
-                    <RefreshCw size={14} className="animate-spin" /> Refreshing your page…
+                    <RefreshCw size={14} className="icon-loading" /> Refreshing your page…
                   </p>
                 </motion.div>
               ) : (

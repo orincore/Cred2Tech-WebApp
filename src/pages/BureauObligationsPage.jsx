@@ -564,7 +564,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                   >
-                    <Fingerprint size={13} className={retryingFor === applicant.id ? 'spin' : ''} />
+                    <Fingerprint size={13} className={retryingFor === applicant.id ? 'icon-loading' : ''} />
                     {retryingFor === applicant.id
                       ? 'Pulling…'
                       : isMsme
@@ -736,7 +736,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                             style={{ background: 'none', border: 'none', color: 'var(--info)', cursor: 'pointer', padding: 4 }}
                             title={`Revert to the bureau-reported EMI (${fmt(obl.original_emi_per_month)}/mo)`}
                           >
-                            <RotateCcw size={15} className={revertingId === obl.id ? 'spin' : ''} />
+                            <RotateCcw size={15} className={revertingId === obl.id ? 'icon-loading' : ''} />
                           </button>
                         )}
                       </td>

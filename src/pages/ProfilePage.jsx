@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone, Bell, Loader2 } from 'lucide-react';
+import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone, Bell } from 'lucide-react';
 import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
@@ -1440,10 +1440,9 @@ const ProfilePage = () => {
                               }}
                             >
                               {pushLoading ? (
-                                <Loader2
-                                  size={16}
-                                  color="#fff"
-                                  style={{ position: 'absolute', top: 3, left: 13, animation: 'spin 1s linear infinite' }}
+                                <span
+                                  className="skeleton-inline"
+                                  style={{ position: 'absolute', top: 3, left: 13, width: 18, height: 18, color: '#fff' }}
                                 />
                               ) : (
                                 <div

@@ -315,7 +315,7 @@ const MfaSetupPage = () => {
           <OtpInput length={6} value={code} onChange={(v) => { setCode(v); setError(''); }} onEnter={confirmTotp} />
         </div>
         <TravelingBorderButton onClick={confirmTotp} disabled={status === 'loading'} className="w-full py-3.5 text-[15px] rounded-[10px]">
-          {status === 'loading' ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Confirm & Enable'}
+          {status === 'loading' ? <span className="skeleton-inline" style={{ display: 'block', margin: '0 auto', width: 56, height: 10 }} /> : 'Confirm & Enable'}
         </TravelingBorderButton>
       </>,
     );
@@ -335,7 +335,7 @@ const MfaSetupPage = () => {
           <OtpInput length={6} value={code} onChange={(v) => { setCode(v); setError(''); }} onEnter={confirmEmail} />
         </div>
         <TravelingBorderButton onClick={confirmEmail} disabled={status === 'loading'} className="w-full py-3.5 text-[15px] rounded-[10px]">
-          {status === 'loading' ? <div className="w-5 h-5 mx-auto border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Confirm & Enable'}
+          {status === 'loading' ? <span className="skeleton-inline" style={{ display: 'block', margin: '0 auto', width: 56, height: 10 }} /> : 'Confirm & Enable'}
         </TravelingBorderButton>
       </>,
     );
@@ -387,7 +387,11 @@ const MfaSetupPage = () => {
   // Loading placeholder for 'totp'/'email' transitional steps (init in flight)
   return cardShell(
     <div className="flex justify-center py-10">
-      <div className="w-8 h-8 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+      <div className="flex flex-col gap-3 w-full">
+        <div className="skeleton" style={{ height: 14, width: '60%', borderRadius: 0 }} />
+        <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
+        <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
+      </div>
     </div>,
   );
 };

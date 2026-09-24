@@ -408,7 +408,7 @@ const EditUserPage = () => {
             >
               {saving ? (
                 <div className="flex justify-center items-center w-full h-full">
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
                   <span style={{ marginLeft: 4 }}>Saving…</span>
                 </div>
               ) : (

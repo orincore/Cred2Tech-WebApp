@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { Loader2, ExternalLink, TrendingUp, Eye, MousePointer, Clock, Mail } from 'lucide-react';
+import { ExternalLink, TrendingUp, Eye, MousePointer, Clock, Mail } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';

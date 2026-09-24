@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Search, RefreshCw, ChevronDown, BarChart3, SlidersHorizontal } from 'lucide-react';
+import TableSkeleton from '../components/ui/TableSkeleton';
+import { Activity, Search, ChevronDown, BarChart3, SlidersHorizontal } from 'lucide-react';
 import api from '../api/axiosInstance';
 import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
@@ -304,11 +305,8 @@ const SuperadminApiLogsPage = () => {
 
       {/* ─── Content ─── */}
       {loading ? (
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <RefreshCw size={24} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: 13, color: 'var(--on-muted)', fontWeight: 500 }}>Loading logs...</span>
-          </div>
+        <div style={{ flex: 1, background: 'var(--bg)', overflow: 'hidden' }} role="status" aria-label="Loading logs">
+          <TableSkeleton rows={10} columns={6} />
         </div>
       ) : logs.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>

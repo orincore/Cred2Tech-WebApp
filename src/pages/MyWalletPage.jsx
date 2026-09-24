@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import {
   Wallet, ArrowUpCircle, ArrowDownCircle, Search, SlidersHorizontal,
-  FileSpreadsheet, RefreshCw, TrendingUp, TrendingDown, Plus, X,
+  FileSpreadsheet, TrendingUp, TrendingDown, Plus, X,
   Download, CheckCircle2, Clock, XCircle,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -457,7 +457,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
                 opacity: redeemingFreebie ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
-              {redeemingFreebie ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {redeemingFreebie ? <span className="skeleton-inline" style={{ width: 15, height: 15 }} /> : null}
               {redeemingFreebie ? 'Redeeming…' : `Redeem ${freebieAmount.toLocaleString('en-IN')} Free Credits`}
             </button>
           ) : (
@@ -470,7 +470,7 @@ const RechargeModal = ({ onClose, onSuccess }) => {
                 opacity: submitting || !base ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
-              {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {submitting ? <span className="skeleton-inline" style={{ width: 15, height: 15 }} /> : null}
               {submitting ? 'Processing…' : `Pay ${base > 0 ? formatINR(amountPayable) : ''}`}
             </button>
           )}
@@ -552,7 +552,7 @@ const AllocationModal = ({ type, employee, onClose, onSuccess }) => {
                 opacity: submitting ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
-              {submitting ? <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+              {submitting ? <span className="skeleton-inline" style={{ width: 15, height: 15 }} /> : null}
               {submitting ? 'Processing…' : 'Confirm'}
             </button>
           </div>
@@ -793,7 +793,7 @@ const MyWalletPage = () => {
           disabled={downloadingId === t.id}
           style={{ ...compactField, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: downloadingId === t.id ? 'not-allowed' : 'pointer' }}
         >
-          {downloadingId === t.id ? <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={12} />}
+          {downloadingId === t.id ? <span className="skeleton-inline" style={{ width: 12, height: 12 }} /> : <Download size={12} />}
           {t.invoice_number || 'Download'}
         </button>
       ) : <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>—</span>,
@@ -838,7 +838,6 @@ const MyWalletPage = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader title="My Wallet" subtitle="Your credit balance, recharges, and transaction history" compact={isMobile} />
       </div>
@@ -957,7 +956,7 @@ const MyWalletPage = () => {
                   disabled={exporting}
                   style={{ ...compactField, display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', cursor: exporting ? 'not-allowed' : 'pointer', border: '1px solid var(--outline)' }}
                 >
-                  {exporting ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileSpreadsheet size={13} />} Export Excel
+                  {exporting ? <span className="skeleton-inline" style={{ width: 13, height: 13 }} /> : <FileSpreadsheet size={13} />} Export Excel
                 </button>
               </div>
 

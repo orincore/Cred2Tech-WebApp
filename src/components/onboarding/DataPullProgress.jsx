@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw, Clock, AlertTriangle, FileDown } from 'lucide-react';
+import { CheckCircle2, AlertCircle, RefreshCw, Clock, AlertTriangle, FileDown } from 'lucide-react';
 
 const getScoreColor = (score) => {
   if (!score) return 'var(--text-tertiary)';
@@ -28,7 +28,7 @@ const DataPullProgress = ({
       case 'COMPLETE':
         return { icon: <CheckCircle2 size={18} color="var(--success)" />, color: 'var(--success)', bg: 'var(--success-bg)', text: 'Complete' };
       case 'PROCESSING':
-        return { icon: <Loader2 size={18} className="animate-spin" color="var(--info)" />, color: 'var(--info)', bg: 'var(--info-bg)', text: 'Processing...' };
+        return { icon: <span className="skeleton-inline" style={{ width: 18, height: 18, color: 'var(--info)' }} />, color: 'var(--info)', bg: 'var(--info-bg)', text: 'Processing...' };
       case 'FAILED':
         return { icon: <AlertCircle size={18} color="var(--error)" />, color: 'var(--error)', bg: 'var(--error-bg)', text: 'Failed' };
       case 'PENDING':
@@ -115,7 +115,7 @@ const DataPullProgress = ({
             title={disabled ? disabledTitle : undefined}
           >
             {loading ? (
-              <Loader2 size={14} className="animate-spin" />
+              <span className="skeleton-inline" style={{ width: 40, height: 10 }} />
             ) : status === 'FAILED' ? (
               'Retry'
             ) : (

@@ -13,7 +13,8 @@ import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
+import TableSkeleton from '../components/ui/TableSkeleton';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 
@@ -384,9 +385,58 @@ export default function CaseDetailPage() {
     }
   };
 
+  // Shaped like the real page (header + actions, Case Progress, two-column
+  // detail cards, table card) so the load reads as "this page is filling in"
+  // rather than a blank screen with a spinner.
   if (loading) return (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <LoadingSpinner size={36} />
+    <div className="hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }} role="status" aria-label="Loading case">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 20, flexWrap: 'wrap' }}>
+        <div>
+          <Skeleton width={190} height={12} style={{ marginBottom: 10 }} />
+          <Skeleton width={320} height={24} style={{ marginBottom: 10 }} />
+          <Skeleton width={260} height={13} />
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {[96, 132, 120, 110].map((w, i) => <Skeleton key={i} width={w} height={30} />)}
+        </div>
+      </div>
+      <div className="card card-padded" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <Skeleton width={110} height={12} />
+          <Skeleton width={90} height={24} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
+          {Array.from({ length: isMobile ? 4 : 8 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 90 }}>
+              <Skeleton width={30} height={30} />
+              <Skeleton width={56} height={10} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 24 }}>
+        {[0, 1].map((c) => (
+          <div key={c} className="card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <Skeleton width={150} height={14} />
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[0, 1, 2, 3].map((r) => (
+                <div key={r} style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                  <Skeleton width={110} height={12} />
+                  <Skeleton width={150} height={12} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <Skeleton width={130} height={14} />
+        </div>
+        <TableSkeleton rows={4} columns={isMobile ? 2 : 5} />
+      </div>
     </div>
   );
   if (!caseData) return (

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Skeleton from '../components/ui/Skeleton';
 import MetricTile from '../components/ui/MetricTile';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import { IS_DEV_BUILD } from '../utils/devBuild';
@@ -968,6 +968,44 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
 // reading useParams()/navigating itself. onOpenProposal(proposalId) is how a
 // newly created (or existing) proposal hands off to step 7, since proposalId
 // only ever exists once one has actually been created here.
+// Shaped like the real ESR step (title, filter bar, lender cards with
+// identity / metric tiles / actions). Also rendered by AddCustomerWizardPage
+// while the case itself is still loading on a direct ?step=6 link, so that
+// entry shows this one skeleton instead of a step-1 form skeleton first.
+export function EsrSkeleton() {
+  return (
+    <div className="esr-page" role="status" aria-label="Loading eligibility">
+      <div style={{ marginBottom: 24 }}>
+        <Skeleton width={260} height={24} style={{ marginBottom: 10 }} />
+        <Skeleton width={330} height={13} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20, padding: '12px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+        <Skeleton width={90} height={14} />
+        <Skeleton width={180} height={34} />
+        <Skeleton width={160} height={34} />
+      </div>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', marginBottom: 12, padding: 16, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 220px', minWidth: 0 }}>
+            <Skeleton width={44} height={44} />
+            <div style={{ flex: 1 }}>
+              <Skeleton width="60%" height={15} style={{ marginBottom: 8 }} />
+              <Skeleton width="40%" height={11} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flex: '2 1 320px' }}>
+            {[0, 1, 2].map((m) => <Skeleton key={m} height={52} style={{ flex: 1 }} />)}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Skeleton width={72} height={32} />
+            <Skeleton width={72} height={32} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onApplyForLoan }) {
 
   const [loading, setLoading]       = useState(true);
@@ -1027,11 +1065,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
     }
   };
 
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-      <LoadingSpinner size={40} />
-    </div>
-  );
+  if (loading) return <EsrSkeleton />;
 
   const lenders = esr?.raw_payload?.lenders || [];
   const eligibleCount   = lenders.filter(hasPositiveEligibility).length;
@@ -1126,7 +1160,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           {esr && (
             <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <RefreshCw size={14} className={generating ? 'spin' : ''} />
+              <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
               {generating ? 'Refreshing...' : 'Refresh Results'}
             </button>
           )}

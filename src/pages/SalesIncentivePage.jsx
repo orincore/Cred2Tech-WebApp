@@ -502,7 +502,7 @@ export default function SalesIncentivePage() {
                               className="btn btn-ghost btn-sm"
                               style={{ color: 'var(--success)', padding: 0 }}
                             >
-                              <RefreshCw size={13} style={{ animation: syncingLevel === r.hierarchy_level ? 'spin 1s linear infinite' : 'none' }} />
+                              <RefreshCw size={13} className={syncingLevel === r.hierarchy_level ? 'icon-loading' : undefined} />
                               {syncingLevel === r.hierarchy_level ? 'Syncing...' : 'Sync Past'}
                             </button>
                           </div>
