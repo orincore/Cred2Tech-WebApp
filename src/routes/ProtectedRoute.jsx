@@ -21,7 +21,17 @@ const ProtectedRoute = ({ children, allowedRoles, allowedTenantTypes }) => {
   // same thing — worth keeping, not worth a loading state of its own.
   useEffect(() => {
     if (!isAuthenticated) return;
-    getMe().catch(() => logout());
+    getMe().catch((error) => {
+      // Only a genuine 401 means the token is actually invalid. A network
+      // error, timeout, or 5xx just means the backend was briefly
+      // unreachable (a DR failover window, a deploy, a blip) — AuthContext
+      // already validated this session on mount; logging out on every
+      // transient hiccup was the exact bug that made short backend
+      // interruptions look like being logged out.
+      if (error.response?.status === 401) {
+        logout();
+      }
+    });
   }, [isAuthenticated, logout]);
 
   if (isLoading) {

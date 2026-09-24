@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Receipt,
   Trash2,
+  ServerCog,
   Tag,
   Bell,
   ShieldCheck,
@@ -125,6 +126,13 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-system-status',
+    label: 'System Status',
+    path: '/admin/system-status',
+    icon: ServerCog,
     roles: ['SUPER_ADMIN'],
   },
   {
