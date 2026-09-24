@@ -140,7 +140,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     property_type: '',
     occupancy_status: 'Self Occupied',
     ownership_type: 'Sole Owner',
-    market_value: ''
+    market_value: '',
+    // Explicit null (not absent) = "no ITR/bank record yet". The step 2/3
+    // upload components read `undefined` as "still loading" and show a
+    // skeleton (Bank: for its full 4s timeout), which is what a case created
+    // in this session used to trigger — these keys only got a value when an
+    // EXISTING case was loaded from the server.
+    customer_itr_profile: null,
+    customer_bank_profile: null
   });
 
   const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0 });
@@ -2384,7 +2391,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         prefillMobile={formData.business_mobile}
                         walletBalance={walletBalance}
                         itrCost={costs.ITR_ANALYTICS}
-                        existingRecord={formData.customer_itr_profile}
+                        existingRecord={formData.customer_itr_profile ?? null}
                         onComplete={(data) => setFormData(prev => ({ ...prev, itr_completed: true, itr_analytics: data }))}
                         onRemoved={() => setFormData(prev => ({ ...prev, itr_completed: false, itr_analytics: null }))}
                         mode={mode}
@@ -2443,7 +2450,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                         walletBalance={walletBalance}
                         analyzeCost={costs.BANK_ANALYSIS}
-                        existingStatus={formData.customer_bank_profile}
+                        existingStatus={formData.customer_bank_profile ?? null}
                         onComplete={(status, payload) => console.log('Primary bank complete')}
                         mode={mode}
                         disabled={isBulkInjectedCase}
