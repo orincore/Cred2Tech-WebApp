@@ -110,6 +110,13 @@ const API_CODE_FALLBACK_LABEL = {
 // attached by joining the api_usage_log the deduction was logged against;
 // it's appended to, never a replacement for, the service name below.
 const transactionReferenceLabel = (t) => {
+  // A refund of a failed API call used to read only the generic "System
+  // Refund for failed execution" — say which API failed and for whom.
+  if (t.is_api_refund && t.api_code) {
+    const service = API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
+    const who = t.customer_name ? `${t.customer_name}${t.case_id ? ` · Case ${t.case_id}` : ''}` : null;
+    return who ? `Refund — ${service} failed — ${who}` : `Refund — ${service} failed`;
+  }
   if (t.remarks) return t.remarks;
   if (t.api_code) {
     const service = API_CODE_FALLBACK_LABEL[t.api_code] || t.api_code.replace(/_/g, ' ');
@@ -120,6 +127,25 @@ const transactionReferenceLabel = (t) => {
 };
 
 const formatCredits = (n) => `${Number(n || 0).toLocaleString('en-IN')}`;
+
+// Whether the API call behind a wallet row worked: SUCCESS = the charge
+// stood; FAILED = the call failed (its credits were refunded, and the refund
+// row itself carries the same status). Rows with no API behind them
+// (recharges, top-ups, adjustments) have none.
+const USAGE_STATUS_STYLE = {
+  SUCCESS: { color: 'var(--success)', bg: 'var(--success-bg)', icon: CheckCircle2, label: 'Success' },
+  FAILED: { color: 'var(--error)', bg: 'var(--error-bg)', icon: XCircle, label: 'Failed' },
+};
+const UsageStatusBadge = ({ status }) => {
+  const s = USAGE_STATUS_STYLE[status];
+  if (!s) return <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>—</span>;
+  const Icon = s.icon;
+  return (
+    <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: s.color, background: s.bg }}>
+      <Icon size={12} /> {s.label}
+    </span>
+  );
+};
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const TOPUP_STATUS_STYLE = {
@@ -722,11 +748,11 @@ const MyWalletPage = () => {
 
   const columns = [
     {
-      key: 'created_at', label: 'Date & Time', width: '20%', padding: '16px 12px',
+      key: 'created_at', label: 'Date & Time', width: '16%', padding: '16px 12px',
       render: (t) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(t.created_at)}</span>,
     },
     {
-      key: 'type', label: 'Type', width: '16%', padding: '16px 12px',
+      key: 'type', label: 'Type', width: '12%', padding: '16px 12px',
       render: (t) => (
         <span className="badge" style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -739,7 +765,7 @@ const MyWalletPage = () => {
       ),
     },
     {
-      key: 'amount', label: 'Amount', align: 'right', width: '14%', padding: '16px 12px',
+      key: 'amount', label: 'Amount', align: 'right', width: '8%', padding: '16px 12px',
       render: (t) => (
         <span style={{ fontSize: 14, fontWeight: 800, color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)' }}>
           {t.transaction_type === 'CREDIT' ? '+' : '-'}{formatCredits(t.amount)}
@@ -747,11 +773,15 @@ const MyWalletPage = () => {
       ),
     },
     {
-      key: 'reference', label: 'Reference', width: '30%', padding: '16px 12px',
+      key: 'api_status', label: 'Status', width: '10%', padding: '16px 12px',
+      render: (t) => <UsageStatusBadge status={t.usage_status} />,
+    },
+    {
+      key: 'reference', label: 'Reference', width: '41%', padding: '16px 12px', whiteSpace: 'normal',
       render: (t) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{transactionReferenceLabel(t)}</span>,
     },
     {
-      key: 'balance_after', label: 'Balance After', align: 'right', width: '20%', padding: '16px 12px',
+      key: 'balance_after', label: 'Balance After', align: 'right', width: '13%', padding: '16px 12px',
       render: (t) => <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{formatCredits(t.balance_after)}</span>,
     },
   ];
@@ -848,7 +878,7 @@ const MyWalletPage = () => {
           <div data-tour="wallet-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 8 : 16, flex: 1 }}>
             <StatCard title="Current Balance" value={balanceLoading ? '—' : (balance !== null ? formatCredits(balance) : '—')} icon={Wallet} color="var(--primary)" loading={balanceLoading} />
             <StatCard title="Credited (in range)" value={summary ? `+${formatCredits(summary.total_credit)}` : '—'} icon={TrendingUp} color="var(--success)" loading={!summary} />
-            <StatCard title="Used (in range)" value={summary ? `-${formatCredits(summary.total_debit)}` : '—'} icon={TrendingDown} color="var(--error)" loading={!summary} />
+            <StatCard title="Used (in range)" value={summary ? `-${formatCredits(summary.total_debit)}` : '—'} subtitle={summary?.total_refunded > 0 ? `Net of ${formatCredits(summary.total_refunded)} refunded` : undefined} icon={TrendingDown} color="var(--error)" loading={!summary} />
           </div>
           <button
             data-tour="wallet-recharge"
@@ -979,6 +1009,7 @@ const MyWalletPage = () => {
                             {t.transaction_type === 'CREDIT' ? <ArrowUpCircle size={12} /> : <ArrowDownCircle size={12} />}
                             {referenceTypeLabel(t.reference_type)}
                           </span>
+                          {t.usage_status && <span style={{ marginLeft: 6 }}><UsageStatusBadge status={t.usage_status} /></span>}
                           <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 6 }}>{formatDateTime(t.created_at)}</div>
                         </div>
                         <div style={{ fontSize: 16, fontWeight: 800, color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--error)', flexShrink: 0 }}>
