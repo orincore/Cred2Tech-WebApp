@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import MetricTile from '../components/ui/MetricTile';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
+import { IS_DEV_BUILD } from '../utils/devBuild';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -51,7 +52,6 @@ const hasPositiveEligibility = (result) => result?.is_eligible === true
 // build-time dev flag (unlike NODE_ENV) but doesn't match the dev-server URL
 // check since local dev usually points at a local backend, not
 // dev.api.cred2tech.com.
-const IS_DEV_BUILD = import.meta.env.DEV || String(import.meta.env.VITE_API_BASE_URL || '').includes('dev.api.cred2tech.com');
 
 // ─── Ineligibility reason → canonical reason mapping ──────────────────────────
 // Docs/Lender_Reject_Reasons_Master_List.xlsx is the single source of truth for

@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 import { getUserById, getUsers, updateUser } from '../api/userService';
 import { getRoles } from '../api/roleService';
 import { useAuth } from '../context/AuthContext';
-import { MOCK_USERS } from '../constants/mockData';
 import { ROLES, HIERARCHY_LEVELS } from '../constants/roles';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -86,21 +85,7 @@ const EditUserPage = () => {
           status: u.status || '',
         });
       } catch {
-        const mock = MOCK_USERS.find((u) => u.id === Number(id));
-        if (mock) {
-          setUser(mock);
-          setForm({
-            name: mock.name || '',
-            email: mock.email || '',
-            mobile: mock.mobile || '',
-            role_id: mock.role_id?.toString() || '',
-            tenant_id: mock.tenant_id?.toString() || '',
-            hierarchy_level: mock.hierarchy_level || '',
-            manager_id: mock.manager_id?.toString() || '',
-            designation: mock.designation || '',
-            status: mock.status || '',
-          });
-        }
+        setUser(null);
       } finally {
         setLoading(false);
       }

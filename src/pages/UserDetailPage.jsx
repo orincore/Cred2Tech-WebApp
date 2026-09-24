@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Edit, Trash2, Mail, Phone, Shield, Building2, Layers, GitBranch, Calendar, User, Hash, Briefcase, Clock } from 'lucide-react';
 import { getUserById } from '../api/userService';
-import { MOCK_USERS } from '../constants/mockData';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
 import StatCard from '../components/ui/StatCard';
@@ -69,8 +68,7 @@ const UserDetailPage = () => {
         if (!cancelled) setUser(data.user || data);
       } catch {
         if (!cancelled) {
-          const mock = MOCK_USERS.find((u) => u.id === Number(id));
-          setUser(mock || null);
+          setUser(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
