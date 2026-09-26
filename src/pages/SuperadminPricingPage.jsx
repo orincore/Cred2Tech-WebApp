@@ -303,6 +303,7 @@ const SuperadminPricingPage = () => {
       const matchSearch = !q ||
         p.api_name?.toLowerCase().includes(q) ||
         p.api_code?.toLowerCase().includes(q) ||
+        p.vendor?.toLowerCase().includes(q) ||
         p.description?.toLowerCase().includes(q);
       return matchSearch;
     });
@@ -497,7 +498,18 @@ const SuperadminPricingPage = () => {
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.api_name || p.api_code}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
+                        {p.vendor && p.vendor !== 'DEFAULT' && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                            background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                            borderRadius: 0, padding: '1px 6px',
+                          }}>
+                            {p.vendor}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span style={{
                       display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
@@ -612,6 +624,20 @@ const SuperadminPricingPage = () => {
                 <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{p.api_name || p.api_code}</span>
                 <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
               </div>
+            )},
+            // Same api_code can have several rows now — one per vendor
+            // actually serving it (e.g. BUREAU_PULL: Signzy vs BEFISC, each
+            // with its own real cost) — this column is what tells them apart.
+            { key: 'vendor', label: 'Vendor', align: 'center', render: (p) => (
+              p.vendor && p.vendor !== 'DEFAULT' ? (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                  background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                  borderRadius: 0, padding: '2px 8px', whiteSpace: 'nowrap',
+                }}>
+                  {p.vendor}
+                </span>
+              ) : <span style={{ color: 'var(--on-muted)' }}>—</span>
             )},
             { key: 'description', label: 'Description', align: 'center', render: (p) => {
               const isEditing = editingId === p.id;
