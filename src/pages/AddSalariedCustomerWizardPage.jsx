@@ -1274,7 +1274,7 @@ const AddSalariedCustomerWizardPage = () => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
                         </button>
                       )
                     ) : (
@@ -1419,7 +1419,7 @@ const AddSalariedCustomerWizardPage = () => {
                                             disabled={saving || walletBalance < costs.PAN_FETCH}
                                             title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {`Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                            {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
                                           </button>
                                         )
                                       ) : (
@@ -1432,11 +1432,29 @@ const AddSalariedCustomerWizardPage = () => {
                                 </div>
 
                                 <div className="grid-2">
-                                  <FormField label="Full Name" name={`coname_${realIdx}`}>
-                                    <input type="text" value={app.name || ''} onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)} className="form-control" placeholder="Enter Full Name" />
+                                  <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
+                                    <input
+                                      type="text"
+                                      value={app.name || ''}
+                                      onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+                                      className="form-control"
+                                      placeholder={app.pan_verified ? 'Autofetched via PAN' : 'Enter Full Name'}
+                                      disabled={app.pan_verified}
+                                    />
                                   </FormField>
-                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`}>
-                                    <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
+                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled={app.pan_verified}>
+                                    {app.pan_verified ? (
+                                      <input
+                                        type="text"
+                                        value={app.dob ? formatDate(app.dob) : ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    ) : (
+                                      <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
+                                    )}
                                   </FormField>
                                 </div>
                               </div>

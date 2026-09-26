@@ -462,7 +462,7 @@ const ItrAnalyticsForm = ({
                                 disabled={disabled}
                                 title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
                             >
-                                {isMsme
+                                {(isMsme || !itrCost)
                                     ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
                                     : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
                             </button>
@@ -502,7 +502,7 @@ const ItrAnalyticsForm = ({
                                         title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
                                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                     >
-                                        <Mail size={13} /> {sendingLink ? 'Sending…' : `Send Auth Link (~${itrCost} Cr)`}
+                                        <Mail size={13} /> {sendingLink ? 'Sending…' : (itrCost ? `Send Auth Link (~${itrCost} Cr)` : 'Send Auth Link')}
                                     </button>
                                 </>
                             )}
@@ -660,7 +660,7 @@ const ItrAnalyticsForm = ({
                             onClick={handleAnalyze}
                             disabled={loading || (!isMsme && walletBalance < itrCost)}
                         >
-                            {loading ? 'Submitting...' : isMsme ? 'Analyze' : `Analyze (~${itrCost} Cr)`}
+                            {loading ? 'Submitting...' : (isMsme || !itrCost) ? 'Analyze' : `Analyze (~${itrCost} Cr)`}
                         </button>
                     </div>
                 </div>

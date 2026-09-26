@@ -712,12 +712,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         {mode === 'AUTH_LINK' ? (
                             <>
                                 <Mail size={14} />
-                                {sendingLink ? 'Sending…' : isMsme ? 'Send Auth Link' : `Send Auth Link (~${gstCost ?? 1} Cr)`}
+                                {sendingLink ? 'Sending…' : (isMsme || !gstCost) ? 'Send Auth Link' : `Send Auth Link (~${gstCost} Cr)`}
                             </>
                         ) : (
                             <>
                                 <Send size={14} />
-                                {loading ? 'Creating...' : isMsme ? 'Submit' : `Submit (~${gstCost ?? 1} Cr)`}
+                                {loading ? 'Creating...' : (isMsme || !gstCost) ? 'Submit' : `Submit (~${gstCost} Cr)`}
                             </>
                         )}
                     </button>

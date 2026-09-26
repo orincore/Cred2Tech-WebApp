@@ -25,7 +25,7 @@ const INCOME_TYPES_SALARIED = [
   'Rental Income — Bank', 'Rental Income — Cash',
   'Interest Income', 'Dividend Income', 'Other'
 ];
-const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'None'];
+const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'Rental Agreement', 'None'];
 
 // esr_financials.salaried_income_source (esrFinancials.service.js) has 5
 // real values, not just OCR/MANUAL — a case can have OCR salary slips for

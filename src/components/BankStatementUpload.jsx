@@ -520,7 +520,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             disabled={disabled}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
-                            {isMsme ? 'Upload PDF' : `Upload PDF (~${analyzeCost} Cr)`}
+                            {isMsme || !analyzeCost ? 'Upload PDF' : `Upload PDF (~${analyzeCost} Cr)`}
                         </button>
                     )}
                 </div>
@@ -634,7 +634,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : (isMsme || !analyzeCost) ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
                             </button>
                         </div>
                     </div>

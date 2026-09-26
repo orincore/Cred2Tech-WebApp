@@ -297,16 +297,45 @@ const SuperadminPricingPage = () => {
     return { live, avgRate, avgMargin };
   }, [apiPricingRows]);
 
+  // One row per api_code now, not one per (api_code, vendor) — BUREAU_PULL's
+  // two rows (SIGNZY/BEFISC) previously showed as two near-duplicate table
+  // rows differing only by a small badge. Grouped here instead, with a
+  // vendor dropdown on the row switching which underlying pricing row
+  // (still its own real id, editable/saveable exactly as before) is shown.
+  // A stable vendor order (Signzy first, matching failover priority) keeps
+  // the dropdown from reordering itself between renders.
+  const VENDOR_ORDER = { SIGNZY: 0, BEFISC: 1 };
+  const apiPricingGroups = useMemo(() => {
+    const map = new Map();
+    for (const p of apiPricingRows) {
+      if (!map.has(p.api_code)) map.set(p.api_code, []);
+      map.get(p.api_code).push(p);
+    }
+    return Array.from(map.entries()).map(([api_code, rows]) => ({
+      api_code,
+      rows: [...rows].sort((a, b) => (VENDOR_ORDER[a.vendor] ?? 9) - (VENDOR_ORDER[b.vendor] ?? 9)),
+    }));
+  }, [apiPricingRows]);
+
+  // Which vendor's row is currently shown/edited per api_code — defaults to
+  // the first row in VENDOR_ORDER (Signzy where it applies) until the admin
+  // picks a different one from the dropdown.
+  const [selectedVendor, setSelectedVendor] = useState({});
+  const getActiveRow = (group) =>
+    group.rows.find(r => r.vendor === selectedVendor[group.api_code]) || group.rows[0];
+
   const filtered = useMemo(() => {
-    return apiPricingRows.filter((p) => {
+    return apiPricingGroups.filter((group) => {
       const q = search.toLowerCase();
-      const matchSearch = !q ||
+      if (!q) return true;
+      return group.rows.some(p =>
         p.api_name?.toLowerCase().includes(q) ||
         p.api_code?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q);
-      return matchSearch;
+        p.vendor?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q)
+      );
     });
-  }, [apiPricingRows, search]);
+  }, [apiPricingGroups, search]);
 
   /* ---- label style shared across filters ---- */
   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
@@ -481,14 +510,15 @@ const SuperadminPricingPage = () => {
             swap for inputs, Save/Cancel replace the Edit button. */}
         {isMobile ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-            {filtered.map((p) => {
+            {filtered.map((group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               const current = isEditing ? editForm : p;
               const margin = current.default_credit_cost - current.vendor_cost;
               const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
               return (
                 <div
-                  key={p.id}
+                  key={group.api_code}
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}
                 >
                   {/* Identity row: API service name + code on the left, status pill anchored right */}
@@ -497,7 +527,26 @@ const SuperadminPricingPage = () => {
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.api_name || p.api_code}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                        <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
+                        {p.vendor && p.vendor !== 'DEFAULT' && (
+                          <select
+                            value={p.vendor}
+                            onChange={e => {
+                              setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
+                              setEditingId(null);
+                            }}
+                            disabled={group.rows.length < 2}
+                            style={{
+                              fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                              background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                              borderRadius: 0, padding: '1px 4px', cursor: group.rows.length < 2 ? 'default' : 'pointer',
+                            }}
+                          >
+                            {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
+                          </select>
+                        )}
+                      </div>
                     </div>
                     <span style={{
                       display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
@@ -607,13 +656,44 @@ const SuperadminPricingPage = () => {
         ) : (
         <DataTable
           columns={[
-            { key: 'api_name', label: 'API Service', align: 'center', render: (p, idx) => (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{p.api_name || p.api_code}</span>
-                <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
-              </div>
-            )},
-            { key: 'description', label: 'Description', align: 'center', render: (p) => {
+            { key: 'api_name', label: 'API Service', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{p.api_name || p.api_code}</span>
+                  <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
+                </div>
+              );
+            }},
+            // Same api_code can have several rows now — one per vendor
+            // actually serving it (e.g. BUREAU_PULL: Signzy vs BEFISC, each
+            // with its own real cost). Picking a vendor here swaps every
+            // other column in this row to that vendor's own pricing row —
+            // still its own real id underneath, saved exactly as before.
+            { key: 'vendor', label: 'Vendor', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
+              if (!p.vendor || p.vendor === 'DEFAULT') return <span style={{ color: 'var(--on-muted)' }}>—</span>;
+              return (
+                <select
+                  value={p.vendor}
+                  onChange={e => {
+                    setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
+                    setEditingId(null);
+                  }}
+                  disabled={group.rows.length < 2}
+                  style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                    borderRadius: 0, padding: '3px 6px', whiteSpace: 'nowrap',
+                    cursor: group.rows.length < 2 ? 'default' : 'pointer',
+                  }}
+                >
+                  {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
+                </select>
+              );
+            }},
+            { key: 'description', label: 'Description', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               return isEditing ? (
                 <input
@@ -626,9 +706,9 @@ const SuperadminPricingPage = () => {
                 p.description || '—'
               );
             }},
-            { key: 'vendor_cost', label: 'Vendor Cost (₹)', align: 'center', render: (p) => {
+            { key: 'vendor_cost', label: 'Vendor Cost (₹)', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
-              const current = isEditing ? editForm : p;
               return isEditing ? (
                 <input
                   type="number"
@@ -641,9 +721,9 @@ const SuperadminPricingPage = () => {
                 `₹${(p.vendor_cost ?? 0).toFixed(2)}`
               );
             }},
-            { key: 'default_credit_cost', label: 'C2T Rate (₹)', align: 'center', render: (p) => {
+            { key: 'default_credit_cost', label: 'C2T Rate (₹)', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
-              const current = isEditing ? editForm : p;
               return isEditing ? (
                 <input
                   type="number"
@@ -658,7 +738,8 @@ const SuperadminPricingPage = () => {
                 </div>
               );
             }},
-            { key: 'margin', label: 'Margin (₹)', align: 'center', render: (p) => {
+            { key: 'margin', label: 'Margin (₹)', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               const current = isEditing ? editForm : p;
               const margin = current.default_credit_cost - current.vendor_cost;
@@ -668,13 +749,14 @@ const SuperadminPricingPage = () => {
                 </span>
               );
             }},
-            { key: 'margin_pct', label: 'Margin %', align: 'center', render: (p) => {
+            { key: 'margin_pct', label: 'Margin %', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               const current = isEditing ? editForm : p;
               const margin = current.default_credit_cost - current.vendor_cost;
               const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
               return (
-                <span style={{ 
+                <span style={{
                   fontSize: 11, fontWeight: 700, color: '#059669',
                   background: isDark ? '#064e3b' : '#ECFDF5', padding: '2px 8px', borderRadius: '4px'
                 }}>
@@ -682,29 +764,33 @@ const SuperadminPricingPage = () => {
                 </span>
               );
             }},
-            { key: 'is_active', label: 'Status', align: 'center', render: (p) => (
-              <span style={{ 
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, 
-                fontSize: 11, fontWeight: 700, color: p.is_active ? '#10b981' : '#f43f5e' 
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? '#10b981' : '#f43f5e' }} />
-                {p.is_active ? 'Live' : 'Disabled'}
-              </span>
-            )},
-            { key: 'action', label: 'Action', align: 'center', render: (p) => {
+            { key: 'is_active', label: 'Status', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
+              return (
+                <span style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  fontSize: 11, fontWeight: 700, color: p.is_active ? '#10b981' : '#f43f5e'
+                }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? '#10b981' : '#f43f5e' }} />
+                  {p.is_active ? 'Live' : 'Disabled'}
+                </span>
+              );
+            }},
+            { key: 'action', label: 'Action', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               return isEditing ? (
                 <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                  <button 
-                    className="btn btn-primary btn-xs" 
-                    onClick={() => handleSavePricing(p.id)} 
+                  <button
+                    className="btn btn-primary btn-xs"
+                    onClick={() => handleSavePricing(p.id)}
                     disabled={saving}
                     style={{ fontSize: 11 }}
                   >
                     Save
                   </button>
-                  <button 
-                    className="btn btn-ghost btn-xs" 
+                  <button
+                    className="btn btn-ghost btn-xs"
                     onClick={() => setEditingId(null)}
                     style={{ fontSize: 11 }}
                   >
@@ -712,8 +798,8 @@ const SuperadminPricingPage = () => {
                   </button>
                 </div>
               ) : (
-                <button 
-                  className="btn btn-outline btn-xs" 
+                <button
+                  className="btn btn-outline btn-xs"
                   onClick={() => startEdit(p)}
                   style={{ fontSize: 11 }}
                 >
@@ -723,6 +809,7 @@ const SuperadminPricingPage = () => {
             }},
           ]}
           data={filtered}
+          rowKey="api_code"
           isMobile={isMobile}
           hoverRows={true}
         />

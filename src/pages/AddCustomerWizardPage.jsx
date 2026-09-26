@@ -1937,7 +1937,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
                         </button>
                       )
                     ) : (
@@ -2118,7 +2118,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                             disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
                                             title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {isMsme ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                            {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
                                           </button>
                                         )
                                       ) : (

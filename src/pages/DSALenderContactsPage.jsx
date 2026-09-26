@@ -167,6 +167,7 @@ export default function DSALenderContactsPage() {
       contact_name: contact.contact_name || '',
       contact_mobile: contact.contact_mobile || '',
       contact_email: contact.contact_email || '',
+      dsa_code: contact.dsa_code || '',
       is_primary: !!contact.is_primary,
     }}));
   };
@@ -202,7 +203,7 @@ export default function DSALenderContactsPage() {
 
   const startAddContact = (lenderId) => {
     setNewContactDrafts(prev => ({ ...prev, [lenderId]: {
-      product_type: 'LAP', contact_name: '', contact_mobile: '', contact_email: '', is_primary: true,
+      product_type: 'LAP', contact_name: '', contact_mobile: '', contact_email: '', dsa_code: '', is_primary: true,
     }}));
   };
 
@@ -464,6 +465,10 @@ export default function DSALenderContactsPage() {
                                     <label style={inputLabel}>EMAIL</label>
                                     <input value={editState.contact_email} onChange={e => updateEditField(contact.id, 'contact_email', e.target.value)} style={inputStyle} placeholder="suresh.nair@hdfc.com" />
                                   </div>
+                                  <div>
+                                    <label style={inputLabel}>SOURCING PARTNER CODE</label>
+                                    <input value={editState.dsa_code} onChange={e => updateEditField(contact.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. DSA-1234" />
+                                  </div>
                                   <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
                                       <input type="checkbox" checked={!!editState.is_primary} onChange={e => updateEditField(contact.id, 'is_primary', e.target.checked)} />
@@ -476,6 +481,7 @@ export default function DSALenderContactsPage() {
                                   <div><span style={{ color: 'var(--text-tertiary)' }}>Contact: </span><strong>{contact.contact_name}</strong></div>
                                   <div><span style={{ color: 'var(--text-tertiary)' }}>Mobile: </span>{contact.contact_mobile || '—'}</div>
                                   <div><span style={{ color: 'var(--text-tertiary)' }}>Email: </span>{contact.contact_email}</div>
+                                  <div><span style={{ color: 'var(--text-tertiary)' }}>Sourcing Partner Code: </span>{contact.dsa_code || '—'}</div>
                                 </div>
                               )}
                             </div>
@@ -503,6 +509,10 @@ export default function DSALenderContactsPage() {
                               <div>
                                 <label style={inputLabel}>EMAIL *</label>
                                 <input value={newContactDrafts[lender.id].contact_email} onChange={e => updateNewContactField(lender.id, 'contact_email', e.target.value)} style={inputStyle} placeholder="suresh.nair@hdfc.com" />
+                              </div>
+                              <div>
+                                <label style={inputLabel}>SOURCING PARTNER CODE</label>
+                                <input value={newContactDrafts[lender.id].dsa_code} onChange={e => updateNewContactField(lender.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. DSA-1234" />
                               </div>
                               <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
