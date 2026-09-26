@@ -127,7 +127,7 @@ const ItrPullForm = ({ caseId, customerId, prefillPan, walletBalance, itrCost, o
             </div>
 
             <button type="button" className="btn btn-secondary" style={{ width: 'fit-content', marginTop: 8 }} onClick={handlePullRequest} disabled={loading || walletBalance < itrCost}>
-                {loading ? 'Processing Extractor...' : `💳 Execute Pull (~${itrCost} Credits)`}
+                {loading ? 'Processing Extractor...' : (itrCost ? `💳 Execute Pull (~${itrCost} Credits)` : '💳 Execute Pull')}
             </button>
         </div>
     );

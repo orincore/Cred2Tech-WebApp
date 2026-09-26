@@ -570,7 +570,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     <Fingerprint size={13} className={retryingFor === applicant.id ? 'icon-loading' : ''} />
                     {retryingFor === applicant.id
                       ? 'Pulling…'
-                      : isMsme
+                      : (isMsme || !bureauCost)
                         ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
                         : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
                   </button>
