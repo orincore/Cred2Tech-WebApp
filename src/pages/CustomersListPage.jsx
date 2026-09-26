@@ -684,7 +684,9 @@ const CustomersListPage = () => {
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.customer?.created_by?.name || ''}</div>
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ color: 'var(--on-surface)' }}>{c.lender_name || '—'}</div>
+                      {c.parent_case_id && (
+                        <div style={{ color: 'var(--on-surface)' }}>{c.lender_name || '—'}</div>
+                      )}
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.product_type || '—'}</div>
                     </td>
                     <td style={cellStyle}>
