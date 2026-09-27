@@ -122,6 +122,24 @@ export const caseService = {
     const response = await axiosInstance.get(`/cases/${caseId}/esr`);
     return response.data;
   },
+  downloadCalculators: async (caseId, version) => {
+    try {
+      const response = await axiosInstance.get(`/cases/${caseId}/esr/calculators/download`, {
+        params: { version }, responseType: 'blob', timeout: 180000,
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Case_${caseId}_ESR_v${version}_Calculators.zip`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      if (error.response?.data instanceof Blob) {
+        try { error.message = JSON.parse(await error.response.data.text()).error || error.message; } catch { /* Keep the original request error. */ }
+      }
+      throw error;
+    }
+  },
 
   // Phase 2 —— Proposals
   createProposal: async (caseId, payload) => {

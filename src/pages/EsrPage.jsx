@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
+import { getUnavailableLenders } from '../api/lenderService';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
@@ -11,7 +12,7 @@ import {
   Send, Clock, CheckCircle2, AlertCircle,
   BarChart3, ClipboardList, Percent, TrendingDown, TrendingUp,
   Home, ChevronUp, ChevronDown, Zap, IndianRupee,
-  ListFilter,
+  ListFilter, Download,
 } from 'lucide-react';
 
 const easeOut = [0.22, 1, 0.36, 1];
@@ -1016,6 +1017,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [lenderFilter, setLenderFilter]         = useState('all');
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [showIneligible, setShowIneligible] = useState(true);
+  const [unavailableLenders, setUnavailableLenders] = useState([]);
+  const [downloadingCalculators, setDownloadingCalculators] = useState(false);
 
   // The card list is rendered from esr.raw_payload.lenders (a debugging
   // snapshot taken before the EligibilityReportLender rows were inserted, so
@@ -1036,15 +1039,17 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       // getCaseById is a fairly heavy call (full applicant/customer income
       // sub-records) only needed to render IncomeSourcesPanel below — skip
       // it entirely outside dev builds rather than fetch data that never renders.
-      const [esrResult, proposalsResult, caseResult] = await Promise.allSettled([
+      const [esrResult, proposalsResult, caseResult, availabilityResult] = await Promise.allSettled([
         caseService.getESR(caseId),
         caseService.listProposals(caseId),
         IS_DEV_BUILD ? caseService.getCaseById(caseId) : Promise.resolve(null),
+        getUnavailableLenders(),
       ]);
       if (esrResult.status === 'fulfilled') setEsr(esrResult.value);
       else if (esrResult.reason?.response?.status !== 404) toast.error('Failed to load ESR');
       if (proposalsResult.status === 'fulfilled') setProposals(proposalsResult.value.proposals || []);
       if (caseResult.status === 'fulfilled') setCaseDetail(caseResult.value);
+      setUnavailableLenders(availabilityResult.status === 'fulfilled' && Array.isArray(availabilityResult.value) ? availabilityResult.value : []);
     } finally {
       setLoading(false);
     }
@@ -1063,6 +1068,22 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleCalculatorDownload = async (refresh = false) => {
+    setDownloadingCalculators(true);
+    try {
+      let report = esr;
+      if (refresh) {
+        await caseService.generateESR(caseId);
+        report = await caseService.getESR(caseId);
+        setEsr(report);
+      }
+      await caseService.downloadCalculators(caseId, report.version_number);
+      toast.success(`Calculator ZIP downloaded for ESR v${report.version_number}`);
+    } catch (error) {
+      toast.error(error.message || 'Unable to download calculators');
+    } finally { setDownloadingCalculators(false); }
   };
 
   if (loading) return <EsrSkeleton />;
@@ -1158,7 +1179,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {esr && (
-            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
+            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating || downloadingCalculators}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
               {generating ? 'Refreshing...' : 'Refresh Results'}
@@ -1167,6 +1188,25 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
       </motion.div>
 
+      {esr && !isMsme && (
+        <section aria-label="Lender calculator downloads" className="card" style={{ padding: 16, marginBottom: 20 }}>
+          <strong>All lender calculators · ESR v{esr.version_number}</strong>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
+            Download all 12 workbooks with their method sheets and an input/output audit. After saving manual changes, update the ESR to download a new version.
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Missing inputs are flagged in the audit. Open the workbooks in Excel to recalculate their formulas; saved engine outputs are included separately.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <button className="btn btn-secondary btn-sm" disabled={generating || downloadingCalculators} onClick={() => handleCalculatorDownload(false)}>
+              <Download size={14} /> {downloadingCalculators ? 'Preparing calculators…' : `Download v${esr.version_number} ZIP`}
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={generating || downloadingCalculators} onClick={() => handleCalculatorDownload(true)}>
+              Update ESR &amp; download new ZIP
+            </button>
+          </div>
+        </section>
+      )}
 
 
       {/* No ESR yet */}
@@ -1219,6 +1259,23 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             Showing {filteredLenders.length} of {lenders.length}
           </div>
         </div>
+      )}
+
+      {unavailableLenders.length > 0 && eligibilityFilter === 'all' && lenderFilter === 'all' && (
+        <section aria-label="Unavailable lenders" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Configured lenders unavailable for ESR</h3>
+          {unavailableLenders.map(lender => (
+            <div key={lender.id} style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', padding: 16, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{getLenderDisplayName(lender)}</strong>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Unavailable — inactive</span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 0 }}>
+                {(lender.products || []).map(p => p.product_type).join(' / ')} policies are configured, but this lender is not active for new ESR calculations. No eligibility offer is available.
+              </p>
+            </div>
+          ))}
+        </section>
       )}
 
       {/* Lenders — compact list view */}

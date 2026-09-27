@@ -480,7 +480,7 @@ const LenderConfigPage = () => {
                      onChange={handleLenderChange}
                   >
                      <option value="">-- Select Lender --</option>
-                     {lenders.map(l => <option key={l.id} value={l.id}>{getLenderDisplayName(l)}</option>)}
+                     {lenders.map(l => <option key={l.id} value={l.id}>{getLenderDisplayName(l)}{l.status === 'INACTIVE' ? ' (Inactive)' : ''}</option>)}
                   </select>
                   <button 
                      className="btn btn-outline" 
@@ -492,6 +492,11 @@ const LenderConfigPage = () => {
                   </button>
                </div>
             </div>
+            {lenders.find(l => l.id === selectedLenderId)?.status === 'INACTIVE' && (
+               <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', flexBasis: '100%' }}>
+                  This lender is inactive. Its policies can be reviewed here, but it is not included in new ESR evaluations.
+               </p>
+            )}
             <div style={{ flex: 1, minWidth: 200 }}>
                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Product Line</span>
                <div style={{ display: 'flex', gap: 8 }}>

@@ -1,5 +1,10 @@
 import api from './axiosInstance';
 
+export const getUnavailableLenders = async () => {
+  const { data } = await api.get('/platform-lenders/unavailable');
+  return data;
+};
+
 export const getLenders = async () => {
   const { data } = await api.get('/admin/lenders');
   return data;

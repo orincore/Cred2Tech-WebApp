@@ -15,6 +15,7 @@ import { toast } from 'react-hot-toast';
 import { subscribeToCasePulls } from '../lib/realtime';
 import PageTour from '../components/tour/PageTour';
 import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
+import { HDFC_DEPARTMENTS } from '../constants/lenderPolicies';
 
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
@@ -87,7 +88,7 @@ const CUSTOMER_TYPE_OPTIONS = [
   { value: 'MSME', label: 'Business / MSME' },
   { value: 'SALARIED', label: 'Salaried' },
 ];
-const LENDER_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
+const LENDER_OPTIONS = ['HDFC Bank', ...Object.values(HDFC_DEPARTMENTS).map(d => d.displayName), 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
 const ALERT_OPTIONS = [{ value: 'PDD_PENDING', label: 'PDD Pending' }];
 const SORT_OPTIONS = [
   { label: 'Newest First', by: 'lead_date', order: 'desc' },
