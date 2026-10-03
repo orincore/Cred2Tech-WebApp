@@ -182,6 +182,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   // field — treated as bureau-eligible (fail open) rather than blocking a
   // case we genuinely don't know the entity type for.
   const [entityType, setEntityType] = useState(null);
+  // Only a case's FIRST ESR is billed, so the Generate button shows a credit
+  // cost only while the case has none.
+  const [hasExistingEsr, setHasExistingEsr] = useState(false);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
   // Applicant ids whose most recent manual pull attempt failed — switches
@@ -196,12 +199,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // that already exists for this case_id — it never triggers a fresh
       // (billed) CIBIL pull, so it's safe to run unconditionally here.
       await caseService.syncObligations(caseId);
-      const [result, caseData] = await Promise.all([
+      // The ESR probe mirrors what the API bills on: only a case with no ESR
+      // yet is charged for Generate, so a 404 here (-> null) is the one state
+      // that shows a credit cost on the button. Any other failure also lands
+      // on null, which errs toward warning about a charge that may not happen
+      // rather than hiding one that will.
+      const [result, caseData, existingEsr] = await Promise.all([
         caseService.getObligations(caseId),
-        caseService.getCaseById(caseId)
+        caseService.getCaseById(caseId),
+        caseService.getESR(caseId).then((r) => r, () => null)
       ]);
 
       setData(result);
+      setHasExistingEsr(Boolean(existingEsr));
       setEntityType(caseData.customer?.entity_type || null);
       // Obligations only return a display name that already falls back to a
       // role label ("Primary Borrower") when Applicant.name is unset — pull
@@ -846,7 +856,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
-            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost ? `Generate Eligibility Summary Report (~${esrGenerationCost} Cr)` : 'Generate Eligibility Summary Report')}
+            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost && !hasExistingEsr ? `Generate Eligibility Summary Report (~${esrGenerationCost} Cr)` : 'Generate Eligibility Summary Report')}
           </button>
           {mustAddCoApplicant ? (
             <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
