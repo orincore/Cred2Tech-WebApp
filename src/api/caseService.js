@@ -115,8 +115,12 @@ export const caseService = {
 
   // Phase 1 —— ESR
   // forCalculatorDownload: the refresh behind "Update ESR & download new ZIP" is not a billed Generate click.
+  // Body is {}, not null: the instance sends Content-Type: application/json, and
+  // express.json() is strict by default, so a bare `null` body is rejected by
+  // body-parser before any route middleware runs — a 400 the API's global error
+  // handler then reports as a bare 500.
   generateESR: async (caseId, { forCalculatorDownload = false } = {}) => {
-    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, null, forCalculatorDownload ? { params: { purpose: 'calculator_refresh' } } : undefined);
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, {}, forCalculatorDownload ? { params: { purpose: 'calculator_refresh' } } : undefined);
     return response.data;
   },
   getESR: async (caseId) => {
