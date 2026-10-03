@@ -123,6 +123,13 @@ export const caseService = {
     const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, {}, forCalculatorDownload ? { params: { purpose: 'calculator_refresh' } } : undefined);
     return response.data;
   },
+  // Re-runs the engine over the case's existing financial snapshot — no new
+  // data pull, and deliberately unbilled on the API side. This is what
+  // "Refresh Results" uses; only the first generation is a charged click.
+  recalculateESR: async (caseId) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/recalculate`, {});
+    return response.data;
+  },
   getESR: async (caseId) => {
     const response = await axiosInstance.get(`/cases/${caseId}/esr`);
     return response.data;

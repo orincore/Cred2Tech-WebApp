@@ -1085,6 +1085,22 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
     }
   };
 
+  // "Refresh Results" re-runs the engine over the snapshot already on the case,
+  // so it goes to /esr/recalculate and is free — only the first generation
+  // (handleGenerate, from the empty state) is a charged click.
+  const handleRefresh = async () => {
+    try {
+      setGenerating(true);
+      const result = await caseService.recalculateESR(caseId);
+      await load();
+      toast.success(`Results refreshed! ${result.eligible_count} lender(s) eligible.`);
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to refresh results');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleCalculatorDownload = async (refresh = false) => {
     setDownloadingCalculators(true);
     try {
@@ -1194,10 +1210,10 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {esr && (
-            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating || downloadingCalculators}
+            <button className="btn btn-secondary btn-sm" onClick={handleRefresh} disabled={generating || downloadingCalculators}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
-              {generating ? 'Refreshing...' : (!isMsme && esrGenerateCost ? `Refresh Results (~${esrGenerateCost} Cr)` : 'Refresh Results')}
+              {generating ? 'Refreshing...' : 'Refresh Results'}
             </button>
           )}
         </div>
