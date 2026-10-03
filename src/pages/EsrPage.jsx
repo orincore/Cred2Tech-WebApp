@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
 import { getUnavailableLenders } from '../api/lenderService';
+import api from '../api/axiosInstance';
+import { withRetry } from '../utils/retryFetch';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
@@ -1019,6 +1021,19 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [showIneligible, setShowIneligible] = useState(true);
   const [unavailableLenders, setUnavailableLenders] = useState([]);
   const [downloadingCalculators, setDownloadingCalculators] = useState(false);
+  // Generate button shows this so a DSA knows the charge before clicking —
+  // MSME self-service borrowers don't see wallet-credit costs (DSA concept).
+  const [esrGenerateCost, setEsrGenerateCost] = useState(0);
+
+  useEffect(() => {
+    if (isMsme) return;
+    withRetry(() => api.get('/wallet/api-costs'))
+      .then(res => {
+        const cost = res.data.find(d => d.api_code === 'ESR_GENERATION')?.tenant_cost || 0;
+        setEsrGenerateCost(cost);
+      })
+      .catch(err => console.error('Could not load ESR generation pricing', err));
+  }, [isMsme]);
 
   // The card list is rendered from esr.raw_payload.lenders (a debugging
   // snapshot taken before the EligibilityReportLender rows were inserted, so
@@ -1075,7 +1090,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
     try {
       let report = esr;
       if (refresh) {
-        await caseService.generateESR(caseId);
+        await caseService.generateESR(caseId, { forCalculatorDownload: true });
         report = await caseService.getESR(caseId);
         setEsr(report);
       }
@@ -1182,7 +1197,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating || downloadingCalculators}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
-              {generating ? 'Refreshing...' : 'Refresh Results'}
+              {generating ? 'Refreshing...' : (!isMsme && esrGenerateCost ? `Refresh Results (~${esrGenerateCost} Cr)` : 'Refresh Results')}
             </button>
           )}
         </div>
@@ -1223,7 +1238,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             We'll instantly check your eligibility across all our lending partners.
           </p>
           <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={18} /> Check My Eligibility
+            <Zap size={18} /> {!isMsme && esrGenerateCost ? `Check My Eligibility (~${esrGenerateCost} Cr)` : 'Check My Eligibility'}
           </button>
         </motion.div>
       )}

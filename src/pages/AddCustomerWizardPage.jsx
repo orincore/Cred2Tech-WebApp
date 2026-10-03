@@ -150,7 +150,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     customer_bank_profile: null
   });
 
-  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0 });
+  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0, ESR_GENERATION: 0 });
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
@@ -176,7 +176,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
         const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
         const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-        setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
+        const esrGeneration = data.find(d => d.api_code === 'ESR_GENERATION')?.tenant_cost || 0;
+        setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch, ESR_GENERATION: esrGeneration });
       })
       .catch(err => {
         console.error(err);
@@ -2594,6 +2595,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               mode={mode}
               walletBalance={walletBalance}
               bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+              esrGenerationCost={costs.ESR_GENERATION}
               onAddCoApplicant={() => { goToStep(1); setStep1SubPage('coapplicants'); }}
             />
           )}

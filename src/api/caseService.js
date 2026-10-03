@@ -114,8 +114,9 @@ export const caseService = {
   },
 
   // Phase 1 —— ESR
-  generateESR: async (caseId) => {
-    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`);
+  // forCalculatorDownload: the refresh behind "Update ESR & download new ZIP" is not a billed Generate click.
+  generateESR: async (caseId, { forCalculatorDownload = false } = {}) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, null, forCalculatorDownload ? { params: { purpose: 'calculator_refresh' } } : undefined);
     return response.data;
   },
   getESR: async (caseId) => {
