@@ -284,7 +284,18 @@ const SuperadminPricingPage = () => {
   // isn't a per-call rate to begin with. It gets its own dedicated,
   // clearly-labeled card below instead of living inside the generic table.
   const msmePricing = useMemo(() => pricing.find(p => p.api_code === 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
-  const apiPricingRows = useMemo(() => pricing.filter(p => p.api_code !== 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
+  // BUREAU_OBLIGATIONS is retired — the obligations/tradelines pull was
+  // folded into the single BUREAU_PULL charge (bureau.controller.js no
+  // longer bills it separately, and that charge is always made directly
+  // against BUREAU_PULL's own Signzy/BEFISC row below — live DB price, no
+  // separate placeholder to keep in sync). BUREAU_OBLIGATIONS is never
+  // billed again and shouldn't show as if it were still its own chargeable
+  // API. Deactivated in the DB; filtered here too so it can't reappear in
+  // the list even if left active.
+  const apiPricingRows = useMemo(() => pricing.filter(p =>
+    p.api_code !== 'DIRECT_MSME_ELIGIBILITY' &&
+    p.api_code !== 'BUREAU_OBLIGATIONS'
+  ), [pricing]);
 
   const stats = useMemo(() => {
     const live = apiPricingRows.filter(p => p.is_active).length;
