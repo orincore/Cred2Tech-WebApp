@@ -44,7 +44,7 @@ const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletMana
 const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetail'));
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
 const SystemStatusPage = lazy(() => import('../pages/SystemStatusPage'));
-const AdminBureauProviderSettingsPage = lazy(() => import('../pages/AdminBureauProviderSettingsPage'));
+const AdminIntegrationProviderSettingsPage = lazy(() => import('../pages/AdminIntegrationProviderSettingsPage'));
 const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'));
 const LenderConfigPage = lazy(() => import('../pages/LenderConfigPage'));
 const CaseDetailPage = lazy(() => import('../pages/CaseDetailPage'));
@@ -283,8 +283,10 @@ const AppRouter = () => (
             <Route path="/admin/system-status" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SystemStatusPage /></ProtectedRoute>
             } />
-            <Route path="/admin/bureau-providers" element={
-               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminBureauProviderSettingsPage /></ProtectedRoute>
+            {/* Old deep link — bureau settings now live as a tab on the merged page. */}
+            <Route path="/admin/bureau-providers" element={<Navigate to="/admin/integration-providers" replace />} />
+            <Route path="/admin/integration-providers" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminIntegrationProviderSettingsPage /></ProtectedRoute>
             } />
             <Route path="/admin/lenders" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'CRED2TECH_MEMBER']}><LenderConfigPage /></ProtectedRoute>

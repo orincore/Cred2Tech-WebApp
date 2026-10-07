@@ -136,9 +136,9 @@ export const NAV_ITEMS = [
     roles: ['SUPER_ADMIN'],
   },
   {
-    id: 'admin-bureau-providers',
-    label: 'Bureau API Settings',
-    path: '/admin/bureau-providers',
+    id: 'admin-integration-providers',
+    label: 'API Provider Settings',
+    path: '/admin/integration-providers',
     icon: ShieldCheck,
     roles: ['SUPER_ADMIN'],
   },
