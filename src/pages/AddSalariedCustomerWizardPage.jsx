@@ -65,7 +65,14 @@ const AddSalariedCustomerWizardPage = () => {
   const searchParams = new URLSearchParams(location.search);
   const urlCaseId = searchParams.get('caseId');
 
-  const [loading, setLoading] = useState(true);
+  // Lazily seeded from whether the URL already names a case, NOT a bare
+  // `true` — the urlCaseId/caseId effect below only calls restoreSession()
+  // or the inline reset on a MISMATCH between the two, and on a true first
+  // mount with no ?caseId at all, urlCaseId and caseId both start out null,
+  // so they already "match" and that effect short-circuits without ever
+  // flipping loading to false. Since loading gates the entire render, a
+  // plain `/customers/salaried/add` visit got stuck on the skeleton forever.
+  const [loading, setLoading] = useState(() => !!urlCaseId);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   // Step 1 is split into two sub-pages (Personal Details, then Co-Applicants)
