@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import DataTable from '../components/DataTable';
 
+import CustomSelect from '../components/CustomSelect';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -173,22 +174,22 @@ const TenantsListPage = () => {
         {/* Type */}
         <div style={{ flex: 1, minWidth: 130 }}>
           <span style={labelSm}>Type</span>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+          <CustomSelect value={filterType} onChange={e => setFilterType(e.target.value)}
             style={{ ...underlineInput(!!filterType), appearance: 'none', cursor: 'pointer', borderBottomColor: filterType ? '#4f46e5' : 'var(--outline)', color: filterType ? '#4f46e5' : 'var(--on-surface)' }}>
             <option value="">All Types</option>
             <option value="DSA">Sourcing Partner</option>
             <option value="INTERNAL">INTERNAL</option>
-          </select>
+          </CustomSelect>
         </div>
 
         {/* Status */}
         <div style={{ flex: 1, minWidth: 120 }}>
           <span style={labelSm}>Status</span>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          <CustomSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             style={{ ...underlineInput(!!filterStatus), appearance: 'none', cursor: 'pointer', borderBottomColor: filterStatus ? '#4f46e5' : 'var(--outline)', color: filterStatus ? '#4f46e5' : 'var(--on-surface)' }}>
             <option value="">All Status</option>
             {STATUS_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-          </select>
+          </CustomSelect>
         </div>
 
         {hasFilters && (

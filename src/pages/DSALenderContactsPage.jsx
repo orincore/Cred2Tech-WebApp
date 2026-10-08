@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { LENDERS_LIST } from '../constants/lenders';
 
+import CustomSelect from '../components/CustomSelect';
 const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 
 // Reuse the app's existing dark-mode-aware role tokens (index.css) instead of
@@ -448,10 +449,10 @@ export default function DSALenderContactsPage() {
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 12 }}>
                                   <div>
                                     <label style={inputLabel}>PRODUCT</label>
-                                    <select value={editState.product_type} onChange={e => updateEditField(contact.id, 'product_type', e.target.value)} style={inputStyle}>
+                                    <CustomSelect value={editState.product_type} onChange={e => updateEditField(contact.id, 'product_type', e.target.value)} style={inputStyle}>
                                       <option value="ALL">ALL</option>
                                       {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-                                    </select>
+                                    </CustomSelect>
                                   </div>
                                   <div>
                                     <label style={inputLabel}>CONTACT PERSON</label>
@@ -493,10 +494,10 @@ export default function DSALenderContactsPage() {
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
                               <div>
                                 <label style={inputLabel}>PRODUCT *</label>
-                                <select value={newContactDrafts[lender.id].product_type} onChange={e => updateNewContactField(lender.id, 'product_type', e.target.value)} style={inputStyle}>
+                                <CustomSelect value={newContactDrafts[lender.id].product_type} onChange={e => updateNewContactField(lender.id, 'product_type', e.target.value)} style={inputStyle}>
                                   <option value="ALL">ALL</option>
                                   {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-                                </select>
+                                </CustomSelect>
                               </div>
                               <div>
                                 <label style={inputLabel}>CONTACT PERSON *</label>
@@ -750,14 +751,14 @@ export default function DSALenderContactsPage() {
                                   </div>
                                   <div>
                                     <label style={inputLabel}>BASIS</label>
-                                    <select value={sc.basis || 'CASE_COUNT'} onChange={e => {
+                                    <CustomSelect value={sc.basis || 'CASE_COUNT'} onChange={e => {
                                       const newSchemes = [...ruleState.special_schemes];
                                       newSchemes[idx].basis = e.target.value;
                                       updateRuleEdit(lender.id, activeProduct, { special_schemes: newSchemes });
                                     }} style={inputStyle}>
                                       <option value="CASE_COUNT">Case Count</option>
                                       <option value="VOLUME">Volume</option>
-                                    </select>
+                                    </CustomSelect>
                                   </div>
                                   <div>
                                     <label style={inputLabel}>VALID FROM</label>

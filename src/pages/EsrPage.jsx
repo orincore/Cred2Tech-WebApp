@@ -9,6 +9,7 @@ import Skeleton from '../components/ui/Skeleton';
 import MetricTile from '../components/ui/MetricTile';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import { IS_DEV_BUILD } from '../utils/devBuild';
+import CustomSelect from '../components/CustomSelect';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -1270,17 +1271,17 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-tertiary)', fontSize: 12, fontWeight: 700 }}>
             <ListFilter size={14} /> Filter Offers
           </div>
-          <select className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
+          <CustomSelect className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
             style={{ width: 'auto', minWidth: 180, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Lenders ({lenders.length})</option>
             {lenderNames.map(name => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <select className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
+          </CustomSelect>
+          <CustomSelect className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
             style={{ width: 'auto', minWidth: 160, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Statuses</option>
             <option value="eligible">Eligible ({eligibleCount})</option>
             <option value="ineligible">Not Eligible ({ineligibleCount})</option>
-          </select>
+          </CustomSelect>
           {(lenderFilter !== 'all' || eligibilityFilter !== 'all') && (
             <button className="btn btn-ghost btn-sm" onClick={() => { setLenderFilter('all'); setEligibilityFilter('all'); }}>
               Clear filters

@@ -11,6 +11,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 
+import CustomSelect from '../components/CustomSelect';
 // Same DSA-tenant role set CreateUserPage offers — kept as a single list here
 // too (rather than importing it) since Internal-tenant users can't reach
 // this role set anyway and importing would suggest a shared meaning that
@@ -26,7 +27,7 @@ const EditUserPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // role_id (not a role name) — matches CreateUserPage's convention, since
-  // the role <select>'s options are keyed by the live /roles response below.
+  // the role dropdown's options are keyed by the live /roles response below.
   const [form, setForm] = useState({ name: '', email: '', mobile: '', role_id: '', tenant_id: '', hierarchy_level: '', manager_id: '', designation: '', status: '' });
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState('');
@@ -305,7 +306,7 @@ const EditUserPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
               <div>
                 <label style={labelStyle}>Platform Role</label>
-                <select
+                <CustomSelect
                   name="role_id"
                   value={form.role_id}
                   onChange={handleChange}
@@ -318,7 +319,7 @@ const EditUserPage = () => {
                   {availableRoles.map((r) => (
                     <option key={r.id} value={r.id}>{ROLES[r.name]?.name || r.name.replace(/_/g, ' ')}</option>
                   ))}
-                </select>
+                </CustomSelect>
                 {isSelfEdit ? (
                   <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 4 }}>You cannot change your own role — ask another admin.</div>
                 ) : rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
@@ -328,7 +329,7 @@ const EditUserPage = () => {
               </div>
               <div>
                 <label style={labelStyle}>Status *</label>
-                <select
+                <CustomSelect
                   name="status"
                   value={form.status}
                   onChange={handleChange}
@@ -340,7 +341,7 @@ const EditUserPage = () => {
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
                   <option value="SUSPENDED">Suspended</option>
-                </select>
+                </CustomSelect>
                 {isSelfEdit && <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 4 }}>You cannot change your own status.</div>}
               </div>
               <div>
@@ -356,7 +357,7 @@ const EditUserPage = () => {
               </div>
               <div>
                 <label style={labelStyle}>Hierarchy Level</label>
-                <select
+                <CustomSelect
                   name="hierarchy_level"
                   value={form.hierarchy_level}
                   onChange={handleChange}
@@ -366,11 +367,11 @@ const EditUserPage = () => {
                 >
                   <option value="">None</option>
                   {HIERARCHY_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={labelStyle}>Manager</label>
-                <select
+                <CustomSelect
                   name="manager_id"
                   value={form.manager_id}
                   onChange={handleChange}
@@ -380,7 +381,7 @@ const EditUserPage = () => {
                 >
                   <option value="">None (root level)</option>
                   {tenantUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role?.name || u.role})</option>)}
-                </select>
+                </CustomSelect>
               </div>
             </div>
           </div>

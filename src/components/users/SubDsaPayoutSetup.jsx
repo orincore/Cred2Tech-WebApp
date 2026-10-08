@@ -4,6 +4,7 @@ import { Plus, X, Check, RefreshCw } from 'lucide-react';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { getPayoutConfig, savePayoutConfig, syncMissingPayouts, getSubDsaMtdStats } from '../../api/subDsaPayoutService';
 
+import CustomSelect from '../CustomSelect';
 const fieldStyle = {
   border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)',
   color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, padding: '6px 10px', outline: 'none', width: '100%', boxSizing: 'border-box',
@@ -144,27 +145,27 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
             <input type="number" min={0} max={100} step={0.5} value={defaultRate} onChange={(e) => setDefaultRate(parseFloat(e.target.value) || 0)} style={{ ...fieldStyle, width: 80 }} />
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>%</span>
           </div>
-          <select value={calculationBase} onChange={(e) => setCalculationBase(e.target.value)} style={{ ...fieldStyle, marginTop: 6 }}>
+          <CustomSelect value={calculationBase} onChange={(e) => setCalculationBase(e.target.value)} style={{ ...fieldStyle, marginTop: 6 }}>
             <option value="DISBURSED_AMOUNT">Disbursed Amount</option>
             <option value="LENDER_COMMISSION">Lender Commission</option>
-          </select>
+          </CustomSelect>
           <div style={sectionHint}>Applied to all lenders unless overridden below</div>
         </div>
         <div>
           <label style={labelStyle}>Payout Trigger</label>
-          <select value={payoutTrigger} onChange={(e) => setPayoutTrigger(e.target.value)} style={fieldStyle}>
+          <CustomSelect value={payoutTrigger} onChange={(e) => setPayoutTrigger(e.target.value)} style={fieldStyle}>
             <option value="ON_DSA_RECEIPT">On Sourcing Partner receipt from lender</option>
             <option value="ON_DISBURSEMENT">On disbursement</option>
             <option value="MANUAL">Manual trigger</option>
-          </select>
+          </CustomSelect>
           <div style={sectionHint}>When Sub-Sourcing Partner receives their share</div>
         </div>
         <div>
           <label style={labelStyle}>TDS Applicable</label>
-          <select value={tdsApplicable ? 'yes' : 'no'} onChange={(e) => setTdsApplicable(e.target.value === 'yes')} style={fieldStyle}>
+          <CustomSelect value={tdsApplicable ? 'yes' : 'no'} onChange={(e) => setTdsApplicable(e.target.value === 'yes')} style={fieldStyle}>
             <option value="yes">Yes — deduct TDS before payout</option>
             <option value="no">No — gross payout</option>
-          </select>
+          </CustomSelect>
           <div style={sectionHint}>TDS at applicable rate (Sec 194H)</div>
         </div>
         <div>
@@ -193,10 +194,10 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {overrides.map((ov, i) => (
               <div key={i} style={{ ...rowGrid(isMobile, '2fr 2fr 1fr 1fr auto'), ...(isMobile ? { border: '1px solid var(--outline)', background: 'var(--surface)', padding: 10 } : {}) }}>
-                <select value={ov.tenant_lender_id} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, tenant_lender_id: e.target.value } : o)))} style={fieldStyle}>
+                <CustomSelect value={ov.tenant_lender_id} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, tenant_lender_id: e.target.value } : o)))} style={fieldStyle}>
                   <option value="">— Select Lender —</option>
                   {lenders.map((l) => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
-                </select>
+                </CustomSelect>
                 <input placeholder="e.g. LAP, Business Loan" value={ov.products} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, products: e.target.value } : o)))} style={fieldStyle} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input type="number" placeholder="40" min={0} max={100} value={ov.override_rate} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, override_rate: e.target.value } : o)))} style={fieldStyle} />
@@ -269,10 +270,10 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
               <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--outline)', padding: 12 }}>
                 <div style={{ ...rowGrid(isMobile, '2fr 1fr 1fr 1fr 1fr auto'), marginBottom: 8 }}>
                   <input placeholder="Scheme name e.g. Q1FY26 Bonus" value={sc.scheme_name} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, scheme_name: e.target.value } : s)))} style={fieldStyle} />
-                  <select value={sc.basis} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, basis: e.target.value } : s)))} style={fieldStyle}>
+                  <CustomSelect value={sc.basis} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, basis: e.target.value } : s)))} style={fieldStyle}>
                     <option value="Cases">Cases</option>
                     <option value="Volume">Volume</option>
-                  </select>
+                  </CustomSelect>
                   <input type="date" value={sc.valid_from} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, valid_from: e.target.value } : s)))} style={fieldStyle} />
                   <input type="date" value={sc.valid_to} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, valid_to: e.target.value } : s)))} style={fieldStyle} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -287,10 +288,10 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, alignItems: isMobile ? 'stretch' : 'end' }}>
                   <div>
                     <label style={labelStyle}>Lender (optional)</label>
-                    <select value={sc.tenant_lender_id || ''} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, tenant_lender_id: e.target.value } : s)))} style={fieldStyle}>
+                    <CustomSelect value={sc.tenant_lender_id || ''} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, tenant_lender_id: e.target.value } : s)))} style={fieldStyle}>
                       <option value="">All Lenders</option>
                       {lenders.map((l) => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={labelStyle}>Min Cases Required</label>

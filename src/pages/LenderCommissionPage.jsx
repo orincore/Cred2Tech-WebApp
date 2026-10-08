@@ -8,6 +8,7 @@ import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 
+import CustomSelect from '../components/CustomSelect';
 const formatCurrency = (amount) => {
   if (amount == null) return '—';
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -83,9 +84,9 @@ function UpdateInvoiceStatusModal({ caseData, onClose, onSuccess }) {
           {allowedNext.length === 0 ? (
             <div className="notice notice-error">This record is in a terminal state and cannot be updated.</div>
           ) : (
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="form-control">
+            <CustomSelect value={status} onChange={(e) => setStatus(e.target.value)} className="form-control">
               {allowedNext.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
-            </select>
+            </CustomSelect>
           )}
         </div>
 
@@ -192,22 +193,22 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
               <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Lender</label>
-                  <select className="form-control" value={filters.lenderName} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
+                  <CustomSelect className="form-control" value={filters.lenderName} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
                     <option value="">-- Select Lender --</option>
                     {availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Month</label>
-                  <select className="form-control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
+                  <CustomSelect className="form-control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
                     {availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Product</label>
-                  <select className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
+                  <CustomSelect className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
                     {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
               </div>
 
@@ -467,24 +468,24 @@ function ExportPayoutsModal({ onClose, availableMonths, availableLenders }) {
           <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 160 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Month</label>
-              <select className="form-control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
+              <CustomSelect className="form-control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
                 <option value="">-- All Months --</option>
                 {availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
+              </CustomSelect>
             </div>
             <div style={{ flex: 1, minWidth: 160 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Lender</label>
-              <select className="form-control" value={filters.lenderName} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
+              <CustomSelect className="form-control" value={filters.lenderName} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
                 <option value="All Lenders">All Lenders</option>
                 {availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+              </CustomSelect>
             </div>
             <div style={{ flex: 1, minWidth: 160 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Product</label>
-              <select className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
+              <CustomSelect className="form-control" value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
                 <option value="All Products">All Products</option>
                 {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-              </select>
+              </CustomSelect>
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Search</label>
@@ -734,25 +735,25 @@ export default function LenderCommissionPage() {
             <div className="filter-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ flex: 1, minWidth: 130 }}>
                 <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={(e) => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })} disabled={data.availableMonths.length === 0}>
+                <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={(e) => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })} disabled={data.availableMonths.length === 0}>
                   {data.availableMonths.length === 0 && <option value="">No data available</option>}
                   {data.availableMonths.length > 0 && <option value="all">All Months</option>}
                   {data.availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div style={{ flex: 1, minWidth: 130 }}>
                 <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Lender</label>
-                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.lenderName || 'All Lenders'} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
+                <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.lenderName || 'All Lenders'} onChange={(e) => setFilters({ ...filters, lenderName: e.target.value })}>
                   <option value="All Lenders">All Lenders</option>
                   {data.availableLenders.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div style={{ flex: 1, minWidth: 120 }}>
                 <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
-                <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.product || 'All Products'} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
+                <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.product || 'All Products'} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
                   <option value="All Products">All Products</option>
                   {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div className="search-field" style={{ flex: 2, minWidth: 170 }}>
                 <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>

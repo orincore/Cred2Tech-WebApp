@@ -17,6 +17,7 @@ import PageTour from '../components/tour/PageTour';
 import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
 import { HDFC_DEPARTMENTS } from '../constants/lenderPolicies';
 
+import CustomSelect from '../components/CustomSelect';
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
   { target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' },
@@ -500,10 +501,10 @@ const CustomersListPage = () => {
 
         <div style={{ flex: 1, minWidth: 145 }}>
           <span style={labelSm(isDark)}>Sort</span>
-          <select value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
+          <CustomSelect value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
             style={{ ...underlineInput(sortIndex !== 0), appearance: 'none', cursor: 'pointer' }}>
             {SORT_OPTIONS.map((opt, i) => <option key={i} value={i}>{opt.label}</option>)}
-          </select>
+          </CustomSelect>
         </div>
         </div>
       </div>

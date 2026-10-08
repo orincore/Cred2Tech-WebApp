@@ -19,6 +19,7 @@ import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 
+import CustomSelect from '../components/CustomSelect';
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
 // Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
@@ -1399,11 +1400,11 @@ const AddSalariedCustomerWizardPage = () => {
 
                                 <div className="grid-3" style={{ marginBottom: 16 }}>
                                   <FormField label="Employment Type" name={`coemp_${realIdx}`}>
-                                    <select className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                                    <CustomSelect className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                                       <option value="SALARIED">Salaried</option>
                                       <option value="SELF_EMPLOYED">Self Employed</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                                    </select>
+                                    </CustomSelect>
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input
@@ -1451,7 +1452,7 @@ const AddSalariedCustomerWizardPage = () => {
 
                                 <div className="grid-2" style={{ marginBottom: 16 }}>
                                   <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
-                                    <select
+                                    <CustomSelect
                                       className="form-control"
                                       value={app.is_professional === true || app.is_professional === 'true' ? 'true' : 'false'}
                                       onChange={e => {
@@ -1467,17 +1468,17 @@ const AddSalariedCustomerWizardPage = () => {
                                     >
                                       <option value="false">No</option>
                                       <option value="true">Yes</option>
-                                    </select>
+                                    </CustomSelect>
                                   </FormField>
                                   {(app.is_professional === true || app.is_professional === 'true') && (
                                     <FormField label="Select Profession" name={`coproftype_${realIdx}`} required>
-                                      <select className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
+                                      <CustomSelect className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
                                         <option value="">Select Profession</option>
                                         <option value="CA">CA</option>
                                         <option value="Lawyer">Lawyer</option>
                                         <option value="Doctor">Doctor</option>
                                         <option value="Other">Other</option>
-                                      </select>
+                                      </CustomSelect>
                                     </FormField>
                                   )}
                                 </div>
@@ -1583,7 +1584,7 @@ const AddSalariedCustomerWizardPage = () => {
               <Panel icon={Landmark} accentColor="var(--warning)" title={<>Loan Product &amp; Collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
                 <div className="grid-3">
                   <FormField label="Select Product" name="product_type" required>
-                    <select
+                    <CustomSelect
                       className="form-control"
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
@@ -1593,33 +1594,33 @@ const AddSalariedCustomerWizardPage = () => {
                       <option value="HL">HL — Home Loan</option>
                       <option value="LAP">LAP — Loan Against Property</option>
                       <option value="PL">PL — Personal Loan</option>
-                    </select>
+                    </CustomSelect>
                   </FormField>
 
                   {PROPERTY_REQUIRED.includes(formData.product_type) && (
                     <>
                       <FormField label="Property Type" name="property_type" required>
-                        <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                        <CustomSelect className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
                           <option value="">— Select —</option>
                           <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
                           <option value="Residential — House / Flat">Residential — House / Flat</option>
                           <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
                           <option value="Plot / Land">Plot / Land</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Occupancy Status" name="occupancy_status">
-                        <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
                           <option value="Self Occupied">Self Occupied</option>
                           <option value="Rented Out">Rented Out</option>
                           <option value="Vacant">Vacant</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Ownership" name="ownership_type">
-                        <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
                           <option value="Sole Owner">Sole Owner</option>
                           <option value="Joint Owner">Joint Owner</option>
                           <option value="Company Owned">Company Owned</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <div>
                         <FormField label="Market Value (₹)" name="market_value" required>

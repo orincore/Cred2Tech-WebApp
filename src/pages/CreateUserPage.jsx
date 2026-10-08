@@ -11,6 +11,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
 import { getErrorMessage } from '../utils/helpers';
 
+import CustomSelect from '../components/CustomSelect';
 const initialForm = {
   name: '',
   email: '',
@@ -351,7 +352,7 @@ const CreateUserPage = () => {
               <div>
                 <label style={labelStyle}>Mobile Number</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <select
+                  <CustomSelect
                     name="mobile_country_code"
                     value={form.mobile_country_code}
                     onChange={e => handleCountryCodeChange('mobile_country_code', e.target.value)}
@@ -360,7 +361,7 @@ const CreateUserPage = () => {
                     onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                   >
                     {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
-                  </select>
+                  </CustomSelect>
                   <input
                     type="text"
                     name="mobile"
@@ -420,7 +421,7 @@ const CreateUserPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
               <div>
                 <label style={labelStyle}>Platform Role *</label>
-                <select
+                <CustomSelect
                   name="role_id"
                   value={form.role_id}
                   onChange={handleChange}
@@ -437,7 +438,7 @@ const CreateUserPage = () => {
                       {ROLES[r.name]?.name || r.name.replace(/_/g, ' ')}
                     </option>
                   ))}
-                </select>
+                </CustomSelect>
                 {errors.role_id && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.role_id}</div>}
                 {rolesError && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{rolesError}</div>}
                 <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Determines what the user can access on the platform</div>
@@ -453,7 +454,7 @@ const CreateUserPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 16 : 24 }}>
               <div>
                 <label style={labelStyle}>Hierarchy Level</label>
-                <select
+                <CustomSelect
                   name="hierarchy_level"
                   value={form.hierarchy_level}
                   onChange={handleChange}
@@ -463,12 +464,12 @@ const CreateUserPage = () => {
                 >
                   <option value="">None (root level)</option>
                   {HIERARCHY_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
+                </CustomSelect>
                 <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>For internal employees (L1, L2, L3…) — not needed for a Sub-Sourcing Partner</div>
               </div>
               <div>
                 <label style={labelStyle}>Manager</label>
-                <select
+                <CustomSelect
                   name="manager_id"
                   value={form.manager_id}
                   onChange={handleChange}
@@ -480,7 +481,7 @@ const CreateUserPage = () => {
                   {eligibleManagers.map(u => (
                     <option key={u.id} value={u.id}>{u.name} ({u.role?.name || u.role})</option>
                   ))}
-                </select>
+                </CustomSelect>
                 <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Select a manager from your tenant. Leave blank if none</div>
               </div>
             </div>

@@ -12,6 +12,7 @@ import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 import { itrAuthLinkService } from '../api/itrAuthLinkService';
 
+import CustomSelect from './CustomSelect';
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const ItrAnalyticsForm = ({
@@ -361,7 +362,7 @@ const ItrAnalyticsForm = ({
                         // requestItrAuthLink call Send Auth Link does — it already
                         // supersedes the still-pending link and issues a fresh one.
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <select
+                            <CustomSelect
                                 value={linkChannel}
                                 onChange={(e) => setLinkChannel(e.target.value)}
                                 className="form-control"
@@ -371,7 +372,7 @@ const ItrAnalyticsForm = ({
                                 <option value="EMAIL">Email</option>
                                 <option value="SMS">SMS</option>
                                 <option value="BOTH">Email + SMS</option>
-                            </select>
+                            </CustomSelect>
                             <button
                                 type="button"
                                 className="btn btn-secondary btn-sm"
@@ -478,7 +479,7 @@ const ItrAnalyticsForm = ({
                                 server-side at submit time either way. */}
                             {!isMsme && (
                                 <>
-                                    <select
+                                    <CustomSelect
                                         value={linkChannel}
                                         onChange={(e) => setLinkChannel(e.target.value)}
                                         className="form-control"
@@ -488,7 +489,7 @@ const ItrAnalyticsForm = ({
                                         <option value="EMAIL">Email</option>
                                         <option value="SMS">SMS</option>
                                         <option value="BOTH">Email + SMS</option>
-                                    </select>
+                                    </CustomSelect>
                                     <button
                                         type="button"
                                         className="btn btn-secondary btn-sm"

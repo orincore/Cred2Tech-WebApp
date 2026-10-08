@@ -18,6 +18,7 @@ import TableSkeleton from '../components/ui/TableSkeleton';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 
+import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -806,7 +807,7 @@ export default function CaseDetailPage() {
 
               <div className="form-group" style={{ marginBottom: 24 }}>
                 <label className="form-label">Select New Stage</label>
-                <select
+                <CustomSelect
                   className="form-control"
                   value={selectedStage}
                   onChange={(e) => {
@@ -819,7 +820,7 @@ export default function CaseDetailPage() {
                 >
                   <option value="">— Choose Stage —</option>
                   {STAGE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                </CustomSelect>
               </div>
 
               {isBackward && (
@@ -864,7 +865,7 @@ export default function CaseDetailPage() {
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
-                        <select
+                        <CustomSelect
                           className="form-control"
                           value={sanctionForm.tenant_lender_id || ''}
                           onChange={(e) => {
@@ -874,7 +875,7 @@ export default function CaseDetailPage() {
                         >
                           <option value="">— Select Lender —</option>
                           {tenantLenders.map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
-                        </select>
+                        </CustomSelect>
                       )}
                     </div>
                     <div className="form-group">
@@ -1038,10 +1039,10 @@ export default function CaseDetailPage() {
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Select Employee</label>
               {loadingUsers ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading users...</p> : (
-                <select className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
+                <CustomSelect className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
                   <option value="">- Select -</option>
                   {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name)})</option>)}
-                </select>
+                </CustomSelect>
               )}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
@@ -1064,13 +1065,13 @@ export default function CaseDetailPage() {
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label">Loan Product & collateral</label>
-                <select className="form-control" value={propertyForm.product_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, product_type: e.target.value }))} required>
+                <CustomSelect className="form-control" value={propertyForm.product_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, product_type: e.target.value }))} required>
                   <option value="">- Select a loan product -</option>
                   <option value="HL">HL - Home Loan</option>
                   <option value="LAP">LAP - Loan Against Property</option>
                   <option value="PL">PL - Personal Loan</option>
                   <option value="BL">BL - Business Loan</option>
-                </select>
+                </CustomSelect>
               </div>
 
               {['LAP', 'HL'].includes(propertyForm.product_type) && (
@@ -1078,31 +1079,31 @@ export default function CaseDetailPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Property Type *</label>
-                      <select className="form-control" value={propertyForm.property_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, property_type: e.target.value }))} required>
+                      <CustomSelect className="form-control" value={propertyForm.property_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, property_type: e.target.value }))} required>
                         <option value="">- Select -</option>
                         <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
                         <option value="Residential — House / Flat">Residential — House / Flat</option>
                         <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
                         <option value="Plot / Land">Plot / Land</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Occupancy</label>
-                      <select className="form-control" value={propertyForm.occupancy_status} onChange={(e) => setPropertyForm(prev => ({ ...prev, occupancy_status: e.target.value }))}>
+                      <CustomSelect className="form-control" value={propertyForm.occupancy_status} onChange={(e) => setPropertyForm(prev => ({ ...prev, occupancy_status: e.target.value }))}>
                         <option value="Self Occupied">Self Occupied</option>
                         <option value="Rented Out">Rented Out</option>
                         <option value="Vacant">Vacant</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Ownership</label>
-                      <select className="form-control" value={propertyForm.ownership_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, ownership_type: e.target.value }))}>
+                      <CustomSelect className="form-control" value={propertyForm.ownership_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, ownership_type: e.target.value }))}>
                         <option value="Sole Owner">Sole Owner</option>
                         <option value="Joint Owner">Joint Owner</option>
                         <option value="Company Owned">Company Owned</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Market Value *</label>

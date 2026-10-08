@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
 import { GATABLE_NAV_ITEMS } from '../constants/navItems';
 
+import CustomSelect from '../components/CustomSelect';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -541,7 +542,7 @@ const SuperadminPricingPage = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                         <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
                         {p.vendor && p.vendor !== 'DEFAULT' && (
-                          <select
+                          <CustomSelect
                             value={p.vendor}
                             onChange={e => {
                               setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
@@ -555,7 +556,7 @@ const SuperadminPricingPage = () => {
                             }}
                           >
                             {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
-                          </select>
+                          </CustomSelect>
                         )}
                       </div>
                     </div>
@@ -685,7 +686,7 @@ const SuperadminPricingPage = () => {
               const p = getActiveRow(group);
               if (!p.vendor || p.vendor === 'DEFAULT') return <span style={{ color: 'var(--on-muted)' }}>—</span>;
               return (
-                <select
+                <CustomSelect
                   value={p.vendor}
                   onChange={e => {
                     setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
@@ -700,7 +701,7 @@ const SuperadminPricingPage = () => {
                   }}
                 >
                   {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
-                </select>
+                </CustomSelect>
               );
             }},
             { key: 'description', label: 'Description', align: 'center', render: (group) => {

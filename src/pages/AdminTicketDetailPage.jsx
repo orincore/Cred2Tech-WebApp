@@ -9,6 +9,7 @@ import AttachmentGallery from '../components/ticket/AttachmentGallery';
 import { formatDateTime, toTitleCase } from '../utils/helpers';
 import { ticketService } from '../api/ticketService';
 
+import CustomSelect from '../components/CustomSelect';
 const STATUS_OPTIONS = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 
 const TIMELINE_LABEL = {
@@ -217,9 +218,9 @@ const AdminTicketDetailPage = () => {
 
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--outline)' }}>
                 <label className="form-label">Status</label>
-                <select className="form-control" value={statusDraft} onChange={(e) => setStatusDraft(e.target.value)}>
+                <CustomSelect className="form-control" value={statusDraft} onChange={(e) => setStatusDraft(e.target.value)}>
                   {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{toTitleCase(s.replace('_', ' '))}</option>)}
-                </select>
+                </CustomSelect>
                 {statusDraft !== ticket.status && (
                   <input
                     type="text"

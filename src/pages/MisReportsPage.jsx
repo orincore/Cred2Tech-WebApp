@@ -11,6 +11,7 @@ import TableSkeleton from '../components/ui/TableSkeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Panel from '../components/ui/Panel';
 
+import CustomSelect from '../components/CustomSelect';
 const REPORT_ICONS = {
   'case-pipeline': GitBranch,
   'product-wise': Package,
@@ -297,78 +298,78 @@ export default function MisReportsPage() {
     }
     if (key === 'granularity') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="DAILY">Daily</option>
           <option value="MONTHLY">Monthly</option>
           <option value="YEARLY">Yearly</option>
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'product') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.products.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'lenderId') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.lenders.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'subDsaUserId') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'sourcingPartnerId') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.teamMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           {options.subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} (Sub-DSA)</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'hierarchyLevel') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.hierarchyLevels.map(h => <option key={h} value={h}>{h}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'sourcingChannel') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           <option value="SALES_TEAM">Sales Team</option>
           <option value="SUB_DSA">Sub-DSA</option>
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'stage') {
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {STAGE_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     if (key === 'status') {
       const opts = STATUS_OPTIONS_BY_REPORT[activeId] || [];
       return (
-        <select {...commonProps} value={value} onChange={e => set(e.target.value)}>
+        <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {opts.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-        </select>
+        </CustomSelect>
       );
     }
     return null;

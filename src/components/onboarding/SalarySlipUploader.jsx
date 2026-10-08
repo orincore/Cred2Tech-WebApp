@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import api from '../../api/axiosInstance';
 import { FileText, PenLine, CheckCircle2, FileCheck2, ClipboardList, Trash2 } from 'lucide-react';
 
+import CustomSelect from '../CustomSelect';
 const MONO_FONT = "'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace";
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -475,7 +476,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
               <div className="manual-modal-row" style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Month</label>
-                  <select required value={manualForm.month} onChange={e => setManualForm({ ...manualForm, month: e.target.value })} className="form-control">
+                  <CustomSelect required value={manualForm.month} onChange={e => setManualForm({ ...manualForm, month: e.target.value })} className="form-control">
                     <option value="">Select Month</option>
                     <option value="January">January</option>
                     <option value="February">February</option>
@@ -489,7 +490,7 @@ const SalarySlipUploader = ({ caseId, applicantId, applicantName }) => {
                     <option value="October">October</option>
                     <option value="November">November</option>
                     <option value="December">December</option>
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Year</label>

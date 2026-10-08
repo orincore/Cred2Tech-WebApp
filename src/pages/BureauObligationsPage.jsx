@@ -8,6 +8,7 @@ import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
 
+import CustomSelect from '../components/CustomSelect';
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const getCibilColor = (score) => {
@@ -790,10 +791,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN TYPE *</label>
-                      <select className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
+                      <CustomSelect className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
                         <option value="">— Type —</option>
                         {LOAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN AMT (₹) *</label>

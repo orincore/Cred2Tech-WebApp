@@ -6,6 +6,7 @@ import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 
+import CustomSelect from '../components/CustomSelect';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -260,7 +261,7 @@ const SuperadminApiLogsPage = () => {
             {/* API Code */}
             <div style={{ flex: isMobile ? '1 1 45%' : 1, minWidth: isMobile ? 120 : 150 }}>
               <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>API Type</span>
-              <select
+              <CustomSelect
                 value={filters.api_code}
                 onChange={e => setFilters({ ...filters, api_code: e.target.value, page: 1 })}
                 style={{ ...underlineInput(!!filters.api_code), appearance: 'none', cursor: 'pointer', borderBottomColor: filters.api_code ? '#4f46e5' : 'var(--outline)', color: filters.api_code ? '#4f46e5' : 'var(--on-surface)', fontSize: isMobile ? 13 : 13 }}
@@ -271,13 +272,13 @@ const SuperadminApiLogsPage = () => {
                 <option value="ITR_FETCH">ITR Fetch</option>
                 <option value="BUREAU_PULL">Bureau Pull</option>
                 <option value="PAN_FETCH">PAN Verify</option>
-              </select>
+              </CustomSelect>
             </div>
 
             {/* Status */}
             <div style={{ flex: isMobile ? '1 1 45%' : 1, minWidth: isMobile ? 120 : 150 }}>
               <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Status</span>
-              <select
+              <CustomSelect
                 value={filters.status}
                 onChange={e => setFilters({ ...filters, status: e.target.value, page: 1 })}
                 style={{ ...underlineInput(!!filters.status), appearance: 'none', cursor: 'pointer', borderBottomColor: filters.status ? '#4f46e5' : 'var(--outline)', color: filters.status ? '#4f46e5' : 'var(--on-surface)', fontSize: isMobile ? 13 : 13 }}
@@ -286,7 +287,7 @@ const SuperadminApiLogsPage = () => {
                 <option value="SUCCESS">Success Only</option>
                 <option value="REFUNDED">Refunded Only</option>
                 <option value="BLOCKED_INSUFFICIENT_CREDITS">Blocked (Missing Funds)</option>
-              </select>
+              </CustomSelect>
             </div>
 
             {(search || filters.api_code || filters.status) && (

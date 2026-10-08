@@ -14,6 +14,7 @@ import { getTenantLenders } from '../api/tenantLenderService';
 import { uploadDocument, deleteDocument } from '../api/documentHelper';
 import { useAuth } from '../context/AuthContext';
 
+import CustomSelect from '../components/CustomSelect';
 // ─── Formatters ───────────────────────────────────────────────────────────────
 // Every currency figure on this page renders to exactly 2 decimal places,
 // consistently across all three magnitude brackets (Cr/L was previously
@@ -1006,7 +1007,7 @@ function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded
         disabled={uploading}
       />
       {!category.freeform && (
-        <select
+        <CustomSelect
           className="form-control"
           value={selectedType}
           onChange={e => setSelectedType(e.target.value)}
@@ -1014,7 +1015,7 @@ function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded
           disabled={uploading}
         >
           {category.options.map(o => <option key={o.type} value={o.type}>{o.label}</option>)}
-        </select>
+        </CustomSelect>
       )}
       {needsCustomLabel && (
         <input
@@ -1736,7 +1737,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
               </div>
               <div>
                 <label style={labelStyle}>RELATIONSHIP</label>
-                <select
+                <CustomSelect
                   value={ref.relationship}
                   onChange={e => setReferences(rs => rs.map((r, i) => i === idx ? { ...r, relationship: e.target.value } : r))}
                   disabled={isSubmitted}
@@ -1753,7 +1754,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
                   <option>Customer</option>
                   <option>Vendor / Supplier</option>
                   <option>Other</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
             <div>

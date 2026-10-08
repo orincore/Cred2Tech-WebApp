@@ -17,6 +17,7 @@ import { loadRazorpay } from '../utils/razorpay';
 import { useAuth } from '../context/AuthContext';
 import PageTour from '../components/tour/PageTour';
 
+import CustomSelect from '../components/CustomSelect';
 const WALLET_TOUR_STEPS = [
   { target: '[data-tour="wallet-stats"]', title: 'Your credit balance', description: 'Your current wallet balance, plus how many credits were added and used in the selected date range.' },
   { target: '[data-tour="wallet-recharge"]', title: 'Recharge your wallet', description: 'Top up your credits here any time. Pay by card, UPI, or netbanking, or redeem a promo code, and a GST invoice is generated automatically.' },
@@ -970,10 +971,10 @@ const MyWalletPage = () => {
 
                 {(!isMobile || showFilters) && (
                   <>
-                    <select style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
+                    <CustomSelect style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
                       <option value="">All types</option>
                       {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    </CustomSelect>
 
                     <div style={{ display: 'flex', gap: 4 }}>
                       {PRESETS.map((p) => (

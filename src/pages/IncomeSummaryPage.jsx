@@ -6,6 +6,7 @@ import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import { PlusCircle, Trash2, ChevronRight, User, Users, Info } from 'lucide-react';
 
+import CustomSelect from '../components/CustomSelect';
 const INCOME_TYPES_MSME = [
   'Director Salary', "Partner's Salary", 'Interest on Capital',
   'Rental Income — Bank', 'Rental Income — Cash', 'Interest Income',
@@ -85,10 +86,10 @@ const AddEntryInlineForm = ({ show, incomeTypes, saving, isMobile, onSubmit }) =
             <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12, alignItems: 'end' }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>INCOME TYPE *</label>
-                <select className="form-control" value={draft.income_type} onChange={e => setDraft({ ...draft, income_type: e.target.value })}>
+                <CustomSelect className="form-control" value={draft.income_type} onChange={e => setDraft({ ...draft, income_type: e.target.value })}>
                   <option value="">— Select —</option>
                   {incomeTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>ANNUAL AMOUNT (₹) *</label>
@@ -96,9 +97,9 @@ const AddEntryInlineForm = ({ show, incomeTypes, saving, isMobile, onSubmit }) =
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>SUPPORTING DOC</label>
-                <select className="form-control" value={draft.supporting_doc_type} onChange={e => setDraft({ ...draft, supporting_doc_type: e.target.value })}>
+                <CustomSelect className="form-control" value={draft.supporting_doc_type} onChange={e => setDraft({ ...draft, supporting_doc_type: e.target.value })}>
                   {DOC_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>REMARKS</label>
