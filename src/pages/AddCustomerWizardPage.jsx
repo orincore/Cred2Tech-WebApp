@@ -2169,28 +2169,36 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                     </div>
                                   </FormField>
                                 </div>
-                                <div className="grid-2">
-                                  <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
-                                    <input
-                                      type="text"
-                                      value={app.name || ''}
-                                      onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
-                                      className="form-control"
-                                      placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
-                                      disabled={app.pan_verified}
-                                    />
-                                  </FormField>
-                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`} required disabled={app.pan_verified}>
-                                    <input
-                                      type="date"
-                                      value={app.dob || ''}
-                                      onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
-                                      className="form-control"
-                                      required
-                                      disabled={app.pan_verified}
-                                    />
-                                  </FormField>
-                                </div>
+                                {/* Same pattern as the primary applicant's Full Name/DOB
+                                block above: never user-editable, so hidden entirely
+                                until PAN verification has actually autofetched a
+                                value, instead of showing an editable "Enter Full
+                                Name" field a DSA could hand-type ahead of (or instead
+                                of) the PAN pull. */}
+                                {app.pan_verified && (
+                                  <div className="grid-2" style={{ animation: 'slideUp 0.35s ease' }}>
+                                    <FormField label="Full Name" name={`coname_${realIdx}`} disabled>
+                                      <input
+                                        type="text"
+                                        value={app.name || ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    </FormField>
+                                    <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled>
+                                      <input
+                                        type="text"
+                                        value={app.dob ? formatDate(app.dob) : ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    </FormField>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
