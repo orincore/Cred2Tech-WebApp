@@ -28,8 +28,10 @@ const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString(
 // file is rejected instantly with clear next-step guidance instead of
 // round-tripping to the server first. Deliberately set below what the
 // backend/vendor would actually accept; this is a product choice, not a
-// reflection of either of their real caps.
-const MAX_STATEMENT_FILE_MB = 5;
+// reflection of either of their real caps. Raised 5→10MB per product
+// decision 2026-10-08 — keep in sync with backend's
+// MAX_STATEMENT_FILE_BYTES (src/utils/statementFileLimits.js).
+const MAX_STATEMENT_FILE_MB = 10;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
