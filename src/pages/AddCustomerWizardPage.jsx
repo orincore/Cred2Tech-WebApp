@@ -1231,7 +1231,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1330,6 +1330,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!formData.dob) return toast.error("Date of Birth / Incorporation is required.");
     const coApplicantMissingDob = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
     if (coApplicantMissingDob) return toast.error(`Date of Birth is required for co-applicant ${coApplicantMissingDob.name || coApplicantMissingDob.pan_number}.`);
+    const coApplicantMissingProfession = formData.applicants.find(a => a.type === 'CO_APPLICANT' && (a.is_professional === true || a.is_professional === 'true') && !a.profession_type);
+    if (coApplicantMissingProfession) return toast.error(`Profession is required for co-applicant ${coApplicantMissingProfession.name || coApplicantMissingProfession.pan_number}.`);
 
     try {
       setSaving(true);
@@ -2168,6 +2170,41 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       )}
                                     </div>
                                   </FormField>
+                                </div>
+
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
+                                    <select
+                                      className="form-control"
+                                      value={app.is_professional === true || app.is_professional === 'true' ? 'true' : 'false'}
+                                      onChange={e => {
+                                        // Both fields in one setFormData call, same reason as
+                                        // the primary applicant's identical toggle above:
+                                        // updateApplicantRow rebuilds its list from the
+                                        // outer formData closure, so two separate calls in
+                                        // the same handler would have the second overwrite
+                                        // the first's change instead of combining with it.
+                                        const isProf = e.target.value === 'true';
+                                        const list = [...formData.applicants];
+                                        list[realIdx] = { ...list[realIdx], is_professional: isProf, profession_type: isProf ? list[realIdx].profession_type : '' };
+                                        setFormData(prev => ({ ...prev, applicants: list }));
+                                      }}
+                                    >
+                                      <option value="false">No</option>
+                                      <option value="true">Yes</option>
+                                    </select>
+                                  </FormField>
+                                  {(app.is_professional === true || app.is_professional === 'true') && (
+                                    <FormField label="Select Profession" name={`coproftype_${realIdx}`} required>
+                                      <select className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
+                                        <option value="">Select Profession</option>
+                                        <option value="CA">CA</option>
+                                        <option value="Lawyer">Lawyer</option>
+                                        <option value="Doctor">Doctor</option>
+                                        <option value="Other">Other</option>
+                                      </select>
+                                    </FormField>
+                                  )}
                                 </div>
                                 {/* Same pattern as the primary applicant's Full Name/DOB
                                 block above: never user-editable, so hidden entirely

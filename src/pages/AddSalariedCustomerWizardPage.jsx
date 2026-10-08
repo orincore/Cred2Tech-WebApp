@@ -744,7 +744,7 @@ const AddSalariedCustomerWizardPage = () => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', otp_verified: false }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', otp_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1447,6 +1447,39 @@ const AddSalariedCustomerWizardPage = () => {
                                       )}
                                     </div>
                                   </FormField>
+                                </div>
+
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
+                                    <select
+                                      className="form-control"
+                                      value={app.is_professional === true || app.is_professional === 'true' ? 'true' : 'false'}
+                                      onChange={e => {
+                                        // Both fields in one setFormData call - updateApplicantRow
+                                        // rebuilds its list from the outer formData closure, so two
+                                        // separate calls in the same handler would have the second
+                                        // overwrite the first's change instead of combining with it.
+                                        const isProf = e.target.value === 'true';
+                                        const list = [...formData.applicants];
+                                        list[realIdx] = { ...list[realIdx], is_professional: isProf, profession_type: isProf ? list[realIdx].profession_type : '' };
+                                        setFormData(prev => ({ ...prev, applicants: list }));
+                                      }}
+                                    >
+                                      <option value="false">No</option>
+                                      <option value="true">Yes</option>
+                                    </select>
+                                  </FormField>
+                                  {(app.is_professional === true || app.is_professional === 'true') && (
+                                    <FormField label="Select Profession" name={`coproftype_${realIdx}`} required>
+                                      <select className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
+                                        <option value="">Select Profession</option>
+                                        <option value="CA">CA</option>
+                                        <option value="Lawyer">Lawyer</option>
+                                        <option value="Doctor">Doctor</option>
+                                        <option value="Other">Other</option>
+                                      </select>
+                                    </FormField>
+                                  )}
                                 </div>
 
                                 {/* Same pattern as the primary applicant's Full Name/DOB
