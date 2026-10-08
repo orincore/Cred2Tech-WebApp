@@ -114,7 +114,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     goToStep(7);
   };
 
-  const [formData, setFormData] = useState({
+  // Factory (not a plain object literal) so resetWizardState below can call
+  // this again to blank the form out — reusing one literal both for the
+  // initial useState and for "the user navigated away from an old case to a
+  // genuinely new one" guarantees the two can never drift apart.
+  const getInitialFormData = () => ({
     customer_id: null,
     business_pan: '',
     business_name: '',
@@ -149,6 +153,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     customer_itr_profile: null,
     customer_bank_profile: null
   });
+
+  const [formData, setFormData] = useState(getInitialFormData);
 
   const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0, ESR_GENERATION: 0 });
   const [walletBalance, setWalletBalance] = useState(0);
@@ -252,11 +258,43 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [coappGstFetchingMap, setCoappGstFetchingMap] = useState({});
   const [coappGstFetchFailedMap, setCoappGstFetchFailedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
-  const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
 
+  // Re-runs on every urlCaseId change, not just on mount — this used to be
+  // `useEffect(() => { restoreSession(); }, [])`, which only ever fires
+  // once. /customers/add?caseId=123 and /customers/add (or
+  // ?caseId=<a different case>) are the SAME route, so React Router
+  // re-renders this component in place instead of remounting it when a
+  // "New Case" link/button navigates between them — the old mount-only
+  // effect never re-fired, and restoreSession's own "no caseId" branch
+  // never reset anything (it only cleared a localStorage key), so whatever
+  // case was previously loaded just stayed in formData/caseId/etc. Clicking
+  // "New Case" while editing an existing case showed that old case's data
+  // under a blank-looking URL. Confirmed live and fixed here.
+  //
+  // The guard below is against re-fetching/resetting on every render:
+  // ensureDraftSaved() and handleContinueAsNewCase() both call setCaseId(...)
+  // BEFORE navigate(`?caseId=...`) — by the time this effect re-runs for
+  // that navigation, caseId already equals the new urlCaseId, so this is a
+  // no-op (no redundant restoreSession fetch / loading flicker right after
+  // creating a case). Only a genuine external change — a different case, or
+  // dropping caseId entirely — leaves them mismatched, which is exactly when
+  // a (re)load or a full reset is actually needed.
+  //
+  // Comparing as strings: urlCaseId (URLSearchParams#get) is always a string
+  // or null; caseId (state, set to caseData.id/newCase.id from a JSON API
+  // response) is a number. `urlCaseId === caseId` would never match a real
+  // case id and would re-fetch/reset on every single render.
   useEffect(() => {
-    restoreSession();
-  }, []);
+    const normalizedUrlCaseId = urlCaseId || null;
+    const normalizedCaseId = caseId == null ? null : String(caseId);
+    if (normalizedUrlCaseId === normalizedCaseId) return;
+    if (urlCaseId) {
+      restoreSession();
+    } else {
+      resetWizardState();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCaseId, caseId]);
 
   // Steps 1-3 in this component are the self-employed Business Entity / GST
   // / ITR / Bank flow — a salaried-origin case never had that data and must
@@ -421,7 +459,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       customer_itr_profile: caseData.business_financials?.itr_analytics || null,
       customer_bank_profile: caseData.business_financials?.bank_statements || null
     });
-    setSuggestedCoApplicants(caseData.suggested_co_applicants || []);
 
     // Rehydrate any consent request that's still live for THIS case —
     // otherwise a page reload or a fresh login after logging out loses the
@@ -465,6 +502,44 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
+  // Blanks every piece of per-case state back to its brand-new-case default
+  // — the counterpart to applyCaseData, which populates all the same state
+  // from a loaded case. Called whenever urlCaseId drops to empty via a real
+  // navigation (see the urlCaseId effect above) so a genuinely new case
+  // never starts with a previous case's data still sitting in memory.
+  // Deliberately leaves loading/saving/isMobile/costs/walletBalance alone —
+  // those are page-/account-level, not per-case.
+  const resetWizardState = () => {
+    // Called directly from the urlCaseId effect for a brand-new case (no
+    // restoreSession() round trip, so no `finally { setLoading(false) }` to
+    // rely on) — without this, `loading` stays stuck at its initial `true`
+    // and the whole page renders nothing but the loading skeleton forever.
+    setLoading(false);
+    localStorage.removeItem('draftCaseId');
+    setCaseId(null);
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setStep2SubPage('gst');
+    setProposalId(null);
+    setApplyLender(null);
+    setFormData(getInitialFormData());
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setGstFetching(false);
+    setGstFetchFailed(false);
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setIdentityMismatch(null);
+    setSelfConsentModal(null);
+    setCoappPanVerifyingMap({});
+    setCoappGstFetchingMap({});
+    setCoappGstFetchFailedMap({});
+    setDuplicateWarning(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
+  };
+
   // If the URL has a caseId, fetch it and apply it. If not, the user
   // clicked "Add New Customer" so start fresh. explicitCaseId lets a caller
   // force which case to load regardless of what the URL currently says —
@@ -477,7 +552,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       const targetCaseId = explicitCaseId || urlCaseId;
 
       if (!targetCaseId) {
-        localStorage.removeItem('draftCaseId');
+        resetWizardState();
         return;
       }
 
@@ -1186,19 +1261,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       arr.splice(index, 1);
       setFormData(prev => ({ ...prev, applicants: arr }));
       toast.success('Co-applicant removed.');
-    }
-  };
-
-  const handleReuseApplicant = async (sourceAppId) => {
-    try {
-      setSaving(true);
-      await caseService.reuseApplicant(caseId, sourceAppId);
-      toast.success('Applicant added from past case successfully!');
-      await restoreSession(true);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to reuse applicant');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1974,40 +2036,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     </div>
 
                     <div style={{ padding: 24 }}>
-                      {suggestedCoApplicants && suggestedCoApplicants.length > 0 && (
-                        <div style={{ marginBottom: 24 }}>
-                          <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary-dark)', marginBottom: 12 }}>Suggested Co-Applicants from Past Cases</h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {suggestedCoApplicants.map((suggestion, idx) => (
-                              <div key={idx} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                                <div>
-                                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{suggestion.name || 'Unnamed Co-Applicant'}</div>
-                                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8 }}>
-                                    PAN: {suggestion.pan_number ? `${suggestion.pan_number.substring(0, 2)}******${suggestion.pan_number.substring(8)}` : 'N/A'} • Mobile: {suggestion.mobile}
-                                    {suggestion.relationship_to_primary && ` • ${suggestion.relationship_to_primary}`}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {suggestion.bureau_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Bureau Available</span>}
-                                    {suggestion.documents_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Documents</span>}
-                                    {suggestion.income_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Income</span>}
-                                    {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary Slips</span>}
-                                    {suggestion.obligations_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Obligations</span>}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleReuseApplicant(suggestion.source_applicant_id)}
-                                  disabled={saving}
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ fontWeight: 600, color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                                >
-                                  Use in this case
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {/* "Suggested Co-Applicants from Past Cases" panel removed —
+                          a new case must never surface or offer to reuse another
+                          case's applicant data (see resetWizardState/the urlCaseId
+                          effect above for the equivalent fix at the case level). */}
                       {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
                           No Co-Applicants appended to this profile yet.

@@ -176,20 +176,73 @@ const AddSalariedCustomerWizardPage = () => {
   };
 
 
-  // Mount-only ([] deps, matching AddCustomerWizardPage.jsx's own identical
-  // effect) — NOT [urlCaseId]. That used to re-fire restoreSession() (a full
+  // Re-runs whenever urlCaseId actually changes relative to our own caseId
+  // state — not mount-only. A mount-only effect was tried here first and
+  // caused its own regression (see below), then patched with a
+  // one-directional reset effect that only handled urlCaseId DROPPING to
+  // empty — which missed the case of urlCaseId changing directly from one
+  // case to a genuinely DIFFERENT case id (e.g. browser back/forward across
+  // two case URLs, or a link straight into a second case while this page
+  // happens to still be mounted on a first). Unified into one bidirectional
+  // effect, same pattern as AddCustomerWizardPage.jsx's own urlCaseId
+  // effect: compare urlCaseId against caseId (normalized to strings — caseId
+  // is a number from the API, urlCaseId is always a string/null from
+  // URLSearchParams, so a naive === never matches a real id) and only act on
+  // a genuine mismatch.
+  //
+  // Why NOT just [urlCaseId]: that used to re-fire restoreSession() (a full
   // fetch + setLoading(true) skeleton cycle) every time the URL's caseId
   // changed for ANY reason, including right after handleContinueAsNewCase
   // above already applied the new case's data instantly via applyCaseData —
   // confirmed live: the mobile field updated correctly at the moment the
   // create-from-existing response landed, then ~100ms later the skeleton
   // appeared anyway and stayed, from this effect's own redundant, pointless
-  // second fetch of the exact same data. ensureDraftSaved's own navigate()
-  // (the only other same-route caseId change) already sets state directly
-  // too, so nothing here was ever depending on this effect re-firing.
+  // second fetch of the exact same data. The mismatch guard below avoids
+  // that: handleContinueAsNewCase/ensureDraftSaved both call setCaseId(...)
+  // BEFORE navigate(`?caseId=...`), so by the time this effect re-runs for
+  // that self-navigation, caseId already equals the new urlCaseId and the
+  // guard short-circuits — only an EXTERNAL change (a different case, or
+  // dropping caseId entirely) leaves them mismatched.
   useEffect(() => {
-    restoreSession();
-  }, []);
+    const normalizedUrlCaseId = urlCaseId || null;
+    const normalizedCaseId = caseId == null ? null : String(caseId);
+    if (normalizedUrlCaseId === normalizedCaseId) return;
+
+    if (urlCaseId) {
+      restoreSession();
+      return;
+    }
+
+    // urlCaseId is empty but our own state still holds a case — a "New
+    // Case" navigation (or back/forward to the blank URL) landed on this
+    // SAME mounted instance (same route, so React Router doesn't remount),
+    // and must not leave the previous case's data showing under what looks
+    // like a blank new-case URL.
+    // setLoading(false) first: `loading` defaults to true and gates the
+    // entire render (see the `if (loading) return (...)` below) — it's
+    // normally cleared by restoreSession's own try/finally, which this
+    // branch bypasses entirely (including on first mount with no
+    // urlCaseId), so without this the page would render nothing but the
+    // skeleton forever.
+    setLoading(false);
+    setCaseId(null);
+    setFormData(getBlankFormData());
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setCoappPanVerifyingMap({});
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setPanEditUnlocked(false);
+    setCoappPanEditUnlockedMap({});
+    setDuplicateWarning(null);
+    setIdentityMismatch(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCaseId, caseId]);
 
   const checkPanDuplicate = async (pan) => {
     if (!pan || pan.length !== 10) return;
@@ -505,52 +558,10 @@ const AddSalariedCustomerWizardPage = () => {
   const [coappConsent, setCoappConsent] = useState({});
   const [coappConsentRequesting, setCoappConsentRequesting] = useState({});
 
-  // Defends against this SAME mounted instance of the page being reused for
-  // two different case attempts — e.g. the browser back button returning
-  // here from `?caseId=X` to the bare `/customers/salaried/add` URL
-  // (handleContinueAsNewCase's own navigate() is a normal push, not
-  // `replace`, so back genuinely lands on that earlier blank URL) without
-  // React Router remounting anything, since it's the same route and only the
-  // search string differs. Without this, `caseId`/`formData` kept holding
-  // case X's data — every applicant, property field, PAN/mobile — while the
-  // URL looked like a brand-new, blank case, regardless of how old case X
-  // was (this is a same-tab state leak, not a time-boxed dedupe issue like
-  // case.service.js#createSalariedCase's own idempotency window).
-  // Deliberately one-directional: only resets when the URL LOSES its
-  // caseId while state still has one. The other direction (urlCaseId
-  // gaining a value) is already handled directly by whichever caller just
-  // set that case's data itself (ensureDraftSaved, handleContinueAsNewCase)
-  // — re-fetching here too would reintroduce the exact skeleton-flicker
-  // regression the mount-only restoreSession effect above was fixed to avoid.
-  // Keyed on the URL's own previous value, not just "state has a caseId and
-  // URL doesn't": handleContinueAsNewCase/ensureDraftSaved call setCaseId()
-  // BEFORE navigate() lands (React Router v7 applies navigation inside a
-  // transition), so for a render or two caseId is set while urlCaseId is
-  // still null. Without the prev-value check that window read as "URL lost
-  // its caseId" and wiped the just-populated form back to blank — which
-  // also made the duplicate-PAN banner reappear on the next blur.
-  const prevUrlCaseIdRef = useRef(urlCaseId);
-  useEffect(() => {
-    const prevUrlCaseId = prevUrlCaseIdRef.current;
-    prevUrlCaseIdRef.current = urlCaseId;
-    if (urlCaseId || !prevUrlCaseId || !caseId) return;
-    setCaseId(null);
-    setFormData(getBlankFormData());
-    setCurrentStep(1);
-    setStep1SubPage('business');
-    setPanVerifying(false);
-    setPanVerifyFailed(false);
-    setCoappPanVerifyingMap({});
-    setConsentRequest(null);
-    setConsentRequesting(false);
-    setConsentRequestFailed(false);
-    setPanEditUnlocked(false);
-    setCoappPanEditUnlockedMap({});
-    setDuplicateWarning(null);
-    setIdentityMismatch(null);
-    setCoappConsent({});
-    setCoappConsentRequesting({});
-  }, [urlCaseId, caseId]);
+  // Reset/restore on urlCaseId<->caseId mismatch is handled by the single
+  // unified effect near the top of the component (alongside the mount
+  // effect) — it covers both directions (URL losing its caseId, and the URL
+  // pointing at a genuinely different case) in one place now.
 
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
