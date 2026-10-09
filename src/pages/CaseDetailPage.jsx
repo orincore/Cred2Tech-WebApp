@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, formatFileSize } from '../utils/helpers';
+import { formatCaseReference } from '../utils/caseReference';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import Skeleton from '../components/ui/Skeleton';
@@ -94,7 +95,7 @@ const STAGE_ORDER = {
   APPROVED: 8, PARTLY_DISBURSED: 9, DISBURSED: 10, CLOSED: 11, REJECTED: 11,
 };
 
-const TABS = ['Overview', 'Co-Borrowers', 'Documents', 'Sanction & Disbursement', 'Activity Log'];
+const TABS = ['Overview', 'Co-Borrowers', 'Documents', 'Other Cases', 'Sanction & Disbursement', 'Activity Log'];
 
 const DataRow = ({ label, value, valueColor }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
@@ -738,6 +739,39 @@ export default function CaseDetailPage() {
               </div>
             </>
           ) : <EmptyRow icon={FileText} text="No documents uploaded yet." />}
+        </div>
+      )}
+
+      {/* Other Cases — every other case on file for this same customer, so a
+          repeat applicant's history (or a lender-clone sibling) is reachable
+          without leaving the case page. */}
+      {activeTab === 'Other Cases' && (
+        <div className="card card-padded">
+          {caseData.other_cases?.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+              {caseData.other_cases.map(oc => {
+                const ocStageColors = STAGE_COLORS[oc.stage] || STAGE_COLORS.DRAFT;
+                const [ocStageBg, ocStageColor] = isDark ? ocStageColors.dark : ocStageColors.light;
+                return (
+                  <div
+                    key={oc.id}
+                    onClick={() => navigate(`/cases/${oc.id}`)}
+                    style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{formatCaseReference(oc)}</div>
+                      <span style={{ background: ocStageBg, color: ocStageColor, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>{STAGE_LABELS[oc.stage] || oc.stage}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{oc.product_type || 'N/A'} {oc.lender_name ? `· ${oc.lender_name}` : ''}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                      {oc.sanctioned_amount ? `Sanctioned: ${formatCurrency(oc.sanctioned_amount)}` : oc.loan_amount ? `Requested: ${formatCurrency(oc.loan_amount)}` : 'Amount not set'}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Created: {new Date(oc.created_at).toLocaleDateString()}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <EmptyRow icon={Users} text="No other cases found for this customer." />}
         </div>
       )}
 
