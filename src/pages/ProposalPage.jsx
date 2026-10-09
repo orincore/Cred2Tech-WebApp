@@ -4,6 +4,7 @@ import { caseService } from '../api/caseService';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Skeleton from '../components/ui/Skeleton';
+import CopyButton from '../components/ui/CopyButton';
 import {
   Send, Save, CheckCircle2, Clock, XCircle,
   AlertCircle, TrendingUp, ChevronDown, ChevronUp, CheckSquare, UploadCloud,
@@ -1591,6 +1592,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
             fontSize: 12, fontWeight: 700, fontFamily: "'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace"
           }}>
             <FolderOpen size={13} /> CASE-{caseId}
+            <CopyButton text={`CASE-${caseId}`} label="Case ID copied" />
           </span>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,

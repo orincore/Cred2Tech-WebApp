@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload, CheckCircle2 } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CopyButton from '../components/ui/CopyButton';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
@@ -566,6 +567,7 @@ const CustomersListPage = () => {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</span>
+                      <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
                       <span style={{
                         fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
                         color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
@@ -668,7 +670,10 @@ const CustomersListPage = () => {
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontWeight: 700, color: 'var(--on-surface)' }}>
+                        {formatCaseReference(c)}
+                        <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
+                      </div>
                       <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
                         <span style={{
                           fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
