@@ -974,7 +974,7 @@ function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded
       const label = needsCustomLabel
         ? customLabel.trim()
         : (category.custom ? selectedOption?.label : undefined);
-      await uploadDocument(file, caseId, docType, {
+      const resp = await uploadDocument(file, caseId, docType, {
         applicantId,
         label,
         category: (needsCustomLabel || category.custom) ? category.id : undefined,
@@ -982,7 +982,7 @@ function AddDocumentRow({ category, applicantId, caseId, isSubmitted, onUploaded
       });
       toast.success(`${file.name} uploaded ✓`);
       setCustomLabel('');
-      onUploaded?.();
+      onUploaded?.(resp?.data?.id);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Upload failed');
     } finally {
@@ -1070,14 +1070,14 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
     if (!file) return;
     setUploading(true);
     try {
-      await uploadDocument(file, caseId, docType || 'OTHER', {
+      const resp = await uploadDocument(file, caseId, docType || 'OTHER', {
         applicantId,
         label: doc?.document_type === 'OTHER' ? doc?.metadata?.custom_label : undefined,
         category: doc?.metadata?.category,
         categoryLabel: doc?.metadata?.category_label,
       });
       toast.success(`${file.name} uploaded ✓`);
-      onUploaded?.();
+      onUploaded?.(resp?.data?.id);
     } catch (err) {
       toast.error(err.response?.data?.error || err.message || 'Upload failed');
     } finally {
@@ -1378,6 +1378,28 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     } catch { toast.error('Failed to update document'); }
   };
 
+  // A document uploaded straight from this page only ever creates the
+  // Document row (uploadDocument posts to /documents/upload, which is
+  // case-scoped, not proposal-scoped) — it was never also linked into this
+  // proposal's proposal_documents join, so it silently stayed unattached
+  // ("Include" showing unchecked) until someone noticed and clicked it. Since
+  // the whole point of uploading from the Prepare Proposal page is "this
+  // document goes with this proposal", attach it immediately after a
+  // successful upload instead of leaving that as a separate manual step —
+  // this is what was causing documents uploaded here to go missing from the
+  // lender email. The "Include" toggle still lets the DSA deliberately drop
+  // it afterwards.
+  const handleDocumentUploaded = async (newDocId) => {
+    if (newDocId) {
+      try {
+        await caseService.attachProposalDocs(caseId, proposalId, [newDocId]);
+      } catch (err) {
+        toast.error('Document uploaded, but could not auto-attach it to the proposal — use Include to attach it manually.');
+      }
+    }
+    await refreshDocuments();
+  };
+
   // Shaped like this page's own real content (header, Loan Details,
   // Applicant Profile, Financial Summary) rather than a bare spinner — and
   // now the ONLY loading animation shown when navigating here, since
@@ -1670,7 +1692,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
           onToggle={isSubmitted ? null : handleToggleDoc}
           isSubmitted={isSubmitted}
           caseId={caseId}
-          onUploaded={refreshDocuments}
+          onUploaded={handleDocumentUploaded}
           isSalaried={isSalaried}
         />
       </Section>
