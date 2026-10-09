@@ -285,7 +285,7 @@ const ItrAnalyticsForm = ({
     // computed fields, so this doesn't just hide the number — it removes it).
     const handleDelete = async () => {
         if (!referenceId) return;
-        if (!window.confirm('Remove this ITR record permanently? You can pull ITR data again afterwards.')) return;
+        if (!window.confirm('Delete this ITR record and remove its stored files? This cannot be undone. Shared copies may be retained. You can pull ITR data again afterwards.')) return;
         setDeleting(true);
         try {
             await api.post('/external/itr/delete', { reference_id: referenceId });

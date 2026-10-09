@@ -6,11 +6,11 @@ import { getTenantLenders } from '../api/tenantLenderService';
 import { viewDocument, downloadDocument } from '../api/documentHelper';
 import { getUsers } from '../api/userService';
 import {
-  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check
+  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, formatFileSize } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import Skeleton from '../components/ui/Skeleton';
@@ -693,21 +693,50 @@ export default function CaseDetailPage() {
       {activeTab === 'Documents' && (
         <div className="card card-padded">
           {caseData.documents?.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-              {caseData.documents.map(doc => (
-                <div key={doc.id} style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FileText size={18} color="var(--text-tertiary)" />
-                    <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+            <>
+              {(() => {
+                const totalBytes = caseData.documents.reduce((sum, d) => sum + (d.file_size_bytes || 0), 0);
+                const uploadedCount = caseData.documents.filter(d => d.source_type === 'DIRECT_UPLOAD').length;
+                const vendorCount = caseData.documents.filter(d => d.source_type === 'VENDOR_DOWNLOAD').length;
+                return (
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center',
+                    padding: '10px 14px', marginBottom: 14, background: 'var(--bg-elevated)',
+                    border: '1.5px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <HardDrive size={14} color="var(--text-tertiary)" />
+                      Storage used: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatFileSize(totalBytes)}</span>
+                    </div>
+                    <div>{caseData.documents.length} document(s)</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><UploadCloud size={13} color="var(--text-tertiary)" /> {uploadedCount} uploaded</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><CloudDownload size={13} color="var(--text-tertiary)" /> {vendorCount} from API pulls</div>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
-                  <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
-                    <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
-                    <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+                );
+              })()}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                {caseData.documents.map(doc => (
+                  <div key={doc.id} style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileText size={18} color="var(--text-tertiary)" />
+                      <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+                      <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
+                        {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
+                      </span>
+                      <span>{formatFileSize(doc.file_size_bytes)}</span>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
+                    <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
+                      <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
+                      <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : <EmptyRow icon={FileText} text="No documents uploaded yet." />}
         </div>
       )}

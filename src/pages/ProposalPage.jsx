@@ -1050,7 +1050,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
   const handleRemove = async () => {
     if (!doc?.id) return;
     const name = doc.original_file_name || label;
-    if (!window.confirm(`Remove "${name}"? You can upload a replacement afterwards.`)) return;
+    if (!window.confirm(`Delete "${name}" and remove its stored file? This cannot be undone. Shared copies may be retained. You can upload a replacement afterwards.`)) return;
     setRemoving(true);
     try {
       await deleteDocument(doc.id);

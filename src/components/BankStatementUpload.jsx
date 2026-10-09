@@ -341,7 +341,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     const handleDelete = async () => {
         if (!reportId) return;
-        if (!window.confirm('Delete this bank statement analysis? You can upload a fresh one afterwards.')) return;
+        if (!window.confirm('Delete this bank statement analysis and remove its stored files? This cannot be undone. Shared copies may be retained. You can upload a fresh one afterwards.')) return;
         setDeleting(true);
         try {
             await api.post('/external/bank/delete', { report_id: reportId });

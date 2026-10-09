@@ -364,7 +364,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // needed under a different GSTIN) — `cancel` above only works on
     // in-flight requests, there was previously no way to clear a finished one.
     const handleDeleteRequest = async (requestId) => {
-        if (!window.confirm('Remove this GST record permanently? You can pull GST data again afterwards.')) return;
+        if (!window.confirm('Delete this GST record and remove its stored files? This cannot be undone. Shared copies may be retained. You can pull GST data again afterwards.')) return;
         setDeleting(true);
         try {
             await api.post(`/external/gst/delete`, { request_id: requestId });
