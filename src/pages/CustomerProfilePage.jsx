@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
   Building2, Mail, Phone, MapPin, FileText, Banknote, Home,
-  Users, CreditCard, Activity, Eye, Plus, ArrowLeft
+  Users, CreditCard, Activity, Eye, Plus, ArrowLeft, HardDrive, UploadCloud, CloudDownload
 } from 'lucide-react';
 import { customerService } from '../api/customerService';
 import api from '../api/axiosInstance';
@@ -12,6 +12,7 @@ import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useTheme } from '../context/ThemeContext';
+import { formatFileSize } from '../utils/helpers';
 
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -256,14 +257,35 @@ const CustomerProfilePage = () => {
 
             {activeTab === 'Documents' && (
               !profile.documents?.length ? <EmptyRow icon={FileText} text="No documents uploaded yet." /> :
-              isMobile ? (
+              <>
+                {(() => {
+                  const totalBytes = profile.documents.reduce((sum, d) => sum + (d.file_size_bytes || 0), 0);
+                  const uploadedCount = profile.documents.filter(d => d.source_type === 'DIRECT_UPLOAD').length;
+                  const vendorCount = profile.documents.filter(d => d.source_type === 'VENDOR_DOWNLOAD').length;
+                  return (
+                    <div style={{
+                      display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center',
+                      padding: '10px 14px', marginBottom: 14, background: 'var(--bg-elevated)',
+                      border: '1.5px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <HardDrive size={14} color="var(--text-tertiary)" />
+                        Storage used: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatFileSize(totalBytes)}</span>
+                      </div>
+                      <div>{profile.documents.length} document(s) across all cases</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><UploadCloud size={13} color="var(--text-tertiary)" /> {uploadedCount} uploaded</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><CloudDownload size={13} color="var(--text-tertiary)" /> {vendorCount} from API pulls</div>
+                    </div>
+                  );
+                })()}
+                {isMobile ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {profile.documents.map(doc => (
                     <div key={doc.id} style={{ border: '1px solid var(--border)', borderRadius: 0, padding: 14 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{doc.document_type?.replace(/_/g, ' ')}</div>
                       {doc.original_file_name && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>{doc.original_file_name}</div>}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{formatDate(doc.created_at) || '—'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{formatDate(doc.created_at) || '—'} · {formatFileSize(doc.file_size_bytes)}</span>
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => {
@@ -292,6 +314,7 @@ const CustomerProfilePage = () => {
                         <td style={{ padding: '12px 8px', textAlign: 'center', wordBreak: 'break-word' }}>
                           <div style={{ fontWeight: 600 }}>{doc.document_type?.replace(/_/g, ' ')}</div>
                           {doc.original_file_name && <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{doc.original_file_name}</div>}
+                          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{formatFileSize(doc.file_size_bytes)}</div>
                         </td>
                         <td style={{ padding: '12px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>{profile.customer_name}</td>
                         <td style={{ padding: '12px 8px', textAlign: 'center' }}><StatusPill status="COMPLETE" /></td>
@@ -310,7 +333,8 @@ const CustomerProfilePage = () => {
                     ))}
                   </tbody>
                 </table>
-              )
+                )}
+              </>
             )}
 
             {activeTab === 'Cases' && (
