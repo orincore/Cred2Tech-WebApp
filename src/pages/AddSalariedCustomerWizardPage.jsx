@@ -355,6 +355,16 @@ const AddSalariedCustomerWizardPage = () => {
 
     const applicants = caseData.applicants || [];
     const primaryApp = applicants.find(a => a.type === 'PRIMARY');
+    // "Continue as New Case" (case.service.js#createCaseFromExisting) marks
+    // its brand-new primary applicant with source_applicant_id pointing at
+    // the OLD case's applicant it was started next to — the one reliable
+    // signal that caseData.customer's plain identity fields below (name/
+    // dob/mobile/email) describe a DIFFERENT, prior case, not this one.
+    // Without this, clicking "Continue as New Case" for a customer with an
+    // unrelated older case immediately showed that older case's name/DOB/
+    // mobile/email here, before this brand-new case had pulled or
+    // confirmed anything itself — same fix as AddCustomerWizardPage.jsx.
+    const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
 
     const restoredApplicants = applicants.map(app => ({
       ...app,
@@ -377,11 +387,11 @@ const AddSalariedCustomerWizardPage = () => {
       // can end up holding a stale legal_business_name/trade_name (a GST artifact,
       // sometimes even a raw GST TRN placeholder string) left over from a
       // different flow, which is never applicable to a salaried customer.
-      business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
-      business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
-      business_email: caseData.customer?.business_email || '',
-      pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
-      dob: toDateInputValue(caseData.customer?.dob),
+      business_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || ''),
+      business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
+      business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
+      pincode: isCarriedOverIdentity ? '' : (primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || ''),
+      dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
       // Sourced from THIS case's own primary Applicant row, not
       // caseData.customer.mobile_verified — that field lives on the shared
       // Customer record and is reused across every case for the same PAN,

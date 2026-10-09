@@ -372,6 +372,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
     const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
     const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
+    // "Continue as New Case" (case.service.js#createCaseFromExisting) marks
+    // its brand-new primary applicant with source_applicant_id pointing at
+    // the OLD case's applicant it was started next to — the one reliable
+    // signal that caseData.customer's plain identity fields below (name/
+    // dob/mobile/email) describe a DIFFERENT, prior case, not this one.
+    // Gating on otp_verified/consentGrantedForThisCase alone (like
+    // currentPanProfile above already does) would also blank a genuinely
+    // fresh, never-yet-consented case's own just-typed data on every
+    // reopen — its otp_verified is false too, but customer.* there IS this
+    // case's own data, entered for it specifically. Without this, clicking
+    // "Continue as New Case" for a customer with an unrelated older case
+    // immediately showed that older case's name/DOB/mobile/email here,
+    // before this brand-new case had pulled or confirmed anything itself.
+    const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
 
     setCaseId(caseData.id);
     setFormData({
@@ -380,17 +394,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // same PAN/customer can have one salaried case and one MSME case at
       // the same time without either affecting the other.
       is_salaried: caseData.category === 'SALARIED',
+      // PAN itself is kept — it's the identifier this case is actually
+      // working with (how the duplicate was even detected), not stale
+      // pulled data, so it's never part of isCarriedOverIdentity's gate.
       business_pan: caseData.customer?.business_pan || '',
       // proprietor_name is a plain user-entered/KYC identity field; business_name
       // is derived from GST vendor lookups and can end up holding a GST
       // registration TRN (reference number) when the business never registered
       // a real trade name yet - prefer the reliable identity field first, same
       // as the case header / MSME dashboard greeting already do.
-      business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
-      proprietor_name: caseData.customer?.proprietor_name || '',
-      dob: toDateInputValue(caseData.customer?.dob),
-      business_mobile: caseData.customer?.business_mobile || '',
-      business_email: caseData.customer?.business_email || '',
+      business_name: isCarriedOverIdentity ? '' : (toTitleCase(resolveEntityName(caseData.customer)) || ''),
+      proprietor_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || ''),
+      dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
+      business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || ''),
+      business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
       // Falls back to the verified PAN's own KYC pincode (principal_pincode)
       // when the applicant row itself was never manually filled in - the
       // salaried wizard already does this (see AddSalariedCustomerWizardPage);
@@ -398,8 +415,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // manually-typed pincode rendered the field blank even though the
       // case has a usable pincode on file.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
-      is_professional: caseData.customer?.is_professional || false,
-      profession_type: caseData.customer?.profession_type || '',
+      is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
+      profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
       // Sourced from THIS case's own primary Applicant row, not
       // caseData.customer.mobile_verified — that field lives on the
       // shared Customer record and is reused across every case for the
