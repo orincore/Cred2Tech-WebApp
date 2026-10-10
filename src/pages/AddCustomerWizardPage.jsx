@@ -1851,23 +1851,34 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               {formData.pan_verified && (
                                 // `gst_completed` (the real, backend-confirmed GST pull
                                 // status — see GstAnalyticsForm / data_pull_status.gst_status)
-                                // always takes priority over `pan_profile` (just the
+                                // always takes priority over `linked_gstins` (just the
                                 // PAN→GSTIN lookup, a separate and much weaker signal
                                 // that can stay empty forever — e.g. a manually-entered
                                 // GSTIN never populates it — even after a real GST pull
-                                // has succeeded). Checking pan_profile first was exactly
-                                // why this badge got stuck on a permanent, misleading
-                                // "Queued…" once gst_completed was already true.
+                                // has succeeded). Checking pan_profile's mere presence
+                                // (previously used here as a stand-in for "a GSTIN was
+                                // found") was wrong on two counts: it stayed stuck on a
+                                // permanent, misleading "Queued…" once gst_completed was
+                                // already true, AND it showed "GSTIN Found" for ANY
+                                // successfully PAN-verified applicant — including one
+                                // with no GST registration at all, since pan_profile is
+                                // set the moment PAN verification succeeds regardless of
+                                // whether any GSTIN came back. linked_gstins.length is
+                                // the actual "a GSTIN was found" signal.
                                 formData.gst_completed ? (
                                   <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <CheckCircle2 size={13} /> GST Pulled
                                   </span>
-                                ) : formData.pan_profile ? (
+                                ) : formData.linked_gstins?.length > 0 ? (
                                   <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <CheckCircle2 size={13} /> GSTIN Found
                                   </span>
                                 ) : gstFetching ? (
                                   <PullingIndicator label="Looking up GSTIN…" />
+                                ) : formData.pan_profile ? (
+                                  <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> No GST registration found for this PAN
+                                  </span>
                                 ) : gstFetchFailed ? (
                                   <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <AlertCircle size={13} /> No GSTIN on file — enter manually below
