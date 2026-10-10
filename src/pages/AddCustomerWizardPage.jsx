@@ -2206,6 +2206,18 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       </CustomSelect>
                                     </FormField>
                                   )}
+                                  {app.employment_type !== 'SALARIED' && (
+                                    <FormField label="Industry Type" name={`coindustry_${realIdx}`}>
+                                      <CustomSelect className="form-control" value={app.industry || ''} onChange={e => updateApplicantRow(realIdx, 'industry', e.target.value)}>
+                                        <option value="">Auto (from GST report)</option>
+                                        <option value="Manufacturing">Manufacturing</option>
+                                        <option value="Wholesale">Wholesale</option>
+                                        <option value="Retail">Retail</option>
+                                        <option value="Specialised">Specialised</option>
+                                        <option value="Service">Service</option>
+                                      </CustomSelect>
+                                    </FormField>
+                                  )}
                                 </div>
                                 {/* Same pattern as the primary applicant's Full Name/DOB
                                 block above: never user-editable, so hidden entirely
