@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, formatFileSize } from '../utils/helpers';
 import { formatCaseReference } from '../utils/caseReference';
+import { groupDocumentsByCategory } from '../constants/documentCategories';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import Skeleton from '../components/ui/Skeleton';
@@ -108,6 +109,30 @@ const EmptyRow = ({ icon: Icon, text }) => (
   <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-tertiary)' }}>
     <Icon size={32} style={{ marginBottom: 10, opacity: 0.4 }} />
     <div style={{ fontSize: 13 }}>{text}</div>
+  </div>
+);
+
+// One document tile within a Documents-tab category section — same card
+// used across every category/applicant grouping, so a document looks and
+// behaves identically no matter which section it falls under.
+const DocumentCard = ({ doc }) => (
+  <div style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <FileText size={18} color="var(--text-tertiary)" />
+      <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+    </div>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+      <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
+        {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
+      </span>
+      <span>{formatFileSize(doc.file_size_bytes)}</span>
+    </div>
+    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
+    <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
+      <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
+      <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+    </div>
   </div>
 );
 
@@ -715,28 +740,39 @@ export default function CaseDetailPage() {
                   </div>
                 );
               })()}
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-                {caseData.documents.map(doc => (
-                  <div key={doc.id} style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FileText size={18} color="var(--text-tertiary)" />
-                      <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
-                      <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                        {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
-                        {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
-                      </span>
-                      <span>{formatFileSize(doc.file_size_bytes)}</span>
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
-                    <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
-                      <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
-                      <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
-                    </div>
+              {/* Grouped into the exact same KYC/Income/Banking/Property
+                  categories the Prepare Proposal page uploads into (see
+                  constants/documentCategories.js) — a document shows up
+                  here under the same section a DSA would expect to find it
+                  under on that page, rather than one flat, unsorted list. */}
+              {groupDocumentsByCategory(caseData.documents, { isSalaried: caseData.category === 'SALARIED' }).map(cat => (
+                <div key={cat.id} style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {cat.label}
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', padding: '1px 8px' }}>{cat.docs.length}</span>
                   </div>
-                ))}
-              </div>
+                  {cat.perApplicant ? (
+                    // One sub-section per applicant that actually has a document
+                    // here (Primary first, then co-borrowers in case order).
+                    caseData.applicants
+                      .filter(app => cat.docs.some(d => d.applicant_id === app.id))
+                      .map((app, idx) => (
+                        <div key={app.id} style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                            {app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Borrower ${idx}`}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                            {cat.docs.filter(d => d.applicant_id === app.id).map(doc => <DocumentCard key={doc.id} doc={doc} />)}
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                      {cat.docs.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
+                    </div>
+                  )}
+                </div>
+              ))}
             </>
           ) : <EmptyRow icon={FileText} text="No documents uploaded yet." />}
         </div>
