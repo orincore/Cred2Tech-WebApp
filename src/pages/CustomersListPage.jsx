@@ -587,7 +587,7 @@ const CustomersListPage = () => {
 
                 <div
                   style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
-                  onClick={() => navigate(`/customers/${c.customer_id}`)}
+                  onClick={() => navigate(`/cases/${c.id}`)}
                 >
                   {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                 </div>
@@ -684,7 +684,7 @@ const CustomersListPage = () => {
                       {c.parent_case_id && !childCaseSuffix(c) && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
+                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/cases/${c.id}`)}>
                         {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                       </div>
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>

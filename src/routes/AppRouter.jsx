@@ -35,7 +35,6 @@ const DSARegisterPage = lazy(() => import('../pages/DSARegisterPage'));
 const CustomersListPage = lazy(() => import('../pages/CustomersListPage'));
 const AddCustomerWizardPage = lazy(() => import('../pages/AddCustomerWizardPage'));
 const AddSalariedCustomerWizardPage = lazy(() => import('../pages/AddSalariedCustomerWizardPage'));
-const CustomerProfilePage = lazy(() => import('../pages/CustomerProfilePage'));
 const SuperadminPricingPage = lazy(() => import('../pages/SuperadminPricingPage'));
 const AdminPromoCodesPage = lazy(() => import('../pages/AdminPromoCodesPage'));
 const AdminTenantManagePage = lazy(() => import('../pages/AdminTenantManagePage'));
@@ -356,14 +355,6 @@ const AppRouter = () => (
               element={
                 <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA']}>
                   <AddSalariedCustomerWizardPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/customers/:customer_id"
-              element={
-                <ProtectedRoute allowedRoles={['DSA_ADMIN', 'DSA_MEMBER', 'SUPER_ADMIN', 'SUB_DSA', 'MSME_CUSTOMER']}>
-                  <CustomerProfilePage />
                 </ProtectedRoute>
               }
             />

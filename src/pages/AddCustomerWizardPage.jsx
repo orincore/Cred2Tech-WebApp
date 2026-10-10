@@ -1748,7 +1748,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
                               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
                             </div>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/customers/${duplicateWarning.id}`)}>View Existing Profile</button>
+                            {duplicateWarning.summary?.latest_case_id && (
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${duplicateWarning.summary.latest_case_id}`)}>View Existing Case</button>
+                            )}
                           </div>
 
                           {duplicateWarning.summary && (
