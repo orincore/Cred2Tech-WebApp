@@ -7,6 +7,8 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
 import MetricTile from '../components/ui/MetricTile';
+import RulebookWorkings, { RulebookDiagnostics } from '../components/esr/RulebookWorkings';
+import { methodLabel } from '../utils/methodLabel';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import { IS_DEV_BUILD } from '../utils/devBuild';
 import CustomSelect from '../components/CustomSelect';
@@ -15,7 +17,7 @@ import {
   Send, Clock, CheckCircle2, AlertCircle,
   BarChart3, ClipboardList, Percent, TrendingDown, TrendingUp,
   Home, ChevronUp, ChevronDown, Zap, IndianRupee,
-  ListFilter, Download,
+  ListFilter,
 } from 'lucide-react';
 
 const easeOut = [0.22, 1, 0.36, 1];
@@ -678,7 +680,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                       background: activeScheme === i ? 'var(--primary)' : 'transparent',
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
-                      {e.scheme_name}
+                      {methodLabel(e.scheme_name)}
                       {hasPositiveEligibility(e) ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
@@ -1012,7 +1014,6 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [showIneligible, setShowIneligible] = useState(true);
   const [unavailableLenders, setUnavailableLenders] = useState([]);
-  const [downloadingCalculators, setDownloadingCalculators] = useState(false);
   // Generate button shows this so a DSA knows the charge before clicking —
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept).
   const [esrGenerateCost, setEsrGenerateCost] = useState(0);
@@ -1043,6 +1044,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setEsr(null);
       // getCaseById is a fairly heavy call (full applicant/customer income
       // sub-records) only needed to render IncomeSourcesPanel below — skip
       // it entirely outside dev builds rather than fetch data that never renders.
@@ -1091,22 +1093,6 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
     } finally {
       setGenerating(false);
     }
-  };
-
-  const handleCalculatorDownload = async (refresh = false) => {
-    setDownloadingCalculators(true);
-    try {
-      let report = esr;
-      if (refresh) {
-        await caseService.generateESR(caseId, { forCalculatorDownload: true });
-        report = await caseService.getESR(caseId);
-        setEsr(report);
-      }
-      await caseService.downloadCalculators(caseId, report.version_number);
-      toast.success(`Calculator ZIP downloaded for ESR v${report.version_number}`);
-    } catch (error) {
-      toast.error(error.message || 'Unable to download calculators');
-    } finally { setDownloadingCalculators(false); }
   };
 
   if (loading) return <EsrSkeleton />;
@@ -1202,7 +1188,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {esr && (
-            <button className="btn btn-secondary btn-sm" onClick={handleRefresh} disabled={generating || downloadingCalculators}
+            <button className="btn btn-secondary btn-sm" onClick={handleRefresh} disabled={generating}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
               {generating ? 'Refreshing...' : 'Refresh Results'}
@@ -1211,26 +1197,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
       </motion.div>
 
-      {esr && !isMsme && (
-        <section aria-label="Lender calculator downloads" className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <strong>All lender calculators · ESR v{esr.version_number}</strong>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-            Download all 12 workbooks with their method sheets and an input/output audit. After saving manual changes, update the ESR to download a new version.
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-            Missing inputs are flagged in the audit. Open the workbooks in Excel to recalculate their formulas; saved engine outputs are included separately.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button className="btn btn-secondary btn-sm" disabled={generating || downloadingCalculators} onClick={() => handleCalculatorDownload(false)}>
-              <Download size={14} /> {downloadingCalculators ? 'Preparing calculators…' : `Download v${esr.version_number} ZIP`}
-            </button>
-            <button className="btn btn-primary btn-sm" disabled={generating || downloadingCalculators} onClick={() => handleCalculatorDownload(true)}>
-              Update ESR &amp; download new ZIP
-            </button>
-          </div>
-        </section>
-      )}
-
+      <RulebookDiagnostics report={esr} />
 
       {/* No ESR yet */}
       {!esr && !generating && (
@@ -1251,7 +1218,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </motion.div>
       )}
 
-      {IS_DEV_BUILD && esr && <IncomeSourcesPanel caseDetail={caseDetail} />}
+      {IS_DEV_BUILD && esr && !esr.raw_payload?.engine_result && <IncomeSourcesPanel caseDetail={caseDetail} />}
 
       {/* Filter bar */}
       {esr && lenders.length > 0 && (
@@ -1323,7 +1290,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{getLenderDisplayName(lender)}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                         {lender.product_display_name || lender.product_type}
-                        {eligible && lender.best_scheme_name ? ` · ${lender.best_scheme_name}` : ''}
+                        {eligible && lender.best_scheme_name ? ` · ${methodLabel(lender.best_scheme_name)}` : ''}
                       </div>
                     </div>
                   </div>
@@ -1342,7 +1309,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
                       border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
                     }}>
-                      {eligible ? 'Eligible' : 'Not Eligible'}
+                      {eligible ? (esr.raw_payload?.engine_result?.provisional ? 'Provisional' : 'Eligible')
+                        : lender.engine_result?.status === 'configuration_error' ? 'Configuration error' : 'Not Eligible'}
                     </span>
                   </div>
                 </div>
@@ -1363,7 +1331,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                   ) : (
                     <div style={{ width: '100%' }}>
                       {(() => {
-                        const reasons = parseIneligibilityReasons(lender.ineligibility_reason);
+                        const reasons = lender.engine_result
+                          ? lender.engine_result.reasons.map(r => r.message)
+                          : parseIneligibilityReasons(lender.ineligibility_reason);
                         if (reasons.length === 0) {
                           // No raw reason mapped to one of the master list's canonical
                           // reasons — show nothing rather than invented/generic text.
@@ -1412,7 +1382,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                 </div>
               </div>
               <div style={{ padding: '0 16px 8px 42px' }}>
-                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} />
+                {lender.engine_result ? <RulebookWorkings lender={lender.engine_result} />
+                  : <CalcBreakdownPanel evaluations={lender.scheme_evaluations} />}
               </div>
             </motion.div>
           );
