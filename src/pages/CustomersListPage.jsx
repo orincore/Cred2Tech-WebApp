@@ -15,7 +15,7 @@ import { useTheme } from '../context/ThemeContext';
 import { toast } from 'react-hot-toast';
 import { subscribeToCasePulls } from '../lib/realtime';
 import PageTour from '../components/tour/PageTour';
-import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
+import { formatCaseReference } from '../utils/caseReference';
 import { HDFC_DEPARTMENTS } from '../constants/lenderPolicies';
 
 import CustomSelect from '../components/CustomSelect';
@@ -568,17 +568,7 @@ const CustomersListPage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</span>
                       <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                        color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
-                        background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
-                      }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
                     </div>
-                    {/* The .N suffix already names the parent; the note only earns its
-                        place for older copies that have no sequence number. */}
-                    {c.parent_case_id && !childCaseSuffix(c) && (
-                      <div style={{ fontSize: 11, color: mutedColor, marginTop: 2 }}>↳ From CASE-{c.parent_case_id}</div>
-                    )}
                   </div>
                   <span style={{ background: stageBg, color: stageColor, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {STAGE_LABELS[c.stage] || c.stage}
@@ -650,7 +640,7 @@ const CustomersListPage = () => {
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
-                {['Case', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
+                {['Case ID', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
                   <th key={h} style={{
                     position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)',
                     padding: '10px 8px', fontSize: 10, fontWeight: 800, color: mutedColor,
@@ -674,14 +664,6 @@ const CustomersListPage = () => {
                         {formatCaseReference(c)}
                         <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
                       </div>
-                      <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                          color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
-                          background: c.category === 'SALARIED' ? 'var(--info-bg)' : 'var(--success-bg)'
-                        }}>{c.category === 'SALARIED' ? 'SALARIED' : 'BUSINESS'}</span>
-                      </div>
-                      {c.parent_case_id && !childCaseSuffix(c) && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
                       <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/cases/${c.id}`)}>
