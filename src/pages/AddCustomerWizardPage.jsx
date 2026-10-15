@@ -520,8 +520,22 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // 1 - do NOT guess a "further along" step from data already present
       // (e.g. an applicant existing as soon as PAN is verified), since that
       // silently skipped the user past step 1 without them clicking Next.
+      //
+      // But only once consent is actually granted for THIS case
+      // (consentGrantedForThisCase, above). Before that, clamp to step 1
+      // regardless of what ?step= says — CaseWizardStepper's own
+      // isStepUnlocked already refuses to let the user click past step 1
+      // without consentGranted, but that only guards the stepper's clicks;
+      // this is what the URL itself resumes to on every reload, and a case
+      // gets its caseId (so a ?step= URL exists to resume at all) the
+      // moment consent is first requested — well before the customer has
+      // actually approved anything. Without this clamp, reloading a case
+      // with a pending consent request and a stale ?step=N in the address
+      // bar (left over from goToStep's own URL sync, or hand-edited) would
+      // drop the user straight onto step N with no consent check at all.
       const stepParam = parseInt(searchParams.get('step'), 10);
-      setCurrentStep(stepParam >= 1 && stepParam <= 7 ? stepParam : 1);
+      const requestedStep = (stepParam >= 1 && stepParam <= 7) ? stepParam : 1;
+      setCurrentStep(consentGrantedForThisCase ? requestedStep : 1);
       const pid = searchParams.get('proposalId');
       if (pid) setProposalId(pid);
     }
@@ -1298,9 +1312,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // Pincode (and every other field on this sub-page) otherwise only reaches
   // the backend via handleStep1Submit, which fires solely from the Step 1
   // form's own "Continue" button. CaseWizardStepper's onStepClick lets a
-  // user jump straight to any already-unlocked step (any step, once a case
-  // exists — see isStepUnlocked there), bypassing that submit entirely, so
-  // a pincode typed and then left via the stepper was silently never saved.
+  // user jump straight to any already-unlocked step (any step once consent
+  // is granted — see isStepUnlocked there), bypassing that submit entirely,
+  // so a pincode typed and then left via the stepper was silently never saved.
   // Persisting on blur closes that gap without needing to touch the
   // stepper's own free-navigation behavior.
   //
@@ -1707,6 +1721,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           currentStep={currentStep}
           caseId={caseId}
           proposalId={proposalId}
+          consentGranted={!!formData.mobile_verified}
           steps={formData.is_salaried ? SALARIED_ORIGIN_STEPS : CASE_WIZARD_STEPS}
           onStepClick={(step) => goToStep(step)}
         />

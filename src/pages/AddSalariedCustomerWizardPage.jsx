@@ -1052,6 +1052,7 @@ const AddSalariedCustomerWizardPage = () => {
         <CaseWizardStepper
           currentStep={currentStep}
           caseId={caseId}
+          consentGranted={!!formData.mobile_verified}
           steps={SALARIED_ORIGIN_STEPS}
           onStepClick={(step) => {
             // This page only ever renders content for its own steps 1-3 —
