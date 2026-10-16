@@ -677,9 +677,18 @@ const CustomersListPage = () => {
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontWeight: 700, color: 'var(--on-surface)' }}>
-                        {caseIdDisplay(c)}
-                        <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
+                      {/* Grid with matching 18px edge columns, rather than a flex row
+                          centered as one group with the copy button — centering the
+                          whole group shifts the number itself off-center (visibly,
+                          against the BUSINESS/SALARIED badge centered below it) by
+                          roughly half the button's width. This keeps the number's own
+                          center fixed regardless of the button. */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '18px 1fr 18px', alignItems: 'center', fontWeight: 700, color: 'var(--on-surface)' }}>
+                        <span />
+                        <span style={{ textAlign: 'center' }}>{caseIdDisplay(c)}</span>
+                        <span style={{ display: 'flex', justifyContent: 'center' }}>
+                          <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
+                        </span>
                       </div>
                       <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
                         <span style={{
