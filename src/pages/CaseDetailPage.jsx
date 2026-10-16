@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { caseService } from '../api/caseService';
 import { getTenantLenders } from '../api/tenantLenderService';
-import { viewDocument, downloadDocument } from '../api/documentHelper';
+import { viewDocument, downloadDocument, deleteDocument } from '../api/documentHelper';
 import { getUsers } from '../api/userService';
 import {
-  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload
+  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload, Trash2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -115,26 +115,54 @@ const EmptyRow = ({ icon: Icon, text }) => (
 // One document tile within a Documents-tab category section — same card
 // used across every category/applicant grouping, so a document looks and
 // behaves identically no matter which section it falls under.
-const DocumentCard = ({ doc }) => (
-  <div style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <FileText size={18} color="var(--text-tertiary)" />
-      <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+const DocumentCard = ({ doc, onDeleted }) => {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    const name = doc.original_file_name || doc.document_type;
+    if (!window.confirm(`Delete "${name}"? This removes the file from storage and cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(doc.id);
+      toast.success('Document deleted');
+      onDeleted?.(doc.id);
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to delete document');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <FileText size={18} color="var(--text-tertiary)" />
+        <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+        <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
+          {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
+        </span>
+        <span>{formatFileSize(doc.file_size_bytes)}</span>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 4, alignItems: 'center' }}>
+        <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
+        <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Delete this document (removes it from storage too)"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--error)', background: 'none', border: 'none', fontWeight: 600, cursor: deleting ? 'default' : 'pointer', padding: 0, marginLeft: 'auto', opacity: deleting ? 0.6 : 1 }}
+        >
+          <Trash2 size={12} />
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+      </div>
     </div>
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
-      <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
-        {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
-      </span>
-      <span>{formatFileSize(doc.file_size_bytes)}</span>
-    </div>
-    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
-    <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
-      <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
-      <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
-    </div>
-  </div>
-);
+  );
+};
 
 export default function CaseDetailPage() {
   const { id } = useParams();
@@ -762,13 +790,13 @@ export default function CaseDetailPage() {
                             {app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Borrower ${idx}`}
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-                            {cat.docs.filter(d => d.applicant_id === app.id).map(doc => <DocumentCard key={doc.id} doc={doc} />)}
+                            {cat.docs.filter(d => d.applicant_id === app.id).map(doc => <DocumentCard key={doc.id} doc={doc} onDeleted={fetchCase} />)}
                           </div>
                         </div>
                       ))
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-                      {cat.docs.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
+                      {cat.docs.map(doc => <DocumentCard key={doc.id} doc={doc} onDeleted={fetchCase} />)}
                     </div>
                   )}
                 </div>
