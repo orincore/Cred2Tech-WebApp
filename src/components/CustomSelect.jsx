@@ -223,7 +223,11 @@ const CustomSelect = ({
     ? {}
     : {
         border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
+        // Flat corners everywhere — this app's inputs/panels/buttons are all
+        // sharp-edged (see .form-control's border-radius: 0 in index.css), so
+        // this trigger and the popup/options below it (same treatment) no
+        // longer stood out as the one rounded ("curved") control on the page.
+        borderRadius: 0,
         background: 'var(--bg-surface)',
         color: 'var(--text-primary)',
         padding: '8px 12px',
@@ -288,7 +292,7 @@ const CustomSelect = ({
               overflowY: 'auto',
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
+              borderRadius: 0,
               boxShadow: 'var(--shadow-lg)',
               zIndex: 10000,
               padding: 4,
@@ -307,7 +311,7 @@ const CustomSelect = ({
                   onClick={() => commitSelection(i)}
                   style={{
                     padding: '8px 12px',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                     fontSize: 14,
                     cursor: opt.disabled ? 'not-allowed' : 'pointer',
                     opacity: opt.disabled ? 0.5 : 1,
