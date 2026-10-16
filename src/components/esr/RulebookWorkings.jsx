@@ -69,7 +69,7 @@ export function RulebookDiagnostics({ report }) {
       </div>}
     </div>}
     {output.partial && <p role="alert">Some configurations could not be evaluated. Review the errors below.</p>}
-    {output.provisional && <p role="alert">Provisional results: resolve missing loan EMIs before treating these amounts as final.</p>}
+    {output.provisional && <p role="alert">Provisional results: verify estimated or missing loan EMIs before treating these amounts as final.</p>}
     <Messages label="Inputs to complete" messages={[...(output.input_issues || []), ...(output.data_gaps || [])]} />
     <Messages label="Source notes" messages={output.adapter_notes} />
     <Messages label="Rulebook errors" messages={output.invalid_rulebooks?.map(r => ({ message: `${r.lender || r.file}: ${r.errors.join('; ')}` }))} />

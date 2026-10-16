@@ -73,7 +73,7 @@ const estimateRemainingTenure = (obl) => {
 // hasn't been re-synced since). Drives showing the "Revert" action in the
 // same slot Delete occupies for a MANUAL row.
 const emiWasEdited = (obl) =>
-  obl.source === 'BUREAU' && obl.original_emi_per_month != null
+  obl.source === 'BUREAU' && !obl.emi_estimated && obl.original_emi_per_month != null
   && Number(obl.emi_per_month) !== Number(obl.original_emi_per_month);
 
 const getObligationDetails = (obl) => {
@@ -266,6 +266,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleEmiBlur = async (oblId, val) => {
     if (val === undefined || val === null) return;
+    if (editEmi[oblId] === undefined) return;
     try {
       await caseService.updateObligation(caseId, oblId, { emi_per_month: parseFloat(val) || 0 });
       await refreshObligations();
@@ -633,7 +634,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month
+                        {obl.emi_estimated && <small style={{ display: 'block', color: 'var(--warning)' }}>
+                          Estimated: {obl.emi_estimate.annual_roi_percent}% · {obl.emi_estimate.tenure_months} months
+                        </small>}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
                           type="number"
@@ -715,6 +720,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                           />
                           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
                         </div>
+                        {obl.emi_estimated && <small style={{ color: 'var(--warning)' }}>
+                          Estimated: {obl.emi_estimate.annual_roi_percent}% · {obl.emi_estimate.tenure_months} months
+                        </small>}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
