@@ -182,6 +182,7 @@ export default function CaseDetailPage() {
   const { isMobile } = useResponsive();
 
   const [caseData, setCaseData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   // An MSME case's PRIMARY applicant IS the business, and is deliberately
   // created without a `name` (case.service.js createCase) — the business
@@ -274,6 +275,8 @@ export default function CaseDetailPage() {
   const fetchCase = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
+      setCaseData(null);
       const data = await caseService.getCaseById(id);
       setCaseData(data);
       if (data && !disbursementSummary?.sanction) {
@@ -294,7 +297,13 @@ export default function CaseDetailPage() {
         });
       }
     } catch (error) {
-      toast.error('Failed to load case details');
+      const status = error.response?.status;
+      const message = status === 404 ? 'Case not found.'
+        : status === 403 ? 'You do not have access to this case.'
+        : status === 401 ? 'Your session has expired. Please sign in again.'
+        : 'Unable to load case details. Please try again.';
+      setLoadError({ message, retryable: ![401, 403, 404].includes(status) });
+      toast.error(message);
       console.error(error);
     } finally {
       setLoading(false);
@@ -496,7 +505,8 @@ export default function CaseDetailPage() {
   );
   if (!caseData) return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-      <p style={{ fontSize: 15, color: 'var(--text-secondary)' }}>Case not found.</p>
+      <p role="alert" style={{ fontSize: 15, color: 'var(--text-secondary)' }}>{loadError?.message || 'Case not found.'}</p>
+      {loadError?.retryable && <button className="btn btn-primary btn-sm" onClick={fetchCase}>Try again</button>}
       <button className="btn btn-secondary btn-sm" onClick={() => navigate(backPath)}><ArrowLeft size={14} /> {isMsme ? 'Back to Dashboard' : 'Back to Pipeline'}</button>
     </div>
   );

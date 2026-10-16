@@ -194,23 +194,15 @@ const ApplicantIncomeBlock = ({ app, isMobile, delay, onDelete, onAdd, incomeTyp
       }]
     : [
         {
-          label: 'Gross Turnover / Receipts', latest: app.gst_turnover?.latest, prev: app.gst_turnover?.prev,
-          // FY column prefers the genuine closed-FY label (fy_turnover_*_label)
-          // over the rolling row's own fy_latest/fy_prev (a date range, not a
-          // bare label — always blanked by fyColumnValue below anyway). Falls
-          // back to fy_latest/fy_prev only when this pull has too little filed
-          // history to have produced a closed-FY summary at all.
-          fyLatest: app.gst_turnover?.fy_turnover_latest_label || app.gst_turnover?.fy_latest,
-          fyPrev: app.gst_turnover?.fy_turnover_previous_label || app.gst_turnover?.fy_prev,
-          // The FY column's own amount — genuinely different from
-          // latest/prev above (the rolling-window sum), so it's carried
-          // separately and rendered under the FY label itself rather than
-          // implying the two numbers are the same figure.
-          fyAmountLatest: app.gst_turnover?.fy_turnover_latest,
-          fyAmountPrev: app.gst_turnover?.fy_turnover_previous,
-          rangeLatest: app.gst_turnover?.fy_latest_range || app.gst_turnover?.fy_latest,
-          rangePrev: app.gst_turnover?.fy_prev_range || app.gst_turnover?.fy_prev,
-          source: 'GST', color: 'var(--info)', bg: 'var(--info-bg)'
+          // Annual sales / gross receipts come from the filed ITR (a complete
+          // Apr-Mar year), not from GST, for both applicant and co-applicant.
+          label: 'Gross Turnover / Receipts', latest: app.net_profit?.gross_receipts_latest, prev: app.net_profit?.gross_receipts_previous,
+          fyLatest: app.net_profit?.fy_latest, fyPrev: app.net_profit?.fy_prev,
+          fyAmountLatest: app.net_profit?.gross_receipts_latest,
+          fyAmountPrev: app.net_profit?.gross_receipts_previous,
+          rangeLatest: app.net_profit?.fy_latest_range || app.net_profit?.fy_latest,
+          rangePrev: app.net_profit?.fy_prev_range || app.net_profit?.fy_prev,
+          source: 'ITR', color: 'var(--success)', bg: 'var(--success-bg)'
         },
         {
           label: 'Net Profit (PAT)', latest: app.net_profit?.latest, prev: app.net_profit?.prev,
@@ -637,7 +629,11 @@ export default function IncomeSummaryPage({ caseId, onNext, isSalaried = false }
           delay={i * 0.05}
           onDelete={handleDelete}
           onAdd={handleAddEntryForApplicant}
-          incomeTypes={incomeTypes}
+          incomeTypes={String(app.employment_type || '').toUpperCase() === 'SALARIED'
+            ? INCOME_TYPES_SALARIED
+            : String(app.employment_type || '').toUpperCase() === 'SELF_EMPLOYED'
+              ? INCOME_TYPES_MSME
+              : incomeTypes}
           saving={saving}
         />
       ))}

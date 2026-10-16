@@ -114,13 +114,12 @@ export const caseService = {
   },
 
   // Phase 1 —— ESR
-  // forCalculatorDownload: the refresh behind "Update ESR & download new ZIP" is not a billed Generate click.
   // Body is {}, not null: the instance sends Content-Type: application/json, and
   // express.json() is strict by default, so a bare `null` body is rejected by
   // body-parser before any route middleware runs — a 400 the API's global error
   // handler then reports as a bare 500.
-  generateESR: async (caseId, { forCalculatorDownload = false } = {}) => {
-    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, {}, forCalculatorDownload ? { params: { purpose: 'calculator_refresh' } } : undefined);
+  generateESR: async (caseId) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, {});
     return response.data;
   },
   // Re-runs the engine over the case's existing financial snapshot — no new
@@ -134,25 +133,6 @@ export const caseService = {
     const response = await axiosInstance.get(`/cases/${caseId}/esr`);
     return response.data;
   },
-  downloadCalculators: async (caseId, version) => {
-    try {
-      const response = await axiosInstance.get(`/cases/${caseId}/esr/calculators/download`, {
-        params: { version }, responseType: 'blob', timeout: 180000,
-      });
-      const url = URL.createObjectURL(response.data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Case_${caseId}_ESR_v${version}_Calculators.zip`;
-      document.body.appendChild(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      if (error.response?.data instanceof Blob) {
-        try { error.message = JSON.parse(await error.response.data.text()).error || error.message; } catch { /* Keep the original request error. */ }
-      }
-      throw error;
-    }
-  },
-
   // Phase 2 —— Proposals
   createProposal: async (caseId, payload) => {
     const response = await axiosInstance.post(`/cases/${caseId}/proposals/create`, payload);
