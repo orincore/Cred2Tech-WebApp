@@ -60,6 +60,14 @@ export function RulebookDiagnostics({ report }) {
   return <section aria-label="Eligibility assessment details" className="card" style={{ padding: 16, marginBottom: 20 }}>
     <strong>Eligibility assessment · ESR v{report.version_number}</strong>
     <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-secondary)' }}>Assessed {output.as_of} · Engine {output.engine_version}</div>
+    {output.summary && <div style={{ marginTop: 10, fontSize: 13 }}>
+      <strong>{output.summary.eligible_lenders} eligible lenders</strong>
+      {output.summary.best_offer && <div style={{ marginTop: 4 }}>
+        Best offer: {money(output.summary.best_offer.amount)} · {output.summary.best_offer.lender}
+        {' · '}{methodLabel(output.lenders?.find(l => l.lender === output.summary.best_offer.lender)
+          ?.schemes?.find(s => s.scheme === output.summary.best_offer.scheme)?.label || output.summary.best_offer.scheme)}
+      </div>}
+    </div>}
     {output.partial && <p role="alert">Some configurations could not be evaluated. Review the errors below.</p>}
     {output.provisional && <p role="alert">Provisional results: resolve missing loan EMIs before treating these amounts as final.</p>}
     <Messages label="Inputs to complete" messages={[...(output.input_issues || []), ...(output.data_gaps || [])]} />
