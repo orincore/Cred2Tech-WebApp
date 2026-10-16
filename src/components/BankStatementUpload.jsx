@@ -9,6 +9,7 @@ import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
 import { IS_DEV_BUILD } from '../utils/devBuild';
+import PriceTag from './PriceTag';
 // Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
 // download-report entitlement gap (confirmed broken on both preprod — bad
 // credentials — and production — 403 not entitled — 2026-09-02). Never shown
@@ -36,7 +37,7 @@ const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
+const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, analyzeCostActual = null, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -522,7 +523,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             disabled={disabled}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
-                            {isMsme || !analyzeCost ? 'Upload PDF' : `Upload PDF (~${analyzeCost} Cr)`}
+                            {isMsme ? 'Upload PDF' : <PriceTag label="Upload PDF" actual={analyzeCostActual} discounted={analyzeCost} />}
                         </button>
                     )}
                 </div>
@@ -636,7 +637,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : (isMsme || !analyzeCost) ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : <PriceTag label="Analyze" actual={analyzeCostActual} discounted={analyzeCost} />}
                             </button>
                         </div>
                     </div>

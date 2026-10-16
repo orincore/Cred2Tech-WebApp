@@ -9,6 +9,7 @@ import { downloadDocument } from '../api/documentHelper';
 import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
 import { useCasePullStatus, usePhaseTransition } from '../hooks/useCasePullStatus';
 import { gstAuthLinkService } from '../api/gstAuthLinkService';
+import PriceTag from './PriceTag';
 
 import CustomSelect from './CustomSelect';
 // GST pull window is fixed, not user-editable or shown on screen: the latest
@@ -24,7 +25,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
+const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, gstCostActual = null, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -713,12 +714,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         {mode === 'AUTH_LINK' ? (
                             <>
                                 <Mail size={14} />
-                                {sendingLink ? 'Sending…' : (isMsme || !gstCost) ? 'Send Auth Link' : `Send Auth Link (~${gstCost} Cr)`}
+                                {sendingLink ? 'Sending…' : isMsme ? 'Send Auth Link' : <PriceTag label="Send Auth Link" actual={gstCostActual} discounted={gstCost} />}
                             </>
                         ) : (
                             <>
                                 <Send size={14} />
-                                {loading ? 'Creating...' : (isMsme || !gstCost) ? 'Submit' : `Submit (~${gstCost} Cr)`}
+                                {loading ? 'Creating...' : isMsme ? 'Submit' : <PriceTag label="Submit" actual={gstCostActual} discounted={gstCost} />}
                             </>
                         )}
                     </button>

@@ -11,6 +11,7 @@ import api from '../api/axiosInstance';
 import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 import { itrAuthLinkService } from '../api/itrAuthLinkService';
+import PriceTag from './PriceTag';
 
 import CustomSelect from './CustomSelect';
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -26,6 +27,7 @@ const ItrAnalyticsForm = ({
     prefillMobile,
     walletBalance,
     itrCost,
+    itrCostActual = null,
     existingRecord,
     onComplete,
     onRemoved,
@@ -463,9 +465,9 @@ const ItrAnalyticsForm = ({
                                 disabled={disabled}
                                 title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : undefined}
                             >
-                                {(isMsme || !itrCost)
+                                {isMsme
                                     ? (status === 'FAILED' ? 'Retry' : 'Fetch ITR')
-                                    : (status === 'FAILED' ? `Retry (~${itrCost} Cr)` : `Fetch ITR (~${itrCost} Cr)`)}
+                                    : <PriceTag label={status === 'FAILED' ? 'Retry' : 'Fetch ITR'} actual={itrCostActual} discounted={itrCost} />}
                             </button>
                             {/* DSA-only: email the customer a link to enter their own
                                 PAN/password instead — never available in MSME self-service
@@ -503,7 +505,7 @@ const ItrAnalyticsForm = ({
                                         title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
                                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                     >
-                                        <Mail size={13} /> {sendingLink ? 'Sending…' : (itrCost ? `Send Auth Link (~${itrCost} Cr)` : 'Send Auth Link')}
+                                        <Mail size={13} /> {sendingLink ? 'Sending…' : <PriceTag label="Send Auth Link" actual={itrCostActual} discounted={itrCost} />}
                                     </button>
                                 </>
                             )}
@@ -661,7 +663,7 @@ const ItrAnalyticsForm = ({
                             onClick={handleAnalyze}
                             disabled={loading || (!isMsme && walletBalance < itrCost)}
                         >
-                            {loading ? 'Submitting...' : (isMsme || !itrCost) ? 'Analyze' : `Analyze (~${itrCost} Cr)`}
+                            {loading ? 'Submitting...' : isMsme ? 'Analyze' : <PriceTag label="Analyze" actual={itrCostActual} discounted={itrCost} />}
                         </button>
                     </div>
                 </div>

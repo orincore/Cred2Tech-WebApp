@@ -18,6 +18,7 @@ import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchM
 import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
+import PriceTag from '../components/PriceTag';
 
 import CustomSelect from '../components/CustomSelect';
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -104,6 +105,10 @@ const AddSalariedCustomerWizardPage = () => {
   // /customers/salaried/add), so unlike that page there's no isMsme branch
   // to skip the wallet gate for.
   const [costs, setCosts] = useState({ PAN_FETCH: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0 });
+  // Mirrors `costs` 1:1 — see AddCustomerWizardPage.jsx's own costsActual
+  // comment for why this stays a separate object instead of folding into
+  // `costs` itself.
+  const [costsActual, setCostsActual] = useState({ PAN_FETCH: null, BUREAU_PULL: null, BUREAU_OBLIGATIONS: null });
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
@@ -114,10 +119,16 @@ const AddSalariedCustomerWizardPage = () => {
     withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
-        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
-        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
-        setCosts({ PAN_FETCH: panFetch, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations });
+        const codes = { PAN_FETCH: 'PAN_FETCH', BUREAU_PULL: 'BUREAU_PULL', BUREAU_OBLIGATIONS: 'BUREAU_OBLIGATIONS' };
+        const nextCosts = {};
+        const nextActual = {};
+        for (const [key, apiCode] of Object.entries(codes)) {
+          const row = data.find(d => d.api_code === apiCode);
+          nextCosts[key] = row?.tenant_cost || 0;
+          nextActual[key] = row?.actual_cost ?? null;
+        }
+        setCosts(nextCosts);
+        setCostsActual(nextActual);
       })
       .catch(err => {
         console.error(err);
@@ -1306,7 +1317,7 @@ const AddSalariedCustomerWizardPage = () => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
+                          <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
                         </button>
                       )
                     ) : (
@@ -1451,7 +1462,7 @@ const AddSalariedCustomerWizardPage = () => {
                                             disabled={saving || walletBalance < costs.PAN_FETCH}
                                             title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
+                                            <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
                                           </button>
                                         )
                                       ) : (

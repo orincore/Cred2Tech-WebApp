@@ -198,6 +198,7 @@ const SuperadminPricingPage = () => {
         description: editForm.description,
         vendor_cost: editForm.vendor_cost,
         credit_cost: editForm.default_credit_cost,
+        actual_credit_cost: editForm.actual_credit_cost === '' ? null : editForm.actual_credit_cost,
         is_active: editForm.is_active
       });
       toast.success('Pricing updated successfully');
@@ -580,7 +581,7 @@ const SuperadminPricingPage = () => {
                           style={{ fontSize: 13, width: '100%' }}
                         />
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Vendor Cost (₹)</div>
                           <input
@@ -599,6 +600,21 @@ const SuperadminPricingPage = () => {
                             value={editForm.default_credit_cost}
                             onChange={e => setEditForm({ ...editForm, default_credit_cost: parseInt(e.target.value) || 0 })}
                             style={{ fontSize: 13, width: '100%', fontWeight: 700, borderBottomColor: 'var(--primary)' }}
+                          />
+                        </div>
+                        <div>
+                          {/* Shown crossed out next to C2T Rate on every pull button in the
+                              app (PriceTag.jsx) whenever it's set higher than C2T Rate —
+                              blank/0 here means "no discount to advertise", same as leaving
+                              it unset. */}
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Actual Price (₹)</div>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm"
+                            placeholder="No discount"
+                            value={editForm.actual_credit_cost ?? ''}
+                            onChange={e => setEditForm({ ...editForm, actual_credit_cost: e.target.value === '' ? '' : (parseInt(e.target.value, 10) || 0) })}
+                            style={{ fontSize: 13, width: '100%' }}
                           />
                         </div>
                       </div>
@@ -636,6 +652,14 @@ const SuperadminPricingPage = () => {
                           <div style={{ background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 0, fontWeight: 700, fontSize: 13, display: 'inline-block', color: 'var(--on-surface)' }}>
                             ₹{(p.default_credit_cost ?? 0).toFixed(2)}
                           </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Actual Price</div>
+                          {p.actual_credit_cost != null && p.actual_credit_cost > p.default_credit_cost ? (
+                            <div style={{ fontSize: 13, fontWeight: 600, textDecoration: 'line-through', color: 'var(--on-muted)' }}>₹{p.actual_credit_cost.toFixed(2)}</div>
+                          ) : (
+                            <div style={{ fontSize: 13, color: 'var(--on-muted)' }}>No discount</div>
+                          )}
                         </div>
                         <div>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Margin</div>
@@ -749,6 +773,27 @@ const SuperadminPricingPage = () => {
                   {(p.default_credit_cost ?? 0).toFixed(2)}
                 </div>
               );
+            }},
+            { key: 'actual_credit_cost', label: 'Actual Price (₹)', align: 'center', render: (group) => {
+              const p = getActiveRow(group);
+              const isEditing = editingId === p.id;
+              if (isEditing) {
+                return (
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    placeholder="No discount"
+                    value={editForm.actual_credit_cost ?? ''}
+                    onChange={e => setEditForm({ ...editForm, actual_credit_cost: e.target.value === '' ? '' : (parseInt(e.target.value, 10) || 0) })}
+                    style={{ width: 100, fontSize: 12 }}
+                  />
+                );
+              }
+              // Shown crossed out next to C2T Rate on every pull button in the
+              // app (PriceTag.jsx) whenever it's set higher than C2T Rate.
+              return p.actual_credit_cost != null && p.actual_credit_cost > p.default_credit_cost
+                ? <span style={{ textDecoration: 'line-through', color: 'var(--on-muted)', fontSize: 13 }}>₹{p.actual_credit_cost.toFixed(2)}</span>
+                : <span style={{ color: 'var(--on-muted)', fontSize: 12 }}>No discount</span>;
             }},
             { key: 'margin', label: 'Margin (₹)', align: 'center', render: (group) => {
               const p = getActiveRow(group);

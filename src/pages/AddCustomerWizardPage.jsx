@@ -21,6 +21,7 @@ import PullingIndicator from '../components/ui/PullingIndicator';
 import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
 import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
 import ConsentSelfOtpModal from '../components/ConsentSelfOtpModal';
+import PriceTag from '../components/PriceTag';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
@@ -165,6 +166,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [formData, setFormData] = useState(getInitialFormData);
 
   const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0, ESR_GENERATION: 0 });
+  // Mirrors `costs` 1:1 — the admin-set "before discount" reference price
+  // for each api_code (ApiPricing.actual_credit_cost), null wherever an
+  // admin hasn't set one. Kept as its own object rather than folded into
+  // `costs` itself so every existing `costs.X` numeric comparison
+  // (disabled-state checks, "Insufficient credits" messages) stays a plain
+  // number, untouched — only the <PriceTag> label spots read this one too.
+  const [costsActual, setCostsActual] = useState({ GST_FETCH: null, ITR_ANALYTICS: null, BANK_ANALYSIS: null, BUREAU_PULL: null, BUREAU_OBLIGATIONS: null, PAN_FETCH: null, ESR_GENERATION: null });
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
@@ -184,20 +192,31 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
-        const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
-        const itr = data.find(d => d.api_code === 'ITR_ANALYTICS')?.tenant_cost || 0;
-        const bank = data.find(d => d.api_code === 'BANK_ANALYSIS')?.tenant_cost || 0;
-        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
-        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
-        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-        const esrGeneration = data.find(d => d.api_code === 'ESR_GENERATION')?.tenant_cost || 0;
-        setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch, ESR_GENERATION: esrGeneration });
+        // ESR generation is priced per case category since 2026-10-16 (see
+        // esr.service.js) — the wizard only ever knows one category at a
+        // time (formData.is_salaried), so resolve straight to the one real
+        // row that applies and keep exposing it under the same
+        // costs.ESR_GENERATION / costsActual.ESR_GENERATION keys every
+        // downstream consumer (BureauObligationsPage, EsrStep) already
+        // reads — nothing further down needs to know about the split.
+        const esrApiCode = formData.is_salaried ? 'ESR_GENERATION_SALARIED' : 'ESR_GENERATION_MSME';
+        const find = (code) => data.find(d => d.api_code === code);
+        const codes = { GST_FETCH: 'GST_FETCH', ITR_ANALYTICS: 'ITR_ANALYTICS', BANK_ANALYSIS: 'BANK_ANALYSIS', BUREAU_PULL: 'BUREAU_PULL', BUREAU_OBLIGATIONS: 'BUREAU_OBLIGATIONS', PAN_FETCH: 'PAN_FETCH', ESR_GENERATION: esrApiCode };
+        const nextCosts = {};
+        const nextActual = {};
+        for (const [key, apiCode] of Object.entries(codes)) {
+          const row = find(apiCode);
+          nextCosts[key] = row?.tenant_cost || 0;
+          nextActual[key] = row?.actual_cost ?? null;
+        }
+        setCosts(nextCosts);
+        setCostsActual(nextActual);
       })
       .catch(err => {
         console.error(err);
         toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
       });
-  }, [isMsme]);
+  }, [isMsme, formData.is_salaried]);
 
   // Polled (not fetched once) so the header pill reflects a deduction the
   // moment it happens — a GST/ITR/bank/PAN pull kicked off from any step, or
@@ -2055,7 +2074,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
                         </button>
                       )
                     ) : (
@@ -2206,7 +2225,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                             disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
                                             title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                            {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
                                           </button>
                                         )
                                       ) : (
@@ -2406,6 +2425,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           onboardingMode={mode}
                           walletBalance={walletBalance}
                           gstCost={costs.GST_FETCH}
+                          gstCostActual={costsActual.GST_FETCH}
                           disabled={isBulkInjectedCase}
                           prefillEmail={formData.business_email}
                           prefillMobile={formData.business_mobile}
@@ -2482,6 +2502,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   onboardingMode={mode}
                                   walletBalance={walletBalance}
                                   gstCost={costs.GST_FETCH}
+                          gstCostActual={costsActual.GST_FETCH}
                                   disabled={isBulkInjectedCase}
                                   prefillEmail={coApp.email}
                                   prefillMobile={coApp.mobile}
@@ -2522,6 +2543,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         prefillMobile={formData.business_mobile}
                         walletBalance={walletBalance}
                         itrCost={costs.ITR_ANALYTICS}
+                        itrCostActual={costsActual.ITR_ANALYTICS}
                         existingRecord={formData.customer_itr_profile ?? null}
                         onComplete={(data) => setFormData(prev => ({ ...prev, itr_completed: true, itr_analytics: data }))}
                         onRemoved={() => setFormData(prev => ({ ...prev, itr_completed: false, itr_analytics: null }))}
@@ -2542,6 +2564,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           prefillMobile={coApp.mobile}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
+                        itrCostActual={costsActual.ITR_ANALYTICS}
                           existingRecord={coApp.itr_analytics?.[0] || null}
                           onComplete={(data) => console.log(`Co-App ${idx} ITR complete`)}
                           mode={mode}
@@ -2581,6 +2604,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                         walletBalance={walletBalance}
                         analyzeCost={costs.BANK_ANALYSIS}
+                        analyzeCostActual={costsActual.BANK_ANALYSIS}
                         existingStatus={formData.customer_bank_profile ?? null}
                         onComplete={(status, payload) => console.log('Primary bank complete')}
                         mode={mode}
@@ -2601,6 +2625,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           walletBalance={walletBalance}
                           analyzeCost={costs.BANK_ANALYSIS}
+                        analyzeCostActual={costsActual.BANK_ANALYSIS}
                           existingStatus={coApp.bank_statements?.[0] || null}
                           onComplete={(status, payload) => console.log(`Co-App ${idx} bank complete`)}
                           mode={mode}
@@ -2725,7 +2750,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               mode={mode}
               walletBalance={walletBalance}
               bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+              bureauCostActual={(costsActual.BUREAU_PULL != null || costsActual.BUREAU_OBLIGATIONS != null)
+                ? (costsActual.BUREAU_PULL ?? costs.BUREAU_PULL) + (costsActual.BUREAU_OBLIGATIONS ?? costs.BUREAU_OBLIGATIONS)
+                : null}
               esrGenerationCost={costs.ESR_GENERATION}
+              esrGenerationCostActual={costsActual.ESR_GENERATION}
               onAddCoApplicant={() => { goToStep(1); setStep1SubPage('coapplicants'); }}
             />
           )}
@@ -2734,6 +2763,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               caseId={caseId}
               onOpenProposal={handleProposalCreated}
               isMsme={isMsme}
+              isSalaried={formData.is_salaried}
               onApplyForLoan={handleApplyForLoan}
             />
           )}

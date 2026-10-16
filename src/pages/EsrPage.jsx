@@ -10,6 +10,7 @@ import MetricTile from '../components/ui/MetricTile';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import { IS_DEV_BUILD } from '../utils/devBuild';
 import CustomSelect from '../components/CustomSelect';
+import PriceTag from '../components/PriceTag';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -1010,7 +1011,7 @@ export function EsrSkeleton() {
   );
 }
 
-export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onApplyForLoan }) {
+export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSalaried = false, onApplyForLoan }) {
 
   const [loading, setLoading]       = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1025,16 +1026,23 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   // Generate button shows this so a DSA knows the charge before clicking —
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept).
   const [esrGenerateCost, setEsrGenerateCost] = useState(0);
+  // "Before discount" reference price for the same row — see PriceTag's own
+  // comment. Null (no admin-set discount) renders no strikethrough.
+  const [esrGenerateCostActual, setEsrGenerateCostActual] = useState(null);
 
   useEffect(() => {
     if (isMsme) return;
+    // ESR generation is priced per case category since 2026-10-16 (see
+    // esr.service.js) — isSalaried picks the one real row that applies.
+    const esrApiCode = isSalaried ? 'ESR_GENERATION_SALARIED' : 'ESR_GENERATION_MSME';
     withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
-        const cost = res.data.find(d => d.api_code === 'ESR_GENERATION')?.tenant_cost || 0;
-        setEsrGenerateCost(cost);
+        const row = res.data.find(d => d.api_code === esrApiCode);
+        setEsrGenerateCost(row?.tenant_cost || 0);
+        setEsrGenerateCostActual(row?.actual_cost ?? null);
       })
       .catch(err => console.error('Could not load ESR generation pricing', err));
-  }, [isMsme]);
+  }, [isMsme, isSalaried]);
 
   // The card list is rendered from esr.raw_payload.lenders (a debugging
   // snapshot taken before the EligibilityReportLender rows were inserted, so
@@ -1255,7 +1263,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             We'll instantly check your eligibility across all our lending partners.
           </p>
           <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={18} /> {!isMsme && esrGenerateCost ? `Check My Eligibility (~${esrGenerateCost} Cr)` : 'Check My Eligibility'}
+            <Zap size={18} /> {isMsme ? 'Check My Eligibility' : <PriceTag label="Check My Eligibility" actual={esrGenerateCostActual} discounted={esrGenerateCost} />}
           </button>
         </motion.div>
       )}

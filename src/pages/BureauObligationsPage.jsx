@@ -7,6 +7,7 @@ import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
+import PriceTag from '../components/PriceTag';
 
 import CustomSelect from '../components/CustomSelect';
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
@@ -149,7 +150,7 @@ const BUREAU_ELIGIBLE_ENTITY_RE = /individual|proprietor/i;
 // Step 5 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, esrGenerationCost, onAddCoApplicant }) {
+export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, bureauCostActual = null, esrGenerationCost, esrGenerationCostActual = null, onAddCoApplicant }) {
   const isMobile = useIsMobile();
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
@@ -581,9 +582,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     <Fingerprint size={13} className={retryingFor === applicant.id ? 'icon-loading' : ''} />
                     {retryingFor === applicant.id
                       ? 'Pulling…'
-                      : (isMsme || !bureauCost)
+                      : isMsme
                         ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
-                        : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
+                        : <PriceTag label={bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details'} actual={bureauCostActual} discounted={bureauCost} />}
                   </button>
                 )
               )}
@@ -857,7 +858,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
-            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost && !hasExistingEsr ? `Generate Eligibility Summary Report (~${esrGenerationCost} Cr)` : 'Generate Eligibility Summary Report')}
+            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost && !hasExistingEsr
+              ? <PriceTag label="Generate Eligibility Summary Report" actual={esrGenerationCostActual} discounted={esrGenerationCost} />
+              : 'Generate Eligibility Summary Report')}
           </button>
           {mustAddCoApplicant ? (
             <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>
