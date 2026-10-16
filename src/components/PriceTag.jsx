@@ -6,11 +6,12 @@ import React from 'react';
 // actual_credit_cost than default_credit_cost on the Superadmin Pricing page
 // (ApiPricing.actual_credit_cost; see pricing.service.js#getTenantCostsMatrix,
 // which is the actual/discounted pair every caller of this component reads
-// from). `discounted` falsy renders the bare label with no price at all —
-// matches every call site's own prior "cost ? `Label (~X Cr)` : 'Label'"
-// fallback (a 0-credit/missing price means nothing to advertise).
+// from). `discounted` missing (null/undefined — no cost row resolved at all)
+// renders the bare label with no price; `discounted: 0` is a real free price
+// and must still render (and still show the strikethrough if actual > 0), so
+// this checks `== null` rather than falsiness.
 export default function PriceTag({ label, actual, discounted, suffix = 'Cr' }) {
-  if (!discounted) return label;
+  if (discounted == null) return label;
   const hasDiscount = actual != null && actual > discounted;
   if (!hasDiscount) return `${label} (~${discounted} ${suffix})`;
   return (
