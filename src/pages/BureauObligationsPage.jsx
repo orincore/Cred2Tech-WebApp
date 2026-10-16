@@ -858,7 +858,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
-            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost && !hasExistingEsr
+            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost != null && !hasExistingEsr
               ? <PriceTag label="Generate Eligibility Summary Report" actual={esrGenerationCostActual} discounted={esrGenerationCost} />
               : 'Generate Eligibility Summary Report')}
           </button>
