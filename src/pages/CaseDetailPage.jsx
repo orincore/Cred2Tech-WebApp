@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { caseService } from '../api/caseService';
@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, formatFileSize } from '../utils/helpers';
 import { formatCaseReference } from '../utils/caseReference';
+import { createSanctionForm, createDisbursementForm, resolveSanctionContext } from '../utils/caseStageForm';
 import { groupDocumentsByCategory } from '../constants/documentCategories';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
@@ -166,6 +167,8 @@ const DocumentCard = ({ doc, onDeleted }) => {
 
 export default function CaseDetailPage() {
   const { id } = useParams();
+  const activeCaseId = useRef(id);
+  activeCaseId.current = id;
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   // MSME direct-portal borrowers can view their own case, but the DSA
@@ -200,6 +203,8 @@ export default function CaseDetailPage() {
   const [selectedStage, setSelectedStage] = useState('');
   const [disbursementSummary, setDisbursementSummary] = useState(null);
   const [tenantLenders, setTenantLenders] = useState([]);
+  const [lendersLoading, setLendersLoading] = useState(true);
+  const [lendersLoadError, setLendersLoadError] = useState(false);
   const [summaryDownloading, setSummaryDownloading] = useState(false);
 
   const [rollbackReason, setRollbackReason] = useState('');
@@ -220,18 +225,11 @@ export default function CaseDetailPage() {
   const [dsaUsers, setDsaUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  const [sanctionForm, setSanctionForm] = useState({
-    loan_account_number: '', sanction_date: new Date().toISOString().split('T')[0],
-    sanctioned_amount: '', confirmed_roi: '', processing_fee: '', remarks: '',
-    lender_name: '', product_type: '', tenant_lender_id: '',
-  });
+  const [sanctionForm, setSanctionForm] = useState(createSanctionForm);
+  const sanctionContext = resolveSanctionContext({ caseData,
+    sanction: disbursementSummary?.sanction, form: sanctionForm, lenders: tenantLenders });
 
-  const [disbursementForm, setDisbursementForm] = useState({
-    amount: '', disbursement_date: new Date().toISOString().split('T')[0],
-    next_disbursement_due_date: '', remarks: '', pdd_pending: false,
-    pdd_documents: [{ document_name: '', due_date: '' }], loan_account_number: '',
-    subvention_amount: '',
-  });
+  const [disbursementForm, setDisbursementForm] = useState(createDisbursementForm);
 
   // A case can only take subvention once, in whichever tranche it's first
   // entered — later tranches (and DISBURSED after a PARTLY_DISBURSED one)
@@ -240,27 +238,26 @@ export default function CaseDetailPage() {
     (d) => d.subvention_amount && Number(d.subvention_amount) > 0
   );
 
-  // Auto-resolve tenant_lender_id if it's missing but lender_name is locked
-  useEffect(() => {
-    if (sanctionForm.lender_name && !sanctionForm.tenant_lender_id && tenantLenders.length > 0) {
-      const match = tenantLenders.find(l => l.lender_name === sanctionForm.lender_name);
-      if (match) {
-        setSanctionForm(prev => ({ ...prev, tenant_lender_id: String(match.id) }));
-      }
-    }
-  }, [sanctionForm.lender_name, sanctionForm.tenant_lender_id, tenantLenders]);
+  const loadTenantLenders = useCallback(async () => {
+    setLendersLoading(true);
+    setLendersLoadError(false);
+    try { setTenantLenders(await getTenantLenders()); }
+    catch { setLendersLoadError(true); }
+    finally { setLendersLoading(false); }
+  }, []);
 
   const fetchDisbursementSummary = useCallback(async () => {
     try {
       const data = await caseService.getDisbursementSummary(id);
+      if (activeCaseId.current !== id) return;
       setDisbursementSummary(data);
       if (data.sanction) {
         setSanctionForm({
           loan_account_number: data.sanction.loan_account_number || '',
           sanction_date: data.sanction.sanction_date?.split('T')[0] || '',
-          sanctioned_amount: data.sanction.sanction_amount || data.summary.sanctioned_amount || '',
-          confirmed_roi: data.sanction.confirmed_roi || '',
-          processing_fee: data.sanction.processing_fee || '',
+          sanctioned_amount: data.sanction.sanctioned_amount ?? data.sanction.sanction_amount ?? data.summary?.sanctioned_amount ?? '',
+          confirmed_roi: data.sanction.confirmed_roi ?? '',
+          processing_fee: data.sanction.processing_fee ?? '',
           remarks: data.sanction.remarks || '',
           lender_name: data.sanction.lender_name || '',
           product_type: data.sanction.product_type || '',
@@ -278,15 +275,8 @@ export default function CaseDetailPage() {
       setLoadError(null);
       setCaseData(null);
       const data = await caseService.getCaseById(id);
+      if (activeCaseId.current !== id) return;
       setCaseData(data);
-      if (data && !disbursementSummary?.sanction) {
-        setSanctionForm(prev => ({
-          ...prev,
-          lender_name: prev.lender_name || data.lender_name || '',
-          product_type: prev.product_type || data.product_type || '',
-          tenant_lender_id: prev.tenant_lender_id || data.tenant_lender_id || '',
-        }));
-      }
       if (data) {
         setPropertyForm({
           product_type: data.product_type || '',
@@ -297,6 +287,7 @@ export default function CaseDetailPage() {
         });
       }
     } catch (error) {
+      if (activeCaseId.current !== id) return;
       const status = error.response?.status;
       const message = status === 404 ? 'Case not found.'
         : status === 403 ? 'You do not have access to this case.'
@@ -306,15 +297,23 @@ export default function CaseDetailPage() {
       toast.error(message);
       console.error(error);
     } finally {
-      setLoading(false);
+      if (activeCaseId.current === id) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    setSanctionForm(createSanctionForm());
+    setDisbursementForm(createDisbursementForm());
+    setCaseFeedbackPrompt(null);
+    setDisbursementSummary(null);
+    setSelectedStage('');
+    setShowStageModal(false);
+    setRollbackReason('');
+    setRollbackConfirmation(false);
     fetchCase();
     fetchDisbursementSummary();
-    getTenantLenders().then(d => setTenantLenders(d.filter(l => l.is_active))).catch(console.error);
-  }, [fetchCase, fetchDisbursementSummary]);
+    loadTenantLenders();
+  }, [fetchCase, fetchDisbursementSummary, loadTenantLenders]);
 
   const handleAllocateClick = async () => {
     setShowAllocateModal(true);
@@ -395,7 +394,7 @@ export default function CaseDetailPage() {
         if (caseData.stage !== 'ESR_GENERATED' && caseData.stage !== 'APPROVED') {
           return toast.error('Case must be Login Done before sanction.');
         }
-        if (!sanctionForm.lender_name) return toast.error('Lender is required.');
+        if (!sanctionContext.lender_name) return toast.error(lendersLoadError ? 'Unable to load lenders. Please retry the lender list.' : 'Please select a lender.');
         if (!sanctionForm.sanctioned_amount) return toast.error('Sanctioned amount is required.');
         if (!sanctionForm.sanction_date) return toast.error('Sanction date is required.');
         if (sanctionForm.confirmed_roi === '' || sanctionForm.confirmed_roi === null || sanctionForm.confirmed_roi === undefined) {
@@ -404,7 +403,9 @@ export default function CaseDetailPage() {
         if (sanctionForm.processing_fee === '' || sanctionForm.processing_fee === null || sanctionForm.processing_fee === undefined) {
           return toast.error('Processing Fee (₹) is required.');
         }
-        await caseService.sanctionCase(id, sanctionForm);
+        await caseService.sanctionCase(id, { ...sanctionForm,
+          lender_name: sanctionContext.lender_name, tenant_lender_id: sanctionContext.tenant_lender_id,
+          product_type: sanctionContext.product_type });
         toast.success('Case sanctioned successfully');
       } else if (['PARTLY_DISBURSED', 'DISBURSED'].includes(selectedStage)) {
         if (!disbursementSummary?.sanction) return toast.error('Case must be sanctioned before disbursement.');
@@ -524,8 +525,7 @@ export default function CaseDetailPage() {
   // from a purged case, since a bookmarked/typed URL could otherwise bypass
   // this button being disabled.
   const isPurged = !!caseData.data_purged_at;
-  const isLenderLocked = !!(disbursementSummary?.sanction?.lender_name || caseData?.lender_name);
-  const isProductTypeLocked = !!(disbursementSummary?.sanction?.product_type || caseData?.product_type);
+  const { isLenderLocked, isProductTypeLocked } = sanctionContext;
 
   return (
     <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
@@ -998,22 +998,27 @@ export default function CaseDetailPage() {
                       </label>
                       {isLenderLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.lender_name}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionContext.lender_name}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
                         <CustomSelect
                           className="form-control"
-                          value={sanctionForm.tenant_lender_id || ''}
+                          value={sanctionContext.tenant_lender_id}
+                          disabled={lendersLoading}
                           onChange={(e) => {
-                            const selected = tenantLenders.find(l => String(l.id) === e.target.value);
-                            setSanctionForm({ ...sanctionForm, tenant_lender_id: e.target.value, lender_name: selected ? selected.lender_name : '' });
+                            const lenderId = String(e.target.value);
+                            const selected = tenantLenders.find(l => String(l.id) === lenderId);
+                            setSanctionForm(prev => ({ ...prev, tenant_lender_id: lenderId, lender_name: selected?.lender_name || '' }));
                           }}
                         >
                           <option value="">— Select Lender —</option>
-                          {tenantLenders.map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
+                          {tenantLenders.filter(l => l.is_active !== false).map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
                         </CustomSelect>
                       )}
+                      {!isLenderLocked && lendersLoadError && <div role="alert" style={{ marginTop: 6, color: 'var(--error)', fontSize: 12 }}>
+                        Unable to load lenders. <button type="button" className="btn btn-secondary btn-sm" onClick={loadTenantLenders}>Retry lenders</button>
+                      </div>}
                     </div>
                     <div className="form-group">
                       <label className="form-label">
@@ -1022,7 +1027,7 @@ export default function CaseDetailPage() {
                       </label>
                       {isProductTypeLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.product_type}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionContext.product_type}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
