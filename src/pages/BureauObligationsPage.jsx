@@ -358,8 +358,12 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // so a single vendor error covers both; check what actually failed
       // instead of guessing at a PAN/DOB problem whenever the count comes
       // back flat.
-      const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (after > before) {
+      const bureauError = result?.errors?.find(e =>
+        String(e.applicantId) === String(applicantId) && ['BUREAU', 'OBLIGATIONS'].includes(e.stage)
+      );
+      if (bureauError) {
+        toast.error(`Bureau check failed: ${bureauError.error}`, { duration: 8000 });
+      } else if (after > before) {
         toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
@@ -367,12 +371,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         // applicant's obligations are already on file, not that the pull
         // failed. Only an actual zero total means the vendor found nothing.
         toast.success(`Bureau data fetched — ${after} obligation(s) already on file, no new ones since last pull`);
-      } else if (obligationsError) {
-        toast.error(`Obligations check failed: ${obligationsError.error}. This is a vendor/connectivity issue, not a problem with the applicant's data — try again shortly.`, { duration: 8000 });
       } else if (freshApplicant?.bureau_fetched) {
         toast.success('Bureau data fetched successfully.');
       } else {
-        toast.error("Bureau pull ran but the vendor genuinely has no obligations on file for this applicant — this can be a legitimate 'no credit history' result, not necessarily missing data.", { duration: 6000 });
+        toast.error('Bureau verification did not complete. No confirmed report is available for this applicant.', { duration: 6000 });
       }
     } catch (e) {
       setBureauFailedFor(prev => new Set(prev).add(applicantId));
