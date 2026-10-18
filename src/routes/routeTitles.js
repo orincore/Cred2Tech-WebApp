@@ -52,7 +52,7 @@ export const ROUTE_TITLES = [
   { path: '/admin/wallets', title: 'Wallets' },
   { path: '/admin/logs', title: 'API Logs' },
   { path: '/admin/system-status', title: 'System Status' },
-  { path: '/admin/bureau-providers', title: 'Bureau API Settings' },
+  { path: '/admin/integration-providers', title: 'API Provider Settings' },
   { path: '/admin/lenders', title: 'Lender Configuration' },
   { path: '/admin/msme-cases', title: 'MSME Cases' },
   { path: '/admin/transactions', title: 'Transactions' },

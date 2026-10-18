@@ -7,7 +7,9 @@ import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
 import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
+import PriceTag from '../components/PriceTag';
 
+import CustomSelect from '../components/CustomSelect';
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const getCibilColor = (score) => {
@@ -72,7 +74,7 @@ const estimateRemainingTenure = (obl) => {
 // hasn't been re-synced since). Drives showing the "Revert" action in the
 // same slot Delete occupies for a MANUAL row.
 const emiWasEdited = (obl) =>
-  obl.source === 'BUREAU' && obl.original_emi_per_month != null
+  obl.source === 'BUREAU' && !obl.emi_estimated && obl.original_emi_per_month != null
   && Number(obl.emi_per_month) !== Number(obl.original_emi_per_month);
 
 const getObligationDetails = (obl) => {
@@ -148,7 +150,7 @@ const BUREAU_ELIGIBLE_ENTITY_RE = /individual|proprietor/i;
 // Step 5 of the case journey — rendered inline by AddCustomerWizardPage
 // (not its own route), so it takes caseId/onNext/onBack as props instead of
 // reading useParams()/navigating itself.
-export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, onAddCoApplicant }) {
+export default function BureauObligationsPage({ caseId, onNext, onBack, mode, walletBalance, bureauCost, bureauCostActual = null, esrGenerationCost, esrGenerationCostActual = null, onAddCoApplicant }) {
   const isMobile = useIsMobile();
   // MSME self-service borrowers don't see wallet-credit costs (DSA concept) —
   // same convention GstAnalyticsForm/ItrAnalyticsForm/BankStatementUpload use.
@@ -182,6 +184,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   // field — treated as bureau-eligible (fail open) rather than blocking a
   // case we genuinely don't know the entity type for.
   const [entityType, setEntityType] = useState(null);
+  // Only a case's FIRST ESR is billed, so the Generate button shows a credit
+  // cost only while the case has none.
+  const [hasExistingEsr, setHasExistingEsr] = useState(false);
   const [bureauReports, setBureauReports] = useState({}); // { [applicantId]: documentRow }
   const [downloadingFor, setDownloadingFor] = useState(null); // applicant_id
   // Applicant ids whose most recent manual pull attempt failed — switches
@@ -196,12 +201,19 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // that already exists for this case_id — it never triggers a fresh
       // (billed) CIBIL pull, so it's safe to run unconditionally here.
       await caseService.syncObligations(caseId);
-      const [result, caseData] = await Promise.all([
+      // The ESR probe mirrors what the API bills on: only a case with no ESR
+      // yet is charged for Generate, so a 404 here (-> null) is the one state
+      // that shows a credit cost on the button. Any other failure also lands
+      // on null, which errs toward warning about a charge that may not happen
+      // rather than hiding one that will.
+      const [result, caseData, existingEsr] = await Promise.all([
         caseService.getObligations(caseId),
-        caseService.getCaseById(caseId)
+        caseService.getCaseById(caseId),
+        caseService.getESR(caseId).then((r) => r, () => null)
       ]);
 
       setData(result);
+      setHasExistingEsr(Boolean(existingEsr));
       setEntityType(caseData.customer?.entity_type || null);
       // Obligations only return a display name that already falls back to a
       // role label ("Primary Borrower") when Applicant.name is unset — pull
@@ -255,6 +267,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   const handleEmiBlur = async (oblId, val) => {
     if (val === undefined || val === null) return;
+    if (editEmi[oblId] === undefined) return;
     try {
       await caseService.updateObligation(caseId, oblId, { emi_per_month: parseFloat(val) || 0 });
       await refreshObligations();
@@ -345,8 +358,12 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
       // so a single vendor error covers both; check what actually failed
       // instead of guessing at a PAN/DOB problem whenever the count comes
       // back flat.
-      const obligationsError = result?.errors?.find(e => e.applicantId === applicantId && e.stage === 'OBLIGATIONS');
-      if (after > before) {
+      const bureauError = result?.errors?.find(e =>
+        String(e.applicantId) === String(applicantId) && ['BUREAU', 'OBLIGATIONS'].includes(e.stage)
+      );
+      if (bureauError) {
+        toast.error(`Bureau check failed: ${bureauError.error}`, { duration: 8000 });
+      } else if (after > before) {
         toast.success(`Bureau data fetched — ${after - before} new obligation(s) found`);
       } else if (after > 0) {
         // Re-running the same PAN/DOB against the vendor legitimately returns
@@ -354,12 +371,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         // applicant's obligations are already on file, not that the pull
         // failed. Only an actual zero total means the vendor found nothing.
         toast.success(`Bureau data fetched — ${after} obligation(s) already on file, no new ones since last pull`);
-      } else if (obligationsError) {
-        toast.error(`Obligations check failed: ${obligationsError.error}. This is a vendor/connectivity issue, not a problem with the applicant's data — try again shortly.`, { duration: 8000 });
       } else if (freshApplicant?.bureau_fetched) {
         toast.success('Bureau data fetched successfully.');
       } else {
-        toast.error("Bureau pull ran but the vendor genuinely has no obligations on file for this applicant — this can be a legitimate 'no credit history' result, not necessarily missing data.", { duration: 6000 });
+        toast.error('Bureau verification did not complete. No confirmed report is available for this applicant.', { duration: 6000 });
       }
     } catch (e) {
       setBureauFailedFor(prev => new Set(prev).add(applicantId));
@@ -570,9 +585,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     <Fingerprint size={13} className={retryingFor === applicant.id ? 'icon-loading' : ''} />
                     {retryingFor === applicant.id
                       ? 'Pulling…'
-                      : (isMsme || !bureauCost)
+                      : isMsme
                         ? (bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details')
-                        : (bureauFailedFor.has(applicant.id) ? `Retry Bureau Pull (~${bureauCost} Cr)` : `Pull Bureau Details (~${bureauCost} Cr)`)}
+                        : <PriceTag label={bureauFailedFor.has(applicant.id) ? 'Retry Bureau Pull' : 'Pull Bureau Details'} actual={bureauCostActual} discounted={bureauCost} />}
                   </button>
                 )
               )}
@@ -622,7 +637,11 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                       </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>EMI / Month
+                        {obl.emi_estimated && <small style={{ display: 'block', color: 'var(--warning)' }}>
+                          Estimated: {obl.emi_estimate.annual_roi_percent}% · {obl.emi_estimate.tenure_months} months
+                        </small>}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <input
                           type="number"
@@ -704,6 +723,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                           />
                           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>/mo</span>
                         </div>
+                        {obl.emi_estimated && <small style={{ color: 'var(--warning)' }}>
+                          Estimated: {obl.emi_estimate.annual_roi_percent}% · {obl.emi_estimate.tenure_months} months
+                        </small>}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
@@ -780,10 +802,10 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN TYPE *</label>
-                      <select className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
+                      <CustomSelect className="form-control" value={newObl.loan_type} onChange={e => setNewObl({ ...newObl, loan_type: e.target.value })}>
                         <option value="">— Type —</option>
                         {LOAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>LOAN AMT (₹) *</label>
@@ -846,7 +868,9 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             style={{ padding: '14px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: isMobile ? '100%' : undefined }}
           >
             <Zap size={18} />
-            {generating ? 'Generating ESR...' : 'Generate Eligibility Summary Report'}
+            {generating ? 'Generating ESR...' : (!isMsme && esrGenerationCost != null && !hasExistingEsr
+              ? <PriceTag label="Generate Eligibility Summary Report" actual={esrGenerationCostActual} discounted={esrGenerationCost} />
+              : 'Generate Eligibility Summary Report')}
           </button>
           {mustAddCoApplicant ? (
             <span style={{ fontSize: 12, color: 'var(--error)', display: 'flex', alignItems: 'center', gap: 4 }}>

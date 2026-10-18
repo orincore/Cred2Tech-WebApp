@@ -11,6 +11,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
 import DataPurgedBadge from '../../components/case/DataPurgedBadge';
 
+import CustomSelect from '../../components/CustomSelect';
 // Labels come from CASE_STAGE_LABELS (the exact same mapping the DSA side
 // uses) so a case never shows a different-looking status depending on who's
 // viewing it — desc/color here are purely additive context for the customer.
@@ -202,14 +203,14 @@ const MsmeCaseDetailPage = () => {
           <SectionCard title="Documents" subtitle="Everything you've submitted, plus reports we've generated for your case" delay={0.1}>
             {!isPurged && (
               <div style={{ padding: 16, borderBottom: '1px solid var(--outline)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <select
+                <CustomSelect
                   className="form-control"
                   value={uploadType}
                   onChange={e => setUploadType(e.target.value)}
                   style={{ width: 'auto', minWidth: 160 }}
                 >
                   {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                </CustomSelect>
                 <input ref={fileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} />
                 <TravelingBorderButton size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="rounded-none">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

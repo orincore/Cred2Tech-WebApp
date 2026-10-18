@@ -21,6 +21,7 @@ import OsIcon from '../components/OsIcon';
 import { formatDate, formatDateTime, getErrorMessage } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 
+import CustomSelect from '../components/CustomSelect';
 const ACCESS_PLAN_LABEL = {
   NO_ACCESS: 'No Access — Locked',
   FREE_GRANTED: 'Free Access (Admin Granted, No Charge)',
@@ -769,10 +770,10 @@ const AdminTenantManagePage = () => {
                 </div>
                 <div>
                   <label style={detailsLabelStyle}>Company Type</label>
-                  <select className="form-control" value={detailsForm.company_type} onChange={(e) => updateDetailsField('company_type', e.target.value)}>
+                  <CustomSelect className="form-control" value={detailsForm.company_type} onChange={(e) => updateDetailsField('company_type', e.target.value)}>
                     <option value="">— Select —</option>
                     {COMPANY_TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div>
                   <label style={detailsLabelStyle}>State</label>
@@ -889,11 +890,11 @@ const AdminTenantManagePage = () => {
                     }
                     return (
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <select className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                        <CustomSelect className="form-control" value={upgradePlanId} onChange={(e) => setUpgradePlanId(e.target.value)} style={{ maxWidth: 260 }}>
                           {upgradeOptions.map((p) => (
                             <option key={p.id} value={p.id}>{p.name} — ₹{p.monthly_price_credits}/mo (+₹{p.monthly_price_credits - subscription.effective_amount_credits} now)</option>
                           ))}
-                        </select>
+                        </CustomSelect>
                         <button onClick={handleAdminUpgradePlan} disabled={busy || !upgradePlanId} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>
                           {busy ? 'Upgrading…' : 'Upgrade Plan'}
                         </button>
@@ -908,7 +909,7 @@ const AdminTenantManagePage = () => {
                   <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 10 }}>Start a Real Subscription</p>
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Plan</label>
-                    <select className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
+                    <CustomSelect className="form-control" value={subPlanId} onChange={(e) => setSubPlanId(e.target.value)} style={{ maxWidth: 260 }}>
                       <option value="FREE">Free (Restricted Access)</option>
                       {data.plans?.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -917,7 +918,7 @@ const AdminTenantManagePage = () => {
                             : `₹${p.monthly_price_credits}/mo`}
                         </option>
                       ))}
-                    </select>
+                    </CustomSelect>
                   </div>
                   {subPlanId === 'FREE' ? (
                     <button onClick={handleAdminSubscribe} disabled={busy} className="btn btn-primary btn-sm" style={{ borderRadius: 0 }}>

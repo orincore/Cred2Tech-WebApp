@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
-import { Settings, Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronRight, ChevronDown, CheckCircle2, Search, Edit, ShieldAlert } from 'lucide-react';
+import { Settings, Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronRight, ChevronDown, CheckCircle2, Search, Edit, ShieldAlert, CalendarClock } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
 import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
 import { GATABLE_NAV_ITEMS } from '../constants/navItems';
 
+import CustomSelect from '../components/CustomSelect';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -23,6 +24,121 @@ const useResponsive = () => {
 
   return { isMobile, isTablet };
 };
+
+// Clean, plain-English names for the Customer Pricing tab — what a
+// Sourcing Partner is actually paying for, never a raw api_code. Kept
+// separate from ApiPricing.api_name (which still carries vendor-specific
+// wording like "— Signzy", useful on the Vendor Costs tab below) so the
+// customer-facing tab never leaks a technical code or a vendor's name.
+const SERVICE_LABELS = {
+  PAN_FETCH: 'PAN Verification',
+  GST_FETCH: 'GST Return Analysis',
+  ITR_ANALYTICS: 'Income Tax Return Analysis',
+  BANK_ANALYSIS: 'Bank Statement Analysis',
+  BUREAU_PULL: 'Credit Bureau Report',
+  SALARY_OCR: 'Salary Slip Reading',
+  PROFILE_ADVANCE: 'Mobile Number Verification',
+  ESR_GENERATION_SALARIED: 'Eligibility Report — Salaried',
+  ESR_GENERATION_MSME: 'Eligibility Report — Self-Employed',
+  VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace Subscription',
+};
+const serviceLabel = (p) => SERVICE_LABELS[p.api_code] || p.api_name || p.api_code;
+
+// The Vendor Costs tab shows each row's own real api_name instead — e.g.
+// Signzy's "GST Analysis" vs ScoreMe's "GST Analysis — ScoreMe" for the
+// exact same service — since that's the whole point of that tab: showing
+// what each vendor's own product is actually called, not collapsing it
+// into one generic cross-vendor name the way serviceLabel does above.
+const vendorApiLabel = (p) => p.api_name || p.api_code;
+
+// Salary Slip Reading and both ESR Generation rows are Cred2Tech's own
+// product, not a real vendor call — SALARY_OCR is billed against a
+// placeholder 'SIGNZY' ApiPricing row and ESR_GENERATION_* against
+// 'DEFAULT' (see seed_core.js / adminApiLogs.controller.js's own
+// CRED2TECH_INTERNAL_API_CODES, which this mirrors), but neither one ever
+// actually reaches an external vendor. Grouped under a "Cred2Tech" section
+// on the Vendor Costs tab instead of being mislabeled under Signzy or
+// hidden entirely.
+const CRED2TECH_INTERNAL_API_CODES = new Set(['SALARY_OCR', 'ESR_GENERATION_SALARIED', 'ESR_GENERATION_MSME']);
+const vendorCostDisplayVendor = (p) => CRED2TECH_INTERNAL_API_CODES.has(p.api_code) ? 'CRED2TECH' : p.vendor;
+
+// Clean names for whoever actually bills Cred2Tech for a vendor-served
+// API — shown only on the Vendor Costs tab, never the customer-facing one.
+const VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', CRED2TECH: 'Cred2Tech' };
+const vendorLabel = (v) => VENDOR_LABELS[v] || v;
+
+const formatScheduledDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// Default date offered when an admin chooses to schedule rather than
+// correct a price right now — the 1st of next calendar month. Still a
+// plain date input underneath, so it's just a starting point, not a rule.
+const nextMonthFirst = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1, 1);
+  return d.toISOString().slice(0, 10);
+};
+
+// Shown under a row that already has a queued price change — lets the
+// admin see what's coming and undo it without having to re-open Edit.
+const PendingPriceBadge = ({ row, onCancel }) => {
+  if (!row.pending_effective_from) return null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8,
+      fontSize: 11, fontWeight: 600, color: '#D97706', background: 'var(--bg-elevated)',
+      border: '1px solid var(--outline)', borderRadius: 0, padding: '5px 8px',
+    }}>
+      <CalendarClock size={12} style={{ flexShrink: 0 }} />
+      <span>New price takes effect {formatScheduledDate(row.pending_effective_from)}</span>
+      <button
+        onClick={() => onCancel(row.id)}
+        style={{ background: 'none', border: 'none', color: 'var(--on-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: 0, marginLeft: 'auto' }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+};
+
+// Shared Save controls for an editing row on either pricing tab — gives the
+// admin an explicit choice every time a price changes: fix today's number
+// right now, or line up a new one that only switches on a future date
+// (e.g. keep billing the current rate through this month, switch on the
+// 1st) without touching what's live until then.
+const PriceEditControls = ({ onSaveNow, onSchedule, onCancelEdit, saving, scheduleDate, setScheduleDate, isMobile }) => (
+  <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginTop: 10, alignItems: isMobile ? 'stretch' : 'center', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 11, color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>If scheduling, apply from</span>
+      <input
+        type="date"
+        value={scheduleDate}
+        onChange={(e) => setScheduleDate(e.target.value)}
+        style={{ fontSize: 12, padding: '4px 6px', border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)', color: 'var(--on-surface)' }}
+      />
+    </div>
+    <div style={{ display: 'flex', gap: 6, marginLeft: isMobile ? 0 : 'auto' }}>
+      <button onClick={onCancelEdit} style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer' }}>
+        Cancel
+      </button>
+      <button
+        onClick={onSchedule}
+        disabled={saving || !scheduleDate}
+        title="Keeps today's price unchanged until the date above, then switches automatically — no need to come back and flip it yourself"
+        style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--primary)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', cursor: saving ? 'not-allowed' : 'pointer' }}
+      >
+        Schedule For Later
+      </button>
+      <button
+        onClick={onSaveNow}
+        disabled={saving}
+        title="Changes the live price immediately — use this to correct a mistake, not to line up a future rate"
+        style={{ padding: '7px 10px', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}
+      >
+        {saving ? 'Saving…' : 'Correct Now'}
+      </button>
+    </div>
+  </div>
+);
 
 // Not using the shared `.card` class here — it's still rounded
 // (`var(--radius-lg)`), and every stat/list surface on this page (and the
@@ -126,7 +242,11 @@ const SuperadminPricingPage = () => {
   const [msmeDraft, setMsmeDraft] = useState('');
   const [freeNavItemIds, setFreeNavItemIds] = useState([]);
   const [freeUntil, setFreeUntil] = useState(''); // yyyy-mm-dd, for the date input
-  const [tab, setTab] = useState('pricing'); // 'pricing' | 'discounts' | 'workspace'
+  // Only one row is ever in edit mode at a time (editingId), so this one
+  // shared draft is enough for whichever row's "Schedule For Later" date
+  // input is currently showing — reset on every startEdit.
+  const [scheduleDate, setScheduleDate] = useState(nextMonthFirst());
+  const [tab, setTab] = useState('customer'); // 'customer' | 'vendor' | 'discounts' | 'workspace'
   const [savingFreeTabs, setSavingFreeTabs] = useState(false);
   const [savingFreeUntil, setSavingFreeUntil] = useState(false);
 
@@ -187,9 +307,14 @@ const SuperadminPricingPage = () => {
   const startEdit = (p) => {
     setEditingId(p.id);
     setEditForm({ ...p });
+    setScheduleDate(nextMonthFirst());
   };
 
-  const handleSavePricing = async (id) => {
+  // `schedule: true` queues the edited values as a future change instead of
+  // touching the live price (see PriceEditControls — "Correct Now" vs
+  // "Schedule For Later"); the backend decides based purely on whether
+  // effective_from is a future date, so omitting it here is what "now" means.
+  const handleSavePricing = async (id, { schedule = false } = {}) => {
     setSaving(true);
     try {
       await api.patch(`/admin/wallet/api-pricing/${id}`, {
@@ -197,13 +322,30 @@ const SuperadminPricingPage = () => {
         description: editForm.description,
         vendor_cost: editForm.vendor_cost,
         credit_cost: editForm.default_credit_cost,
-        is_active: editForm.is_active
+        actual_credit_cost: editForm.actual_credit_cost === '' ? null : editForm.actual_credit_cost,
+        is_active: editForm.is_active,
+        ...(schedule ? { effective_from: scheduleDate } : {}),
       });
-      toast.success('Pricing updated successfully');
+      toast.success(schedule ? `Price change scheduled for ${formatScheduledDate(scheduleDate)}` : 'Pricing updated successfully');
       setEditingId(null);
       fetchData();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Drops a queued "Schedule For Later" change — the live price is
+  // untouched, this only clears what was waiting to replace it.
+  const handleCancelPending = async (id) => {
+    setSaving(true);
+    try {
+      await api.patch(`/admin/wallet/api-pricing/${id}`, { cancel_pending: true });
+      toast.success('Scheduled price change cancelled');
+      fetchData();
+    } catch (err) {
+      toast.error('Failed to cancel the scheduled change');
     } finally {
       setSaving(false);
     }
@@ -284,7 +426,18 @@ const SuperadminPricingPage = () => {
   // isn't a per-call rate to begin with. It gets its own dedicated,
   // clearly-labeled card below instead of living inside the generic table.
   const msmePricing = useMemo(() => pricing.find(p => p.api_code === 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
-  const apiPricingRows = useMemo(() => pricing.filter(p => p.api_code !== 'DIRECT_MSME_ELIGIBILITY'), [pricing]);
+  // BUREAU_OBLIGATIONS is retired — the obligations/tradelines pull was
+  // folded into the single BUREAU_PULL charge (bureau.controller.js no
+  // longer bills it separately, and that charge is always made directly
+  // against BUREAU_PULL's own Signzy/BEFISC row below — live DB price, no
+  // separate placeholder to keep in sync). BUREAU_OBLIGATIONS is never
+  // billed again and shouldn't show as if it were still its own chargeable
+  // API. Deactivated in the DB; filtered here too so it can't reappear in
+  // the list even if left active.
+  const apiPricingRows = useMemo(() => pricing.filter(p =>
+    p.api_code !== 'DIRECT_MSME_ELIGIBILITY' &&
+    p.api_code !== 'BUREAU_OBLIGATIONS'
+  ), [pricing]);
 
   const stats = useMemo(() => {
     const live = apiPricingRows.filter(p => p.is_active).length;
@@ -299,12 +452,15 @@ const SuperadminPricingPage = () => {
 
   // One row per api_code now, not one per (api_code, vendor) — BUREAU_PULL's
   // two rows (SIGNZY/BEFISC) previously showed as two near-duplicate table
-  // rows differing only by a small badge. Grouped here instead, with a
-  // vendor dropdown on the row switching which underlying pricing row
+  // rows differing only by a small badge, and GST/ITR/Bank each gained their
+  // own second vendor (ScoreMe) the same way. Grouped here instead, with a
+  // provider dropdown on the row switching which underlying pricing row
   // (still its own real id, editable/saveable exactly as before) is shown.
-  // A stable vendor order (Signzy first, matching failover priority) keeps
-  // the dropdown from reordering itself between renders.
-  const VENDOR_ORDER = { SIGNZY: 0, BEFISC: 1 };
+  // A stable vendor order (Signzy first, matching every service's own
+  // failover priority) keeps the dropdown from reordering itself between
+  // renders — BEFISC/SCOREME never both appear on the same row, so their
+  // relative order against each other doesn't matter.
+  const VENDOR_ORDER = { SIGNZY: 0, BEFISC: 1, SCOREME: 1 };
   const apiPricingGroups = useMemo(() => {
     const map = new Map();
     for (const p of apiPricingRows) {
@@ -329,13 +485,54 @@ const SuperadminPricingPage = () => {
       const q = search.toLowerCase();
       if (!q) return true;
       return group.rows.some(p =>
-        p.api_name?.toLowerCase().includes(q) ||
-        p.api_code?.toLowerCase().includes(q) ||
-        p.vendor?.toLowerCase().includes(q) ||
+        serviceLabel(p).toLowerCase().includes(q) ||
         p.description?.toLowerCase().includes(q)
       );
     });
   }, [apiPricingGroups, search]);
+
+  // Every individually vendor-billed pricing row, one per row (never
+  // grouped by api_code the way Customer Pricing is above) — "each and
+  // every API we're actually using," so BUREAU_PULL's Signzy and BEFISC
+  // rows both show up on their own rather than behind one dropdown. A real
+  // vendor row (vendor !== 'DEFAULT') always qualifies; a 'DEFAULT' row only
+  // qualifies when it's actually Cred2Tech's own product (SALARY_OCR,
+  // ESR_GENERATION_*) — Virtual Workspace's subscription fee is the one
+  // 'DEFAULT' row left out entirely, since nothing (not even an internal
+  // engine) is ever "called" to produce it.
+  const vendorCostRows = useMemo(() => apiPricingRows.filter(p =>
+    CRED2TECH_INTERNAL_API_CODES.has(p.api_code) || (p.vendor && p.vendor !== 'DEFAULT')
+  ), [apiPricingRows]);
+  const filteredVendorRows = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return vendorCostRows;
+    return vendorCostRows.filter(p =>
+      vendorApiLabel(p).toLowerCase().includes(q) ||
+      vendorLabel(vendorCostDisplayVendor(p)).toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q)
+    );
+  }, [vendorCostRows, search]);
+
+  // One section per vendor instead of one long mixed list — easier to scan
+  // "everything Signzy charges us" vs "everything ScoreMe charges us" side
+  // by side rather than hunting through a flat table for a vendor's name in
+  // every row. Grouped by display vendor (vendorCostDisplayVendor), not the
+  // raw ApiPricing.vendor column, so SALARY_OCR/ESR_GENERATION_* land under
+  // "Cred2Tech" rather than under whatever placeholder billing vendor they
+  // happen to be stored against. Cred2Tech's own products sort last — this
+  // tab exists to track real third-party vendor spend first and foremost.
+  const VENDOR_COST_GROUP_ORDER = { ...VENDOR_ORDER, CRED2TECH: 99 };
+  const vendorCostGroups = useMemo(() => {
+    const map = new Map();
+    for (const p of filteredVendorRows) {
+      const v = vendorCostDisplayVendor(p);
+      if (!map.has(v)) map.set(v, []);
+      map.get(v).push(p);
+    }
+    return [...map.entries()]
+      .sort((a, b) => (VENDOR_COST_GROUP_ORDER[a[0]] ?? 9) - (VENDOR_COST_GROUP_ORDER[b[0]] ?? 9))
+      .map(([vendor, rows]) => ({ vendor, rows }));
+  }, [filteredVendorRows]);
 
   /* ---- label style shared across filters ---- */
   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
@@ -458,7 +655,8 @@ const SuperadminPricingPage = () => {
           one long stacked scroll. ─── */}
       <div style={{ padding: '0 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: 4, flexShrink: 0, overflowX: 'auto' }}>
         {[
-          { id: 'pricing', label: 'API Pricing' },
+          { id: 'customer', label: 'Customer Pricing' },
+          { id: 'vendor', label: 'Vendor Costs' },
           { id: 'discounts', label: 'Volume Discounts' },
           { id: 'workspace', label: 'Virtual Workspace' },
         ].map((t) => (
@@ -496,57 +694,62 @@ const SuperadminPricingPage = () => {
           Sub-header → table/cards → Discounts at their natural heights, and
           overflowY:auto scrolls the stack as a whole once it doesn't fit. */}
       <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
-        {tab === 'pricing' && (
+        {tab === 'customer' && (
         <>
         {/* Sub-header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)', flexShrink: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Rate Card — Sourcing Partner Pricing</span>
-          <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} APIs</span>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>What Sourcing Partners Pay, per Service</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} services</span>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--on-muted)' }}>
+            One row per service a Sourcing Partner is billed for, regardless of which vendor ends up handling the call.
+          </p>
         </div>
 
         {/* Mobile: card list instead of a table — same reasoning as the other
             admin list pages. Each card supports the same inline edit the
             desktop table's row already does: tap Edit, the read-only fields
-            swap for inputs, Save/Cancel replace the Edit button. */}
+            swap for inputs, PriceEditControls replaces the Edit button. */}
         {isMobile ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
             {filtered.map((group) => {
               const p = getActiveRow(group);
               const isEditing = editingId === p.id;
-              const current = isEditing ? editForm : p;
-              const margin = current.default_credit_cost - current.vendor_cost;
-              const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
+              const hasMultipleProviders = group.rows.length > 1;
               return (
                 <div
                   key={group.api_code}
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}
                 >
-                  {/* Identity row: API service name + code on the left, status pill anchored right */}
+                  {/* Identity row: clean service name on the left (never a raw
+                      api_code), status pill anchored right */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.api_name || p.api_code}
+                        {serviceLabel(p)}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                        <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
-                        {p.vendor && p.vendor !== 'DEFAULT' && (
-                          <select
-                            value={p.vendor}
-                            onChange={e => {
-                              setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
-                              setEditingId(null);
-                            }}
-                            disabled={group.rows.length < 2}
-                            style={{
-                              fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
-                              background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
-                              borderRadius: 0, padding: '1px 4px', cursor: group.rows.length < 2 ? 'default' : 'pointer',
-                            }}
-                          >
-                            {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
-                          </select>
-                        )}
-                      </div>
+                      {/* Only a service actually served by more than one vendor
+                          needs this — today that's Credit Bureau Report
+                          (Signzy/BEFISC) and GST/ITR/Bank Statement Analysis
+                          (Signzy/ScoreMe); everything else only ever has one
+                          price to show. */}
+                      {hasMultipleProviders && (
+                        <CustomSelect
+                          value={p.vendor}
+                          onChange={e => {
+                            setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
+                            setEditingId(null);
+                          }}
+                          style={{
+                            fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                            background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                            borderRadius: 0, padding: '1px 4px', cursor: 'pointer', marginTop: 4,
+                          }}
+                        >
+                          {group.rows.map(r => <option key={r.vendor} value={r.vendor}>via {vendorLabel(r.vendor)}</option>)}
+                        </CustomSelect>
+                      )}
                     </div>
                     <span style={{
                       display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
@@ -558,8 +761,8 @@ const SuperadminPricingPage = () => {
                   </div>
 
                   {isEditing ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
-                      <div>
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
+                      <div style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Description</div>
                         <input
                           className="form-control form-control-sm"
@@ -570,17 +773,7 @@ const SuperadminPricingPage = () => {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Vendor Cost (₹)</div>
-                          <input
-                            type="number"
-                            className="form-control form-control-sm"
-                            value={editForm.vendor_cost}
-                            onChange={e => setEditForm({ ...editForm, vendor_cost: parseFloat(e.target.value) })}
-                            style={{ fontSize: 13, width: '100%' }}
-                          />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>C2T Rate (₹)</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Price Charged (₹)</div>
                           <input
                             type="number"
                             className="form-control form-control-sm"
@@ -589,22 +782,30 @@ const SuperadminPricingPage = () => {
                             style={{ fontSize: 13, width: '100%', fontWeight: 700, borderBottomColor: 'var(--primary)' }}
                           />
                         </div>
+                        <div>
+                          {/* Shown crossed out next to the real price on every pull
+                              button in the app (PriceTag.jsx) whenever it's set
+                              higher — blank means "no discount to advertise". */}
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Reference Price (₹)</div>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm"
+                            placeholder="No discount"
+                            value={editForm.actual_credit_cost ?? ''}
+                            onChange={e => setEditForm({ ...editForm, actual_credit_cost: e.target.value === '' ? '' : (parseInt(e.target.value, 10) || 0) })}
+                            style={{ fontSize: 13, width: '100%' }}
+                          />
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          style={{ flex: 1, padding: '8px 0', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0, fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer' }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => handleSavePricing(p.id)}
-                          disabled={saving}
-                          style={{ flex: 1, padding: '8px 0', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 0, fontSize: 12, fontWeight: 700, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          {saving ? 'Saving…' : 'Save'}
-                        </button>
-                      </div>
+                      <PriceEditControls
+                        onSaveNow={() => handleSavePricing(p.id)}
+                        onSchedule={() => handleSavePricing(p.id, { schedule: true })}
+                        onCancelEdit={() => setEditingId(null)}
+                        saving={saving}
+                        scheduleDate={scheduleDate}
+                        setScheduleDate={setScheduleDate}
+                        isMobile
+                      />
                     </div>
                   ) : (
                     <>
@@ -616,26 +817,21 @@ const SuperadminPricingPage = () => {
                         marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
                       }}>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vendor Cost</div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>C2T Rate</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Price Charged</div>
                           <div style={{ background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 0, fontWeight: 700, fontSize: 13, display: 'inline-block', color: 'var(--on-surface)' }}>
                             ₹{(p.default_credit_cost ?? 0).toFixed(2)}
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Margin</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>₹{margin.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Margin %</div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: 'var(--success-bg)', padding: '2px 8px', borderRadius: 0, display: 'inline-block' }}>
-                            {marginPct.toFixed(1)}%
-                          </span>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Reference Price</div>
+                          {p.actual_credit_cost != null && p.actual_credit_cost > p.default_credit_cost ? (
+                            <div style={{ fontSize: 13, fontWeight: 600, textDecoration: 'line-through', color: 'var(--on-muted)' }}>₹{p.actual_credit_cost.toFixed(2)}</div>
+                          ) : (
+                            <div style={{ fontSize: 13, color: 'var(--on-muted)' }}>No discount</div>
+                          )}
                         </div>
                       </div>
+                      <PendingPriceBadge row={p} onCancel={handleCancelPending} />
                       <button
                         onClick={() => startEdit(p)}
                         style={{
@@ -656,40 +852,36 @@ const SuperadminPricingPage = () => {
         ) : (
         <DataTable
           columns={[
-            { key: 'api_name', label: 'API Service', align: 'center', render: (group) => {
+            { key: 'api_name', label: 'Service', align: 'left', render: (group) => {
               const p = getActiveRow(group);
+              const hasMultipleProviders = group.rows.length > 1;
               return (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{p.api_name || p.api_code}</span>
-                  <span style={{ fontSize: 10, color: 'var(--on-muted)', fontFamily: 'monospace' }}>{p.api_code}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{serviceLabel(p)}</span>
+                  {/* Same api_code can have several rows — one per vendor
+                      actually serving it: Credit Bureau Report (Signzy vs
+                      BEFISC) and GST/ITR/Bank Statement Analysis (Signzy vs
+                      ScoreMe) each have two, with their own real price.
+                      Picking a provider here swaps every other column in
+                      this row to that vendor's own pricing row — still its
+                      own real id underneath, saved exactly as before. */}
+                  {hasMultipleProviders && (
+                    <CustomSelect
+                      value={p.vendor}
+                      onChange={e => {
+                        setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
+                        setEditingId(null);
+                      }}
+                      style={{
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
+                        background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
+                        borderRadius: 0, padding: '2px 5px', cursor: 'pointer', width: 'fit-content',
+                      }}
+                    >
+                      {group.rows.map(r => <option key={r.vendor} value={r.vendor}>via {vendorLabel(r.vendor)}</option>)}
+                    </CustomSelect>
+                  )}
                 </div>
-              );
-            }},
-            // Same api_code can have several rows now — one per vendor
-            // actually serving it (e.g. BUREAU_PULL: Signzy vs BEFISC, each
-            // with its own real cost). Picking a vendor here swaps every
-            // other column in this row to that vendor's own pricing row —
-            // still its own real id underneath, saved exactly as before.
-            { key: 'vendor', label: 'Vendor', align: 'center', render: (group) => {
-              const p = getActiveRow(group);
-              if (!p.vendor || p.vendor === 'DEFAULT') return <span style={{ color: 'var(--on-muted)' }}>—</span>;
-              return (
-                <select
-                  value={p.vendor}
-                  onChange={e => {
-                    setSelectedVendor(prev => ({ ...prev, [group.api_code]: e.target.value }));
-                    setEditingId(null);
-                  }}
-                  disabled={group.rows.length < 2}
-                  style={{
-                    fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
-                    background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
-                    borderRadius: 0, padding: '3px 6px', whiteSpace: 'nowrap',
-                    cursor: group.rows.length < 2 ? 'default' : 'pointer',
-                  }}
-                >
-                  {group.rows.map(r => <option key={r.vendor} value={r.vendor}>{r.vendor}</option>)}
-                </select>
               );
             }},
             { key: 'description', label: 'Description', align: 'center', render: (group) => {
@@ -706,63 +898,49 @@ const SuperadminPricingPage = () => {
                 p.description || '—'
               );
             }},
-            { key: 'vendor_cost', label: 'Vendor Cost (₹)', align: 'center', render: (group) => {
+            { key: 'default_credit_cost', label: 'Price Charged (₹)', align: 'center', render: (group) => {
               const p = getActiveRow(group);
               const isEditing = editingId === p.id;
-              return isEditing ? (
-                <input
-                  type="number"
-                  className="form-control form-control-sm"
-                  value={editForm.vendor_cost}
-                  onChange={e => setEditForm({...editForm, vendor_cost: parseFloat(e.target.value)})}
-                  style={{ width: 80, fontSize: 12 }}
-                />
-              ) : (
-                `₹${(p.vendor_cost ?? 0).toFixed(2)}`
-              );
-            }},
-            { key: 'default_credit_cost', label: 'C2T Rate (₹)', align: 'center', render: (group) => {
-              const p = getActiveRow(group);
-              const isEditing = editingId === p.id;
-              return isEditing ? (
-                <input
-                  type="number"
-                  className="form-control"
-                  value={editForm.default_credit_cost}
-                  onChange={e => setEditForm({...editForm, default_credit_cost: parseInt(e.target.value) || 0})}
-                  style={{ width: 100, fontWeight: 700, borderBottomColor: 'var(--primary)' }}
-                />
-              ) : (
-                <div style={{ background: isDark ? '#1e293b' : '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
-                  {(p.default_credit_cost ?? 0).toFixed(2)}
-                </div>
-              );
-            }},
-            { key: 'margin', label: 'Margin (₹)', align: 'center', render: (group) => {
-              const p = getActiveRow(group);
-              const isEditing = editingId === p.id;
-              const current = isEditing ? editForm : p;
-              const margin = current.default_credit_cost - current.vendor_cost;
+              if (isEditing) {
+                return (
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={editForm.default_credit_cost}
+                    onChange={e => setEditForm({...editForm, default_credit_cost: parseInt(e.target.value) || 0})}
+                    style={{ width: 100, fontWeight: 700, borderBottomColor: 'var(--primary)' }}
+                  />
+                );
+              }
               return (
-                <span style={{ fontWeight: 700, color: '#059669', fontSize: 13 }}>
-                  ₹{margin.toFixed(2)}
-                </span>
+                <>
+                  <div style={{ background: isDark ? '#1e293b' : '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
+                    {(p.default_credit_cost ?? 0).toFixed(2)}
+                  </div>
+                  <PendingPriceBadge row={p} onCancel={handleCancelPending} />
+                </>
               );
             }},
-            { key: 'margin_pct', label: 'Margin %', align: 'center', render: (group) => {
+            { key: 'actual_credit_cost', label: 'Reference Price (₹)', align: 'center', render: (group) => {
               const p = getActiveRow(group);
               const isEditing = editingId === p.id;
-              const current = isEditing ? editForm : p;
-              const margin = current.default_credit_cost - current.vendor_cost;
-              const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
-              return (
-                <span style={{
-                  fontSize: 11, fontWeight: 700, color: '#059669',
-                  background: isDark ? '#064e3b' : '#ECFDF5', padding: '2px 8px', borderRadius: '4px'
-                }}>
-                  {marginPct.toFixed(1)}%
-                </span>
-              );
+              if (isEditing) {
+                return (
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    placeholder="No discount"
+                    value={editForm.actual_credit_cost ?? ''}
+                    onChange={e => setEditForm({ ...editForm, actual_credit_cost: e.target.value === '' ? '' : (parseInt(e.target.value, 10) || 0) })}
+                    style={{ width: 100, fontSize: 12 }}
+                  />
+                );
+              }
+              // Shown crossed out next to the real price on every pull button
+              // in the app (PriceTag.jsx) whenever it's set higher.
+              return p.actual_credit_cost != null && p.actual_credit_cost > p.default_credit_cost
+                ? <span style={{ textDecoration: 'line-through', color: 'var(--on-muted)', fontSize: 13 }}>₹{p.actual_credit_cost.toFixed(2)}</span>
+                : <span style={{ color: 'var(--on-muted)', fontSize: 12 }}>No discount</span>;
             }},
             { key: 'is_active', label: 'Status', align: 'center', render: (group) => {
               const p = getActiveRow(group);
@@ -780,23 +958,14 @@ const SuperadminPricingPage = () => {
               const p = getActiveRow(group);
               const isEditing = editingId === p.id;
               return isEditing ? (
-                <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                  <button
-                    className="btn btn-primary btn-xs"
-                    onClick={() => handleSavePricing(p.id)}
-                    disabled={saving}
-                    style={{ fontSize: 11 }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => setEditingId(null)}
-                    style={{ fontSize: 11 }}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <PriceEditControls
+                  onSaveNow={() => handleSavePricing(p.id)}
+                  onSchedule={() => handleSavePricing(p.id, { schedule: true })}
+                  onCancelEdit={() => setEditingId(null)}
+                  saving={saving}
+                  scheduleDate={scheduleDate}
+                  setScheduleDate={setScheduleDate}
+                />
               ) : (
                 <button
                   className="btn btn-outline btn-xs"
@@ -813,6 +982,244 @@ const SuperadminPricingPage = () => {
           isMobile={isMobile}
           hoverRows={true}
         />
+        )}
+        </>
+        )}
+
+        {tab === 'vendor' && (
+        <>
+        {/* Sub-header */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>What Vendors Charge Us, per API Call</span>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filteredVendorRows.length} APIs</span>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--on-muted)' }}>
+            Grouped by vendor — every API Signzy serves, then every one ScoreMe or BEFISC serves, and so on. Fill in what each vendor actually charges so cost tracking on the Logs dashboard stays accurate. Still ₹0 wherever this hasn't been set yet.
+          </p>
+        </div>
+
+        {vendorCostGroups.map(({ vendor, rows }) => (
+          <div key={vendor} style={{ marginBottom: 4 }}>
+            {/* Vendor section heading — groups every API by who actually
+                charges us for it, so "everything Signzy costs" and
+                "everything ScoreMe costs" can each be scanned on their own
+                instead of hunting through one long mixed list. */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              padding: isMobile ? '10px 16px' : '10px 20px',
+              background: 'var(--bg-elevated)', borderBottom: '1px solid var(--outline)', borderTop: '1px solid var(--outline)',
+            }}>
+              <span style={{
+                fontSize: 12, fontWeight: 800, letterSpacing: '0.02em', color: '#4f46e5',
+              }}>
+                {vendorLabel(vendor)}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>{rows.length} {rows.length === 1 ? 'API' : 'APIs'}</span>
+              {vendor === 'CRED2TECH' && (
+                <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>— our own product, not a third-party vendor call</span>
+              )}
+            </div>
+
+            {isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                {rows.map((p) => {
+                  const isEditing = editingId === p.id;
+                  const current = isEditing ? editForm : p;
+                  const margin = current.default_credit_cost - current.vendor_cost;
+                  const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
+                  return (
+                    <div
+                      key={p.id}
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {vendorApiLabel(p)}
+                        </div>
+                        <span style={{
+                          display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                          fontSize: 11, fontWeight: 700, color: p.is_active ? 'var(--success)' : 'var(--error)',
+                        }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? 'var(--success)' : 'var(--error)' }} />
+                          {p.is_active ? 'Live' : 'Disabled'}
+                        </span>
+                      </div>
+
+                      {isEditing ? (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Description</div>
+                            <input
+                              className="form-control form-control-sm"
+                              value={editForm.description || ''}
+                              onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                              style={{ fontSize: 13, width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>What {vendorLabel(vendorCostDisplayVendor(p))} Charges Us (₹)</div>
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              placeholder="0"
+                              value={editForm.vendor_cost}
+                              onChange={e => setEditForm({ ...editForm, vendor_cost: parseFloat(e.target.value) })}
+                              style={{ fontSize: 13, width: '100%', fontWeight: 700 }}
+                            />
+                          </div>
+                          <PriceEditControls
+                            onSaveNow={() => handleSavePricing(p.id)}
+                            onSchedule={() => handleSavePricing(p.id, { schedule: true })}
+                            onCancelEdit={() => setEditingId(null)}
+                            saving={saving}
+                            scheduleDate={scheduleDate}
+                            setScheduleDate={setScheduleDate}
+                            isMobile
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          {p.description && (
+                            <div style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 8 }}>{p.description}</div>
+                          )}
+                          <div style={{
+                            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+                            marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
+                          }}>
+                            <div>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vendor Charges Us</div>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</div>
+                              {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>We Charge Customer</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>₹{(p.default_credit_cost ?? 0).toFixed(2)}</div>
+                            </div>
+                            <div style={{ gridColumn: 'span 2' }}>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Margin</div>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: 'var(--success-bg)', padding: '2px 8px', borderRadius: 0, display: 'inline-block' }}>
+                                ₹{margin.toFixed(2)} · {marginPct.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                          <PendingPriceBadge row={p} onCancel={handleCancelPending} />
+                          <button
+                            onClick={() => startEdit(p)}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                              width: '100%', marginTop: 12, padding: '8px 0',
+                              background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                              fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                            }}
+                          >
+                            <Edit size={12} /> Edit
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+            <DataTable
+              columns={[
+                { key: 'api_name', label: 'Vendor’s API', align: 'left', render: (p) => (
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--on-surface)' }}>{vendorApiLabel(p)}</span>
+                )},
+                { key: 'description', label: 'Description', align: 'center', render: (p) => {
+                  const isEditing = editingId === p.id;
+                  return isEditing ? (
+                    <input
+                      className="form-control form-control-sm"
+                      value={editForm.description}
+                      onChange={e => setEditForm({...editForm, description: e.target.value})}
+                      style={{ fontSize: 12 }}
+                    />
+                  ) : (
+                    p.description || '—'
+                  );
+                }},
+                { key: 'vendor_cost', label: 'Vendor Charges Us (₹)', align: 'center', render: (p) => {
+                  const isEditing = editingId === p.id;
+                  if (isEditing) {
+                    return (
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        placeholder="0"
+                        value={editForm.vendor_cost}
+                        onChange={e => setEditForm({...editForm, vendor_cost: parseFloat(e.target.value)})}
+                        style={{ width: 90, fontSize: 12, fontWeight: 700 }}
+                      />
+                    );
+                  }
+                  return (
+                    <>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</span>
+                      {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                      <PendingPriceBadge row={p} onCancel={handleCancelPending} />
+                    </>
+                  );
+                }},
+                { key: 'default_credit_cost', label: 'We Charge Customer (₹)', align: 'center', render: (p) => (
+                  <span style={{ fontSize: 13, color: 'var(--on-muted)' }}>₹{(p.default_credit_cost ?? 0).toFixed(2)}</span>
+                )},
+                { key: 'margin', label: 'Margin', align: 'center', render: (p) => {
+                  const isEditing = editingId === p.id;
+                  const current = isEditing ? editForm : p;
+                  const margin = current.default_credit_cost - current.vendor_cost;
+                  const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
+                  return (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, color: '#059669',
+                      background: isDark ? '#064e3b' : '#ECFDF5', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap',
+                    }}>
+                      ₹{margin.toFixed(2)} · {marginPct.toFixed(1)}%
+                    </span>
+                  );
+                }},
+                { key: 'is_active', label: 'Status', align: 'center', render: (p) => (
+                  <span style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                    fontSize: 11, fontWeight: 700, color: p.is_active ? '#10b981' : '#f43f5e'
+                  }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.is_active ? '#10b981' : '#f43f5e' }} />
+                    {p.is_active ? 'Live' : 'Disabled'}
+                  </span>
+                )},
+                { key: 'action', label: 'Action', align: 'center', render: (p) => {
+                  const isEditing = editingId === p.id;
+                  return isEditing ? (
+                    <PriceEditControls
+                      onSaveNow={() => handleSavePricing(p.id)}
+                      onSchedule={() => handleSavePricing(p.id, { schedule: true })}
+                      onCancelEdit={() => setEditingId(null)}
+                      saving={saving}
+                      scheduleDate={scheduleDate}
+                      setScheduleDate={setScheduleDate}
+                    />
+                  ) : (
+                    <button
+                      className="btn btn-outline btn-xs"
+                      onClick={() => startEdit(p)}
+                      style={{ fontSize: 11 }}
+                    >
+                      Edit
+                    </button>
+                  );
+                }},
+              ]}
+              data={rows}
+              rowKey="id"
+              isMobile={isMobile}
+              hoverRows={true}
+            />
+            )}
+          </div>
+        ))}
+        {vendorCostGroups.length === 0 && (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--on-muted)', fontSize: 13 }}>No vendor-billed APIs match this search.</div>
         )}
         </>
         )}

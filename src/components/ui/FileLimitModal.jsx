@@ -3,7 +3,7 @@ import { FileWarning, X, Scissors, FilePlus2, Layers } from 'lucide-react';
 
 /**
  * Blocking popup for a statement file that can't be processed (over the
- * 5MB size or 80-page limit) — replaces a toast for this specific rejection
+ * 10MB size limit) — replaces a toast for this specific rejection
  * since a transient toast isn't enough room to actually walk someone through
  * the fix (split the file, upload each part, we combine them).
  */

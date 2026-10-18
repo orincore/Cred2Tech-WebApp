@@ -6,6 +6,7 @@ import DataTable from '../components/DataTable';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 
+import CustomSelect from '../components/CustomSelect';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -424,7 +425,7 @@ const VendorManagementPage = () => {
                   </div>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>API Type</label>
-                    <select
+                    <CustomSelect
                       value={editForm.apiType}
                       onChange={e => setEditForm({...editForm, apiType: e.target.value})}
                       style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
@@ -435,11 +436,11 @@ const VendorManagementPage = () => {
                         <option value="GST">GST</option>
                         <option value="Banking">Banking</option>
                         <option value="Bureau">Bureau</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Role</label>
-                    <select
+                    <CustomSelect
                       value={editForm.role}
                       onChange={e => setEditForm({...editForm, role: e.target.value})}
                       style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
@@ -448,7 +449,7 @@ const VendorManagementPage = () => {
                     >
                         <option value="Primary">Primary</option>
                         <option value="Backup">Backup</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                </div>
 
@@ -477,7 +478,7 @@ const VendorManagementPage = () => {
                   </div>
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-muted)', display: 'block', marginBottom: 6 }}>Billing Cycle</label>
-                    <select
+                    <CustomSelect
                       value={editForm.billingModel}
                       onChange={e => setEditForm({...editForm, billingModel: e.target.value})}
                       style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', borderBottom: '2px solid var(--outline)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, padding: '6px 0', transition: 'border-color 0.2s', cursor: 'pointer', appearance: 'none' }}
@@ -486,7 +487,7 @@ const VendorManagementPage = () => {
                     >
                         <option value="Volume Slabs">Monthly Volume-Based</option>
                         <option value="Per Call (Flat)">Per Call (Flat)</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                </div>
 

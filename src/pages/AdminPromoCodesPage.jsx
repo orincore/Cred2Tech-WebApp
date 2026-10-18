@@ -5,6 +5,7 @@ import api from '../api/axiosInstance';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useTheme } from '../context/ThemeContext';
 
+import CustomSelect from '../components/CustomSelect';
 const PRODUCT_LABELS = {
   DIRECT_MSME_ELIGIBILITY: 'Direct MSME Eligibility Fee',
   VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace Subscription',
@@ -361,10 +362,10 @@ const AdminPromoCodesPage = () => {
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Active</label>
-                  <select className="form-control" value={form.is_active ? '1' : '0'} onChange={(e) => setForm({ ...form, is_active: e.target.value === '1' })}>
+                  <CustomSelect className="form-control" value={form.is_active ? '1' : '0'} onChange={(e) => setForm({ ...form, is_active: e.target.value === '1' })}>
                     <option value="1">Active</option>
                     <option value="0">Inactive</option>
-                  </select>
+                  </CustomSelect>
                 </div>
               </div>
 
@@ -375,11 +376,11 @@ const AdminPromoCodesPage = () => {
 
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Benefit Type</label>
-                <select className="form-control" value={form.benefit_type} onChange={(e) => handleBenefitTypeChange(e.target.value)}>
+                <CustomSelect className="form-control" value={form.benefit_type} onChange={(e) => handleBenefitTypeChange(e.target.value)}>
                   {Object.entries(BENEFIT_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
 
               <div>
@@ -413,10 +414,10 @@ const AdminPromoCodesPage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>{form.benefit_type === 'CASHBACK' ? 'Bonus Type' : 'Discount Type'}</label>
-                    <select className="form-control" value={form.discount_type} onChange={(e) => setForm({ ...form, discount_type: e.target.value })}>
+                    <CustomSelect className="form-control" value={form.discount_type} onChange={(e) => setForm({ ...form, discount_type: e.target.value })}>
                       <option value="PERCENTAGE">Percentage</option>
                       <option value="FLAT">Flat (₹ / credits)</option>
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>{form.benefit_type === 'CASHBACK' ? 'Bonus Value' : 'Value'}</label>
@@ -434,11 +435,11 @@ const AdminPromoCodesPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Duration (subscriptions only)</label>
-                  <select className="form-control" value={form.duration_type} onChange={(e) => setForm({ ...form, duration_type: e.target.value })}>
+                  <CustomSelect className="form-control" value={form.duration_type} onChange={(e) => setForm({ ...form, duration_type: e.target.value })}>
                     <option value="ONCE">First charge only</option>
                     <option value="RECURRING_N">N cycles, then full price</option>
                     <option value="RECURRING_FOREVER">Every cycle, forever</option>
-                  </select>
+                  </CustomSelect>
                 </div>
                 {form.duration_type === 'RECURRING_N' && (
                   <div>

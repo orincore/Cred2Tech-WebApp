@@ -21,6 +21,7 @@ import PullingIndicator from '../components/ui/PullingIndicator';
 import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
 import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
 import ConsentSelfOtpModal from '../components/ConsentSelfOtpModal';
+import PriceTag from '../components/PriceTag';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
@@ -33,6 +34,7 @@ import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
 
 
+import CustomSelect from '../components/CustomSelect';
 // Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
 // rest) — reading it back always yields a real Date, which Express's JSON
 // serialization turns into a full ISO datetime string like
@@ -60,7 +62,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const urlCaseId = searchParams.get('caseId');
   const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
+  // Lazily seeded from whether the URL already names a case, NOT a bare
+  // `true` — the urlCaseId/caseId effect below only calls restoreSession()
+  // or resetWizardState() on a MISMATCH between the two, and on a true first
+  // mount with no ?caseId at all, urlCaseId and caseId both start out null,
+  // so they already "match" and that effect short-circuits without ever
+  // flipping loading to false. Since loading gates the entire render, a
+  // plain `/customers/add` visit got stuck on the skeleton forever.
+  const [loading, setLoading] = useState(() => !!urlCaseId);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   // Step 1 is split into two sub-pages (Business Entity, then Co-Applicants)
@@ -114,7 +123,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     goToStep(7);
   };
 
-  const [formData, setFormData] = useState({
+  // Factory (not a plain object literal) so resetWizardState below can call
+  // this again to blank the form out — reusing one literal both for the
+  // initial useState and for "the user navigated away from an old case to a
+  // genuinely new one" guarantees the two can never drift apart.
+  const getInitialFormData = () => ({
     customer_id: null,
     business_pan: '',
     business_name: '',
@@ -150,7 +163,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     customer_bank_profile: null
   });
 
-  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0 });
+  const [formData, setFormData] = useState(getInitialFormData);
+
+  const [costs, setCosts] = useState({ GST_FETCH: 0, ITR_ANALYTICS: 0, BANK_ANALYSIS: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0, PAN_FETCH: 0, ESR_GENERATION: 0 });
+  // Mirrors `costs` 1:1 — the admin-set "before discount" reference price
+  // for each api_code (ApiPricing.actual_credit_cost), null wherever an
+  // admin hasn't set one. Kept as its own object rather than folded into
+  // `costs` itself so every existing `costs.X` numeric comparison
+  // (disabled-state checks, "Insufficient credits" messages) stays a plain
+  // number, untouched — only the <PriceTag> label spots read this one too.
+  const [costsActual, setCostsActual] = useState({ GST_FETCH: null, ITR_ANALYTICS: null, BANK_ANALYSIS: null, BUREAU_PULL: null, BUREAU_OBLIGATIONS: null, PAN_FETCH: null, ESR_GENERATION: null });
   const [walletBalance, setWalletBalance] = useState(0);
 
   // Synthetically-injected test/audit cases (dsa_notes tagged [BULK UPLOAD] —
@@ -170,19 +192,31 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
-        const gst = data.find(d => d.api_code === 'GST_FETCH')?.tenant_cost || 0;
-        const itr = data.find(d => d.api_code === 'ITR_ANALYTICS')?.tenant_cost || 0;
-        const bank = data.find(d => d.api_code === 'BANK_ANALYSIS')?.tenant_cost || 0;
-        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
-        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
-        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-        setCosts({ GST_FETCH: gst, ITR_ANALYTICS: itr, BANK_ANALYSIS: bank, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations, PAN_FETCH: panFetch });
+        // ESR generation is priced per case category since 2026-10-16 (see
+        // esr.service.js) — the wizard only ever knows one category at a
+        // time (formData.is_salaried), so resolve straight to the one real
+        // row that applies and keep exposing it under the same
+        // costs.ESR_GENERATION / costsActual.ESR_GENERATION keys every
+        // downstream consumer (BureauObligationsPage, EsrStep) already
+        // reads — nothing further down needs to know about the split.
+        const esrApiCode = formData.is_salaried ? 'ESR_GENERATION_SALARIED' : 'ESR_GENERATION_MSME';
+        const find = (code) => data.find(d => d.api_code === code);
+        const codes = { GST_FETCH: 'GST_FETCH', ITR_ANALYTICS: 'ITR_ANALYTICS', BANK_ANALYSIS: 'BANK_ANALYSIS', BUREAU_PULL: 'BUREAU_PULL', BUREAU_OBLIGATIONS: 'BUREAU_OBLIGATIONS', PAN_FETCH: 'PAN_FETCH', ESR_GENERATION: esrApiCode };
+        const nextCosts = {};
+        const nextActual = {};
+        for (const [key, apiCode] of Object.entries(codes)) {
+          const row = find(apiCode);
+          nextCosts[key] = row?.tenant_cost || 0;
+          nextActual[key] = row?.actual_cost ?? null;
+        }
+        setCosts(nextCosts);
+        setCostsActual(nextActual);
       })
       .catch(err => {
         console.error(err);
         toast.error('Could not load API pricing. The credit costs shown may be out of date, refresh the page to retry.');
       });
-  }, [isMsme]);
+  }, [isMsme, formData.is_salaried]);
 
   // Polled (not fetched once) so the header pill reflects a deduction the
   // moment it happens — a GST/ITR/bank/PAN pull kicked off from any step, or
@@ -251,11 +285,43 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const [coappGstFetchingMap, setCoappGstFetchingMap] = useState({});
   const [coappGstFetchFailedMap, setCoappGstFetchFailedMap] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
-  const [suggestedCoApplicants, setSuggestedCoApplicants] = useState([]);
 
+  // Re-runs on every urlCaseId change, not just on mount — this used to be
+  // `useEffect(() => { restoreSession(); }, [])`, which only ever fires
+  // once. /customers/add?caseId=123 and /customers/add (or
+  // ?caseId=<a different case>) are the SAME route, so React Router
+  // re-renders this component in place instead of remounting it when a
+  // "New Case" link/button navigates between them — the old mount-only
+  // effect never re-fired, and restoreSession's own "no caseId" branch
+  // never reset anything (it only cleared a localStorage key), so whatever
+  // case was previously loaded just stayed in formData/caseId/etc. Clicking
+  // "New Case" while editing an existing case showed that old case's data
+  // under a blank-looking URL. Confirmed live and fixed here.
+  //
+  // The guard below is against re-fetching/resetting on every render:
+  // ensureDraftSaved() and handleContinueAsNewCase() both call setCaseId(...)
+  // BEFORE navigate(`?caseId=...`) — by the time this effect re-runs for
+  // that navigation, caseId already equals the new urlCaseId, so this is a
+  // no-op (no redundant restoreSession fetch / loading flicker right after
+  // creating a case). Only a genuine external change — a different case, or
+  // dropping caseId entirely — leaves them mismatched, which is exactly when
+  // a (re)load or a full reset is actually needed.
+  //
+  // Comparing as strings: urlCaseId (URLSearchParams#get) is always a string
+  // or null; caseId (state, set to caseData.id/newCase.id from a JSON API
+  // response) is a number. `urlCaseId === caseId` would never match a real
+  // case id and would re-fetch/reset on every single render.
   useEffect(() => {
-    restoreSession();
-  }, []);
+    const normalizedUrlCaseId = urlCaseId || null;
+    const normalizedCaseId = caseId == null ? null : String(caseId);
+    if (normalizedUrlCaseId === normalizedCaseId) return;
+    if (urlCaseId) {
+      restoreSession();
+    } else {
+      resetWizardState();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCaseId, caseId]);
 
   // Steps 1-3 in this component are the self-employed Business Entity / GST
   // / ITR / Bank flow — a salaried-origin case never had that data and must
@@ -325,6 +391,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     const wasResetOnThisCase = caseData.activity_logs?.some(l => l.activity_type === 'PAN_RESET');
     const panVerifiedNow = !!primaryApp?.pan_verified || (consentGrantedForThisCase && !!matchingPanProfile && !wasResetOnThisCase);
     const currentPanProfile = panVerifiedNow ? matchingPanProfile : null;
+    // "Continue as New Case" (case.service.js#createCaseFromExisting) marks
+    // its brand-new primary applicant with source_applicant_id pointing at
+    // the OLD case's applicant it was started next to — the one reliable
+    // signal that caseData.customer's plain identity fields below (name/
+    // dob/mobile/email) describe a DIFFERENT, prior case, not this one.
+    // Gating on otp_verified/consentGrantedForThisCase alone (like
+    // currentPanProfile above already does) would also blank a genuinely
+    // fresh, never-yet-consented case's own just-typed data on every
+    // reopen — its otp_verified is false too, but customer.* there IS this
+    // case's own data, entered for it specifically. Without this, clicking
+    // "Continue as New Case" for a customer with an unrelated older case
+    // immediately showed that older case's name/DOB/mobile/email here,
+    // before this brand-new case had pulled or confirmed anything itself.
+    const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
 
     setCaseId(caseData.id);
     setFormData({
@@ -333,17 +413,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // same PAN/customer can have one salaried case and one MSME case at
       // the same time without either affecting the other.
       is_salaried: caseData.category === 'SALARIED',
+      // PAN itself is kept — it's the identifier this case is actually
+      // working with (how the duplicate was even detected), not stale
+      // pulled data, so it's never part of isCarriedOverIdentity's gate.
       business_pan: caseData.customer?.business_pan || '',
       // proprietor_name is a plain user-entered/KYC identity field; business_name
       // is derived from GST vendor lookups and can end up holding a GST
       // registration TRN (reference number) when the business never registered
       // a real trade name yet - prefer the reliable identity field first, same
       // as the case header / MSME dashboard greeting already do.
-      business_name: toTitleCase(resolveEntityName(caseData.customer)) || '',
-      proprietor_name: caseData.customer?.proprietor_name || '',
-      dob: toDateInputValue(caseData.customer?.dob),
-      business_mobile: caseData.customer?.business_mobile || '',
-      business_email: caseData.customer?.business_email || '',
+      business_name: isCarriedOverIdentity ? '' : (toTitleCase(resolveEntityName(caseData.customer)) || ''),
+      proprietor_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || ''),
+      dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
+      business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || ''),
+      business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
       // Falls back to the verified PAN's own KYC pincode (principal_pincode)
       // when the applicant row itself was never manually filled in - the
       // salaried wizard already does this (see AddSalariedCustomerWizardPage);
@@ -351,8 +434,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // manually-typed pincode rendered the field blank even though the
       // case has a usable pincode on file.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
-      is_professional: caseData.customer?.is_professional || false,
-      profession_type: caseData.customer?.profession_type || '',
+      is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
+      profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
       // Sourced from THIS case's own primary Applicant row, not
       // caseData.customer.mobile_verified — that field lives on the
       // shared Customer record and is reused across every case for the
@@ -420,7 +503,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       customer_itr_profile: caseData.business_financials?.itr_analytics || null,
       customer_bank_profile: caseData.business_financials?.bank_statements || null
     });
-    setSuggestedCoApplicants(caseData.suggested_co_applicants || []);
 
     // Rehydrate any consent request that's still live for THIS case —
     // otherwise a page reload or a fresh login after logging out loses the
@@ -457,11 +539,63 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // 1 - do NOT guess a "further along" step from data already present
       // (e.g. an applicant existing as soon as PAN is verified), since that
       // silently skipped the user past step 1 without them clicking Next.
+      //
+      // But only once consent is actually granted for THIS case
+      // (consentGrantedForThisCase, above). Before that, clamp to step 1
+      // regardless of what ?step= says — CaseWizardStepper's own
+      // isStepUnlocked already refuses to let the user click past step 1
+      // without consentGranted, but that only guards the stepper's clicks;
+      // this is what the URL itself resumes to on every reload, and a case
+      // gets its caseId (so a ?step= URL exists to resume at all) the
+      // moment consent is first requested — well before the customer has
+      // actually approved anything. Without this clamp, reloading a case
+      // with a pending consent request and a stale ?step=N in the address
+      // bar (left over from goToStep's own URL sync, or hand-edited) would
+      // drop the user straight onto step N with no consent check at all.
       const stepParam = parseInt(searchParams.get('step'), 10);
-      setCurrentStep(stepParam >= 1 && stepParam <= 7 ? stepParam : 1);
+      const requestedStep = (stepParam >= 1 && stepParam <= 7) ? stepParam : 1;
+      setCurrentStep(consentGrantedForThisCase ? requestedStep : 1);
       const pid = searchParams.get('proposalId');
       if (pid) setProposalId(pid);
     }
+  };
+
+  // Blanks every piece of per-case state back to its brand-new-case default
+  // — the counterpart to applyCaseData, which populates all the same state
+  // from a loaded case. Called whenever urlCaseId drops to empty via a real
+  // navigation (see the urlCaseId effect above) so a genuinely new case
+  // never starts with a previous case's data still sitting in memory.
+  // Deliberately leaves loading/saving/isMobile/costs/walletBalance alone —
+  // those are page-/account-level, not per-case.
+  const resetWizardState = () => {
+    // Called directly from the urlCaseId effect for a brand-new case (no
+    // restoreSession() round trip, so no `finally { setLoading(false) }` to
+    // rely on) — without this, `loading` stays stuck at its initial `true`
+    // and the whole page renders nothing but the loading skeleton forever.
+    setLoading(false);
+    localStorage.removeItem('draftCaseId');
+    setCaseId(null);
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setStep2SubPage('gst');
+    setProposalId(null);
+    setApplyLender(null);
+    setFormData(getInitialFormData());
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setGstFetching(false);
+    setGstFetchFailed(false);
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setIdentityMismatch(null);
+    setSelfConsentModal(null);
+    setCoappPanVerifyingMap({});
+    setCoappGstFetchingMap({});
+    setCoappGstFetchFailedMap({});
+    setDuplicateWarning(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
   };
 
   // If the URL has a caseId, fetch it and apply it. If not, the user
@@ -476,7 +610,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       const targetCaseId = explicitCaseId || urlCaseId;
 
       if (!targetCaseId) {
-        localStorage.removeItem('draftCaseId');
+        resetWizardState();
         return;
       }
 
@@ -1148,7 +1282,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1188,19 +1322,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  const handleReuseApplicant = async (sourceAppId) => {
-    try {
-      setSaving(true);
-      await caseService.reuseApplicant(caseId, sourceAppId);
-      toast.success('Applicant added from past case successfully!');
-      await restoreSession(true);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to reuse applicant');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const goToCoApplicants = () => {
     if (!formData.business_pan) return toast.error("Business PAN is required.");
     if (!formData.mobile_verified) return toast.error("Primary Business Mobile must be verified before proceeding.");
@@ -1210,9 +1331,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // Pincode (and every other field on this sub-page) otherwise only reaches
   // the backend via handleStep1Submit, which fires solely from the Step 1
   // form's own "Continue" button. CaseWizardStepper's onStepClick lets a
-  // user jump straight to any already-unlocked step (any step, once a case
-  // exists — see isStepUnlocked there), bypassing that submit entirely, so
-  // a pincode typed and then left via the stepper was silently never saved.
+  // user jump straight to any already-unlocked step (any step once consent
+  // is granted — see isStepUnlocked there), bypassing that submit entirely,
+  // so a pincode typed and then left via the stepper was silently never saved.
   // Persisting on blur closes that gap without needing to touch the
   // stepper's own free-navigation behavior.
   //
@@ -1260,6 +1381,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!formData.dob) return toast.error("Date of Birth / Incorporation is required.");
     const coApplicantMissingDob = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
     if (coApplicantMissingDob) return toast.error(`Date of Birth is required for co-applicant ${coApplicantMissingDob.name || coApplicantMissingDob.pan_number}.`);
+    const coApplicantMissingProfession = formData.applicants.find(a => a.type === 'CO_APPLICANT' && (a.is_professional === true || a.is_professional === 'true') && !a.profession_type);
+    if (coApplicantMissingProfession) return toast.error(`Profession is required for co-applicant ${coApplicantMissingProfession.name || coApplicantMissingProfession.pan_number}.`);
 
     try {
       setSaving(true);
@@ -1617,6 +1740,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           currentStep={currentStep}
           caseId={caseId}
           proposalId={proposalId}
+          consentGranted={!!formData.mobile_verified}
           steps={formData.is_salaried ? SALARIED_ORIGIN_STEPS : CASE_WIZARD_STEPS}
           onStepClick={(step) => goToStep(step)}
         />
@@ -1658,7 +1782,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
                               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
                             </div>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/customers/${duplicateWarning.id}`)}>View Existing Profile</button>
+                            {duplicateWarning.summary?.latest_case_id && (
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${duplicateWarning.summary.latest_case_id}`)}>View Existing Case</button>
+                            )}
                           </div>
 
                           {duplicateWarning.summary && (
@@ -1759,23 +1885,34 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               {formData.pan_verified && (
                                 // `gst_completed` (the real, backend-confirmed GST pull
                                 // status — see GstAnalyticsForm / data_pull_status.gst_status)
-                                // always takes priority over `pan_profile` (just the
+                                // always takes priority over `linked_gstins` (just the
                                 // PAN→GSTIN lookup, a separate and much weaker signal
                                 // that can stay empty forever — e.g. a manually-entered
                                 // GSTIN never populates it — even after a real GST pull
-                                // has succeeded). Checking pan_profile first was exactly
-                                // why this badge got stuck on a permanent, misleading
-                                // "Queued…" once gst_completed was already true.
+                                // has succeeded). Checking pan_profile's mere presence
+                                // (previously used here as a stand-in for "a GSTIN was
+                                // found") was wrong on two counts: it stayed stuck on a
+                                // permanent, misleading "Queued…" once gst_completed was
+                                // already true, AND it showed "GSTIN Found" for ANY
+                                // successfully PAN-verified applicant — including one
+                                // with no GST registration at all, since pan_profile is
+                                // set the moment PAN verification succeeds regardless of
+                                // whether any GSTIN came back. linked_gstins.length is
+                                // the actual "a GSTIN was found" signal.
                                 formData.gst_completed ? (
                                   <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <CheckCircle2 size={13} /> GST Pulled
                                   </span>
-                                ) : formData.pan_profile ? (
+                                ) : formData.linked_gstins?.length > 0 ? (
                                   <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <CheckCircle2 size={13} /> GSTIN Found
                                   </span>
                                 ) : gstFetching ? (
                                   <PullingIndicator label="Looking up GSTIN…" />
+                                ) : formData.pan_profile ? (
+                                  <span style={{ color: 'var(--text-tertiary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <AlertCircle size={13} /> No GST registration found for this PAN
+                                  </span>
                                 ) : gstFetchFailed ? (
                                   <span style={{ background: 'var(--error-bg)', color: 'var(--error)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <AlertCircle size={13} /> No GSTIN on file — enter manually below
@@ -1831,7 +1968,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         </FormField>
 
                         <FormField label="Are You A Professional?" name="is_professional">
-                          <select
+                          <CustomSelect
                             className="form-control"
                             value={formData.is_professional === true || formData.is_professional === 'true' ? 'true' : 'false'}
                             onChange={e => {
@@ -1841,20 +1978,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           >
                             <option value="false">No</option>
                             <option value="true">Yes</option>
-                          </select>
+                          </CustomSelect>
                         </FormField>
                       </div>
 
                       {(formData.is_professional === true || formData.is_professional === 'true') && (
                         <div className="grid-2" style={{ marginBottom: 24 }}>
                           <FormField label="Select Your Profession" name="profession_type" required>
-                            <select className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
+                            <CustomSelect className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
                               <option value="">Select Profession</option>
                               <option value="CA">CA</option>
                               <option value="Lawyer">Lawyer</option>
                               <option value="Doctor">Doctor</option>
                               <option value="Other">Other</option>
-                            </select>
+                            </CustomSelect>
                           </FormField>
                         </div>
                       )}
@@ -1937,7 +2074,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                          {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
                         </button>
                       )
                     ) : (
@@ -1973,40 +2110,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     </div>
 
                     <div style={{ padding: 24 }}>
-                      {suggestedCoApplicants && suggestedCoApplicants.length > 0 && (
-                        <div style={{ marginBottom: 24 }}>
-                          <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary-dark)', marginBottom: 12 }}>Suggested Co-Applicants from Past Cases</h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {suggestedCoApplicants.map((suggestion, idx) => (
-                              <div key={idx} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 0, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                                <div>
-                                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{suggestion.name || 'Unnamed Co-Applicant'}</div>
-                                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 8 }}>
-                                    PAN: {suggestion.pan_number ? `${suggestion.pan_number.substring(0, 2)}******${suggestion.pan_number.substring(8)}` : 'N/A'} • Mobile: {suggestion.mobile}
-                                    {suggestion.relationship_to_primary && ` • ${suggestion.relationship_to_primary}`}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    {suggestion.bureau_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Bureau Available</span>}
-                                    {suggestion.documents_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Documents</span>}
-                                    {suggestion.income_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Income</span>}
-                                    {suggestion.salary_ocr_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Salary Slips</span>}
-                                    {suggestion.obligations_available && <span style={{ fontSize: 11, background: 'var(--info-bg)', color: 'var(--info)', padding: '2px 8px', borderRadius: 0 }}>Obligations</span>}
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleReuseApplicant(suggestion.source_applicant_id)}
-                                  disabled={saving}
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ fontWeight: 600, color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                                >
-                                  Use in this case
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {/* "Suggested Co-Applicants from Past Cases" panel removed —
+                          a new case must never surface or offer to reuse another
+                          case's applicant data (see resetWizardState/the urlCaseId
+                          effect above for the equivalent fix at the case level). */}
                       {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
                           No Co-Applicants appended to this profile yet.
@@ -2087,11 +2194,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                 </div>
                                 <div className="grid-3" style={{ marginBottom: 16 }}>
                                   <FormField label="Employment Type" name={`coemp_${realIdx}`}>
-                                    <select className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                                    <CustomSelect className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                                       <option value="SELF_EMPLOYED">Self Employed</option>
                                       <option value="SALARIED">Salaried</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                                    </select>
+                                    </CustomSelect>
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
@@ -2118,7 +2225,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                             disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
                                             title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {(isMsme || !costs.PAN_FETCH) ? 'Request Consent' : `Request Consent (~${costs.PAN_FETCH} Cr)`}
+                                            {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
                                           </button>
                                         )
                                       ) : (
@@ -2129,28 +2236,83 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                     </div>
                                   </FormField>
                                 </div>
-                                <div className="grid-2">
-                                  <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
-                                    <input
-                                      type="text"
-                                      value={app.name || ''}
-                                      onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
+                                    <CustomSelect
                                       className="form-control"
-                                      placeholder={app.pan_verified ? 'Autofetched' : 'Enter Full Name'}
-                                      disabled={app.pan_verified}
-                                    />
+                                      value={app.is_professional === true || app.is_professional === 'true' ? 'true' : 'false'}
+                                      onChange={e => {
+                                        // Both fields in one setFormData call, same reason as
+                                        // the primary applicant's identical toggle above:
+                                        // updateApplicantRow rebuilds its list from the
+                                        // outer formData closure, so two separate calls in
+                                        // the same handler would have the second overwrite
+                                        // the first's change instead of combining with it.
+                                        const isProf = e.target.value === 'true';
+                                        const list = [...formData.applicants];
+                                        list[realIdx] = { ...list[realIdx], is_professional: isProf, profession_type: isProf ? list[realIdx].profession_type : '' };
+                                        setFormData(prev => ({ ...prev, applicants: list }));
+                                      }}
+                                    >
+                                      <option value="false">No</option>
+                                      <option value="true">Yes</option>
+                                    </CustomSelect>
                                   </FormField>
-                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`} required disabled={app.pan_verified}>
-                                    <input
-                                      type="date"
-                                      value={app.dob || ''}
-                                      onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)}
-                                      className="form-control"
-                                      required
-                                      disabled={app.pan_verified}
-                                    />
-                                  </FormField>
+                                  {(app.is_professional === true || app.is_professional === 'true') && (
+                                    <FormField label="Select Profession" name={`coproftype_${realIdx}`} required>
+                                      <CustomSelect className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
+                                        <option value="">Select Profession</option>
+                                        <option value="CA">CA</option>
+                                        <option value="Lawyer">Lawyer</option>
+                                        <option value="Doctor">Doctor</option>
+                                        <option value="Other">Other</option>
+                                      </CustomSelect>
+                                    </FormField>
+                                  )}
+                                  {app.employment_type !== 'SALARIED' && (
+                                    <FormField label="Industry Type" name={`coindustry_${realIdx}`}>
+                                      <CustomSelect className="form-control" value={app.industry || ''} onChange={e => updateApplicantRow(realIdx, 'industry', e.target.value)}>
+                                        <option value="">Auto (from GST report)</option>
+                                        <option value="Manufacturing">Manufacturing</option>
+                                        <option value="Wholesale">Wholesale</option>
+                                        <option value="Retail">Retail</option>
+                                        <option value="Specialised">Specialised</option>
+                                        <option value="Service">Service</option>
+                                      </CustomSelect>
+                                    </FormField>
+                                  )}
                                 </div>
+                                {/* Same pattern as the primary applicant's Full Name/DOB
+                                block above: never user-editable, so hidden entirely
+                                until PAN verification has actually autofetched a
+                                value, instead of showing an editable "Enter Full
+                                Name" field a DSA could hand-type ahead of (or instead
+                                of) the PAN pull. */}
+                                {app.pan_verified && (
+                                  <div className="grid-2" style={{ animation: 'slideUp 0.35s ease' }}>
+                                    <FormField label="Full Name" name={`coname_${realIdx}`} disabled>
+                                      <input
+                                        type="text"
+                                        value={app.name || ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    </FormField>
+                                    <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled>
+                                      <input
+                                        type="text"
+                                        value={app.dob ? formatDate(app.dob) : ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    </FormField>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -2275,6 +2437,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           onboardingMode={mode}
                           walletBalance={walletBalance}
                           gstCost={costs.GST_FETCH}
+                          gstCostActual={costsActual.GST_FETCH}
                           disabled={isBulkInjectedCase}
                           prefillEmail={formData.business_email}
                           prefillMobile={formData.business_mobile}
@@ -2351,6 +2514,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   onboardingMode={mode}
                                   walletBalance={walletBalance}
                                   gstCost={costs.GST_FETCH}
+                          gstCostActual={costsActual.GST_FETCH}
                                   disabled={isBulkInjectedCase}
                                   prefillEmail={coApp.email}
                                   prefillMobile={coApp.mobile}
@@ -2391,6 +2555,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         prefillMobile={formData.business_mobile}
                         walletBalance={walletBalance}
                         itrCost={costs.ITR_ANALYTICS}
+                        itrCostActual={costsActual.ITR_ANALYTICS}
                         existingRecord={formData.customer_itr_profile ?? null}
                         onComplete={(data) => setFormData(prev => ({ ...prev, itr_completed: true, itr_analytics: data }))}
                         onRemoved={() => setFormData(prev => ({ ...prev, itr_completed: false, itr_analytics: null }))}
@@ -2411,6 +2576,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           prefillMobile={coApp.mobile}
                           walletBalance={walletBalance}
                           itrCost={costs.ITR_ANALYTICS}
+                        itrCostActual={costsActual.ITR_ANALYTICS}
                           existingRecord={coApp.itr_analytics?.[0] || null}
                           onComplete={(data) => console.log(`Co-App ${idx} ITR complete`)}
                           mode={mode}
@@ -2450,6 +2616,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         applicantName={toTitleCase(formData.proprietor_name || formData.business_name) || formData.business_pan || 'Primary Business'}
                         walletBalance={walletBalance}
                         analyzeCost={costs.BANK_ANALYSIS}
+                        analyzeCostActual={costsActual.BANK_ANALYSIS}
                         existingStatus={formData.customer_bank_profile ?? null}
                         onComplete={(status, payload) => console.log('Primary bank complete')}
                         mode={mode}
@@ -2470,6 +2637,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           applicantName={toTitleCase(coApp.name) || coApp.pan_number || `Co-Applicant ${idx + 1}`}
                           walletBalance={walletBalance}
                           analyzeCost={costs.BANK_ANALYSIS}
+                        analyzeCostActual={costsActual.BANK_ANALYSIS}
                           existingStatus={coApp.bank_statements?.[0] || null}
                           onComplete={(status, payload) => console.log(`Co-App ${idx} bank complete`)}
                           mode={mode}
@@ -2513,7 +2681,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               <Panel icon={Landmark} accentColor="var(--warning)" delay={0} title={<>Loan Product & collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 20 }}>
                   <FormField label="Select Product" name="product_type" required>
-                    <select
+                    <CustomSelect
                       className="form-control"
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
@@ -2527,7 +2695,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       <option value="ML">Machinery / Equipment Finance</option>
                       <option value="BL">Business Loan (Unsecured)</option>
                       <option value="Other">Other — Specify</option>
-                    </select>
+                    </CustomSelect>
                   </FormField>
 
                   <FormField label="Additional Requirements / Notes" name="dsa_notes">
@@ -2538,27 +2706,27 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                   {PROPERTY_REQUIRED.includes(formData.product_type) && (
                     <>
                       <FormField label="Property Type" name="property_type" required>
-                        <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                        <CustomSelect className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
                           <option value="">— Select —</option>
                           <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
                           <option value="Residential — House / Flat">Residential — House / Flat</option>
                           <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
                           <option value="Plot / Land">Plot / Land</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Occupancy Status" name="occupancy_status">
-                        <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
                           <option value="Self Occupied">Self Occupied</option>
                           <option value="Rented Out">Rented Out</option>
                           <option value="Vacant">Vacant</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Ownership" name="ownership_type">
-                        <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
                           <option value="Sole Owner">Sole Owner</option>
                           <option value="Joint Owner">Joint Owner</option>
                           <option value="Company Owned">Company Owned</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <div>
                         <FormField label="Market Value (₹)" name="market_value" required>
@@ -2594,6 +2762,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               mode={mode}
               walletBalance={walletBalance}
               bureauCost={costs.BUREAU_PULL + costs.BUREAU_OBLIGATIONS}
+              bureauCostActual={(costsActual.BUREAU_PULL != null || costsActual.BUREAU_OBLIGATIONS != null)
+                ? (costsActual.BUREAU_PULL ?? costs.BUREAU_PULL) + (costsActual.BUREAU_OBLIGATIONS ?? costs.BUREAU_OBLIGATIONS)
+                : null}
+              esrGenerationCost={costs.ESR_GENERATION}
+              esrGenerationCostActual={costsActual.ESR_GENERATION}
               onAddCoApplicant={() => { goToStep(1); setStep1SubPage('coapplicants'); }}
             />
           )}
@@ -2602,6 +2775,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               caseId={caseId}
               onOpenProposal={handleProposalCreated}
               isMsme={isMsme}
+              isSalaried={formData.is_salaried}
               onApplyForLoan={handleApplyForLoan}
             />
           )}

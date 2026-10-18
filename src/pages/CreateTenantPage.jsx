@@ -11,6 +11,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
 
+import CustomSelect from '../components/CustomSelect';
 const initialForm = {
   // Tenant fields
   name: '',
@@ -427,7 +428,7 @@ const CreateTenantPage = () => {
                 <div>
                   <label style={labelStyle}>Mobile Number</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <select
+                    <CustomSelect
                       name="mobile_country_code"
                       value={form.mobile_country_code}
                       onChange={e => handleCountryCodeChange('mobile_country_code', e.target.value)}
@@ -436,7 +437,7 @@ const CreateTenantPage = () => {
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                       {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
-                    </select>
+                    </CustomSelect>
                     <input
                       type="text"
                       name="mobile"
@@ -456,7 +457,7 @@ const CreateTenantPage = () => {
                 </div>
                 <div>
                   <label style={labelStyle}>Organization Type *</label>
-                  <select
+                  <CustomSelect
                     name="type"
                     value={form.type}
                     onChange={handleChange}
@@ -465,7 +466,7 @@ const CreateTenantPage = () => {
                     onBlur={e => e.target.style.borderBottomColor = errors.type ? 'var(--error)' : 'var(--outline)'}
                   >
                     {TENANT_TYPES.map((t) => <option key={t} value={t}>{formatTenantType(t)}</option>)}
-                  </select>
+                  </CustomSelect>
                   {errors.type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.type}</div>}
                 </div>
                 <div>
@@ -504,7 +505,7 @@ const CreateTenantPage = () => {
                 </div>
                 <div>
                   <label style={labelStyle}>Company Type *</label>
-                  <select
+                  <CustomSelect
                     name="company_type"
                     value={form.company_type}
                     onChange={handleChange}
@@ -514,7 +515,7 @@ const CreateTenantPage = () => {
                   >
                     <option value="">Select Type...</option>
                     {companyTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  </CustomSelect>
                   {errors.company_type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.company_type}</div>}
                 </div>
               </div>
@@ -639,7 +640,7 @@ const CreateTenantPage = () => {
                 <div>
                   <label style={labelStyle}>Admin Mobile</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <select
+                    <CustomSelect
                       name="admin_mobile_country_code"
                       value={form.admin_mobile_country_code}
                       onChange={e => handleCountryCodeChange('admin_mobile_country_code', e.target.value)}
@@ -648,7 +649,7 @@ const CreateTenantPage = () => {
                       onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                     >
                       {countryOptions.map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}
-                    </select>
+                    </CustomSelect>
                     <input
                       type="text"
                       name="admin_mobile"

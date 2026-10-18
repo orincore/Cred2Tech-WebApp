@@ -7,6 +7,7 @@ import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 
+import CustomSelect from '../components/CustomSelect';
 const fmt = (v) => {
   if (v === null || v === undefined) return '—';
   const n = parseFloat(v);
@@ -86,9 +87,9 @@ function UpdateStatusModal({ entry, onClose, onSuccess }) {
             {allowedNext.length === 0 ? (
               <div className="notice notice-error">Cannot update a terminal state.</div>
             ) : (
-              <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="form-control">
+              <CustomSelect value={newStatus} onChange={e => setNewStatus(e.target.value)} className="form-control">
                 {allowedNext.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
-              </select>
+              </CustomSelect>
             )}
           </div>
 
@@ -346,7 +347,7 @@ export default function SalesIncentivePage() {
         <div className="filter-bar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ flex: 1, minWidth: 140 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-            <select
+            <CustomSelect
               value={filters.month || 'all'}
               onChange={e => setFilters({ ...filters, month: e.target.value === 'all' ? 'all' : e.target.value })}
               className="form-control"
@@ -358,15 +359,15 @@ export default function SalesIncentivePage() {
               {availableMonths.map(m => (
                 <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
           {isAdmin && (
             <div style={{ flex: 1, minWidth: 140 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Team Member</label>
-              <select value={filters.user_id} onChange={e => setFilters({ ...filters, user_id: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }}>
+              <CustomSelect value={filters.user_id} onChange={e => setFilters({ ...filters, user_id: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }}>
                 <option value="">All Members</option>
                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+              </CustomSelect>
             </div>
           )}
           <div style={{ flex: 1, minWidth: 120 }}>
@@ -427,16 +428,16 @@ export default function SalesIncentivePage() {
               <form onSubmit={handleRuleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 24, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Level</label>
-                  <select required value={ruleForm.hierarchy_level} onChange={e => setRuleForm({ ...ruleForm, hierarchy_level: e.target.value })} className="form-control">
+                  <CustomSelect required value={ruleForm.hierarchy_level} onChange={e => setRuleForm({ ...ruleForm, hierarchy_level: e.target.value })} className="form-control">
                     <option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option><option value="L4">L4</option>
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Type</label>
-                  <select value={ruleForm.commission_type} onChange={e => setRuleForm({ ...ruleForm, commission_type: e.target.value })} className="form-control">
+                  <CustomSelect value={ruleForm.commission_type} onChange={e => setRuleForm({ ...ruleForm, commission_type: e.target.value })} className="form-control">
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FIXED">Fixed (₹)</option>
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Value</label>
@@ -444,11 +445,11 @@ export default function SalesIncentivePage() {
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Base</label>
-                  <select value={ruleForm.calculation_base} onChange={e => setRuleForm({ ...ruleForm, calculation_base: e.target.value })} className="form-control">
+                  <CustomSelect value={ruleForm.calculation_base} onChange={e => setRuleForm({ ...ruleForm, calculation_base: e.target.value })} className="form-control">
                     <option value="DISBURSED_AMOUNT">Disbursed Amount</option>
                     <option value="LENDER_COMMISSION">Lender Commission</option>
                     <option value="FIXED_PER_CASE">Fixed Per Case</option>
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Effective From</label>

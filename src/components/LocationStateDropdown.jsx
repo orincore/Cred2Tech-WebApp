@@ -1,5 +1,6 @@
 import React from 'react';
 
+import CustomSelect from './CustomSelect';
 const indianStates = [
   'Andhra Pradesh',
   'Arunachal Pradesh',
@@ -71,16 +72,17 @@ const LocationStateDropdown = ({
             <rect />
           </svg>
           <span className="material-symbols-outlined text-[17px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0 relative z-10">map</span>
-          <select
+          <CustomSelect
             name="state"
             value={state}
             onChange={onStateChange}
             onBlur={onStateBlur}
+            hideChevron
             className="flex-1 bg-transparent border-none outline-none text-[0.88rem] text-[#0a1628] dark:text-[#e6edf7] font-medium cursor-pointer relative z-10 appearance-none"
           >
             <option value="">Select State…</option>
             {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          </CustomSelect>
           <span className="material-symbols-outlined text-[18px] text-[#0a1628] dark:text-[#e6edf7] flex-shrink-0">arrow_drop_down</span>
         </div>
         {stateError && (

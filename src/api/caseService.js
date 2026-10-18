@@ -114,15 +114,25 @@ export const caseService = {
   },
 
   // Phase 1 —— ESR
+  // Body is {}, not null: the instance sends Content-Type: application/json, and
+  // express.json() is strict by default, so a bare `null` body is rejected by
+  // body-parser before any route middleware runs — a 400 the API's global error
+  // handler then reports as a bare 500.
   generateESR: async (caseId) => {
-    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`);
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/generate`, {});
+    return response.data;
+  },
+  // Re-runs the engine over the case's existing financial snapshot — no new
+  // data pull, and deliberately unbilled on the API side. This is what
+  // "Refresh Results" uses; only the first generation is a charged click.
+  recalculateESR: async (caseId) => {
+    const response = await axiosInstance.post(`/cases/${caseId}/esr/recalculate`, {});
     return response.data;
   },
   getESR: async (caseId) => {
     const response = await axiosInstance.get(`/cases/${caseId}/esr`);
     return response.data;
   },
-
   // Phase 2 —— Proposals
   createProposal: async (caseId, payload) => {
     const response = await axiosInstance.post(`/cases/${caseId}/proposals/create`, payload);

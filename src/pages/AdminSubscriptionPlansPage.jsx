@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { getErrorMessage } from '../utils/helpers';
 import { GATABLE_NAV_ITEMS } from '../constants/navItems';
 
+import CustomSelect from '../components/CustomSelect';
 const EMPTY_FORM = {
   name: '',
   description: '',
@@ -296,10 +297,10 @@ const AdminSubscriptionPlansPage = () => {
 
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase' }}>Status</label>
-                <select className="form-control" value={form.is_active ? '1' : '0'} onChange={(e) => setForm({ ...form, is_active: e.target.value === '1' })}>
+                <CustomSelect className="form-control" value={form.is_active ? '1' : '0'} onChange={(e) => setForm({ ...form, is_active: e.target.value === '1' })}>
                   <option value="1">Active — selectable by tenants</option>
                   <option value="0">Inactive — hidden from new subscribes/upgrades</option>
-                </select>
+                </CustomSelect>
               </div>
 
               {editing?.id && (

@@ -4,6 +4,7 @@ import { Send, Users, Info, Bell } from 'lucide-react';
 import { showTestBrowserNotification } from '../lib/pushNotifications';
 import PageHeader from '../components/ui/PageHeader';
 
+import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   React.useEffect(() => {
@@ -227,7 +228,7 @@ const AdminSendNotificationPage = () => {
               <Users size={13} style={{ display: 'inline', marginRight: 4 }} />
               Send to
             </label>
-            <select
+            <CustomSelect
               className="form-control"
               value={targetOption.value}
               onChange={(e) => setTargetOption(TARGET_OPTIONS.find((o) => o.value === e.target.value))}
@@ -236,7 +237,7 @@ const AdminSendNotificationPage = () => {
               {TARGET_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </select>
+            </CustomSelect>
             {targetOption.value === 'USER' && (
               <div style={{ position: 'relative', maxWidth: 420, marginTop: 10 }}>
                 <input
@@ -307,11 +308,11 @@ const AdminSendNotificationPage = () => {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
               Notification type
             </label>
-            <select className="form-control" value={notificationType} onChange={(e) => setNotificationType(e.target.value)} style={{ maxWidth: 280 }}>
+            <CustomSelect className="form-control" value={notificationType} onChange={(e) => setNotificationType(e.target.value)} style={{ maxWidth: 280 }}>
               <option value="ALERT">Alert</option>
               <option value="FEATURE_UPDATE">Feature update</option>
               <option value="COUPON">Coupon</option>
-            </select>
+            </CustomSelect>
           </div>
 
           <div style={{ marginBottom: 24 }}>

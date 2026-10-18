@@ -18,7 +18,9 @@ import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchM
 import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
+import PriceTag from '../components/PriceTag';
 
+import CustomSelect from '../components/CustomSelect';
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
 
 // Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
@@ -65,7 +67,14 @@ const AddSalariedCustomerWizardPage = () => {
   const searchParams = new URLSearchParams(location.search);
   const urlCaseId = searchParams.get('caseId');
 
-  const [loading, setLoading] = useState(true);
+  // Lazily seeded from whether the URL already names a case, NOT a bare
+  // `true` — the urlCaseId/caseId effect below only calls restoreSession()
+  // or the inline reset on a MISMATCH between the two, and on a true first
+  // mount with no ?caseId at all, urlCaseId and caseId both start out null,
+  // so they already "match" and that effect short-circuits without ever
+  // flipping loading to false. Since loading gates the entire render, a
+  // plain `/customers/salaried/add` visit got stuck on the skeleton forever.
+  const [loading, setLoading] = useState(() => !!urlCaseId);
   const [saving, setSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   // Step 1 is split into two sub-pages (Personal Details, then Co-Applicants)
@@ -96,6 +105,10 @@ const AddSalariedCustomerWizardPage = () => {
   // /customers/salaried/add), so unlike that page there's no isMsme branch
   // to skip the wallet gate for.
   const [costs, setCosts] = useState({ PAN_FETCH: 0, BUREAU_PULL: 0, BUREAU_OBLIGATIONS: 0 });
+  // Mirrors `costs` 1:1 — see AddCustomerWizardPage.jsx's own costsActual
+  // comment for why this stays a separate object instead of folding into
+  // `costs` itself.
+  const [costsActual, setCostsActual] = useState({ PAN_FETCH: null, BUREAU_PULL: null, BUREAU_OBLIGATIONS: null });
   const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
@@ -106,10 +119,16 @@ const AddSalariedCustomerWizardPage = () => {
     withRetry(() => api.get('/wallet/api-costs'))
       .then(res => {
         const data = res.data;
-        const panFetch = data.find(d => d.api_code === 'PAN_FETCH')?.tenant_cost || 0;
-        const bureauPull = data.find(d => d.api_code === 'BUREAU_PULL')?.tenant_cost || 0;
-        const bureauObligations = data.find(d => d.api_code === 'BUREAU_OBLIGATIONS')?.tenant_cost || 0;
-        setCosts({ PAN_FETCH: panFetch, BUREAU_PULL: bureauPull, BUREAU_OBLIGATIONS: bureauObligations });
+        const codes = { PAN_FETCH: 'PAN_FETCH', BUREAU_PULL: 'BUREAU_PULL', BUREAU_OBLIGATIONS: 'BUREAU_OBLIGATIONS' };
+        const nextCosts = {};
+        const nextActual = {};
+        for (const [key, apiCode] of Object.entries(codes)) {
+          const row = data.find(d => d.api_code === apiCode);
+          nextCosts[key] = row?.tenant_cost || 0;
+          nextActual[key] = row?.actual_cost ?? null;
+        }
+        setCosts(nextCosts);
+        setCostsActual(nextActual);
       })
       .catch(err => {
         console.error(err);
@@ -176,20 +195,73 @@ const AddSalariedCustomerWizardPage = () => {
   };
 
 
-  // Mount-only ([] deps, matching AddCustomerWizardPage.jsx's own identical
-  // effect) — NOT [urlCaseId]. That used to re-fire restoreSession() (a full
+  // Re-runs whenever urlCaseId actually changes relative to our own caseId
+  // state — not mount-only. A mount-only effect was tried here first and
+  // caused its own regression (see below), then patched with a
+  // one-directional reset effect that only handled urlCaseId DROPPING to
+  // empty — which missed the case of urlCaseId changing directly from one
+  // case to a genuinely DIFFERENT case id (e.g. browser back/forward across
+  // two case URLs, or a link straight into a second case while this page
+  // happens to still be mounted on a first). Unified into one bidirectional
+  // effect, same pattern as AddCustomerWizardPage.jsx's own urlCaseId
+  // effect: compare urlCaseId against caseId (normalized to strings — caseId
+  // is a number from the API, urlCaseId is always a string/null from
+  // URLSearchParams, so a naive === never matches a real id) and only act on
+  // a genuine mismatch.
+  //
+  // Why NOT just [urlCaseId]: that used to re-fire restoreSession() (a full
   // fetch + setLoading(true) skeleton cycle) every time the URL's caseId
   // changed for ANY reason, including right after handleContinueAsNewCase
   // above already applied the new case's data instantly via applyCaseData —
   // confirmed live: the mobile field updated correctly at the moment the
   // create-from-existing response landed, then ~100ms later the skeleton
   // appeared anyway and stayed, from this effect's own redundant, pointless
-  // second fetch of the exact same data. ensureDraftSaved's own navigate()
-  // (the only other same-route caseId change) already sets state directly
-  // too, so nothing here was ever depending on this effect re-firing.
+  // second fetch of the exact same data. The mismatch guard below avoids
+  // that: handleContinueAsNewCase/ensureDraftSaved both call setCaseId(...)
+  // BEFORE navigate(`?caseId=...`), so by the time this effect re-runs for
+  // that self-navigation, caseId already equals the new urlCaseId and the
+  // guard short-circuits — only an EXTERNAL change (a different case, or
+  // dropping caseId entirely) leaves them mismatched.
   useEffect(() => {
-    restoreSession();
-  }, []);
+    const normalizedUrlCaseId = urlCaseId || null;
+    const normalizedCaseId = caseId == null ? null : String(caseId);
+    if (normalizedUrlCaseId === normalizedCaseId) return;
+
+    if (urlCaseId) {
+      restoreSession();
+      return;
+    }
+
+    // urlCaseId is empty but our own state still holds a case — a "New
+    // Case" navigation (or back/forward to the blank URL) landed on this
+    // SAME mounted instance (same route, so React Router doesn't remount),
+    // and must not leave the previous case's data showing under what looks
+    // like a blank new-case URL.
+    // setLoading(false) first: `loading` defaults to true and gates the
+    // entire render (see the `if (loading) return (...)` below) — it's
+    // normally cleared by restoreSession's own try/finally, which this
+    // branch bypasses entirely (including on first mount with no
+    // urlCaseId), so without this the page would render nothing but the
+    // skeleton forever.
+    setLoading(false);
+    setCaseId(null);
+    setFormData(getBlankFormData());
+    setCurrentStep(1);
+    setStep1SubPage('business');
+    setPanVerifying(false);
+    setPanVerifyFailed(false);
+    setCoappPanVerifyingMap({});
+    setConsentRequest(null);
+    setConsentRequesting(false);
+    setConsentRequestFailed(false);
+    setPanEditUnlocked(false);
+    setCoappPanEditUnlockedMap({});
+    setDuplicateWarning(null);
+    setIdentityMismatch(null);
+    setCoappConsent({});
+    setCoappConsentRequesting({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCaseId, caseId]);
 
   const checkPanDuplicate = async (pan) => {
     if (!pan || pan.length !== 10) return;
@@ -294,6 +366,16 @@ const AddSalariedCustomerWizardPage = () => {
 
     const applicants = caseData.applicants || [];
     const primaryApp = applicants.find(a => a.type === 'PRIMARY');
+    // "Continue as New Case" (case.service.js#createCaseFromExisting) marks
+    // its brand-new primary applicant with source_applicant_id pointing at
+    // the OLD case's applicant it was started next to — the one reliable
+    // signal that caseData.customer's plain identity fields below (name/
+    // dob/mobile/email) describe a DIFFERENT, prior case, not this one.
+    // Without this, clicking "Continue as New Case" for a customer with an
+    // unrelated older case immediately showed that older case's name/DOB/
+    // mobile/email here, before this brand-new case had pulled or
+    // confirmed anything itself — same fix as AddCustomerWizardPage.jsx.
+    const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
 
     const restoredApplicants = applicants.map(app => ({
       ...app,
@@ -316,11 +398,11 @@ const AddSalariedCustomerWizardPage = () => {
       // can end up holding a stale legal_business_name/trade_name (a GST artifact,
       // sometimes even a raw GST TRN placeholder string) left over from a
       // different flow, which is never applicable to a salaried customer.
-      business_name: caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || '',
-      business_mobile: (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
-      business_email: caseData.customer?.business_email || '',
-      pincode: primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || '',
-      dob: toDateInputValue(caseData.customer?.dob),
+      business_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || ''),
+      business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
+      business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
+      pincode: isCarriedOverIdentity ? '' : (primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || ''),
+      dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
       // Sourced from THIS case's own primary Applicant row, not
       // caseData.customer.mobile_verified — that field lives on the shared
       // Customer record and is reused across every case for the same PAN,
@@ -505,52 +587,10 @@ const AddSalariedCustomerWizardPage = () => {
   const [coappConsent, setCoappConsent] = useState({});
   const [coappConsentRequesting, setCoappConsentRequesting] = useState({});
 
-  // Defends against this SAME mounted instance of the page being reused for
-  // two different case attempts — e.g. the browser back button returning
-  // here from `?caseId=X` to the bare `/customers/salaried/add` URL
-  // (handleContinueAsNewCase's own navigate() is a normal push, not
-  // `replace`, so back genuinely lands on that earlier blank URL) without
-  // React Router remounting anything, since it's the same route and only the
-  // search string differs. Without this, `caseId`/`formData` kept holding
-  // case X's data — every applicant, property field, PAN/mobile — while the
-  // URL looked like a brand-new, blank case, regardless of how old case X
-  // was (this is a same-tab state leak, not a time-boxed dedupe issue like
-  // case.service.js#createSalariedCase's own idempotency window).
-  // Deliberately one-directional: only resets when the URL LOSES its
-  // caseId while state still has one. The other direction (urlCaseId
-  // gaining a value) is already handled directly by whichever caller just
-  // set that case's data itself (ensureDraftSaved, handleContinueAsNewCase)
-  // — re-fetching here too would reintroduce the exact skeleton-flicker
-  // regression the mount-only restoreSession effect above was fixed to avoid.
-  // Keyed on the URL's own previous value, not just "state has a caseId and
-  // URL doesn't": handleContinueAsNewCase/ensureDraftSaved call setCaseId()
-  // BEFORE navigate() lands (React Router v7 applies navigation inside a
-  // transition), so for a render or two caseId is set while urlCaseId is
-  // still null. Without the prev-value check that window read as "URL lost
-  // its caseId" and wiped the just-populated form back to blank — which
-  // also made the duplicate-PAN banner reappear on the next blur.
-  const prevUrlCaseIdRef = useRef(urlCaseId);
-  useEffect(() => {
-    const prevUrlCaseId = prevUrlCaseIdRef.current;
-    prevUrlCaseIdRef.current = urlCaseId;
-    if (urlCaseId || !prevUrlCaseId || !caseId) return;
-    setCaseId(null);
-    setFormData(getBlankFormData());
-    setCurrentStep(1);
-    setStep1SubPage('business');
-    setPanVerifying(false);
-    setPanVerifyFailed(false);
-    setCoappPanVerifyingMap({});
-    setConsentRequest(null);
-    setConsentRequesting(false);
-    setConsentRequestFailed(false);
-    setPanEditUnlocked(false);
-    setCoappPanEditUnlockedMap({});
-    setDuplicateWarning(null);
-    setIdentityMismatch(null);
-    setCoappConsent({});
-    setCoappConsentRequesting({});
-  }, [urlCaseId, caseId]);
+  // Reset/restore on urlCaseId<->caseId mismatch is handled by the single
+  // unified effect near the top of the component (alongside the mount
+  // effect) — it covers both directions (URL losing its caseId, and the URL
+  // pointing at a genuinely different case) in one place now.
 
   const handleRequestCoapplicantConsent = async (index) => {
     const app = formData.applicants[index];
@@ -726,7 +766,7 @@ const AddSalariedCustomerWizardPage = () => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', otp_verified: false }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', otp_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1023,6 +1063,7 @@ const AddSalariedCustomerWizardPage = () => {
         <CaseWizardStepper
           currentStep={currentStep}
           caseId={caseId}
+          consentGranted={!!formData.mobile_verified}
           steps={SALARIED_ORIGIN_STEPS}
           onStepClick={(step) => {
             // This page only ever renders content for its own steps 1-3 —
@@ -1070,7 +1111,9 @@ const AddSalariedCustomerWizardPage = () => {
                               <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
                               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
                             </div>
-                            <button type="button" onClick={() => navigate(`/customers/${duplicateWarning.id}`)} className="btn btn-secondary btn-sm">View Existing Profile</button>
+                            {duplicateWarning.summary?.latest_case_id && (
+                              <button type="button" onClick={() => navigate(`/cases/${duplicateWarning.summary.latest_case_id}`)} className="btn btn-secondary btn-sm">View Existing Case</button>
+                            )}
                           </div>
 
                           {duplicateWarning.summary && (
@@ -1274,7 +1317,7 @@ const AddSalariedCustomerWizardPage = () => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
+                          <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
                         </button>
                       )
                     ) : (
@@ -1381,11 +1424,11 @@ const AddSalariedCustomerWizardPage = () => {
 
                                 <div className="grid-3" style={{ marginBottom: 16 }}>
                                   <FormField label="Employment Type" name={`coemp_${realIdx}`}>
-                                    <select className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
+                                    <CustomSelect className="form-control" value={app.employment_type || 'SALARIED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                                       <option value="SALARIED">Salaried</option>
                                       <option value="SELF_EMPLOYED">Self Employed</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                                    </select>
+                                    </CustomSelect>
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input
@@ -1419,7 +1462,7 @@ const AddSalariedCustomerWizardPage = () => {
                                             disabled={saving || walletBalance < costs.PAN_FETCH}
                                             title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {costs.PAN_FETCH ? `Request Consent (~${costs.PAN_FETCH} Cr)` : 'Request Consent'}
+                                            <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
                                           </button>
                                         )
                                       ) : (
@@ -1431,19 +1474,58 @@ const AddSalariedCustomerWizardPage = () => {
                                   </FormField>
                                 </div>
 
-                                <div className="grid-2">
-                                  <FormField label="Full Name" name={`coname_${realIdx}`} disabled={app.pan_verified}>
-                                    <input
-                                      type="text"
-                                      value={app.name || ''}
-                                      onChange={e => updateApplicantRow(realIdx, 'name', e.target.value)}
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                  <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
+                                    <CustomSelect
                                       className="form-control"
-                                      placeholder={app.pan_verified ? 'Autofetched via PAN' : 'Enter Full Name'}
-                                      disabled={app.pan_verified}
-                                    />
+                                      value={app.is_professional === true || app.is_professional === 'true' ? 'true' : 'false'}
+                                      onChange={e => {
+                                        // Both fields in one setFormData call - updateApplicantRow
+                                        // rebuilds its list from the outer formData closure, so two
+                                        // separate calls in the same handler would have the second
+                                        // overwrite the first's change instead of combining with it.
+                                        const isProf = e.target.value === 'true';
+                                        const list = [...formData.applicants];
+                                        list[realIdx] = { ...list[realIdx], is_professional: isProf, profession_type: isProf ? list[realIdx].profession_type : '' };
+                                        setFormData(prev => ({ ...prev, applicants: list }));
+                                      }}
+                                    >
+                                      <option value="false">No</option>
+                                      <option value="true">Yes</option>
+                                    </CustomSelect>
                                   </FormField>
-                                  <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled={app.pan_verified}>
-                                    {app.pan_verified ? (
+                                  {(app.is_professional === true || app.is_professional === 'true') && (
+                                    <FormField label="Select Profession" name={`coproftype_${realIdx}`} required>
+                                      <CustomSelect className="form-control" value={app.profession_type || ''} onChange={e => updateApplicantRow(realIdx, 'profession_type', e.target.value)}>
+                                        <option value="">Select Profession</option>
+                                        <option value="CA">CA</option>
+                                        <option value="Lawyer">Lawyer</option>
+                                        <option value="Doctor">Doctor</option>
+                                        <option value="Other">Other</option>
+                                      </CustomSelect>
+                                    </FormField>
+                                  )}
+                                </div>
+
+                                {/* Same pattern as the primary applicant's Full Name/DOB
+                                block above: never user-editable, so hidden entirely
+                                until PAN verification has actually autofetched a
+                                value, instead of showing an editable "Enter Full
+                                Name" field a DSA could hand-type ahead of (or instead
+                                of) the PAN pull. */}
+                                {app.pan_verified && (
+                                  <div className="grid-2" style={{ animation: 'slideUp 0.35s ease' }}>
+                                    <FormField label="Full Name" name={`coname_${realIdx}`} disabled>
+                                      <input
+                                        type="text"
+                                        value={app.name || ''}
+                                        className="form-control"
+                                        placeholder="Autofetched via PAN"
+                                        disabled
+                                        readOnly
+                                      />
+                                    </FormField>
+                                    <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled>
                                       <input
                                         type="text"
                                         value={app.dob ? formatDate(app.dob) : ''}
@@ -1452,11 +1534,9 @@ const AddSalariedCustomerWizardPage = () => {
                                         disabled
                                         readOnly
                                       />
-                                    ) : (
-                                      <input type="date" value={app.dob || ''} onChange={e => updateApplicantRow(realIdx, 'dob', e.target.value)} className="form-control" />
-                                    )}
-                                  </FormField>
-                                </div>
+                                    </FormField>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1528,7 +1608,7 @@ const AddSalariedCustomerWizardPage = () => {
               <Panel icon={Landmark} accentColor="var(--warning)" title={<>Loan Product &amp; Collateral <span style={{ color: 'var(--error)', fontSize: 12 }}>*</span></>}>
                 <div className="grid-3">
                   <FormField label="Select Product" name="product_type" required>
-                    <select
+                    <CustomSelect
                       className="form-control"
                       value={formData.product_type}
                       onChange={e => setFormData({ ...formData, product_type: e.target.value })}
@@ -1538,33 +1618,33 @@ const AddSalariedCustomerWizardPage = () => {
                       <option value="HL">HL — Home Loan</option>
                       <option value="LAP">LAP — Loan Against Property</option>
                       <option value="PL">PL — Personal Loan</option>
-                    </select>
+                    </CustomSelect>
                   </FormField>
 
                   {PROPERTY_REQUIRED.includes(formData.product_type) && (
                     <>
                       <FormField label="Property Type" name="property_type" required>
-                        <select className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
+                        <CustomSelect className="form-control" value={formData.property_type} onChange={e => setFormData({ ...formData, property_type: e.target.value })} required>
                           <option value="">— Select —</option>
                           <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
                           <option value="Residential — House / Flat">Residential — House / Flat</option>
                           <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
                           <option value="Plot / Land">Plot / Land</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Occupancy Status" name="occupancy_status">
-                        <select className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.occupancy_status} onChange={e => setFormData({ ...formData, occupancy_status: e.target.value })}>
                           <option value="Self Occupied">Self Occupied</option>
                           <option value="Rented Out">Rented Out</option>
                           <option value="Vacant">Vacant</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <FormField label="Ownership" name="ownership_type">
-                        <select className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
+                        <CustomSelect className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
                           <option value="Sole Owner">Sole Owner</option>
                           <option value="Joint Owner">Joint Owner</option>
                           <option value="Company Owned">Company Owned</option>
-                        </select>
+                        </CustomSelect>
                       </FormField>
                       <div>
                         <FormField label="Market Value (₹)" name="market_value" required>

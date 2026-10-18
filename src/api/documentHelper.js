@@ -96,8 +96,9 @@ export async function uploadDocument(file, caseId, docType, options = {}) {
 }
 
 /**
- * Soft-delete a stored document (server flips status to DELETED, so it drops
- * out of listDocuments without destroying the row or its audit trail).
+ * Remove a stored file and mark its document DELETED, retaining the audit row.
+ * Shared files remain until their final non-DELETED document is removed.
+ * Storage failures reject the request so deletion can be retried.
  */
 export async function deleteDocument(documentId) {
     const response = await api.delete(`/documents/${documentId}`);

@@ -9,6 +9,7 @@ import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 
+import CustomSelect from '../components/CustomSelect';
 const fmt = (v) => {
   if (v === null || v === undefined) return '—';
   const n = parseFloat(v);
@@ -99,9 +100,9 @@ function UpdateStatusModal({ entry, onClose, onSuccess }) {
             {allowedNext.length === 0 ? (
               <div className="notice notice-error">This record is in a terminal state and cannot be updated.</div>
             ) : (
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="form-control">
+              <CustomSelect value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="form-control">
                 {allowedNext.map(s => <option key={s} value={s}>{STATUS_META[s]?.label || s}</option>)}
-              </select>
+              </CustomSelect>
             )}
           </div>
 
@@ -419,27 +420,27 @@ export default function SubDsaPayoutPage() {
         <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ minWidth: 120 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Month</label>
-            <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={e => setFilters(p => ({ ...p, month: e.target.value === 'all' ? 'all' : e.target.value }))} disabled={availableMonths.length === 0}>
+            <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.month || 'all'} onChange={e => setFilters(p => ({ ...p, month: e.target.value === 'all' ? 'all' : e.target.value }))} disabled={availableMonths.length === 0}>
               {availableMonths.length === 0 && <option value="">No data available</option>}
               {availableMonths.length > 0 && <option value="all">All Months</option>}
               {availableMonths.map(m => <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           {isAdmin && (
             <div style={{ minWidth: 130 }}>
               <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Sub-Sourcing Partner</label>
-              <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.sub_dsa_user_id} onChange={e => setFilters(p => ({ ...p, sub_dsa_user_id: e.target.value }))}>
+              <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.sub_dsa_user_id} onChange={e => setFilters(p => ({ ...p, sub_dsa_user_id: e.target.value }))}>
                 <option value="">All Sub-Sourcing Partners</option>
                 {subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              </CustomSelect>
             </div>
           )}
           <div style={{ minWidth: 120 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Invoice Status</label>
-            <select className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}>
+            <CustomSelect className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}>
               <option value="">All Statuses</option>
               {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div style={{ minWidth: 110 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>

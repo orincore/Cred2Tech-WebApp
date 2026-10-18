@@ -9,6 +9,7 @@ import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert, Save } from 'lucide
 import { toast } from 'react-hot-toast';
 import { getLenderDisplayName } from '../constants/lenderPolicies';
 
+import CustomSelect from '../components/CustomSelect';
 // Mirrors the backend's key-based type inference (Cred2Tech/backend's
 // src/utils/esrParsers.js normalizeParameter()) so the editor shown for a
 // cell always matches what the backend will actually accept for that
@@ -36,7 +37,7 @@ const leadingNumber = (v) => {
 };
 
 // Stored boolean values arrive as loosely-cased free text ("Yes", "NO",
-// "true"...) — normalize to the exact option value the <select> uses.
+// "true"...) — normalize to the exact option value the <CustomSelect> uses.
 const boolDisplayValue = (v) => {
    const s = String(v ?? '').trim().toLowerCase();
    if (['yes', 'true', 'y', '1'].includes(s)) return 'Yes';
@@ -473,15 +474,15 @@ const LenderConfigPage = () => {
             <div style={{ flex: 1, minWidth: 200 }}>
                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Lender</span>
                <div style={{ display: 'flex', gap: 8 }}>
-                  <select
+                  <CustomSelect
                      className="form-control"
                      style={{ flex: 1, fontSize: 13 }}
                      value={selectedLenderId}
                      onChange={handleLenderChange}
                   >
                      <option value="">-- Select Lender --</option>
-                     {lenders.map(l => <option key={l.id} value={l.id}>{getLenderDisplayName(l)}</option>)}
-                  </select>
+                     {lenders.map(l => <option key={l.id} value={l.id}>{getLenderDisplayName(l)}{l.status === 'INACTIVE' ? ' (Inactive)' : ''}</option>)}
+                  </CustomSelect>
                   <button 
                      className="btn btn-outline" 
                      onClick={addLender} 
@@ -492,10 +493,15 @@ const LenderConfigPage = () => {
                   </button>
                </div>
             </div>
+            {lenders.find(l => l.id === selectedLenderId)?.status === 'INACTIVE' && (
+               <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--on-muted)', flexBasis: '100%' }}>
+                  This lender is inactive. Its policies can be reviewed here, but it is not included in new ESR evaluations.
+               </p>
+            )}
             <div style={{ flex: 1, minWidth: 200 }}>
                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Target Product Line</span>
                <div style={{ display: 'flex', gap: 8 }}>
-                  <select
+                  <CustomSelect
                      className="form-control"
                      style={{ flex: 1, fontSize: 13 }}
                      value={selectedProductId}
@@ -504,7 +510,7 @@ const LenderConfigPage = () => {
                   >
                      <option value="">-- Select Product --</option>
                      {products.map(p => <option key={p.id} value={p.id}>{p.product_type} - {p.status}</option>)}
-                  </select>
+                  </CustomSelect>
                   <button 
                      className="btn btn-outline" 
                      onClick={addProduct} 
@@ -699,7 +705,7 @@ const LenderConfigPage = () => {
                                                    {Array.isArray(val) && val.length > 0 ? `Slab Set (${val.length} rules)${isDirty ? ' •' : ''}` : 'Configure Slabs'}
                                                 </button>
                                              ) : paramType === 'boolean' ? (
-                                                <select
+                                                <CustomSelect
                                                    style={{ ...baseInputStyle, textAlign: 'center', cursor: 'pointer' }}
                                                    defaultValue={boolDisplayValue(val)}
                                                    onChange={(e) => commitEdit(e.target, e.target.value)}
@@ -707,7 +713,7 @@ const LenderConfigPage = () => {
                                                    <option value="">---</option>
                                                    <option value="Yes">Yes</option>
                                                    <option value="No">No</option>
-                                                </select>
+                                                </CustomSelect>
                                              ) : paramType === 'percent' ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: dirtyBg }}>
                                                    <input

@@ -1,16 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { caseService } from '../api/caseService';
 import { getTenantLenders } from '../api/tenantLenderService';
-import { viewDocument, downloadDocument } from '../api/documentHelper';
+import { viewDocument, downloadDocument, deleteDocument } from '../api/documentHelper';
 import { getUsers } from '../api/userService';
 import {
-  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check
+  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload, Trash2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName } from '../utils/helpers';
+import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, formatFileSize } from '../utils/helpers';
+import { formatCaseReference } from '../utils/caseReference';
+import { createSanctionForm, createDisbursementForm, resolveSanctionContext } from '../utils/caseStageForm';
+import { groupDocumentsByCategory } from '../constants/documentCategories';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import Skeleton from '../components/ui/Skeleton';
@@ -18,6 +21,7 @@ import TableSkeleton from '../components/ui/TableSkeleton';
 import CaseFeedbackModal from '../components/case/CaseFeedbackModal';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 
+import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -93,7 +97,7 @@ const STAGE_ORDER = {
   APPROVED: 8, PARTLY_DISBURSED: 9, DISBURSED: 10, CLOSED: 11, REJECTED: 11,
 };
 
-const TABS = ['Overview', 'Co-Borrowers', 'Documents', 'Sanction & Disbursement', 'Activity Log'];
+const TABS = ['Overview', 'Co-Borrowers', 'Documents', 'Other Cases', 'Sanction & Disbursement', 'Activity Log'];
 
 const DataRow = ({ label, value, valueColor }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
@@ -109,8 +113,62 @@ const EmptyRow = ({ icon: Icon, text }) => (
   </div>
 );
 
+// One document tile within a Documents-tab category section — same card
+// used across every category/applicant grouping, so a document looks and
+// behaves identically no matter which section it falls under.
+const DocumentCard = ({ doc, onDeleted }) => {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    const name = doc.original_file_name || doc.document_type;
+    if (!window.confirm(`Delete "${name}"? This removes the file from storage and cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(doc.id);
+      toast.success('Document deleted');
+      onDeleted?.(doc.id);
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Failed to delete document');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <FileText size={18} color="var(--text-tertiary)" />
+        <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>
+        <span title={doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded directly' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'Pulled via API' : 'Generated internally'} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
+          {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
+        </span>
+        <span>{formatFileSize(doc.file_size_bytes)}</span>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 4, alignItems: 'center' }}>
+        <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
+        <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Delete this document (removes it from storage too)"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--error)', background: 'none', border: 'none', fontWeight: 600, cursor: deleting ? 'default' : 'pointer', padding: 0, marginLeft: 'auto', opacity: deleting ? 0.6 : 1 }}
+        >
+          <Trash2 size={12} />
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function CaseDetailPage() {
   const { id } = useParams();
+  const activeCaseId = useRef(id);
+  activeCaseId.current = id;
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   // MSME direct-portal borrowers can view their own case, but the DSA
@@ -127,6 +185,7 @@ export default function CaseDetailPage() {
   const { isMobile } = useResponsive();
 
   const [caseData, setCaseData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   // An MSME case's PRIMARY applicant IS the business, and is deliberately
   // created without a `name` (case.service.js createCase) — the business
@@ -144,6 +203,8 @@ export default function CaseDetailPage() {
   const [selectedStage, setSelectedStage] = useState('');
   const [disbursementSummary, setDisbursementSummary] = useState(null);
   const [tenantLenders, setTenantLenders] = useState([]);
+  const [lendersLoading, setLendersLoading] = useState(true);
+  const [lendersLoadError, setLendersLoadError] = useState(false);
   const [summaryDownloading, setSummaryDownloading] = useState(false);
 
   const [rollbackReason, setRollbackReason] = useState('');
@@ -164,18 +225,11 @@ export default function CaseDetailPage() {
   const [dsaUsers, setDsaUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  const [sanctionForm, setSanctionForm] = useState({
-    loan_account_number: '', sanction_date: new Date().toISOString().split('T')[0],
-    sanctioned_amount: '', confirmed_roi: '', processing_fee: '', remarks: '',
-    lender_name: '', product_type: '', tenant_lender_id: '',
-  });
+  const [sanctionForm, setSanctionForm] = useState(createSanctionForm);
+  const sanctionContext = resolveSanctionContext({ caseData,
+    sanction: disbursementSummary?.sanction, form: sanctionForm, lenders: tenantLenders });
 
-  const [disbursementForm, setDisbursementForm] = useState({
-    amount: '', disbursement_date: new Date().toISOString().split('T')[0],
-    next_disbursement_due_date: '', remarks: '', pdd_pending: false,
-    pdd_documents: [{ document_name: '', due_date: '' }], loan_account_number: '',
-    subvention_amount: '',
-  });
+  const [disbursementForm, setDisbursementForm] = useState(createDisbursementForm);
 
   // A case can only take subvention once, in whichever tranche it's first
   // entered — later tranches (and DISBURSED after a PARTLY_DISBURSED one)
@@ -184,27 +238,26 @@ export default function CaseDetailPage() {
     (d) => d.subvention_amount && Number(d.subvention_amount) > 0
   );
 
-  // Auto-resolve tenant_lender_id if it's missing but lender_name is locked
-  useEffect(() => {
-    if (sanctionForm.lender_name && !sanctionForm.tenant_lender_id && tenantLenders.length > 0) {
-      const match = tenantLenders.find(l => l.lender_name === sanctionForm.lender_name);
-      if (match) {
-        setSanctionForm(prev => ({ ...prev, tenant_lender_id: String(match.id) }));
-      }
-    }
-  }, [sanctionForm.lender_name, sanctionForm.tenant_lender_id, tenantLenders]);
+  const loadTenantLenders = useCallback(async () => {
+    setLendersLoading(true);
+    setLendersLoadError(false);
+    try { setTenantLenders(await getTenantLenders()); }
+    catch { setLendersLoadError(true); }
+    finally { setLendersLoading(false); }
+  }, []);
 
   const fetchDisbursementSummary = useCallback(async () => {
     try {
       const data = await caseService.getDisbursementSummary(id);
+      if (activeCaseId.current !== id) return;
       setDisbursementSummary(data);
       if (data.sanction) {
         setSanctionForm({
           loan_account_number: data.sanction.loan_account_number || '',
           sanction_date: data.sanction.sanction_date?.split('T')[0] || '',
-          sanctioned_amount: data.sanction.sanction_amount || data.summary.sanctioned_amount || '',
-          confirmed_roi: data.sanction.confirmed_roi || '',
-          processing_fee: data.sanction.processing_fee || '',
+          sanctioned_amount: data.sanction.sanctioned_amount ?? data.sanction.sanction_amount ?? data.summary?.sanctioned_amount ?? '',
+          confirmed_roi: data.sanction.confirmed_roi ?? '',
+          processing_fee: data.sanction.processing_fee ?? '',
           remarks: data.sanction.remarks || '',
           lender_name: data.sanction.lender_name || '',
           product_type: data.sanction.product_type || '',
@@ -219,16 +272,11 @@ export default function CaseDetailPage() {
   const fetchCase = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
+      setCaseData(null);
       const data = await caseService.getCaseById(id);
+      if (activeCaseId.current !== id) return;
       setCaseData(data);
-      if (data && !disbursementSummary?.sanction) {
-        setSanctionForm(prev => ({
-          ...prev,
-          lender_name: prev.lender_name || data.lender_name || '',
-          product_type: prev.product_type || data.product_type || '',
-          tenant_lender_id: prev.tenant_lender_id || data.tenant_lender_id || '',
-        }));
-      }
       if (data) {
         setPropertyForm({
           product_type: data.product_type || '',
@@ -239,18 +287,33 @@ export default function CaseDetailPage() {
         });
       }
     } catch (error) {
-      toast.error('Failed to load case details');
+      if (activeCaseId.current !== id) return;
+      const status = error.response?.status;
+      const message = status === 404 ? 'Case not found.'
+        : status === 403 ? 'You do not have access to this case.'
+        : status === 401 ? 'Your session has expired. Please sign in again.'
+        : 'Unable to load case details. Please try again.';
+      setLoadError({ message, retryable: ![401, 403, 404].includes(status) });
+      toast.error(message);
       console.error(error);
     } finally {
-      setLoading(false);
+      if (activeCaseId.current === id) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    setSanctionForm(createSanctionForm());
+    setDisbursementForm(createDisbursementForm());
+    setCaseFeedbackPrompt(null);
+    setDisbursementSummary(null);
+    setSelectedStage('');
+    setShowStageModal(false);
+    setRollbackReason('');
+    setRollbackConfirmation(false);
     fetchCase();
     fetchDisbursementSummary();
-    getTenantLenders().then(d => setTenantLenders(d.filter(l => l.is_active))).catch(console.error);
-  }, [fetchCase, fetchDisbursementSummary]);
+    loadTenantLenders();
+  }, [fetchCase, fetchDisbursementSummary, loadTenantLenders]);
 
   const handleAllocateClick = async () => {
     setShowAllocateModal(true);
@@ -331,7 +394,7 @@ export default function CaseDetailPage() {
         if (caseData.stage !== 'ESR_GENERATED' && caseData.stage !== 'APPROVED') {
           return toast.error('Case must be Login Done before sanction.');
         }
-        if (!sanctionForm.lender_name) return toast.error('Lender is required.');
+        if (!sanctionContext.lender_name) return toast.error(lendersLoadError ? 'Unable to load lenders. Please retry the lender list.' : 'Please select a lender.');
         if (!sanctionForm.sanctioned_amount) return toast.error('Sanctioned amount is required.');
         if (!sanctionForm.sanction_date) return toast.error('Sanction date is required.');
         if (sanctionForm.confirmed_roi === '' || sanctionForm.confirmed_roi === null || sanctionForm.confirmed_roi === undefined) {
@@ -340,7 +403,9 @@ export default function CaseDetailPage() {
         if (sanctionForm.processing_fee === '' || sanctionForm.processing_fee === null || sanctionForm.processing_fee === undefined) {
           return toast.error('Processing Fee (₹) is required.');
         }
-        await caseService.sanctionCase(id, sanctionForm);
+        await caseService.sanctionCase(id, { ...sanctionForm,
+          lender_name: sanctionContext.lender_name, tenant_lender_id: sanctionContext.tenant_lender_id,
+          product_type: sanctionContext.product_type });
         toast.success('Case sanctioned successfully');
       } else if (['PARTLY_DISBURSED', 'DISBURSED'].includes(selectedStage)) {
         if (!disbursementSummary?.sanction) return toast.error('Case must be sanctioned before disbursement.');
@@ -441,7 +506,8 @@ export default function CaseDetailPage() {
   );
   if (!caseData) return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-      <p style={{ fontSize: 15, color: 'var(--text-secondary)' }}>Case not found.</p>
+      <p role="alert" style={{ fontSize: 15, color: 'var(--text-secondary)' }}>{loadError?.message || 'Case not found.'}</p>
+      {loadError?.retryable && <button className="btn btn-primary btn-sm" onClick={fetchCase}>Try again</button>}
       <button className="btn btn-secondary btn-sm" onClick={() => navigate(backPath)}><ArrowLeft size={14} /> {isMsme ? 'Back to Dashboard' : 'Back to Pipeline'}</button>
     </div>
   );
@@ -459,8 +525,7 @@ export default function CaseDetailPage() {
   // from a purged case, since a bookmarked/typed URL could otherwise bypass
   // this button being disabled.
   const isPurged = !!caseData.data_purged_at;
-  const isLenderLocked = !!(disbursementSummary?.sanction?.lender_name || caseData?.lender_name);
-  const isProductTypeLocked = !!(disbursementSummary?.sanction?.product_type || caseData?.product_type);
+  const { isLenderLocked, isProductTypeLocked } = sanctionContext;
 
   return (
     <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
@@ -692,22 +757,95 @@ export default function CaseDetailPage() {
       {activeTab === 'Documents' && (
         <div className="card card-padded">
           {caseData.documents?.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-              {caseData.documents.map(doc => (
-                <div key={doc.id} style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FileText size={18} color="var(--text-tertiary)" />
-                    <div style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{doc.original_file_name || doc.document_type}</div>
+            <>
+              {(() => {
+                const totalBytes = caseData.documents.reduce((sum, d) => sum + (d.file_size_bytes || 0), 0);
+                const uploadedCount = caseData.documents.filter(d => d.source_type === 'DIRECT_UPLOAD').length;
+                const vendorCount = caseData.documents.filter(d => d.source_type === 'VENDOR_DOWNLOAD').length;
+                return (
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center',
+                    padding: '10px 14px', marginBottom: 14, background: 'var(--bg-elevated)',
+                    border: '1.5px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <HardDrive size={14} color="var(--text-tertiary)" />
+                      Storage used: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatFileSize(totalBytes)}</span>
+                    </div>
+                    <div>{caseData.documents.length} document(s)</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><UploadCloud size={13} color="var(--text-tertiary)" /> {uploadedCount} uploaded</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><CloudDownload size={13} color="var(--text-tertiary)" /> {vendorCount} from API pulls</div>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Uploaded: {new Date(doc.created_at).toLocaleDateString()}</div>
-                  <div style={{ display: 'flex', gap: 14, marginTop: 4 }}>
-                    <button onClick={() => viewDocument(doc.id)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View</button>
-                    <button onClick={() => downloadDocument(doc.id, doc.original_file_name)} style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Download</button>
+                );
+              })()}
+              {/* Grouped into the exact same KYC/Income/Banking/Property
+                  categories the Prepare Proposal page uploads into (see
+                  constants/documentCategories.js) — a document shows up
+                  here under the same section a DSA would expect to find it
+                  under on that page, rather than one flat, unsorted list. */}
+              {groupDocumentsByCategory(caseData.documents, { isSalaried: caseData.category === 'SALARIED' }).map(cat => (
+                <div key={cat.id} style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {cat.label}
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', padding: '1px 8px' }}>{cat.docs.length}</span>
                   </div>
+                  {cat.perApplicant ? (
+                    // One sub-section per applicant that actually has a document
+                    // here (Primary first, then co-borrowers in case order).
+                    caseData.applicants
+                      .filter(app => cat.docs.some(d => d.applicant_id === app.id))
+                      .map((app, idx) => (
+                        <div key={app.id} style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                            {app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Borrower ${idx}`}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                            {cat.docs.filter(d => d.applicant_id === app.id).map(doc => <DocumentCard key={doc.id} doc={doc} onDeleted={fetchCase} />)}
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                      {cat.docs.map(doc => <DocumentCard key={doc.id} doc={doc} onDeleted={fetchCase} />)}
+                    </div>
+                  )}
                 </div>
               ))}
-            </div>
+            </>
           ) : <EmptyRow icon={FileText} text="No documents uploaded yet." />}
+        </div>
+      )}
+
+      {/* Other Cases — every other case on file for this same customer, so a
+          repeat applicant's history (or a lender-clone sibling) is reachable
+          without leaving the case page. */}
+      {activeTab === 'Other Cases' && (
+        <div className="card card-padded">
+          {caseData.other_cases?.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+              {caseData.other_cases.map(oc => {
+                const ocStageColors = STAGE_COLORS[oc.stage] || STAGE_COLORS.DRAFT;
+                const [ocStageBg, ocStageColor] = isDark ? ocStageColors.dark : ocStageColors.light;
+                return (
+                  <div
+                    key={oc.id}
+                    onClick={() => navigate(`/cases/${oc.id}`)}
+                    style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, cursor: 'pointer' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{formatCaseReference(oc)}</div>
+                      <span style={{ background: ocStageBg, color: ocStageColor, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>{STAGE_LABELS[oc.stage] || oc.stage}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{oc.product_type || 'N/A'} {oc.lender_name ? `· ${oc.lender_name}` : ''}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                      {oc.sanctioned_amount ? `Sanctioned: ${formatCurrency(oc.sanctioned_amount)}` : oc.loan_amount ? `Requested: ${formatCurrency(oc.loan_amount)}` : 'Amount not set'}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)' }}>Created: {new Date(oc.created_at).toLocaleDateString()}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <EmptyRow icon={Users} text="No other cases found for this customer." />}
         </div>
       )}
 
@@ -806,7 +944,7 @@ export default function CaseDetailPage() {
 
               <div className="form-group" style={{ marginBottom: 24 }}>
                 <label className="form-label">Select New Stage</label>
-                <select
+                <CustomSelect
                   className="form-control"
                   value={selectedStage}
                   onChange={(e) => {
@@ -819,7 +957,7 @@ export default function CaseDetailPage() {
                 >
                   <option value="">— Choose Stage —</option>
                   {STAGE_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                </CustomSelect>
               </div>
 
               {isBackward && (
@@ -860,22 +998,27 @@ export default function CaseDetailPage() {
                       </label>
                       {isLenderLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.lender_name}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionContext.lender_name}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
-                        <select
+                        <CustomSelect
                           className="form-control"
-                          value={sanctionForm.tenant_lender_id || ''}
+                          value={sanctionContext.tenant_lender_id}
+                          disabled={lendersLoading}
                           onChange={(e) => {
-                            const selected = tenantLenders.find(l => String(l.id) === e.target.value);
-                            setSanctionForm({ ...sanctionForm, tenant_lender_id: e.target.value, lender_name: selected ? selected.lender_name : '' });
+                            const lenderId = String(e.target.value);
+                            const selected = tenantLenders.find(l => String(l.id) === lenderId);
+                            setSanctionForm(prev => ({ ...prev, tenant_lender_id: lenderId, lender_name: selected?.lender_name || '' }));
                           }}
                         >
                           <option value="">— Select Lender —</option>
-                          {tenantLenders.map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
-                        </select>
+                          {tenantLenders.filter(l => l.is_active !== false).map(l => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
+                        </CustomSelect>
                       )}
+                      {!isLenderLocked && lendersLoadError && <div role="alert" style={{ marginTop: 6, color: 'var(--error)', fontSize: 12 }}>
+                        Unable to load lenders. <button type="button" className="btn btn-secondary btn-sm" onClick={loadTenantLenders}>Retry lenders</button>
+                      </div>}
                     </div>
                     <div className="form-group">
                       <label className="form-label">
@@ -884,7 +1027,7 @@ export default function CaseDetailPage() {
                       </label>
                       {isProductTypeLocked ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1.5px solid var(--primary-light)', background: 'var(--primary-subtle)', minHeight: 36 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionForm.product_type}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-dark)' }}>{sanctionContext.product_type}</span>
                           <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>Locked</span>
                         </div>
                       ) : (
@@ -1038,10 +1181,10 @@ export default function CaseDetailPage() {
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Select Employee</label>
               {loadingUsers ? <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>Loading users...</p> : (
-                <select className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
+                <CustomSelect className="form-control" value={allocateUserId} onChange={(e) => setAllocateUserId(e.target.value)} required>
                   <option value="">- Select -</option>
                   {dsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name)})</option>)}
-                </select>
+                </CustomSelect>
               )}
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
@@ -1064,13 +1207,13 @@ export default function CaseDetailPage() {
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label">Loan Product & collateral</label>
-                <select className="form-control" value={propertyForm.product_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, product_type: e.target.value }))} required>
+                <CustomSelect className="form-control" value={propertyForm.product_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, product_type: e.target.value }))} required>
                   <option value="">- Select a loan product -</option>
                   <option value="HL">HL - Home Loan</option>
                   <option value="LAP">LAP - Loan Against Property</option>
                   <option value="PL">PL - Personal Loan</option>
                   <option value="BL">BL - Business Loan</option>
-                </select>
+                </CustomSelect>
               </div>
 
               {['LAP', 'HL'].includes(propertyForm.product_type) && (
@@ -1078,31 +1221,31 @@ export default function CaseDetailPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Property Type *</label>
-                      <select className="form-control" value={propertyForm.property_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, property_type: e.target.value }))} required>
+                      <CustomSelect className="form-control" value={propertyForm.property_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, property_type: e.target.value }))} required>
                         <option value="">- Select -</option>
                         <option value="Commercial — Office / Shop">Commercial — Office / Shop</option>
                         <option value="Residential — House / Flat">Residential — House / Flat</option>
                         <option value="Industrial — Factory / Warehouse">Industrial — Factory / Warehouse</option>
                         <option value="Plot / Land">Plot / Land</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Occupancy</label>
-                      <select className="form-control" value={propertyForm.occupancy_status} onChange={(e) => setPropertyForm(prev => ({ ...prev, occupancy_status: e.target.value }))}>
+                      <CustomSelect className="form-control" value={propertyForm.occupancy_status} onChange={(e) => setPropertyForm(prev => ({ ...prev, occupancy_status: e.target.value }))}>
                         <option value="Self Occupied">Self Occupied</option>
                         <option value="Rented Out">Rented Out</option>
                         <option value="Vacant">Vacant</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Ownership</label>
-                      <select className="form-control" value={propertyForm.ownership_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, ownership_type: e.target.value }))}>
+                      <CustomSelect className="form-control" value={propertyForm.ownership_type} onChange={(e) => setPropertyForm(prev => ({ ...prev, ownership_type: e.target.value }))}>
                         <option value="Sole Owner">Sole Owner</option>
                         <option value="Joint Owner">Joint Owner</option>
                         <option value="Company Owned">Company Owned</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Market Value *</label>

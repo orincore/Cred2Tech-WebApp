@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload, CheckCircle2 } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import CopyButton from '../components/ui/CopyButton';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
@@ -15,6 +16,15 @@ import { toast } from 'react-hot-toast';
 import { subscribeToCasePulls } from '../lib/realtime';
 import PageTour from '../components/tour/PageTour';
 import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
+import { HDFC_DEPARTMENTS } from '../constants/lenderPolicies';
+
+import CustomSelect from '../components/CustomSelect';
+
+// This page's own display-only trim — strip the "CASE-" prefix so the
+// Case ID column shows the bare id ("3317", or "3317.1" for a split case)
+// while formatCaseReference(c) itself (used for the copy button, and by
+// every other page) still returns the full "CASE-3317" reference.
+const caseIdDisplay = (c) => formatCaseReference(c).replace(/^CASE-/, '');
 
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
@@ -87,7 +97,7 @@ const CUSTOMER_TYPE_OPTIONS = [
   { value: 'MSME', label: 'Business / MSME' },
   { value: 'SALARIED', label: 'Salaried' },
 ];
-const LENDER_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
+const LENDER_OPTIONS = ['HDFC Bank', ...Object.values(HDFC_DEPARTMENTS).map(d => d.displayName), 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra', 'SBI', 'IDFC First'].map(v => ({ value: v, label: v }));
 const ALERT_OPTIONS = [{ value: 'PDD_PENDING', label: 'PDD Pending' }];
 const SORT_OPTIONS = [
   { label: 'Newest First', by: 'lead_date', order: 'desc' },
@@ -499,10 +509,10 @@ const CustomersListPage = () => {
 
         <div style={{ flex: 1, minWidth: 145 }}>
           <span style={labelSm(isDark)}>Sort</span>
-          <select value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
+          <CustomSelect value={sortIndex} onChange={(e) => { setSortIndex(Number(e.target.value)); setPage(1); }}
             style={{ ...underlineInput(sortIndex !== 0), appearance: 'none', cursor: 'pointer' }}>
             {SORT_OPTIONS.map((opt, i) => <option key={i} value={i}>{opt.label}</option>)}
-          </select>
+          </CustomSelect>
         </div>
         </div>
       </div>
@@ -563,7 +573,8 @@ const CustomersListPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{caseIdDisplay(c)}</span>
+                      <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
                       <span style={{
                         fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
                         color: c.category === 'SALARIED' ? 'var(--info)' : 'var(--success)',
@@ -583,7 +594,7 @@ const CustomersListPage = () => {
 
                 <div
                   style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
-                  onClick={() => navigate(`/customers/${c.customer_id}`)}
+                  onClick={() => navigate(`/cases/${c.id}`)}
                 >
                   {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                 </div>
@@ -646,7 +657,7 @@ const CustomersListPage = () => {
             </colgroup>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
-                {['Case', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
+                {['Case ID', 'Customer', 'Lender / Product', 'Bureau Score', 'Amounts (Sanc / Disb)', 'Stage / Alert', 'Updated', 'Action'].map((h) => (
                   <th key={h} style={{
                     position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg)',
                     padding: '10px 8px', fontSize: 10, fontWeight: 800, color: mutedColor,
@@ -666,7 +677,19 @@ const CustomersListPage = () => {
                 return (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--outline)' }}>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: 'var(--on-surface)' }}>{formatCaseReference(c)}</div>
+                      {/* Grid with matching 18px edge columns, rather than a flex row
+                          centered as one group with the copy button — centering the
+                          whole group shifts the number itself off-center (visibly,
+                          against the BUSINESS/SALARIED badge centered below it) by
+                          roughly half the button's width. This keeps the number's own
+                          center fixed regardless of the button. */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '18px 1fr 18px', alignItems: 'center', fontWeight: 700, color: 'var(--on-surface)' }}>
+                        <span />
+                        <span style={{ textAlign: 'center' }}>{caseIdDisplay(c)}</span>
+                        <span style={{ display: 'flex', justifyContent: 'center' }}>
+                          <CopyButton text={formatCaseReference(c)} label="Case ID copied" />
+                        </span>
+                      </div>
                       <div style={{ marginTop: 3, display: 'flex', justifyContent: 'center' }}>
                         <span style={{
                           fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
@@ -677,7 +700,7 @@ const CustomersListPage = () => {
                       {c.parent_case_id && !childCaseSuffix(c) && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/customers/${c.customer_id}`)}>
+                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/cases/${c.id}`)}>
                         {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                       </div>
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>

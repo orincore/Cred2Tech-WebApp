@@ -9,6 +9,7 @@ import { downloadDocument } from '../api/documentHelper';
 import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '../hooks/useCasePullStatus';
 
 import { IS_DEV_BUILD } from '../utils/devBuild';
+import PriceTag from './PriceTag';
 // Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
 // download-report entitlement gap (confirmed broken on both preprod — bad
 // credentials — and production — 403 not entitled — 2026-09-02). Never shown
@@ -28,13 +29,15 @@ const formatInr = (n) => n != null ? `₹${Math.round(Number(n)).toLocaleString(
 // file is rejected instantly with clear next-step guidance instead of
 // round-tripping to the server first. Deliberately set below what the
 // backend/vendor would actually accept; this is a product choice, not a
-// reflection of either of their real caps.
-const MAX_STATEMENT_FILE_MB = 5;
+// reflection of either of their real caps. Raised 5→10MB per product
+// decision 2026-10-08 — keep in sync with backend's
+// MAX_STATEMENT_FILE_BYTES (src/utils/statementFileLimits.js).
+const MAX_STATEMENT_FILE_MB = 10;
 const formatFileSize = (bytes) => bytes >= 1024 * 1024
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, existingStatus, onComplete, mode, disabled = false }) => {
+const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, applicantName, walletBalance, analyzeCost, analyzeCostActual = null, existingStatus, onComplete, mode, disabled = false }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = mode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -339,7 +342,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     const handleDelete = async () => {
         if (!reportId) return;
-        if (!window.confirm('Delete this bank statement analysis? You can upload a fresh one afterwards.')) return;
+        if (!window.confirm('Delete this bank statement analysis and remove its stored files? This cannot be undone. Shared copies may be retained. You can upload a fresh one afterwards.')) return;
         setDeleting(true);
         try {
             await api.post('/external/bank/delete', { report_id: reportId });
@@ -520,7 +523,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             disabled={disabled}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
-                            {isMsme || !analyzeCost ? 'Upload PDF' : `Upload PDF (~${analyzeCost} Cr)`}
+                            {isMsme ? 'Upload PDF' : <PriceTag label="Upload PDF" actual={analyzeCostActual} discounted={analyzeCost} />}
                         </button>
                     )}
                 </div>
@@ -634,7 +637,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : (isMsme || !analyzeCost) ? 'Analyze' : `Analyze (~${analyzeCost} Cr)`}
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : <PriceTag label="Analyze" actual={analyzeCostActual} discounted={analyzeCost} />}
                             </button>
                         </div>
                     </div>

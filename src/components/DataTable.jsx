@@ -12,6 +12,13 @@ const DataTable = ({
   stickyHeader = true,
   hoverRows = true,
   showLastRowBorder = false,
+  // Optional column sorting: pass `sortable: true` on a column def plus
+  // these three props to make its header clickable. Omitted by every
+  // existing caller, so this is purely additive — headers render exactly as
+  // before when they're left out.
+  sortBy = null,
+  sortDir = 'desc',
+  onSort = null,
 }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -79,22 +86,26 @@ const DataTable = ({
             zIndex: 10 
           }}>
             {columns.map((col) => (
-              <th 
+              <th
                 key={col.key}
+                onClick={col.sortable && onSort ? () => onSort(col.key) : undefined}
                 style={{
-                  padding: '11px 10px', 
-                  fontSize: 10, 
-                  fontWeight: 800, 
-                  color: 'var(--on-muted)',
-                  textTransform: 'uppercase', 
+                  padding: '11px 10px',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: col.sortable && sortBy === col.key ? 'var(--primary)' : 'var(--on-muted)',
+                  textTransform: 'uppercase',
                   letterSpacing: '0.1em',
                   textAlign: col.align || 'left',
-                  overflow: 'hidden', 
-                  whiteSpace: 'nowrap', 
-                  textOverflow: 'ellipsis'
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  cursor: col.sortable && onSort ? 'pointer' : 'default',
+                  userSelect: col.sortable && onSort ? 'none' : 'auto',
                 }}
               >
                 {col.label}
+                {col.sortable && sortBy === col.key && (sortDir === 'asc' ? ' ▲' : ' ▼')}
               </th>
             ))}
           </tr>

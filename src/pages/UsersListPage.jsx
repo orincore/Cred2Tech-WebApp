@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import DataTable from '../components/DataTable';
 import PageTour from '../components/tour/PageTour';
 
+import CustomSelect from '../components/CustomSelect';
 const USERS_TOUR_STEPS = [
   { target: '[data-tour="users-add"]', title: 'Add someone to your team', description: 'Bring on a new employee or Sub-Sourcing Partner from here. They\'ll get an OTP by mobile and email to activate their own account.' },
   { target: '[data-tour="users-tabs"]', title: 'Employees vs Sub-Sourcing Partner', description: 'Your internal employees and your external Sub-Sourcing Partner referral partners are kept in separate tabs, since they\'re managed a little differently.' },
@@ -257,33 +258,33 @@ const UsersListPage = () => {
             {activeTab !== 'subDsa' && (
               <div style={{ flex: 1, minWidth: isMobile ? '45%' : 130 }}>
                 <span style={labelSm}>Role</span>
-                <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+                <CustomSelect value={filterRole} onChange={e => setFilterRole(e.target.value)}
                   style={{ ...underlineInput(!!filterRole), appearance: 'none', cursor: 'pointer', borderBottomColor: filterRole ? 'var(--primary)' : 'var(--outline)', color: filterRole ? 'var(--primary)' : 'var(--on-surface)' }}>
                   <option value="">All Roles</option>
                   {ROLE_OPTIONS.filter(o => (o.value || o) !== 'SUB_DSA').map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-                </select>
+                </CustomSelect>
               </div>
             )}
 
             {/* Status */}
             <div style={{ flex: 1, minWidth: isMobile ? '45%' : 120 }}>
               <span style={labelSm}>Status</span>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              <CustomSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                 style={{ ...underlineInput(!!filterStatus), appearance: 'none', cursor: 'pointer', borderBottomColor: filterStatus ? 'var(--primary)' : 'var(--outline)', color: filterStatus ? 'var(--primary)' : 'var(--on-surface)' }}>
                 <option value="">All Status</option>
                 {STATUS_OPTIONS.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
-              </select>
+              </CustomSelect>
             </div>
 
             {/* Level — Sub-DSA partners don't sit in the internal L1-L4 hierarchy. */}
             {activeTab !== 'subDsa' && (
               <div style={{ flex: 1, minWidth: isMobile ? '45%' : 110 }}>
                 <span style={labelSm}>Level</span>
-                <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
+                <CustomSelect value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
                   style={{ ...underlineInput(!!filterLevel), appearance: 'none', cursor: 'pointer', borderBottomColor: filterLevel ? 'var(--primary)' : 'var(--outline)', color: filterLevel ? 'var(--primary)' : 'var(--on-surface)' }}>
                   <option value="">All Levels</option>
                   {['L1', 'L2', 'L3', 'L4'].map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
+                </CustomSelect>
               </div>
             )}
 

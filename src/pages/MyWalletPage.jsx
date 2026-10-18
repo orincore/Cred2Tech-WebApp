@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import {
   Wallet, ArrowUpCircle, ArrowDownCircle, Search, SlidersHorizontal,
   FileSpreadsheet, TrendingUp, TrendingDown, Plus, X,
-  Download, CheckCircle2, Clock, XCircle,
+  Download, CheckCircle2, Clock, XCircle, Building2, Users,
 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
@@ -17,6 +17,7 @@ import { loadRazorpay } from '../utils/razorpay';
 import { useAuth } from '../context/AuthContext';
 import PageTour from '../components/tour/PageTour';
 
+import CustomSelect from '../components/CustomSelect';
 const WALLET_TOUR_STEPS = [
   { target: '[data-tour="wallet-stats"]', title: 'Your credit balance', description: 'Your current wallet balance, plus how many credits were added and used in the selected date range.' },
   { target: '[data-tour="wallet-recharge"]', title: 'Recharge your wallet', description: 'Top up your credits here any time. Pay by card, UPI, or netbanking, or redeem a promo code, and a GST invoice is generated automatically.' },
@@ -597,6 +598,11 @@ const MyWalletPage = () => {
 
   const [balance, setBalance] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  // Only ever populated for DSA_ADMIN — getBalance omits both fields for
+  // any other role (see dsa.wallet.controller.js), so these stay null and
+  // the extra org-wide stat cards below just don't render for them.
+  const [orgCredits, setOrgCredits] = useState(null);
+  const [teamAllocated, setTeamAllocated] = useState(null);
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -642,8 +648,12 @@ const MyWalletPage = () => {
     try {
       const result = await walletService.getBalance();
       setBalance(result.balance);
+      setOrgCredits(result.total_organisation_credits ?? null);
+      setTeamAllocated(result.allocated_to_team ?? null);
     } catch (err) {
       setBalance(null);
+      setOrgCredits(null);
+      setTeamAllocated(null);
     } finally {
       setBalanceLoading(false);
     }
@@ -876,7 +886,20 @@ const MyWalletPage = () => {
         {/* ─── Summary stat cards + Recharge button ─── */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 8 : 16, marginBottom: 16, alignItems: 'stretch' }}>
           <div data-tour="wallet-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 8 : 16, flex: 1 }}>
-            <StatCard title="Current Balance" value={balanceLoading ? '—' : (balance !== null ? formatCredits(balance) : '—')} icon={Wallet} color="var(--primary)" loading={balanceLoading} />
+            {canManageEmployeeCredits && (
+              <StatCard title="Total Organisation Credits" value={balanceLoading ? '—' : (orgCredits !== null ? formatCredits(orgCredits) : '—')} subtitle="With you + allocated to team" icon={Building2} color="var(--primary)" loading={balanceLoading} />
+            )}
+            <StatCard
+              title="Current Balance"
+              value={balanceLoading ? '—' : (balance !== null ? formatCredits(balance) : '—')}
+              subtitle={canManageEmployeeCredits ? 'With you — not yet allocated' : undefined}
+              icon={Wallet}
+              color="var(--primary)"
+              loading={balanceLoading}
+            />
+            {canManageEmployeeCredits && (
+              <StatCard title="Allocated to Team" value={balanceLoading ? '—' : (teamAllocated !== null ? formatCredits(teamAllocated) : '—')} subtitle="Given to your team, incl. unused" icon={Users} color="var(--warning)" loading={balanceLoading} />
+            )}
             <StatCard title="Credited (in range)" value={summary ? `+${formatCredits(summary.total_credit)}` : '—'} icon={TrendingUp} color="var(--success)" loading={!summary} />
             <StatCard title="Used (in range)" value={summary ? `-${formatCredits(summary.total_debit)}` : '—'} subtitle={summary?.total_refunded > 0 ? `Net of ${formatCredits(summary.total_refunded)} refunded` : undefined} icon={TrendingDown} color="var(--error)" loading={!summary} />
           </div>
@@ -948,10 +971,10 @@ const MyWalletPage = () => {
 
                 {(!isMobile || showFilters) && (
                   <>
-                    <select style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
+                    <CustomSelect style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
                       <option value="">All types</option>
                       {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    </CustomSelect>
 
                     <div style={{ display: 'flex', gap: 4 }}>
                       {PRESETS.map((p) => (

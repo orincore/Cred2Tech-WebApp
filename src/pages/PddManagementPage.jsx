@@ -9,6 +9,7 @@ import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 
+import CustomSelect from '../components/CustomSelect';
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const STATUS_TABS = ['ALL', 'PENDING', 'COLLECTED', 'WAIVED'];
@@ -358,7 +359,7 @@ export default function PddManagementPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div className="form-group">
                   <label className="form-label">Collection Status <span className="required">*</span></label>
-                  <select
+                  <CustomSelect
                     required
                     value={modalForm.status}
                     onChange={e => setModalForm({ ...modalForm, status: e.target.value })}
@@ -367,7 +368,7 @@ export default function PddManagementPage() {
                     <option value="PENDING">Pending</option>
                     <option value="COLLECTED">Collected</option>
                     {canWaive && <option value="WAIVED">Waived</option>}
-                  </select>
+                  </CustomSelect>
                 </div>
 
                 {modalForm.status === 'COLLECTED' && (

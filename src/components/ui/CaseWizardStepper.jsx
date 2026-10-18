@@ -30,7 +30,7 @@ export const SALARIED_ORIGIN_STEPS = [
  * route navigation, so effects that only run "while mounted" (PAN/GST/bureau
  * auto-fetch) stay alive across the whole journey.
  */
-export default function CaseWizardStepper({ currentStep, caseId, proposalId, onStepClick, steps = CASE_WIZARD_STEPS }) {
+export default function CaseWizardStepper({ currentStep, caseId, proposalId, consentGranted = true, onStepClick, steps = CASE_WIZARD_STEPS }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 640);
@@ -44,8 +44,19 @@ export default function CaseWizardStepper({ currentStep, caseId, proposalId, onS
   // step 7 at all, so checking step count (not array identity) correctly
   // applies the gate to every full 7-step journey, including the
   // salaried-origin relabeled variant.
+  //
+  // Step 1 is where consent is requested in the first place, so it must
+  // always stay reachable — every step past it needs consent already
+  // GRANTED. Without this, a case created to send the consent request
+  // (ensureDraftSaved creates it up front, before the customer approves
+  // anything) already has a caseId, which used to be the only thing this
+  // function checked — so clicking ahead on the stepper skipped the
+  // not-yet-approved consent gate entirely, most obviously right after a
+  // page refresh (consentGranted is only reliably known once the case
+  // reloads; before that it's easy to leave this defaulting to unlocked).
   const isStepUnlocked = (step) => {
     if (!caseId) return false;
+    if (step !== 1 && !consentGranted) return false;
     if (steps.length >= 7 && step === 7) return !!proposalId;
     return true;
   };

@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { caseService } from '../api/caseService';
+import { getUnavailableLenders } from '../api/lenderService';
+import api from '../api/axiosInstance';
+import { withRetry } from '../utils/retryFetch';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import Skeleton from '../components/ui/Skeleton';
 import MetricTile from '../components/ui/MetricTile';
+import RulebookWorkings, { RulebookDiagnostics } from '../components/esr/RulebookWorkings';
+import { methodLabel } from '../utils/methodLabel';
 import { getLenderDisplayName, isSchemeDisabledForLender } from '../constants/lenderPolicies';
 import { IS_DEV_BUILD } from '../utils/devBuild';
+import CustomSelect from '../components/CustomSelect';
+import PriceTag from '../components/PriceTag';
 import {
   CheckCircle, XCircle, RefreshCw, Calculator,
   Send, Clock, CheckCircle2, AlertCircle,
@@ -339,26 +346,6 @@ function formatTraceValue(value) {
   return String(value);
 }
 
-// Fields already shown elsewhere (top summary tiles, or rendered as their
-// own dedicated section below) — excluded from the generic catch-all so
-// nothing appears twice.
-const TRACE_HANDLED_KEYS = new Set([
-  'scheme_id', 'scheme_name', 'lender_policy_key', 'lender_policy_name', 'product_id', 'product_type',
-  'product_display_name', 'is_eligible', 'status', 'configuration_status', 'income_method_matched',
-  'manual_review_required', 'reason_code', 'ineligibility_reason', 'failure_reasons', 'warnings', 'policy_warnings',
-  'eligible_income_breakdown', 'foir_breakdown', 'dscr_breakdown',
-  'final_eligible_loan_amount', 'eligible_loan_amount', 'foir_based_eligible_loan_amount', 'ltv_based_eligible_loan_amount',
-  'requested_loan_cap', 'product_cap', 'max_loan_by_ltv',
-  'applicable_ltv_key', 'applicable_ltv_percent', 'actual_final_ltv_percent', 'property_value',
-  'monthly_income_used', 'primary_monthly_income_used', 'monthly_income_note',
-  'maximum_eligible_emi', 'max_eligible_emi', 'proposed_emi', 'foir_allowed_percent', 'foir_actual_percent',
-  'dscr_min_ratio', 'dscr_actual_ratio', 'dscr_eligible_loan_amount', 'dscr_status',
-  'final_tenure_used', 'lender_max_tenure_months', 'max_tenure_months', 'age_based_tenure_limit_months',
-  'underwriting_roi_used', 'roi_min', 'roi_max', 'pf_min', 'pf_max',
-  'hdfc_pos_deduction_entries', 'obligation_exclusion_notes', 'hdfc_unsecured_pos_deduction',
-  'surrogate_program_notes', 'raw_trace_text',
-]);
-
 function FullCalculationTrace({ ev }) {
   const income = ev.eligible_income_breakdown || [];
   const foir = ev.foir_breakdown;
@@ -368,12 +355,11 @@ function FullCalculationTrace({ ev }) {
   const [showLegacy, setShowLegacy] = useState(false);
   const [showRawTrace, setShowRawTrace] = useState(false);
 
-  const otherFields = Object.entries(ev)
-    .filter(([k, v]) => !TRACE_HANDLED_KEYS.has(k) && v !== null && v !== undefined && v !== '' && formatTraceValue(v) !== null)
-    .filter(([, v]) => !(Array.isArray(v) && v.length === 0));
 
   return (
     <div style={{ marginTop: 10 }}>
+      <details>
+        <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)', padding: '6px 0' }}>Detailed calculation workings</summary>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--warning)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
         <Zap size={11} /> FULL CALCULATION TRACE (dev build only)
       </div>
@@ -389,7 +375,13 @@ function FullCalculationTrace({ ev }) {
         <div style={TRACE_SECTION_STYLE}>
           <div style={TRACE_TITLE_STYLE}>Income Composition</div>
           {income.map((row, i) => (
-            <div key={i} style={TRACE_ROW_STYLE}>
+            <div key={i} style={{
+              ...TRACE_ROW_STYLE,
+              ...(/applicant/i.test(row.type || '') ? {
+                background: 'var(--info-bg)', padding: '8px 10px', margin: '4px 0',
+                borderLeft: '3px solid var(--info)', fontSize: 13, fontWeight: 700,
+              } : {}),
+            }}>
               <span>{row.type}{row.source ? ` (${row.source})` : ''}{row.rule ? <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)' }}>{row.rule}</div> : null}</span>
               <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{fmt(row.eligible_monthly)}{row.raw_monthly != null && row.raw_monthly !== row.eligible_monthly ? <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> (raw {fmt(row.raw_monthly)})</span> : null}</span>
             </div>
@@ -457,15 +449,6 @@ function FullCalculationTrace({ ev }) {
         <div style={{ ...TRACE_ROW_STYLE, borderBottom: 'none', fontWeight: 800 }}><span>Final eligible amount (min of the above)</span><span>{fmt(ev.final_eligible_loan_amount)}</span></div>
       </div>
 
-      {otherFields.length > 0 && (
-        <div style={TRACE_SECTION_STYLE}>
-          <div style={TRACE_TITLE_STYLE}>Other Fields</div>
-          {otherFields.map(([k, v]) => (
-            <div key={k} style={TRACE_ROW_STYLE}><span>{humanizeFieldName(k)}</span><span>{formatTraceValue(v)}</span></div>
-          ))}
-        </div>
-      )}
-
       {realWarnings.length > 0 && (
         <div style={{ ...TRACE_SECTION_STYLE, background: 'var(--warning-bg)', borderColor: 'var(--warning)' }}>
           <div style={{ ...TRACE_TITLE_STYLE, color: 'var(--warning)' }}>Warnings</div>
@@ -501,11 +484,26 @@ function FullCalculationTrace({ ev }) {
               border: '1px solid var(--border)',
               color: 'var(--text-secondary)'
             }}>
-              {ev.raw_trace_text}
+              {ev.raw_trace_text.split('\n').map((line, i) => (
+                <span key={i} style={{
+                  display: 'block', minHeight: '1.5em',
+                  ...(/STEP\s+(?:10\s*[-–—]\s*FINAL ELIGIBILITY|9A\s*[-–—]\s*COMBINED DOUBLE WHAMMY ELIGIBILITY)/i.test(line) ? {
+                    background: 'var(--info-bg)', color: 'var(--info)',
+                    borderLeft: '3px solid var(--info)', padding: '8px 10px',
+                    margin: '6px 0', fontSize: 14, fontWeight: 800,
+                  } : {}),
+                  ...(/^(?:Applicant(?: only)?(?: —| loan limit:)|Combined applicant \+ co-applicant eligibility|Applicant \+ co-applicant loan limit:|Formula:\s*Applicant available EMI\s*\+\s*Co-Applicant available EMI|Result:\s*(?:Scenario B eligibility|Applicant eligibility))/i.test(line.trim()) ? {
+                    background: 'var(--info-bg)', color: 'var(--info)',
+                    borderLeft: '3px solid var(--info)', padding: '6px 8px',
+                    margin: '4px 0', fontSize: 13, fontWeight: 700,
+                  } : {}),
+                }}>{line}</span>
+              ))}
             </pre>
           )}
         </div>
       )}
+      </details>
     </div>
   );
 }
@@ -683,7 +681,7 @@ const CalcBreakdownPanel = ({ evaluations }) => {
                       background: activeScheme === i ? 'var(--primary)' : 'transparent',
                       color: activeScheme === i ? '#fff' : 'var(--text-secondary)',
                     }}>
-                      {e.scheme_name}
+                      {methodLabel(e.scheme_name)}
                       {hasPositiveEligibility(e) ? <CheckCircle2 size={11} color={activeScheme === i ? '#fff' : 'var(--success)'} /> : <XCircle size={11} color={activeScheme === i ? '#fff' : 'var(--error)'} />}
                     </button>
                   ))}
@@ -1006,7 +1004,7 @@ export function EsrSkeleton() {
   );
 }
 
-export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onApplyForLoan }) {
+export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSalaried = false, onApplyForLoan }) {
 
   const [loading, setLoading]       = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1016,6 +1014,27 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const [lenderFilter, setLenderFilter]         = useState('all');
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [showIneligible, setShowIneligible] = useState(true);
+  const [unavailableLenders, setUnavailableLenders] = useState([]);
+  // Generate button shows this so a DSA knows the charge before clicking —
+  // MSME self-service borrowers don't see wallet-credit costs (DSA concept).
+  const [esrGenerateCost, setEsrGenerateCost] = useState(0);
+  // "Before discount" reference price for the same row — see PriceTag's own
+  // comment. Null (no admin-set discount) renders no strikethrough.
+  const [esrGenerateCostActual, setEsrGenerateCostActual] = useState(null);
+
+  useEffect(() => {
+    if (isMsme) return;
+    // ESR generation is priced per case category since 2026-10-16 (see
+    // esr.service.js) — isSalaried picks the one real row that applies.
+    const esrApiCode = isSalaried ? 'ESR_GENERATION_SALARIED' : 'ESR_GENERATION_MSME';
+    withRetry(() => api.get('/wallet/api-costs'))
+      .then(res => {
+        const row = res.data.find(d => d.api_code === esrApiCode);
+        setEsrGenerateCost(row?.tenant_cost || 0);
+        setEsrGenerateCostActual(row?.actual_cost ?? null);
+      })
+      .catch(err => console.error('Could not load ESR generation pricing', err));
+  }, [isMsme, isSalaried]);
 
   // The card list is rendered from esr.raw_payload.lenders (a debugging
   // snapshot taken before the EligibilityReportLender rows were inserted, so
@@ -1033,18 +1052,21 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setEsr(null);
       // getCaseById is a fairly heavy call (full applicant/customer income
       // sub-records) only needed to render IncomeSourcesPanel below — skip
       // it entirely outside dev builds rather than fetch data that never renders.
-      const [esrResult, proposalsResult, caseResult] = await Promise.allSettled([
+      const [esrResult, proposalsResult, caseResult, availabilityResult] = await Promise.allSettled([
         caseService.getESR(caseId),
         caseService.listProposals(caseId),
         IS_DEV_BUILD ? caseService.getCaseById(caseId) : Promise.resolve(null),
+        getUnavailableLenders(),
       ]);
       if (esrResult.status === 'fulfilled') setEsr(esrResult.value);
       else if (esrResult.reason?.response?.status !== 404) toast.error('Failed to load ESR');
       if (proposalsResult.status === 'fulfilled') setProposals(proposalsResult.value.proposals || []);
       if (caseResult.status === 'fulfilled') setCaseDetail(caseResult.value);
+      setUnavailableLenders(availabilityResult.status === 'fulfilled' && Array.isArray(availabilityResult.value) ? availabilityResult.value : []);
     } finally {
       setLoading(false);
     }
@@ -1060,6 +1082,22 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
       toast.success(`ESR generated! ${result.eligible_count} lender(s) eligible.`);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Failed to generate ESR');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // "Refresh Results" re-runs the engine over the snapshot already on the case,
+  // so it goes to /esr/recalculate and is free — only the first generation
+  // (handleGenerate, from the empty state) is a charged click.
+  const handleRefresh = async () => {
+    try {
+      setGenerating(true);
+      const result = await caseService.recalculateESR(caseId);
+      await load();
+      toast.success(`Results refreshed! ${result.eligible_count} lender(s) eligible.`);
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to refresh results');
     } finally {
       setGenerating(false);
     }
@@ -1158,7 +1196,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {esr && (
-            <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={generating}
+            <button className="btn btn-secondary btn-sm" onClick={handleRefresh} disabled={generating}
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} className={generating ? 'icon-loading' : ''} />
               {generating ? 'Refreshing...' : 'Refresh Results'}
@@ -1167,7 +1205,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
         </div>
       </motion.div>
 
-
+      <RulebookDiagnostics report={esr} />
 
       {/* No ESR yet */}
       {!esr && !generating && (
@@ -1183,12 +1221,12 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             We'll instantly check your eligibility across all our lending partners.
           </p>
           <button className="btn btn-primary btn-lg" onClick={handleGenerate} disabled={generating} style={{ padding: '14px 36px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={18} /> Check My Eligibility
+            <Zap size={18} /> {isMsme ? 'Check My Eligibility' : <PriceTag label="Check My Eligibility" actual={esrGenerateCostActual} discounted={esrGenerateCost} />}
           </button>
         </motion.div>
       )}
 
-      {IS_DEV_BUILD && esr && <IncomeSourcesPanel caseDetail={caseDetail} />}
+      {IS_DEV_BUILD && esr && !esr.raw_payload?.engine_result && <IncomeSourcesPanel caseDetail={caseDetail} />}
 
       {/* Filter bar */}
       {esr && lenders.length > 0 && (
@@ -1199,17 +1237,17 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-tertiary)', fontSize: 12, fontWeight: 700 }}>
             <ListFilter size={14} /> Filter Offers
           </div>
-          <select className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
+          <CustomSelect className="form-control" value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
             style={{ width: 'auto', minWidth: 180, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Lenders ({lenders.length})</option>
             {lenderNames.map(name => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <select className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
+          </CustomSelect>
+          <CustomSelect className="form-control" value={eligibilityFilter} onChange={e => setEligibilityFilter(e.target.value)}
             style={{ width: 'auto', minWidth: 160, padding: '9px 10px', fontSize: 13 }}>
             <option value="all">All Statuses</option>
             <option value="eligible">Eligible ({eligibleCount})</option>
             <option value="ineligible">Not Eligible ({ineligibleCount})</option>
-          </select>
+          </CustomSelect>
           {(lenderFilter !== 'all' || eligibilityFilter !== 'all') && (
             <button className="btn btn-ghost btn-sm" onClick={() => { setLenderFilter('all'); setEligibilityFilter('all'); }}>
               Clear filters
@@ -1219,6 +1257,23 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
             Showing {filteredLenders.length} of {lenders.length}
           </div>
         </div>
+      )}
+
+      {unavailableLenders.length > 0 && eligibilityFilter === 'all' && lenderFilter === 'all' && (
+        <section aria-label="Unavailable lenders" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Configured lenders unavailable for ESR</h3>
+          {unavailableLenders.map(lender => (
+            <div key={lender.id} style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', padding: 16, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{getLenderDisplayName(lender)}</strong>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Unavailable — inactive</span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 0 }}>
+                {(lender.products || []).map(p => p.product_type).join(' / ')} policies are configured, but this lender is not active for new ESR calculations. No eligibility offer is available.
+              </p>
+            </div>
+          ))}
+        </section>
       )}
 
       {/* Lenders — compact list view */}
@@ -1243,7 +1298,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{getLenderDisplayName(lender)}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                         {lender.product_display_name || lender.product_type}
-                        {eligible && lender.best_scheme_name ? ` · ${lender.best_scheme_name}` : ''}
+                        {eligible && lender.best_scheme_name ? ` · ${methodLabel(lender.best_scheme_name)}` : ''}
                       </div>
                     </div>
                   </div>
@@ -1262,7 +1317,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                       padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 700,
                       border: `1px solid ${eligible ? 'var(--success)' : 'var(--border)'}`, flexShrink: 0
                     }}>
-                      {eligible ? 'Eligible' : 'Not Eligible'}
+                      {eligible ? (esr.raw_payload?.engine_result?.provisional ? 'Provisional' : 'Eligible')
+                        : lender.engine_result?.status === 'configuration_error' ? 'Configuration error' : 'Not Eligible'}
                     </span>
                   </div>
                 </div>
@@ -1283,7 +1339,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                   ) : (
                     <div style={{ width: '100%' }}>
                       {(() => {
-                        const reasons = parseIneligibilityReasons(lender.ineligibility_reason);
+                        const reasons = lender.engine_result
+                          ? lender.engine_result.reasons.map(r => r.message)
+                          : parseIneligibilityReasons(lender.ineligibility_reason);
                         if (reasons.length === 0) {
                           // No raw reason mapped to one of the master list's canonical
                           // reasons — show nothing rather than invented/generic text.
@@ -1332,7 +1390,8 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, onAppl
                 </div>
               </div>
               <div style={{ padding: '0 16px 8px 42px' }}>
-                <CalcBreakdownPanel evaluations={lender.scheme_evaluations} />
+                {lender.engine_result ? <RulebookWorkings lender={lender.engine_result} />
+                  : <CalcBreakdownPanel evaluations={lender.scheme_evaluations} />}
               </div>
             </motion.div>
           );

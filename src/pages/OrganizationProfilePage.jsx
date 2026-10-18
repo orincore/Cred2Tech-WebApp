@@ -10,6 +10,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
 
+import CustomSelect from '../components/CustomSelect';
 // Same list CreateTenantPage offers — kept in sync there rather than shared,
 // same reasoning as EditUserPage's own local DSA_ROLE_NAMES copy.
 const companyTypeOptions = ['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP'];
@@ -399,7 +400,7 @@ const OrganizationProfilePage = () => {
               </div>
               <div>
                 <label style={labelStyle}>Company Type *</label>
-                <select
+                <CustomSelect
                   name="company_type"
                   value={form.company_type}
                   onChange={handleChange}
@@ -409,7 +410,7 @@ const OrganizationProfilePage = () => {
                 >
                   <option value="">Select Type…</option>
                   {companyTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </CustomSelect>
                 {errors.company_type && <div style={{ color: 'var(--error)', fontSize: 11, marginTop: 4 }}>{errors.company_type}</div>}
               </div>
             </div>

@@ -9,7 +9,9 @@ import { downloadDocument } from '../api/documentHelper';
 import { formatStatusLabel, isUsableEntityName } from '../utils/helpers';
 import { useCasePullStatus, usePhaseTransition } from '../hooks/useCasePullStatus';
 import { gstAuthLinkService } from '../api/gstAuthLinkService';
+import PriceTag from './PriceTag';
 
+import CustomSelect from './CustomSelect';
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
 // manually-picked range that can be set incorrectly or go stale.
@@ -23,7 +25,7 @@ const AUTO_FROM_YEAR = String(fromDate.getFullYear());
 
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
-const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
+const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantType = 'PRIMARY', applicantName = null, linkedGstins = [], onComplete, onRemoved, onboardingMode, walletBalance, gstCost, gstCostActual = null, disabled = false, prefillEmail = '', prefillMobile = '' }) => {
     // MSME self-service borrowers don't see wallet-credit costs (DSA concept)
     const isMsme = onboardingMode === 'MSME_SELF_SERVICE';
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
@@ -363,7 +365,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     // needed under a different GSTIN) — `cancel` above only works on
     // in-flight requests, there was previously no way to clear a finished one.
     const handleDeleteRequest = async (requestId) => {
-        if (!window.confirm('Remove this GST record permanently? You can pull GST data again afterwards.')) return;
+        if (!window.confirm('Delete this GST record and remove its stored files? This cannot be undone. Shared copies may be retained. You can pull GST data again afterwards.')) return;
         setDeleting(true);
         try {
             await api.post(`/external/gst/delete`, { request_id: requestId });
@@ -475,7 +477,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         <FormField label="SELECT GSTIN" required>
                             {!isManualGstin && linkedGstins && linkedGstins.length > 0 ? (
                                 <div style={{ display: 'flex', gap: 8 }}>
-                                    <select
+                                    <CustomSelect
                                         className="form-control"
                                         value={formData.gstin}
                                         onChange={e => {
@@ -494,7 +496,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                             </option>
                                         ))}
                                         <option value="__manual__">Enter manually...</option>
-                                    </select>
+                                    </CustomSelect>
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', gap: 8 }}>
@@ -618,7 +620,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     <Mail size={13} color="#4f46e5" />
                                     <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link Via</span>
                                 </div>
-                                <select
+                                <CustomSelect
                                     value={linkChannel}
                                     onChange={(e) => setLinkChannel(e.target.value)}
                                     className="form-control"
@@ -627,7 +629,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     <option value="EMAIL">Email</option>
                                     <option value="SMS">SMS</option>
                                     <option value="BOTH">Email + SMS</option>
-                                </select>
+                                </CustomSelect>
                             </div>
                             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {channelNeedsEmail && (
@@ -712,12 +714,12 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         {mode === 'AUTH_LINK' ? (
                             <>
                                 <Mail size={14} />
-                                {sendingLink ? 'Sending…' : (isMsme || !gstCost) ? 'Send Auth Link' : `Send Auth Link (~${gstCost} Cr)`}
+                                {sendingLink ? 'Sending…' : isMsme ? 'Send Auth Link' : <PriceTag label="Send Auth Link" actual={gstCostActual} discounted={gstCost} />}
                             </>
                         ) : (
                             <>
                                 <Send size={14} />
-                                {loading ? 'Creating...' : (isMsme || !gstCost) ? 'Submit' : `Submit (~${gstCost} Cr)`}
+                                {loading ? 'Creating...' : isMsme ? 'Submit' : <PriceTag label="Submit" actual={gstCostActual} discounted={gstCost} />}
                             </>
                         )}
                     </button>
@@ -817,7 +819,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     )}
                                 </div>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <select
+                                    <CustomSelect
                                         value={linkChannel}
                                         onChange={(e) => setLinkChannel(e.target.value)}
                                         className="form-control"
@@ -827,7 +829,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                         <option value="EMAIL">Email</option>
                                         <option value="SMS">SMS</option>
                                         <option value="BOTH">Email + SMS</option>
-                                    </select>
+                                    </CustomSelect>
                                     <button
                                         type="button"
                                         className="btn btn-secondary btn-sm"

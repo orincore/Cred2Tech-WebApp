@@ -12,6 +12,7 @@ import DataTable from '../components/DataTable';
 import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
 import { getDirectMsmeCases } from '../api/adminMsmeService';
 
+import CustomSelect from '../components/CustomSelect';
 // Compact mobile stat block — mirrors the sharp-border, tight-padding tiles
 // used on the Pricing/Logs pages' collapsible summary rows.
 function MiniStat({ label, value, color, loading }) {
@@ -229,7 +230,7 @@ const AdminMsmeCasesPage = () => {
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Filter size={14} color="var(--on-muted)" />
-            <select
+            <CustomSelect
               value={filterMode}
               onChange={e => setFilterMode(e.target.value)}
               style={{
@@ -240,7 +241,7 @@ const AdminMsmeCasesPage = () => {
               <option value="ALL">All Leads</option>
               <option value="ALLOCATED">Allocated</option>
               <option value="UNALLOCATED">Unallocated</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
 

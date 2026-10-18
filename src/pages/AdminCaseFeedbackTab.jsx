@@ -9,6 +9,7 @@ import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
 import { caseFeedbackService } from '../api/caseFeedbackService';
 
+import CustomSelect from '../components/CustomSelect';
 const TYPE_OPTIONS = ['FULL', 'PARTIAL'];
 const RATING_OPTIONS = [5, 4, 3, 2, 1];
 const PAGE_SIZE = 20;
@@ -145,14 +146,14 @@ const AdminCaseFeedbackTab = () => {
               style={{ ...compactField, width: '100%', paddingLeft: 26, boxSizing: 'border-box' }}
             />
           </div>
-          <select style={{ ...compactField, maxWidth: 160 }} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+          <CustomSelect style={{ ...compactField, maxWidth: 160 }} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
             <option value="">All milestones</option>
             {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t === 'FULL' ? 'Fully Disbursed' : 'Partially Disbursed'}</option>)}
-          </select>
-          <select style={{ ...compactField, maxWidth: 130 }} value={rating} onChange={(e) => { setRating(e.target.value); setPage(1); }}>
+          </CustomSelect>
+          <CustomSelect style={{ ...compactField, maxWidth: 130 }} value={rating} onChange={(e) => { setRating(e.target.value); setPage(1); }}>
             <option value="">All ratings</option>
             {RATING_OPTIONS.map((r) => <option key={r} value={r}>{r} star{r > 1 ? 's' : ''}</option>)}
-          </select>
+          </CustomSelect>
           {activeFilterCount > 0 && (
             <button onClick={clearFilters} style={{ ...compactField, border: 'none', color: 'var(--primary)', marginLeft: 'auto', cursor: 'pointer' }}>
               Clear filters ({activeFilterCount})

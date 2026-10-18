@@ -118,8 +118,10 @@ const DataPullProgress = ({
               <span className="skeleton-inline" style={{ width: 40, height: 10 }} />
             ) : status === 'FAILED' ? (
               'Retry'
+            ) : cost > 0 ? (
+              <>Pull (<span style={{ color: 'var(--error)', fontWeight: 700 }}>{cost}</span>)</>
             ) : (
-              `Pull ${cost > 0 ? `(${cost} Cr)` : ''}`
+              'Pull'
             )}
           </button>
         )}

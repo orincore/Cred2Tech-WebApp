@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
 import { getTenantSummary } from '../api/tenantService';
+import CustomSelect from '../components/CustomSelect';
 import {
   getDirectMsmeCaseDetail,
   getAllocationTargets,
@@ -256,7 +257,7 @@ const AdminMsmeCaseAllocatePage = () => {
                     <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
                       <MapPin size={12} /> State
                     </label>
-                    <select
+                    <CustomSelect
                       className="form-control"
                       value={stateFilter}
                       onChange={e => setStateFilter(e.target.value)}
@@ -264,7 +265,7 @@ const AdminMsmeCaseAllocatePage = () => {
                     >
                       <option value="">All States</option>
                       {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                 </div>
 

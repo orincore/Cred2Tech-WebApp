@@ -1,3 +1,8 @@
+export const HDFC_DEPARTMENTS = {
+  LAP: { code: 'HDFC_LAP', displayName: 'HDFC Bank - LAP' },
+  HOME_LOAN: { code: 'HDFC_HOME_LOAN', displayName: 'HDFC Bank - Home loan Department' },
+};
+
 export const BAJAJ_AFNP = {
   code: 'BAJAJ_AFNP',
   displayName: 'Bajaj Housing Finance Ltd - Near Prime & Affordable (AFNP)',
@@ -43,6 +48,13 @@ export const getLenderDisplayName = (lender = {}) => {
   const code = String(lender.code || lender.lender_code || '').toUpperCase();
   const name = String(lender.name || lender.lender_name || '').trim();
   const upperName = name.toUpperCase();
+  // The legacy HDFC code covered both products. Keep historical names intact
+  // unless the department is explicitly identified by its code or name.
+  for (const department of Object.values(HDFC_DEPARTMENTS)) {
+    if (code === department.code || upperName === department.displayName.toUpperCase()) {
+      return department.displayName;
+    }
+  }
   if (code === BAJAJ_AFNP.code || BAJAJ_NAMES.some(alias => upperName === alias || upperName.startsWith(`${alias} -`))) {
     return BAJAJ_AFNP.displayName;
   }

@@ -148,6 +148,20 @@ export const formatCompactINR = (amount) => {
   return `₹${n.toLocaleString('en-IN')}`;
 };
 
+// Format a byte count as a human-readable size (B/KB/MB/GB).
+export const formatFileSize = (bytes) => {
+  const n = Number(bytes);
+  if (!n || n <= 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = n;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
 // Get the error message from an axios error
 export const getErrorMessage = (error) => {
   return (

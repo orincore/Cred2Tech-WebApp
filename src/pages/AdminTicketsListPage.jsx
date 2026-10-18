@@ -13,6 +13,7 @@ import { roleLabel } from '../constants/roles';
 import { ticketService } from '../api/ticketService';
 import AdminCaseFeedbackTab from './AdminCaseFeedbackTab';
 
+import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -207,18 +208,18 @@ const AdminTicketsListPage = () => {
                 style={{ ...compactField, width: '100%', paddingLeft: 26, boxSizing: 'border-box' }}
               />
             </div>
-            <select style={{ ...compactField, maxWidth: 130 }} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+            <CustomSelect style={{ ...compactField, maxWidth: 130 }} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
               <option value="">All types</option>
               {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t === 'ISSUE' ? 'Issue' : 'Feedback'}</option>)}
-            </select>
-            <select style={{ ...compactField, maxWidth: 140 }} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+            </CustomSelect>
+            <CustomSelect style={{ ...compactField, maxWidth: 140 }} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
               <option value="">All statuses</option>
               {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{toTitleCase(s.replace('_', ' '))}</option>)}
-            </select>
-            <select style={{ ...compactField, maxWidth: 150 }} value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
+            </CustomSelect>
+            <CustomSelect style={{ ...compactField, maxWidth: 150 }} value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
               <option value="">All submitters</option>
               {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-            </select>
+            </CustomSelect>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="checkbox" checked={unreadOnly} onChange={(e) => { setUnreadOnly(e.target.checked); setPage(1); }} />
               Unread only

@@ -12,6 +12,7 @@ import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
 import { adminTransactionsService } from '../api/adminTransactionsService';
 
+import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -288,14 +289,14 @@ const AdminTransactionsPage = () => {
 
             {(!isMobile || showFilters) && (
               <>
-                <select style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
+                <CustomSelect style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="">All types</option>
                   {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select style={{ ...compactField, maxWidth: 140 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+                </CustomSelect>
+                <CustomSelect style={{ ...compactField, maxWidth: 140 }} value={status} onChange={(e) => setStatus(e.target.value)}>
                   <option value="">All statuses</option>
                   {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                </CustomSelect>
                 <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ ...compactField, maxWidth: 140 }} title="From date" />
                 <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ ...compactField, maxWidth: 140 }} title="To date" />
                 {activeFilterCount > 0 && (
