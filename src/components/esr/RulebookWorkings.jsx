@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { methodLabel } from '../../utils/methodLabel';
 import { Calculator, ChevronUp, ChevronDown, CheckCircle2, XCircle, IndianRupee, TrendingUp, Clock, TrendingDown, Home, Percent } from 'lucide-react';
+import { IS_DEV_BUILD } from '../../utils/devBuild';
 
 const money = value => value == null ? '—' : `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const percent = value => value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`;
@@ -126,7 +127,7 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
           <Messages label="Why this scheme is not eligible" severity="error" messages={s.reasons} />
         </div>}
         <Messages label="Warnings" severity="warning" messages={s.warnings} />
-        <details style={{ marginTop: 10 }}>
+        {IS_DEV_BUILD && <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', fontSize: 11, padding: '6px 0' }}>Detailed calculation workings</summary>
           <Metrics result={s} />
           {s.scenario && <div style={{ fontSize: 12 }}>Selected: {s.scenario}</div>}
@@ -135,7 +136,7 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
             <summary style={{ cursor: 'pointer', fontSize: 12 }}>{scenario.scenario}{scenario.chosen ? ' · Selected' : ''} · {scenario.eligible ? money(scenario.amount) : 'Not eligible'}</summary>
             <Metrics result={scenario} /><Messages label="Reasons" severity="error" messages={scenario.reasons} /><Messages label="Warnings" severity="warning" messages={scenario.warnings} /><Trace trace={scenario.trace} />
           </details>)}
-        </details>
+        </details>}
       </div>
     </div>}
   </div>;
