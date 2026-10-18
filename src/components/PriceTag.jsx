@@ -8,11 +8,13 @@ import React from 'react';
 // pricing.service.js#getTenantCostsMatrix, which is the actual/discounted
 // pair every caller of this component reads from). `discounted` missing
 // (null/undefined — no cost row resolved at all) renders the bare label with
-// no price; `discounted: 0` is a real free price and must still render (and
-// still show the strikethrough if actual > 0), so this checks `== null`
-// rather than falsiness.
+// no price; `discounted: 0` with a real `actual` is a genuine fully-discounted
+// offer and must still render the strikethrough — but `actual` and
+// `discounted` both 0 means no real price was ever set at all (not a free
+// offer), so that case renders the bare label too.
 export default function PriceTag({ label, actual, discounted }) {
   if (discounted == null) return label;
+  if (actual === 0 && discounted === 0) return label;
   const hasDiscount = actual != null && actual > discounted;
   if (!hasDiscount) {
     return (
