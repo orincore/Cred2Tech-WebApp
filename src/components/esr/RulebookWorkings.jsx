@@ -13,14 +13,18 @@ const readable = value => {
   return String(value);
 };
 
-function Messages({ messages, label }) {
+function Messages({ messages, label, severity = 'info' }) {
   if (!messages?.length) return null;
+  const color = severity === 'error' ? 'var(--error)' : severity === 'warning' ? 'var(--warning)' : 'var(--text-secondary)';
+  const icon = severity === 'error' ? '✕' : severity === 'warning' ? '⚠' : '•';
   return <div style={{ marginTop: 10 }}>
-    <strong style={{ fontSize: 12 }}>{label}</strong>
-    <ul style={{ paddingLeft: 20, margin: '6px 0', fontSize: 12, lineHeight: 1.6 }}>
-      {messages.map((m, i) => <li key={`${m.code || ''}-${i}`}><span>{m.message || String(m)}</span>
-        {m.code && <span style={{ color: 'var(--text-tertiary)' }}> ({m.code})</span>}
-        {m.affects?.length > 0 && <div style={{ color: 'var(--text-tertiary)' }}>Applies to: {m.affects.join(', ')}</div>}
+    {label && <strong style={{ fontSize: 12 }}>{label}</strong>}
+    <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0', fontSize: 12, lineHeight: 1.6 }}>
+      {messages.filter(Boolean).map((m, i) => <li key={`${m.code || ''}-${i}`} style={{ color, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        <span aria-hidden="true" style={{ flexShrink: 0 }}>{icon}</span>
+        <div><span>{typeof m === 'string' ? m : m.message}</span>
+          {m.affects?.length > 0 && <div style={{ color: 'var(--text-tertiary)' }}>Applies to: {m.affects.join(', ')}</div>}
+        </div>
       </li>)}
     </ul>
   </div>;
@@ -70,10 +74,10 @@ export function RulebookDiagnostics({ report }) {
     </div>}
     {output.partial && <p role="alert">Some configurations could not be evaluated. Review the errors below.</p>}
     {output.provisional && <p role="alert">Provisional results: verify estimated or missing loan EMIs before treating these amounts as final.</p>}
-    <Messages label="Inputs to complete" messages={[...(output.input_issues || []), ...(output.data_gaps || [])]} />
+    <Messages label="Inputs to complete" severity="warning" messages={[...(output.input_issues || []), ...(output.data_gaps || [])]} />
     <Messages label="Source notes" messages={output.adapter_notes} />
-    <Messages label="Rulebook errors" messages={output.invalid_rulebooks?.map(r => ({ message: `${r.lender || r.file}: ${r.errors.join('; ')}` }))} />
-    <Messages label="Rulebook warnings" messages={output.rulebook_warnings} />
+    <Messages label="Rulebook errors" severity="error" messages={output.invalid_rulebooks?.map(r => ({ message: `${r.lender || r.file}: ${r.errors.join('; ')}` }))} />
+    <Messages label="Rulebook warnings" severity="warning" messages={output.rulebook_warnings} />
     <Messages label="Unavailable lenders / products" messages={output.not_offered?.map(r => ({ message: `${r.lender}: ${r.reason}` }))} />
   </section>;
 }
@@ -99,6 +103,35 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
     { label: 'PF', value: s.pf_min == null && s.pf_max == null ? '—' : `${percent(s.pf_min)}–${percent(s.pf_max)}`, Icon: Percent, color: 'var(--warning)', bg: 'var(--warning-bg)' },
   ];
   return <div style={{ marginTop: 12 }}>
+    <div aria-label="Method assessment summaries">
+      {schemes.map(item => <article key={item.scheme} aria-label={`${methodLabel(item.label)} assessment`}
+        style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <strong style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span aria-hidden="true" style={{ color: item.eligible ? 'var(--success)' : 'var(--error)' }}>{item.eligible ? '✓' : '✕'}</span>
+              {methodLabel(item.label)}
+            </strong>
+            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-secondary)' }}>
+              {[
+                item.tenure_months != null && `${item.tenure_months} months`,
+                item.foir != null && `FOIR ${(item.foir * 100).toFixed(1)}%`,
+                item.emi != null && `EMI capacity ${money(item.emi)}`
+              ].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <strong style={{ fontSize: 13, color: item.eligible ? 'var(--success)' : 'var(--text-secondary)' }}>{item.eligible ? compactMoney(item.amount) : 'Not eligible'}</strong>
+            <button type="button" onClick={() => { setSelected(item.scheme); setOpen(true); }}
+              style={{ display: 'block', marginLeft: 'auto', marginTop: 3, padding: 0, border: 0, background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
+              View calculation
+            </button>
+          </div>
+        </div>
+        <Messages severity="error" messages={item.reasons} />
+        <Messages severity="warning" messages={item.warnings} />
+      </article>)}
+    </div>
     <button className="btn btn-secondary btn-sm" onClick={() => setOpen(value => !value)} aria-expanded={open}
       style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 0 }}>
       <Calculator size={12} />{open ? 'Hide Calculation' : 'View Calculation'}{open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -119,9 +152,9 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
           </div>)}
         </div>
         {!s.eligible && s.reasons?.length > 0 && <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--error-bg)', border: '1px solid var(--error)' }}>
-          <Messages label="Why this scheme is not eligible" messages={s.reasons} />
+          <Messages label="Why this scheme is not eligible" severity="error" messages={s.reasons} />
         </div>}
-        <Messages label="Warnings" messages={s.warnings} />
+        <Messages label="Warnings" severity="warning" messages={s.warnings} />
         <details style={{ marginTop: 10 }}>
           <summary style={{ cursor: 'pointer', fontSize: 11, padding: '6px 0' }}>Detailed calculation workings</summary>
           <Metrics result={s} />
@@ -129,7 +162,7 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
           <Trace trace={s.trace} />
           {(s.scenario_details || []).map((scenario, index) => <details key={index} style={{ marginTop: 12 }}>
             <summary style={{ cursor: 'pointer', fontSize: 12 }}>{scenario.scenario}{scenario.chosen ? ' · Selected' : ''} · {scenario.eligible ? money(scenario.amount) : 'Not eligible'}</summary>
-            <Metrics result={scenario} /><Messages label="Reasons" messages={scenario.reasons} /><Messages label="Warnings" messages={scenario.warnings} /><Trace trace={scenario.trace} />
+            <Metrics result={scenario} /><Messages label="Reasons" severity="error" messages={scenario.reasons} /><Messages label="Warnings" severity="warning" messages={scenario.warnings} /><Trace trace={scenario.trace} />
           </details>)}
         </details>
       </div>

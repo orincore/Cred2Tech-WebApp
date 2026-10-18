@@ -29,13 +29,36 @@ test('scheme and scenario output preserves engine amounts, workings and warnings
   const otherHtml = render(Workings, { ...props, initialScheme: 'other' });
   for (const value of ['12,34,567.89', '20,00,000', '70.00%', '65.00%', '240 months', 'Housing loan included',
     '18,729', 'Salary verification pending', 'B — together', 'Hide Calculation', 'role="tablist"']) assert.ok(html.includes(value), value);
-  assert.ok(!html.includes('DOB required'));
+  assert.ok(html.includes('DOB required')); // All methods have visible assessment summaries.
   assert.ok(otherHtml.includes('DOB required'));
   assert.ok(otherHtml.includes('Indicative amount only'));
   assert.ok(otherHtml.includes('Why this scheme is not eligible'));
   const closed = render(Workings, { lender: props.lender });
   assert.ok(closed.includes('View Calculation'));
   assert.ok(!closed.includes('role="tablist"'));
+  assert.ok(closed.includes('DOB required'));
+  assert.ok(closed.includes('Salary verification pending'));
+});
+
+test('each method shows readable rejection and ABB warning without opening calculation or displaying codes', () => {
+  const reason = 'Existing obligations exhaust the repayment capacity.';
+  const warning = 'Lender ABB definition is average of balances on 5th, 15th, 25th, 30th over 12 months; day-wise balances not available, so the platform ABB (₹9,03,561) was used.';
+  const html = render(Workings, { lender: { schemes: [
+    { scheme: 'cash_profit', label: 'Cash Profit Method', eligible: false, amount: 0,
+      reasons: [{ code: 'OBLIGATIONS_EXCEED_CAPACITY', message: reason }], warnings: [{ code: 'ABB_DEFINITION', message: warning }] },
+    { scheme: 'banking', label: 'Banking (ABB × 67%)', eligible: true, amount: 30000000,
+      reasons: [], warnings: [{ code: 'ABB_DEFINITION', message: warning }] }
+  ] } });
+  assert.ok(html.includes(reason));
+  assert.equal(html.split(warning).length - 1, 2);
+  assert.ok(html.includes('✕'));
+  assert.ok(html.includes('⚠'));
+  assert.ok(html.includes('color:var(--error)'));
+  assert.ok(html.includes('color:var(--warning)'));
+  assert.ok(!html.includes('OBLIGATIONS_EXCEED_CAPACITY'));
+  assert.ok(!html.includes('ABB_DEFINITION'));
+  assert.ok(!html.includes('ABB × 67%'));
+  assert.ok(!html.includes('role="tabpanel"'));
 });
 
 test('provisional results, input gaps and configuration errors remain visible', () => {
