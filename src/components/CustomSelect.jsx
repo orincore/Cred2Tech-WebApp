@@ -127,7 +127,7 @@ const CustomSelect = ({
       if (!opt || opt.disabled) return;
       if (String(opt.value) !== String(value ?? '')) {
         onChange?.({
-          target: { name, value: opt.value, type: 'select-one' },
+          target: { name, value: String(opt.value), type: 'select-one' },
           type: 'change',
           preventDefault() {},
           stopPropagation() {},
