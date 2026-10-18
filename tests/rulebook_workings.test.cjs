@@ -29,28 +29,30 @@ test('scheme and scenario output preserves engine amounts, workings and warnings
   const otherHtml = render(Workings, { ...props, initialScheme: 'other' });
   for (const value of ['12,34,567.89', '20,00,000', '70.00%', '65.00%', '240 months', 'Housing loan included',
     '18,729', 'Salary verification pending', 'B — together', 'Hide Calculation', 'role="tablist"']) assert.ok(html.includes(value), value);
-  assert.ok(html.includes('DOB required')); // All methods have visible assessment summaries.
+  assert.ok(!html.includes('DOB required'));
   assert.ok(otherHtml.includes('DOB required'));
   assert.ok(otherHtml.includes('Indicative amount only'));
   assert.ok(otherHtml.includes('Why this scheme is not eligible'));
   const closed = render(Workings, { lender: props.lender });
   assert.ok(closed.includes('View Calculation'));
   assert.ok(!closed.includes('role="tablist"'));
-  assert.ok(closed.includes('DOB required'));
-  assert.ok(closed.includes('Salary verification pending'));
+  assert.ok(!closed.includes('DOB required'));
+  assert.ok(!closed.includes('Salary verification pending'));
+  assert.ok(!closed.includes('Method assessment summaries'));
 });
 
-test('each method shows readable rejection and ABB warning without opening calculation or displaying codes', () => {
+test('selected calculation tab shows readable rejection and ABB warning without external summaries or codes', () => {
   const reason = 'Existing obligations exhaust the repayment capacity.';
   const warning = 'Lender ABB definition is average of balances on 5th, 15th, 25th, 30th over 12 months; day-wise balances not available, so the platform ABB (₹9,03,561) was used.';
-  const html = render(Workings, { lender: { schemes: [
+  const props = { initiallyOpen: true, initialScheme: 'cash_profit', lender: { schemes: [
     { scheme: 'cash_profit', label: 'Cash Profit Method', eligible: false, amount: 0,
       reasons: [{ code: 'OBLIGATIONS_EXCEED_CAPACITY', message: reason }], warnings: [{ code: 'ABB_DEFINITION', message: warning }] },
     { scheme: 'banking', label: 'Banking (ABB × 67%)', eligible: true, amount: 30000000,
       reasons: [], warnings: [{ code: 'ABB_DEFINITION', message: warning }] }
-  ] } });
+  ] } };
+  const html = render(Workings, props);
   assert.ok(html.includes(reason));
-  assert.equal(html.split(warning).length - 1, 2);
+  assert.equal(html.split(warning).length - 1, 1);
   assert.ok(html.includes('✕'));
   assert.ok(html.includes('⚠'));
   assert.ok(html.includes('color:var(--error)'));
@@ -58,7 +60,15 @@ test('each method shows readable rejection and ABB warning without opening calcu
   assert.ok(!html.includes('OBLIGATIONS_EXCEED_CAPACITY'));
   assert.ok(!html.includes('ABB_DEFINITION'));
   assert.ok(!html.includes('ABB × 67%'));
-  assert.ok(!html.includes('role="tabpanel"'));
+  assert.ok(html.includes('role="tabpanel"'));
+  assert.ok(!html.includes('Method assessment summaries'));
+  assert.ok(!html.includes('<article'));
+  const banking = render(Workings, { ...props, initialScheme: 'banking' });
+  assert.ok(banking.includes(warning));
+  assert.ok(!banking.includes(reason));
+  const closed = render(Workings, { lender: props.lender });
+  assert.ok(!closed.includes(reason));
+  assert.ok(!closed.includes(warning));
 });
 
 test('provisional results, input gaps and configuration errors remain visible', () => {

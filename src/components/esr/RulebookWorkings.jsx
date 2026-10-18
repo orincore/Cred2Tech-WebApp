@@ -103,35 +103,6 @@ export default function RulebookWorkings({ lender, initiallyOpen = false, initia
     { label: 'PF', value: s.pf_min == null && s.pf_max == null ? '—' : `${percent(s.pf_min)}–${percent(s.pf_max)}`, Icon: Percent, color: 'var(--warning)', bg: 'var(--warning-bg)' },
   ];
   return <div style={{ marginTop: 12 }}>
-    <div aria-label="Method assessment summaries">
-      {schemes.map(item => <article key={item.scheme} aria-label={`${methodLabel(item.label)} assessment`}
-        style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div>
-            <strong style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span aria-hidden="true" style={{ color: item.eligible ? 'var(--success)' : 'var(--error)' }}>{item.eligible ? '✓' : '✕'}</span>
-              {methodLabel(item.label)}
-            </strong>
-            <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-secondary)' }}>
-              {[
-                item.tenure_months != null && `${item.tenure_months} months`,
-                item.foir != null && `FOIR ${(item.foir * 100).toFixed(1)}%`,
-                item.emi != null && `EMI capacity ${money(item.emi)}`
-              ].filter(Boolean).join(' · ')}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <strong style={{ fontSize: 13, color: item.eligible ? 'var(--success)' : 'var(--text-secondary)' }}>{item.eligible ? compactMoney(item.amount) : 'Not eligible'}</strong>
-            <button type="button" onClick={() => { setSelected(item.scheme); setOpen(true); }}
-              style={{ display: 'block', marginLeft: 'auto', marginTop: 3, padding: 0, border: 0, background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
-              View calculation
-            </button>
-          </div>
-        </div>
-        <Messages severity="error" messages={item.reasons} />
-        <Messages severity="warning" messages={item.warnings} />
-      </article>)}
-    </div>
     <button className="btn btn-secondary btn-sm" onClick={() => setOpen(value => !value)} aria-expanded={open}
       style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 0 }}>
       <Calculator size={12} />{open ? 'Hide Calculation' : 'View Calculation'}{open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
