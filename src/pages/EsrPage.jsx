@@ -1205,7 +1205,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
         </div>
       </motion.div>
 
-      <RulebookDiagnostics report={esr} />
+      {IS_DEV_BUILD && <RulebookDiagnostics report={esr} />}
 
       {/* No ESR yet */}
       {!esr && !generating && (
