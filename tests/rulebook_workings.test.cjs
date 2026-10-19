@@ -11,6 +11,11 @@ const compiled = esbuild.transformSync(fs.readFileSync(filename, 'utf8'), { load
 const component = new Module(filename, module);
 component.filename = filename;
 component.paths = Module._nodeModulePaths(path.dirname(filename));
+// Match Vite's development environment when rendering debug diagnostics in Node.
+component.require = function (id) {
+  if (id === '../../utils/devBuild') return { IS_DEV_BUILD: true };
+  return Module.prototype.require.call(this, id);
+};
 component._compile(compiled, filename);
 const { default: Workings, RulebookDiagnostics } = component.exports;
 const render = (Type, props) => renderToStaticMarkup(React.createElement(Type, props));
