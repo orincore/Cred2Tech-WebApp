@@ -1168,7 +1168,7 @@ const DSARegisterPage = () => {
                 light/dark wipe) makes the hop between the two pages a
                 cross-fade instead of a hard reload. */}
             {step === 1 && (
-              <div className="flex justify-center md:justify-start mb-8">
+              <div className="flex justify-center mb-8">
                 <div className="inline-flex p-1 rounded-[12px]" style={{ background: 'var(--bg-elevated)' }}>
                   <button
                     type="button"
