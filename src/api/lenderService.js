@@ -72,3 +72,8 @@ export const updateSchemeParameter = async (schemeId, parameterId, valuePayload)
   });
   return data;
 };
+
+export const updateProductMatrix = async (productId, changes) => {
+  const { data } = await api.put(`/admin/lenders/products/${productId}/matrix`, { changes });
+  return data;
+};

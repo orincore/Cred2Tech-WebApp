@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { publicRegisterDSA, publicLookupPan, sendDsaVerificationOtp, confirmDsaVerificationOtp } from '../api/tenantService';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import PartnerBadgeArt from '../components/PartnerBadgeArt';
+import { viewTransitionNavigate } from '../lib/viewTransitionNavigate';
 import { countries } from '../lib/countries';
 
 const initialForm = {
@@ -475,7 +477,7 @@ const DsaAgreementPreviewModal = ({ dsaName, adminName, address, mobile, email, 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">Sourcing Partner Agreement — Preview</h3>
+          <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">Sourcing Partner Agreement preview</h3>
           <button onClick={onClose} className="material-symbols-outlined text-[20px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 cursor-pointer hover:text-[#0a1628] dark:hover:text-[#e6edf7]">close</button>
         </div>
         <div className="px-5 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border-b border-[#c7d2fe]/60 dark:border-[#2d3a6c] shrink-0">
@@ -1064,7 +1066,7 @@ const DSARegisterPage = () => {
                 {/* Step Circle */}
                 <div
                   className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 ease-out z-10
-                    ${isActive ? 'bg-white border-white scale-110 shadow-[0_0_20px_rgba(255,255,255,0.3)] text-indigo-600' :
+                    ${isActive ? 'bg-white border-white scale-110 text-indigo-600' :
                       isCompleted ? 'bg-white/90 border-white/90 text-indigo-600' : 'bg-[#4f46e5] dark:bg-[#312e81] border-white/30 text-white/40'}`}
                 >
                   {isCompleted ? (
@@ -1092,7 +1094,7 @@ const DSARegisterPage = () => {
 
               {/* Right Column: Text */}
               <div className={`flex flex-col justify-start ${isLast ? '' : 'pb-10'} transition-transform duration-500 ease-out`} style={{ transform: isActive ? 'translateX(4px)' : 'translateX(0)' }}>
-                <div className={`text-[10px] font-bold tracking-[0.15em] uppercase transition-colors duration-300 mb-0.5 mt-0.5 ${isActive ? 'text-indigo-200' : isCompleted ? 'text-white/60' : 'text-white/30'}`}>
+                <div className={`text-[11px] font-semibold transition-colors duration-300 mb-0.5 mt-0.5 ${isActive ? 'text-indigo-200' : isCompleted ? 'text-white/60' : 'text-white/30'}`}>
                   Step {s.num}
                 </div>
                 <div className={`text-[16px] transition-all duration-300 leading-tight ${isActive ? 'text-white font-bold' : isCompleted ? 'text-white/90 font-semibold' : 'text-white/40 font-medium'}`}>
@@ -1115,46 +1117,87 @@ const DSARegisterPage = () => {
           overflow-x: hidden;
         }
       `}</style>
-      <div className="min-h-screen flex flex-col md:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
+      <div className="min-h-screen flex flex-col lg:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
 
-        {/* Left Sidebar - Hidden on small screens, takes 40% on desktop */}
-        <div className="hidden md:flex flex-col w-2/5 max-w-[480px] bg-indigo-600 dark:bg-indigo-900 relative overflow-hidden shrink-0">
-          <div className="p-10 flex-1 z-10">
+        {/* Left Sidebar - hidden below lg, same width as the login page's
+            brand panel (lg:w-[42%] lg:max-w-[520px]) so the two screens of
+            the auth flow read as one shell. Flat fill (no gradient), the
+            same dot-grid and ring watermark kit as the login page.
+            taste-skill-ignore: brand indigo, kept per --keep palette */}
+        <div className="hidden lg:flex lg:w-[42%] lg:max-w-[520px] flex-col bg-[#4F46E5] dark:bg-[#1e1b4b] relative overflow-hidden shrink-0">
+          <svg className="absolute inset-0 w-full h-full opacity-[0.1]" aria-hidden="true">
+            <pattern id="registerDotGrid" width="26" height="26" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.6" fill="#ffffff" />
+            </pattern>
+            <rect width="100%" height="100%" fill="url(#registerDotGrid)" />
+          </svg>
+          <svg className="absolute -bottom-24 -left-28 w-[480px] h-[480px] opacity-[0.07]" viewBox="0 0 480 480" aria-hidden="true">
+            <circle cx="240" cy="240" r="238" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+            <circle cx="240" cy="240" r="190" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+          </svg>
+
+          <div className="relative z-10 p-10 flex-1">
             <div className="mb-8">
-              <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
+              <Logo size="xlarge" className="brightness-0 invert" />
             </div>
             {renderStepIndicator()}
           </div>
-          {/* Illustration at bottom */}
-          <div className="relative mt-auto w-full flex items-end justify-center pointer-events-none pb-8 pt-12 overflow-hidden">
-            <img src="/lottie/registration.gif" alt="Registration" className="w-full max-w-[420px] object-contain opacity-90 scale-125 origin-bottom translate-y-2" />
-            <div className="absolute inset-0 bg-gradient-to-t from-indigo-600 dark:from-indigo-900 via-transparent to-transparent opacity-60" />
+          {/* Brand graphic at bottom, flat, no stock art and no gradient scrim */}
+          <div className="relative z-10 mt-auto w-full flex items-end justify-center pointer-events-none pb-10 pt-12">
+            <PartnerBadgeArt className="w-full max-w-[300px]" />
           </div>
         </div>
 
         {/* Right Content */}
         <div className="flex-1 flex flex-col relative h-screen overflow-y-auto">
-          {/* Mobile Header */}
-          <div className="flex md:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+          {/* Mobile / tablet header */}
+          <div className="flex lg:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
             <Logo size="large" />
             <ThemeToggle />
           </div>
 
-          {/* Desktop Theme Toggle */}
-          <div className="hidden md:flex absolute top-6 right-6 z-50">
+          {/* Desktop Theme Toggle, same top-8 right-8 position as the login page */}
+          <div className="hidden lg:flex absolute top-8 right-8 z-50">
             <ThemeToggle />
           </div>
 
-          <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 md:py-16 max-w-3xl mx-auto w-full mt-4 md:mt-0">
+          <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 md:py-16 max-w-3xl mx-auto w-full mt-4 lg:mt-0">
+            {/* Login / Register: the same switch the login page carries, so
+                the two halves of the auth flow stay one piece of navigation.
+                A view transition (same primitive ThemeToggle uses for its
+                light/dark wipe) makes the hop between the two pages a
+                cross-fade instead of a hard reload. */}
+            {step === 1 && (
+              <div className="flex justify-center mb-8">
+                <div className="inline-flex p-1 rounded-[12px]" style={{ background: 'var(--bg-elevated)' }}>
+                  <button
+                    type="button"
+                    onClick={() => viewTransitionNavigate(navigate, '/login')}
+                    className="px-5 py-2 rounded-[9px] text-[13px] font-semibold transition-colors hover:opacity-80"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Login
+                  </button>
+                  <span
+                    aria-current="page"
+                    className="px-5 py-2 rounded-[9px] text-[13px] font-semibold"
+                    style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                  >
+                    Register
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Back Button */}
             {step > 1 ? (
-              <button onClick={prevStep} type="button" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider text-sm mb-8 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors w-fit">
+              <button onClick={prevStep} type="button" className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm mb-8 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors w-fit">
                 <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                 {step === 2 && 'Business Identity'}
                 {step === 3 && 'Address & Coverage'}
               </button>
             ) : (
-              <div className="h-12 mb-8 md:block hidden"></div>
+              <div className="h-4 mb-8 md:block hidden"></div>
             )}
 
             {/* Success & API Error */}
@@ -1179,7 +1222,7 @@ const DSARegisterPage = () => {
                 {step === 3 && 'Create your admin account'}
               </h2>
               <p className="text-[15px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
-                {step === 1 && 'Start with your PAN — we\'ll auto-fill your business details from it.'}
+                {step === 1 && 'Start with your PAN, we\'ll auto-fill your business details from it.'}
                 {step === 2 && 'Confirm your registered address and pick the states you service.'}
                 {step === 3 && 'This will be your Sourcing Partner Admin login, using the business email and mobile above. You can add team members later.'}
               </p>
@@ -1220,7 +1263,7 @@ const DSARegisterPage = () => {
                       </div>
                       {errors.pan_number && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.pan_number}</span>}
                       {!errors.pan_number && panLookup.status === 'loading' && <span className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-1.5 block">Fetching your business details…</span>}
-                      {!errors.pan_number && panLookup.status === 'done' && <span className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1.5 block">Details auto-filled below — please review.</span>}
+                      {!errors.pan_number && panLookup.status === 'done' && <span className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1.5 block">Details auto-filled below, please review.</span>}
                       {!errors.pan_number && panLookup.status === 'error' && <span className="text-[11px] text-amber-600 dark:text-amber-500 mt-1.5 block">{panLookup.error}</span>}
                     </div>
                     <div className="md:col-span-2">
@@ -1294,7 +1337,7 @@ const DSARegisterPage = () => {
                     {gstRecords.length > 0 && (
                       <div>
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-2.5">
-                          We found {gstRecords.length > 1 ? 'these GST registrations' : 'a GST registration'} linked to your PAN — pick your registered address
+                          We found {gstRecords.length > 1 ? 'these GST registrations' : 'a GST registration'} linked to your PAN, pick your registered address
                         </label>
                         <div className="flex flex-col gap-2.5">
                           {gstRecords.map((r) => (
@@ -1320,7 +1363,7 @@ const DSARegisterPage = () => {
                             <span className={`material-symbols-outlined text-[20px] shrink-0 ${selectedGstin === 'manual' ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
                               {selectedGstin === 'manual' ? 'radio_button_checked' : 'radio_button_unchecked'}
                             </span>
-                            <span className="text-[13px] font-semibold text-[#0a1628] dark:text-[#e6edf7]">None of these — I'll enter my address manually</span>
+                            <span className="text-[13px] font-semibold text-[#0a1628] dark:text-[#e6edf7]">None of these, I'll enter my address manually</span>
                           </div>
                         </div>
                       </div>
@@ -1370,7 +1413,7 @@ const DSARegisterPage = () => {
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Operational States *</label>
-                        <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">States you provide Sourcing Partner service in — used to match you with leads in the admin panel.</p>
+                        <p className="text-[11px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 mb-2">States you provide Sourcing Partner service in, used to match you with leads in the admin panel.</p>
                         <MultiSelectDropdown
                           value={form.operational_states}
                           onChange={(vals) => { setForm((p) => ({ ...p, operational_states: vals })); setErrors((p) => ({ ...p, operational_states: '' })); }}
@@ -1477,22 +1520,12 @@ const DSARegisterPage = () => {
                   solid
                   showIcon={false}
                   size="md"
-                  className="w-full py-4 text-[15px] flex items-center justify-center font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-4 text-[15px] flex items-center justify-center font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Processing…' : isPincodeFetching ? 'Fetching Address…' : step === 3 ? 'Register Now' : 'Continue'}
                 </TravelingBorderButton>
-
-                {step === 1 && (
-                  <p className="text-center text-sm mt-6 text-[#0a1628] dark:text-[#e6edf7] font-medium">
-                    Already have an account?{' '}
-                    <Link
-                      to="/login"
-                      className="font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                    >
-                      Sign in here
-                    </Link>
-                  </p>
-                )}
+                {/* "Already have an account? Sign in here" is now covered by
+                    the Login / Register tab above step 1, so it isn't repeated here. */}
               </div>
             </form>
           </div>

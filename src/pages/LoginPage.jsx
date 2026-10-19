@@ -7,6 +7,8 @@ import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import LoanJourneyArt from '../components/LoanJourneyArt';
+import { viewTransitionNavigate } from '../lib/viewTransitionNavigate';
 
 const LoginPage = () => {
   const { login, applyTrustedDeviceLogin, isAuthenticated } = useAuth();
@@ -26,7 +28,7 @@ const LoginPage = () => {
   }, []);
 
   // ProtectedRoute redirects unauthenticated visits to a deep link here with
-  // state.from set to the page they were trying to reach — send them back
+  // state.from set to the page they were trying to reach, send them back
   // there instead of the dashboard so a shared/bookmarked URL still works
   // after the login detour.
   const redirectTarget = location.state?.from
@@ -49,7 +51,7 @@ const LoginPage = () => {
     try {
       const result = await login(email, password);
       setLoginState('success');
-      // Every account now requires MFA — login() never returns a logged-in
+      // Every account now requires MFA. login() never returns a logged-in
       // user directly, UNLESS this exact browser presented a still-valid
       // "trust this device" cookie for this exact account (result.loginComplete),
       // in which case the backend already skipped straight to a real
@@ -78,7 +80,7 @@ const LoginPage = () => {
       setLoginState('error');
       setTimeout(() => setLoginState('idle'), 1200);
       // Account-owner "Ban Device" (Active Sessions, Profile page) rejects
-      // this IP before the password is even checked — the backend flags it
+      // this IP before the password is even checked, the backend flags it
       // with code DEVICE_BLOCKED so this gets its own dedicated popup
       // instead of the plain inline error banner, and never proceeds to a
       // signed-in state.
@@ -97,181 +99,228 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
+    <div className="min-h-screen lg:flex font-sans" style={{ background: 'var(--bg-base)' }}>
 
-      {/* Left Sidebar - Hidden on small screens, takes 40% on desktop */}
-      <div className="hidden md:flex flex-col w-2/5 max-w-[480px] bg-indigo-600 dark:bg-indigo-900 relative overflow-hidden shrink-0">
-        <div className="p-10 flex flex-col h-full z-10">
-          <div className="mb-8">
-            <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
-          </div>
+      {/* Brand panel, large tablets and desktop only. Flat fill, no gradient.
+          Colour is Cred2Tech's own brand indigo (var(--primary) across the
+          app), kept intentionally rather than swapped for a neutral.
+          taste-skill-ignore: brand indigo, not a generated-page default. */}
+      <aside className="hidden lg:flex lg:w-[42%] lg:max-w-[520px] relative flex-col shrink-0 overflow-hidden bg-[#4F46E5] dark:bg-[#1e1b4b]">{/* taste-skill-ignore: brand indigo, kept per --keep palette */}
+        <svg className="absolute inset-0 w-full h-full opacity-[0.1]" aria-hidden="true">
+          <pattern id="loginDotGrid" width="26" height="26" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.6" fill="#ffffff" />
+          </pattern>
+          <rect width="100%" height="100%" fill="url(#loginDotGrid)" />
+        </svg>
+        {/* Large flat seal, pure depth through overlap, no blur or gradient */}
+        <svg className="absolute -bottom-24 -left-28 w-[480px] h-[480px] opacity-[0.07]" viewBox="0 0 480 480" aria-hidden="true">
+          <circle cx="240" cy="240" r="238" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+          <circle cx="240" cy="240" r="190" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+        </svg>
 
-          <div className="mt-12 text-white">
-            <h2 className="text-3xl font-bold leading-tight mb-4">
+        <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
+          <Logo size="xlarge" className="brightness-0 invert" />
+
+          <div className="mt-14 xl:mt-20">
+            <h2 className="text-[38px] xl:text-[44px] font-bold leading-[1.08] mb-4 text-white">
               Welcome Back
             </h2>
-            <p className="text-indigo-100 text-[15px] leading-relaxed opacity-90">
+            <p className="text-[16px] leading-relaxed max-w-[360px] text-white/80">
               Sign in to manage your fintech pipeline, track applications, and access enterprise-grade analytics seamlessly.
             </p>
           </div>
 
-          <div className="relative mt-auto w-full flex items-center justify-center flex-1">
-            <lottie-player
-              src="/lottie/into.json"
-              background="transparent"
-              speed="1"
-              loop
-              autoplay
-              style={{ width: '130%', height: '130%', filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.1))', transform: 'scale(1.2)' }}
-              className="relative z-10"
-            />
+          <div className="flex-1 flex items-end justify-center pb-6">
+            <LoanJourneyArt className="w-full max-w-[380px] xl:max-w-[430px]" />
           </div>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-indigo-800/50 dark:from-black/40 via-transparent to-transparent pointer-events-none z-20" />
-      </div>
+      </aside>
 
-      {/* Right Content */}
-      <div className="flex-1 flex flex-col relative h-screen overflow-y-auto">
-        {/* Mobile Header */}
-        <div className="flex md:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
-          <Logo size="large" />
+      {/* Form column */}
+      <div className="flex-1 flex flex-col min-h-screen relative overflow-hidden">
+        {/* Large flat seal, echoing the brand panel's mark, anchoring the
+            otherwise-empty lower corner with depth instead of a gradient. */}
+        <svg className="hidden lg:block absolute -bottom-28 -right-24 w-[420px] h-[420px] opacity-[0.035] pointer-events-none" viewBox="0 0 480 480" aria-hidden="true">
+          <circle cx="240" cy="240" r="238" fill="none" stroke="#4F46E5" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
+          <circle cx="240" cy="240" r="190" fill="none" stroke="#4F46E5" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
+        </svg>
+
+        {/* Mobile / tablet top bar */}
+        <div className="flex lg:hidden items-center justify-between px-5 sm:px-8 h-16 shrink-0">
+          <Logo size="medium" />
           <ThemeToggle />
         </div>
 
-        {/* Desktop Theme Toggle */}
-        <div className="hidden md:flex absolute top-6 right-6 z-50">
+        {/* Desktop toggle */}
+        <div className="hidden lg:flex absolute top-8 right-8 z-10">
           <ThemeToggle />
         </div>
 
-        <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center max-w-xl mx-auto w-full">
-          <div className="mb-10">
-            <h1 className="text-[28px] md:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-              Sign In
-            </h1>
-            <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] md:text-[15px]">
-              Access your secure Cred2Tech portal
-            </p>
-          </div>
-
-          {/* Error banner */}
-          {apiError && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
-              <span className="material-symbols-outlined text-[15px]">error</span>
-              {apiError}
-            </div>
-          )}
-
-          {/* Form Fields */}
-          <div className="space-y-8 mb-8">
-            {/* Email */}
-            <div>
-              <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Email *</label>
-              <div className="flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => { setEmail(e.target.value); setApiError(''); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="name@company.com"
-                  className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div className="relative">
-              <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Password *</label>
-              <div className="relative flex items-center pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-                <input
-                  type={showPwd ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setApiError(''); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="••••••••"
-                  className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 pr-8 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
-                />
+        <div className="flex-1 flex flex-col px-5 sm:px-8 pt-6 sm:pt-10 pb-10 lg:justify-center lg:pt-0 lg:pb-16">
+          <div className="w-full max-w-[400px] mx-auto">
+            {/* Login / Register: a DSA partner who landed here by mistake
+                switches without a back-and-forth through two separate pages. */}
+            <div className="flex justify-center mb-7">
+              <div className="inline-flex p-1 rounded-[12px]" style={{ background: 'var(--bg-elevated)' }}>
                 <button
-                  onClick={() => setShowPwd(p => !p)}
                   type="button"
-                  className="absolute right-0 text-[#0a1628] dark:text-[#e6edf7] hover:text-indigo-600 transition-colors bg-transparent border-0 flex cursor-pointer"
+                  aria-current="page"
+                  className="px-5 py-2 rounded-[9px] text-[13px] font-semibold transition-colors"
+                  style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                 >
-                  <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                  Login
                 </button>
-              </div>
-              <div className="flex justify-end mt-2">
                 <button
-                  className="text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-transparent border-0 cursor-pointer"
                   type="button"
-                  onClick={() => navigate('/forgot-password')}
+                  onClick={() => viewTransitionNavigate(navigate, '/register-dsa')}
+                  className="px-5 py-2 rounded-[9px] text-[13px] font-semibold transition-colors hover:opacity-80"
+                  style={{ color: 'var(--text-secondary)' }}
                 >
-                  Forgot password?
+                  Register
                 </button>
               </div>
             </div>
-          </div>
 
-          <TravelingBorderButton
-            onClick={handleLogin}
-            disabled={loginState === 'loading'}
-            className="w-full py-3.5 text-[15px] rounded-[10px]"
-          >
-            {loginState === 'loading' ? (
-              <div className="flex justify-center items-center w-full h-full">
-                <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
-              </div>
-            ) : loginState === 'success' ? (
-              <div className="flex items-center justify-center gap-2 w-full h-full">
-                <span className="material-symbols-outlined text-[18px]">check</span>
-                <span>Access Granted</span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 w-full h-full">
-                <span>Sign In</span>
+            <div className="mb-8 lg:mb-10 relative">
+              <h1 className="text-[28px] sm:text-[30px] lg:text-[34px] font-bold tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>
+                Sign In
+              </h1>
+              <p className="text-[14px] sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
+                Access your secure Cred2Tech portal
+              </p>
+            </div>
+
+            {/* Error banner */}
+            {apiError && (
+              <div
+                className="flex items-center gap-2 px-3.5 py-3 rounded-[10px] mb-6 text-[13px] font-medium"
+                style={{ background: 'var(--error-bg)', color: 'var(--error)' }}
+              >
+                <span className="material-symbols-outlined text-[16px]">error</span>
+                {apiError}
               </div>
             )}
-          </TravelingBorderButton>
 
-          <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <p className="text-[13px] text-[#0a1628] dark:text-[#e6edf7] font-medium">
-              New to the platform?
-              <button
-                className="text-indigo-600 dark:text-indigo-400 font-bold ml-1 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors cursor-pointer bg-transparent border-0"
-                onClick={() => navigate('/register-dsa')}
-              >
-                Register as Partner
-              </button>
-            </p>
-            <button
-              onClick={() => navigate('/msme/login')}
-              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-[10px] border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[14px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer"
+            {/* Form fields, no outer box, the underline carries the field
+                to match how every other form in the product is built. */}
+            <div className="flex flex-col gap-6 mb-8">
+              <div className="form-group">
+                <label className="form-label" htmlFor="login-email">
+                  Email<span className="required">*</span>
+                </label>
+                <div className="relative flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] shrink-0" style={{ color: 'var(--text-tertiary)' }}>mail</span>
+                  <input
+                    id="login-email"
+                    type="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); setApiError(''); }}
+                    onKeyDown={handleKeyDown}
+                    placeholder="name@company.com"
+                    autoComplete="username"
+                    className="form-control"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <div className="flex items-center justify-between">
+                  <label className="form-label" htmlFor="login-password">
+                    Password<span className="required">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/forgot-password')}
+                    className="text-[13px] font-semibold hover:underline"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] shrink-0" style={{ color: 'var(--text-tertiary)' }}>lock</span>
+                  <input
+                    id="login-password"
+                    type={showPwd ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setApiError(''); }}
+                    onKeyDown={handleKeyDown}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    className="form-control"
+                    style={{ paddingRight: 28 }}
+                  />
+                  <button
+                    onClick={() => setShowPwd(p => !p)}
+                    type="button"
+                    aria-label={showPwd ? 'Hide password' : 'Show password'}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 flex hover:opacity-70 transition-opacity"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{showPwd ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <TravelingBorderButton
+              onClick={handleLogin}
+              disabled={loginState === 'loading'}
+              solid
+              className="w-full py-3.5 text-[15px] rounded-[10px]"
             >
-              <span className="material-symbols-outlined text-[17px]">storefront</span>
-              MSME Borrower? Login with OTP
-            </button>
+              {loginState === 'loading' ? (
+                <div className="flex justify-center items-center w-full h-full">
+                  <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
+                </div>
+              ) : loginState === 'success' ? (
+                <div className="flex items-center justify-center gap-2 w-full h-full">
+                  <span className="material-symbols-outlined text-[18px]">check</span>
+                  <span>Access Granted</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 w-full h-full">
+                  <span>Sign In</span>
+                </div>
+              )}
+            </TravelingBorderButton>
+
+            <div className="mt-8 text-center">
+              {/* "New to the platform? Register as Partner" is now covered by
+                  the Login / Register tab above, so it isn't repeated here. */}
+              <button
+                onClick={() => navigate('/msme/login')}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] text-[14px] font-bold transition-colors hover:brightness-95"
+                style={{ background: 'var(--primary-subtle)', color: 'var(--primary)' }}
+              >
+                <span className="material-symbols-outlined text-[17px]">storefront</span>
+                MSME Borrower? Login with OTP
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Device blocked popup — account owner used "Ban Device" on this
+      {/* Device blocked popup. Account owner used "Ban Device" on this
           device/IP from Active Sessions (Profile page). Deliberately its own
           modal, not the inline error banner, and never lets sign-in proceed. */}
       {deviceBlocked && (
         <div
-          className="fixed inset-0 flex items-center justify-center z-[1000] bg-black/50"
+          className="fixed inset-0 flex items-center justify-center z-[1000] bg-black/50 px-4"
           style={{ backdropFilter: 'blur(4px)' }}
         >
-          <div className="bg-white dark:bg-[#162048] rounded-[20px] shadow-2xl p-8 max-w-[400px] w-[90%] text-center">
-            <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-5">
-              <span className="material-symbols-outlined text-[32px] text-red-600">block</span>
+          <div className="rounded-[20px] shadow-2xl p-8 max-w-[400px] w-full text-center" style={{ background: 'var(--bg-surface)' }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: 'var(--error-bg)' }}>
+              <span className="material-symbols-outlined text-[32px]" style={{ color: 'var(--error)' }}>block</span>
             </div>
-            <h3 className="text-xl font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">
+            <h3 className="text-xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
               This device is blocked
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+            <p className="text-sm mb-6 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               This device has been blocked by the account owner.
               If you feel your account has been taken over by somebody else,
               contact us at{' '}
-              <a href="mailto:support@cred2tech.com" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+              <a href="mailto:support@cred2tech.com" className="font-semibold hover:underline" style={{ color: 'var(--primary)' }}>
                 support@cred2tech.com
               </a>.
             </p>

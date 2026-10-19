@@ -9,6 +9,12 @@ import { ThemeToggle } from '../../components/ThemeToggle';
 import Logo from '../../components/Logo';
 import TravelingBorderButton from '../../components/TravelingBorderButton';
 import OtpInput from '../../components/OtpInput';
+import EligibilityMeterArt from '../../components/EligibilityMeterArt';
+
+// Display-only grouping ("98765 43210") for the mobile field below — the
+// space never reaches state; onChange strips every non-digit back out, so
+// `mobile` itself always stays a plain 10-digit string for validation/the API.
+const formatMobileDisplay = (digits) => (digits.length > 5 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits);
 
 import { IS_DEV_BUILD } from '../../utils/devBuild';
 const stepVariants = {
@@ -23,7 +29,7 @@ const MsmeLoginPage = () => {
   const location = useLocation();
 
   // MsmeProtectedRoute redirects a logged-out deep link here with
-  // state.from set to the page the user was trying to reach — send them
+  // state.from set to the page the user was trying to reach, send them
   // back there after OTP verification instead of always to the dashboard.
   const redirectTarget = location.state?.from
     ? `${location.state.from.pathname}${location.state.from.search || ''}${location.state.from.hash || ''}`
@@ -32,6 +38,7 @@ const MsmeLoginPage = () => {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [mobile, setMobile] = useState('');
+  const [mobileFocused, setMobileFocused] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -98,61 +105,61 @@ const MsmeLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#ffffff] dark:bg-[#0a1628] font-sans overflow-hidden">
 
-      {/* Left Sidebar - Hidden on small screens, takes 40% on desktop */}
-      <div className="hidden md:flex flex-col w-2/5 max-w-[480px] bg-indigo-600 dark:bg-indigo-900 relative overflow-hidden shrink-0">
-        {/* Ambient orbs */}
-        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-indigo-400/30 blur-3xl glow-pulse pointer-events-none" />
-        <div className="absolute bottom-10 -right-20 w-80 h-80 rounded-full bg-indigo-300/20 blur-3xl glow-pulse-slow pointer-events-none" />
+      {/* Left Sidebar, hidden below lg, same width as the login and DSA
+          register brand panels (lg:w-[42%] lg:max-w-[520px]) so every auth
+          screen in the product shares one shell. Flat fill, no gradient,
+          no glow orbs; its own eligibility-meter graphic rather than the
+          stock Lottie clip the other two screens used to share with it.
+          taste-skill-ignore: brand indigo, kept per --keep palette */}
+      <div className="hidden lg:flex lg:w-[42%] lg:max-w-[520px] flex-col bg-[#4F46E5] dark:bg-[#1e1b4b] relative overflow-hidden shrink-0">{/* taste-skill-ignore: brand indigo, kept per --keep palette */}
+        <svg className="absolute inset-0 w-full h-full opacity-[0.1]" aria-hidden="true">
+          <pattern id="msmeDotGrid" width="26" height="26" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.6" fill="#ffffff" />
+          </pattern>
+          <rect width="100%" height="100%" fill="url(#msmeDotGrid)" />
+        </svg>
+        <svg className="absolute -bottom-24 -left-28 w-[480px] h-[480px] opacity-[0.07]" viewBox="0 0 480 480" aria-hidden="true">
+          <circle cx="240" cy="240" r="238" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+          <circle cx="240" cy="240" r="190" fill="none" stroke="#ffffff" strokeWidth="1.5" />
+        </svg>
 
-        <div className="p-10 flex flex-col h-full z-10">
-          <div className="mb-8">
-            <Logo size="xlarge" isDark={false} className="brightness-0 invert" />
-          </div>
+        <div className="relative z-10 p-10 xl:p-14 flex flex-col h-full">
+          <Logo size="xlarge" className="brightness-0 invert" />
 
-          <div className="mt-12 text-white">
-            
-            <h2 className="text-3xl font-bold leading-tight mb-4 hero-h1">
+          <div className="mt-14 xl:mt-20 text-white">
+            <h2 className="text-[38px] xl:text-[44px] font-bold leading-[1.08] mb-4">
               Check Your Loan Eligibility
             </h2>
-            <p className="text-white text-[15px] leading-relaxed opacity-90 hero-p">
-              Discover offers across multiple lenders instantly — without affecting your credit score. Consent-based, secure, and built for your business.
+            <p className="text-[16px] leading-relaxed max-w-[360px] text-white/80">
+              Discover offers across multiple lenders instantly, without affecting your credit score. Consent-based, secure, and built for your business.
             </p>
-            <p className="mt-5 text-[12px] text-indigo-200/60 hero-btns">
+            <p className="mt-5 text-[12px] text-white/50">
               Powered by consent-based APIs · Regulatory-compliant · Not a lender
             </p>
           </div>
 
-          <div className="relative mt-auto w-full flex items-center justify-center flex-1">
-            <lottie-player
-              src="/lottie/into.json"
-              background="transparent"
-              speed="1"
-              loop
-              autoplay
-              style={{ width: '130%', height: '130%', filter: 'drop-shadow(0 20px 30px rgba(0,0,0,0.1))', transform: 'scale(1.2)' }}
-              className="relative z-10"
-            />
+          <div className="flex-1 flex items-end justify-center pb-6">
+            <EligibilityMeterArt className="w-full max-w-[300px]" />
           </div>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-indigo-800/50 dark:from-black/40 via-transparent to-transparent pointer-events-none z-20" />
       </div>
 
       {/* Right Content */}
       <div className="flex-1 flex flex-col relative h-screen overflow-y-auto">
-        {/* Mobile Header */}
-        <div className="flex md:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+        {/* Mobile / tablet header */}
+        <div className="flex lg:hidden items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
           <Logo size="large" />
           <ThemeToggle />
         </div>
 
-        {/* Desktop Theme Toggle */}
-        <div className="hidden md:flex absolute top-6 right-6 z-50">
+        {/* Desktop Theme Toggle, same top-8 right-8 position as the other auth screens */}
+        <div className="hidden lg:flex absolute top-8 right-8 z-50">
           <ThemeToggle />
         </div>
 
-        <div className="flex-1 flex flex-col px-6 py-8 md:px-16 lg:px-24 justify-center max-w-xl mx-auto w-full">
+        <div className="flex-1 flex flex-col px-6 pt-6 sm:pt-10 pb-10 sm:px-8 lg:px-16 lg:justify-center lg:pt-0 lg:pb-16 max-w-[420px] mx-auto w-full">
           <div className="mb-10">
             <h1 className="text-[28px] md:text-[34px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
               {step === 1 ? 'Welcome Back' : 'Verify OTP'}
@@ -160,14 +167,17 @@ const MsmeLoginPage = () => {
             <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] md:text-[15px]">
               {step === 1
                 ? 'Sign in to your Cred2Tech MSME portal'
-                : <>Enter the code sent to <span className="font-bold text-[#0a1628] dark:text-[#e6edf7]">+91 ******{mobile.slice(-4)}</span> and your registered email</>}
+                : <>Enter the code sent via SMS to <span className="font-bold text-[#0a1628] dark:text-[#e6edf7]">+91 ******{mobile.slice(-4)}</span></>}
             </p>
           </div>
 
           {/* Error banner */}
           {apiError && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-6 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
-              <span className="material-symbols-outlined text-[15px]">error</span>
+            <div
+              className="flex items-center gap-2 px-3.5 py-3 rounded-[10px] mb-6 text-[13px] font-medium"
+              style={{ background: 'var(--error-bg)', color: 'var(--error)' }}
+            >
+              <span className="material-symbols-outlined text-[16px]">error</span>
               {apiError}
             </div>
           )}
@@ -184,34 +194,40 @@ const MsmeLoginPage = () => {
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 onSubmit={handleSendOtp}
               >
-                {/* Info banner */}
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-8 text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">
-                  <span className="material-symbols-outlined text-[15px]">sms</span>
-                  OTP will be sent to your registered mobile number
-                </div>
-
-                {/* Mobile */}
-                <div className="mb-8">
-                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Registered Mobile Number *</label>
-                  <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-                    <span className="text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold select-none">+91</span>
+                {/* Mobile — the one field this screen has, so it carries the
+                    screen's weight: larger scale, still the product's own
+                    flat underline (no boxed/bordered input — not our theme). */}
+                <div className="mb-3">
+                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-2">Registered Mobile Number *</label>
+                  <div
+                    className="flex items-center gap-3 pb-3 border-b-2 transition-colors"
+                    style={{ borderColor: mobileFocused ? 'var(--primary)' : 'var(--border)' }}
+                  >
+                    <span className="text-[20px] font-bold select-none" style={{ color: 'var(--text-primary)' }}>+91</span>
                     <input
                       type="tel"
                       inputMode="numeric"
-                      maxLength={10}
-                      value={mobile}
-                      onChange={e => { setMobile(e.target.value.replace(/\D/g, '')); setApiError(''); }}
+                      maxLength={11}
+                      value={formatMobileDisplay(mobile)}
+                      onChange={e => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setApiError(''); }}
                       onKeyDown={e => { if (e.key === 'Enter') handleSendOtp(e); }}
-                      placeholder="Enter 10-digit mobile number"
+                      onFocus={() => setMobileFocused(true)}
+                      onBlur={() => setMobileFocused(false)}
+                      placeholder="98765 43210"
                       autoFocus
-                      className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
+                      className="w-full bg-transparent border-0 outline-none text-[20px] font-bold tracking-wide p-0 focus:ring-0 placeholder-gray-300 dark:placeholder-gray-600"
+                      style={{ color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
+                <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] opacity-50 mb-8">
+                  OTP will be sent to your registered mobile number.
+                </p>
 
                 <TravelingBorderButton
                   type="submit"
                   disabled={loading}
+                  solid
                   className="w-full py-3.5 text-[15px] rounded-[10px]"
                 >
                   {loading ? (
@@ -234,14 +250,9 @@ const MsmeLoginPage = () => {
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 onSubmit={handleVerifyOtp}
               >
-                {/* Success banner */}
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-8 text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
-                  <span className="material-symbols-outlined text-[15px]">check_circle</span>
-                  OTP sent to +91 ******{mobile.slice(-4)} and registered email
-                </div>
-
-                {/* OTP */}
-                <div className="mb-3">
+                {/* The subtitle above already says where the code went, so
+                    this step doesn't repeat it a second time. */}
+                <div className="mb-3 mt-2">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold">Enter OTP *</label>
                     <button
@@ -270,6 +281,7 @@ const MsmeLoginPage = () => {
                 <TravelingBorderButton
                   type="submit"
                   disabled={loading || otp.length < 4}
+                  solid
                   className="w-full py-3.5 text-[15px] rounded-[10px]"
                 >
                   {loading ? (
@@ -284,15 +296,15 @@ const MsmeLoginPage = () => {
             )}
           </AnimatePresence>
 
-          <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 text-center">
-            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-medium mb-4">
+          <div className="mt-10 text-center">
+            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] opacity-50 mb-3">
               Platform acts as technology facilitator only. Not a lender or credit institution.
             </p>
             <button
               onClick={() => navigate('/login')}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-[14px] font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[17px]">badge</span>
+              <span className="material-symbols-outlined text-[16px]">badge</span>
               Sourcing Partner? Login here
             </button>
           </div>

@@ -1073,6 +1073,18 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
   }, [caseId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refreshPolicy = (event) => {
+      if (event.type === 'storage' && event.key !== 'esr-policy-updated') return;
+      load();
+    };
+    window.addEventListener('storage', refreshPolicy);
+    window.addEventListener('esr-policy-updated', refreshPolicy);
+    return () => {
+      window.removeEventListener('storage', refreshPolicy);
+      window.removeEventListener('esr-policy-updated', refreshPolicy);
+    };
+  }, [load]);
 
   const handleGenerate = async () => {
     try {

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
    getLenders, createLender, getLenderProducts, createLenderProduct,
    getProductMatrix, createScheme, getParameterMaster,
-   updateSchemeParameter, updateScheme, deleteScheme
+   updateProductMatrix, updateScheme, deleteScheme
 } from '../api/lenderService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Settings, Plus, Files, Trash, X, Lock, ShieldAlert, Save } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { getLenderDisplayName } from '../constants/lenderPolicies';
+import { validateLenderMatrixChanges, lenderSaveError } from '../utils/lenderConfigValidation';
 
 import CustomSelect from '../components/CustomSelect';
 // Mirrors the backend's key-based type inference (Cred2Tech/backend's
@@ -195,6 +196,8 @@ const LenderConfigPage = () => {
    const [schemes, setSchemes] = useState([]);
    const [parameters, setParameters] = useState([]);
    const [matrixData, setMatrixData] = useState({}); // { [schemeId_parameterId]: value } — last-saved values
+   const [rulebook, setRulebook] = useState(null);
+   const [invalidRules, setInvalidRules] = useState(new Set());
    const [loading, setLoading] = useState(false);
 
    // Edits the admin has made but not yet persisted — { [schemeId_parameterId]: { schemeId, parameterId, value } }.
@@ -236,6 +239,7 @@ const LenderConfigPage = () => {
 
       const id = e.target.value;
       setSelectedLenderId(id);
+      setInvalidRules(new Set());
       setSelectedProductId('');
       setSchemes([]);
       setPendingChanges({});
@@ -253,6 +257,7 @@ const LenderConfigPage = () => {
 
       const id = e.target.value;
       setSelectedProductId(id);
+      setInvalidRules(new Set());
       setPendingChanges({});
       if (!id) { setSchemes([]); return; }
       loadMatrix(id);
@@ -263,6 +268,7 @@ const LenderConfigPage = () => {
       try {
          const data = await getProductMatrix(productId);
          setSchemes(data.schemes || []);
+         setRulebook(data.rulebook || null);
 
          const newMatrix = {};
          if (data.values) {
@@ -319,11 +325,27 @@ const LenderConfigPage = () => {
    const handleSaveAll = async () => {
       const changes = Object.values(pendingChanges);
       if (changes.length === 0) return;
+      const productType = products.find(p => String(p.id) === String(selectedProductId))?.product_type;
+      const validationError = validateLenderMatrixChanges({ changes, schemes, parameters, productType, rulebook, matrixData });
+      if (validationError) {
+         toast.error(validationError, { duration: 10000 });
+         return;
+      }
 
       setSavingAll(true);
-      const results = await Promise.allSettled(
-         changes.map(c => updateSchemeParameter(c.schemeId, c.parameterId, c.value))
-      );
+      let result;
+      try {
+         result = await updateProductMatrix(selectedProductId, changes.map(c => ({ scheme_id: c.schemeId, parameter_id: c.parameterId, value: c.value })));
+      } catch (e) {
+         setSavingAll(false);
+         toast.error(lenderSaveError(e), { duration: 10000 });
+         return;
+      }
+      const results = changes.map(() => ({ status: 'fulfilled' }));
+      const productRule = result.rulebook.products[products.find(p => String(p.id) === String(selectedProductId))?.product_type];
+      setRulebook(prev => ({ ...prev, product: productRule, methods: (prev?.methods || []).map(m => ({ ...m, rule: productRule?.schemes[m.key] })) }));
+      localStorage.setItem('esr-policy-updated', String(Date.now()));
+      window.dispatchEvent(new Event('esr-policy-updated'));
 
       const succeeded = changes.filter((_, i) => results[i].status === 'fulfilled');
       const failed = changes.filter((_, i) => results[i].status === 'rejected');
@@ -345,7 +367,7 @@ const LenderConfigPage = () => {
       setSavingAll(false);
 
       if (failed.length === 0) {
-         toast.success(`Saved ${succeeded.length} change${succeeded.length > 1 ? 's' : ''}`);
+         toast.success(`Saved ${succeeded.length} change${succeeded.length > 1 ? 's' : ''} to Rulebooks. ESR recalculates on next view.`);
       } else if (succeeded.length === 0) {
          toast.error(`Failed to save ${failed.length} change${failed.length > 1 ? 's' : ''}. Please retry.`);
       } else {
@@ -528,7 +550,7 @@ const LenderConfigPage = () => {
             <button
                className="btn btn-primary btn-sm"
                onClick={handleSaveAll}
-               disabled={!hasUnsavedChanges || savingAll}
+               disabled={!hasUnsavedChanges || savingAll || invalidRules.size > 0}
                title={hasUnsavedChanges ? 'Save changes to the matrix' : 'No changes to save'}
                style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
             >
@@ -550,6 +572,36 @@ const LenderConfigPage = () => {
             </div>
          ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px' : '20px', background: 'var(--bg)' }}>
+               {rulebook ? (
+                  <details style={{ padding: 16, border: '1px solid var(--outline)', marginBottom: 16 }}>
+                     <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Connected Rulebook · {rulebook.lender}</summary>
+                     <p style={{ fontSize: 12 }}>Saved edits apply to ESR calculations. Existing results recalculate when opened. The effective rules below show the values used by ESR; legacy matrix values apply only after a validated save. Clear an override to restore its underlying rule. Complex rules can be edited below.</p>
+                     {(rulebook.methods || []).filter(m => m.scheme_id).map(m => (
+                        <details key={`${m.key}-${JSON.stringify(m.rule)}`} style={{ marginTop: 12 }}>
+                           <summary>{m.rule?.label || m.key} · Method rule</summary>
+                           <textarea aria-label={`${m.rule?.label || m.key} rulebook rule`} defaultValue={JSON.stringify(m.rule, null, 2)}
+                              style={{ width: '100%', minHeight: 220, fontFamily: 'monospace', marginTop: 8, background: 'var(--surface)', color: 'var(--on-surface)' }}
+                              onBlur={e => {
+                                 const parameter = parameters.find(p => p.parameter_key === 'calculation_rule');
+                                 if (!parameter) { toast.error('Calculation rule parameter is not configured.'); return; }
+                                 if (e.target.value === JSON.stringify(m.rule, null, 2)) {
+                                    setInvalidRules(prev => { const next = new Set(prev); next.delete(m.key); return next; });
+                                    return;
+                                 }
+                                 try {
+                                    const rule = JSON.parse(e.target.value);
+                                    stageCellChange(m.scheme_id, parameter.id, rule);
+                                    setInvalidRules(prev => { const next = new Set(prev); next.delete(m.key); return next; });
+                                 } catch {
+                                    setInvalidRules(prev => new Set(prev).add(m.key));
+                                    toast.error('Invalid rule JSON. Correct it before saving.');
+                                 }
+                              }} />
+                        </details>
+                     ))}
+                     <details style={{ marginTop: 12 }}><summary>View effective product rules</summary><pre style={{ overflow: 'auto', fontSize: 11 }}>{JSON.stringify(rulebook.product, null, 2)}</pre></details>
+                  </details>
+               ) : <p role="status">No rulebook is connected to this lender/product. ESR rule changes cannot be applied here.</p>}
                {/* Edit Mode Banner */}
                <div style={{
                   backgroundColor: 'var(--warning-bg)',
