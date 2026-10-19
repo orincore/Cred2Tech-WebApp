@@ -11,6 +11,11 @@ import TravelingBorderButton from '../../components/TravelingBorderButton';
 import OtpInput from '../../components/OtpInput';
 import EligibilityMeterArt from '../../components/EligibilityMeterArt';
 
+// Display-only grouping ("98765 43210") for the mobile field below — the
+// space never reaches state; onChange strips every non-digit back out, so
+// `mobile` itself always stays a plain 10-digit string for validation/the API.
+const formatMobileDisplay = (digits) => (digits.length > 5 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits);
+
 import { IS_DEV_BUILD } from '../../utils/devBuild';
 const stepVariants = {
   enter: (dir) => ({ opacity: 0, x: dir > 0 ? 48 : -48 }),
@@ -33,6 +38,7 @@ const MsmeLoginPage = () => {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [mobile, setMobile] = useState('');
+  const [mobileFocused, setMobileFocused] = useState(false);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -188,21 +194,29 @@ const MsmeLoginPage = () => {
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 onSubmit={handleSendOtp}
               >
-                {/* Mobile */}
+                {/* Mobile — the one field this screen has, so it carries the
+                    screen's weight: larger scale, still the product's own
+                    flat underline (no boxed/bordered input — not our theme). */}
                 <div className="mb-3">
-                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-1.5">Registered Mobile Number *</label>
-                  <div className="flex items-center gap-2 pb-3 border-b border-gray-200 dark:border-gray-700 focus-within:border-indigo-600 dark:focus-within:border-indigo-400 transition-colors">
-                    <span className="text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold select-none">+91</span>
+                  <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold mb-2">Registered Mobile Number *</label>
+                  <div
+                    className="flex items-center gap-3 pb-3 border-b-2 transition-colors"
+                    style={{ borderColor: mobileFocused ? 'var(--primary)' : 'var(--border)' }}
+                  >
+                    <span className="text-[20px] font-bold select-none" style={{ color: 'var(--text-primary)' }}>+91</span>
                     <input
                       type="tel"
                       inputMode="numeric"
-                      maxLength={10}
-                      value={mobile}
-                      onChange={e => { setMobile(e.target.value.replace(/\D/g, '')); setApiError(''); }}
+                      maxLength={11}
+                      value={formatMobileDisplay(mobile)}
+                      onChange={e => { setMobile(e.target.value.replace(/\D/g, '').slice(0, 10)); setApiError(''); }}
                       onKeyDown={e => { if (e.key === 'Enter') handleSendOtp(e); }}
-                      placeholder="Enter 10-digit mobile number"
+                      onFocus={() => setMobileFocused(true)}
+                      onBlur={() => setMobileFocused(false)}
+                      placeholder="98765 43210"
                       autoFocus
-                      className="w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold p-0 focus:ring-0 placeholder-gray-400 dark:placeholder-gray-600"
+                      className="w-full bg-transparent border-0 outline-none text-[20px] font-bold tracking-wide p-0 focus:ring-0 placeholder-gray-300 dark:placeholder-gray-600"
+                      style={{ color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
