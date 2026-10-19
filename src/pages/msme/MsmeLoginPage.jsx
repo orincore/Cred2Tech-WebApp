@@ -167,7 +167,7 @@ const MsmeLoginPage = () => {
             <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] md:text-[15px]">
               {step === 1
                 ? 'Sign in to your Cred2Tech MSME portal'
-                : <>Enter the code sent to <span className="font-bold text-[#0a1628] dark:text-[#e6edf7]">+91 ******{mobile.slice(-4)}</span> and your registered email</>}
+                : <>Enter the code sent via SMS to <span className="font-bold text-[#0a1628] dark:text-[#e6edf7]">+91 ******{mobile.slice(-4)}</span></>}
             </p>
           </div>
 
@@ -250,13 +250,9 @@ const MsmeLoginPage = () => {
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 onSubmit={handleVerifyOtp}
               >
-                <div className="flex items-center gap-1.5 mb-8 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
-                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                  OTP sent to +91 ******{mobile.slice(-4)} and registered email
-                </div>
-
-                {/* OTP */}
-                <div className="mb-3">
+                {/* The subtitle above already says where the code went, so
+                    this step doesn't repeat it a second time. */}
+                <div className="mb-3 mt-2">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[12px] text-[#0a1628] dark:text-[#e6edf7] font-semibold">Enter OTP *</label>
                     <button
