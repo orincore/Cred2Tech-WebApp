@@ -1617,7 +1617,7 @@ const AddSalariedCustomerWizardPage = () => {
                       <option value="">— Select a loan product —</option>
                       <option value="HL">HL — Home Loan</option>
                       <option value="LAP">LAP — Loan Against Property</option>
-                      <option value="PL">PL — Personal Loan</option>
+                      <option value="PL" disabled>PL — Personal Loan — Coming Soon</option>
                     </CustomSelect>
                   </FormField>
 

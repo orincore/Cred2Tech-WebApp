@@ -2690,11 +2690,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       <option value="">— Select a loan product —</option>
                       <option value="LAP">LAP — Loan Against Property</option>
                       <option value="HL">HL — Home Loan</option>
-                      <option value="WC">Working Capital (CC / OD)</option>
-                      <option value="TL">Term Loan (MSME / BL)</option>
-                      <option value="ML">Machinery / Equipment Finance</option>
-                      <option value="BL">Business Loan (Unsecured)</option>
-                      <option value="Other">Other — Specify</option>
+                      <option value="WC" disabled>Working Capital (CC / OD) — Coming Soon</option>
+                      <option value="TL" disabled>Term Loan (MSME / BL) — Coming Soon</option>
+                      <option value="ML" disabled>Machinery / Equipment Finance — Coming Soon</option>
+                      <option value="BL" disabled>Business Loan (Unsecured) — Coming Soon</option>
+                      <option value="Other" disabled>Other — Coming Soon</option>
                     </CustomSelect>
                   </FormField>
 

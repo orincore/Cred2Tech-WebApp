@@ -7,7 +7,7 @@ import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-import LoanJourneyArt from '../components/LoanJourneyArt';
+import LoginScanApproval from '../components/LoginScanApproval';
 import { viewTransitionNavigate } from '../lib/viewTransitionNavigate';
 
 const LoginPage = () => {
@@ -131,7 +131,7 @@ const LoginPage = () => {
           </div>
 
           <div className="flex-1 flex items-end justify-center pb-6">
-            <LoanJourneyArt className="w-full max-w-[380px] xl:max-w-[430px]" />
+            <LoginScanApproval className="w-full max-w-[320px] xl:max-w-[360px]" />
           </div>
         </div>
       </aside>
