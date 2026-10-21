@@ -187,7 +187,7 @@ const MsmeLoginPage = () => {
             >
               <span className="material-symbols-outlined text-[20px]" style={{ color: 'var(--primary)' }}>schedule</span>
               <p className="text-[13px] leading-relaxed text-[#0a1628] dark:text-[#e6edf7]">
-                <span className="font-bold">Coming soon.</span> MSME self-service sign-in isn't open yet. Already working with Cred2Tech through a Sourcing Partner? Use the link below instead.
+                <span className="font-bold">Coming soon.</span> MSME self-service sign-in isn't open yet.
               </p>
             </div>
           )}
