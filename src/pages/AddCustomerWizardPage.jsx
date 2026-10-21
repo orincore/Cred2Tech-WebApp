@@ -2698,10 +2698,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     </CustomSelect>
                   </FormField>
 
-                  <FormField label="Additional Requirements / Notes" name="dsa_notes">
-                    <textarea rows={3} className="form-control" placeholder="Any specific requirements..." value={formData.dsa_notes} onChange={e => setFormData({ ...formData, dsa_notes: e.target.value })} />
-                  </FormField>
-
                   {/* Property & Collateral fields — only for LAP / HL */}
                   {PROPERTY_REQUIRED.includes(formData.product_type) && (
                     <>
@@ -2719,13 +2715,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <option value="Self Occupied">Self Occupied</option>
                           <option value="Rented Out">Rented Out</option>
                           <option value="Vacant">Vacant</option>
-                        </CustomSelect>
-                      </FormField>
-                      <FormField label="Ownership" name="ownership_type">
-                        <CustomSelect className="form-control" value={formData.ownership_type} onChange={e => setFormData({ ...formData, ownership_type: e.target.value })}>
-                          <option value="Sole Owner">Sole Owner</option>
-                          <option value="Joint Owner">Joint Owner</option>
-                          <option value="Company Owned">Company Owned</option>
                         </CustomSelect>
                       </FormField>
                       <div>
