@@ -319,8 +319,17 @@ const MsmeLoginPage = () => {
           </AnimatePresence>
 
           <div className="mt-10 text-center">
-            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] opacity-50 mb-3">
+            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] opacity-50 mb-2">
               Platform acts as technology facilitator only. Not a lender or credit institution.
+            </p>
+            <p className="text-[12px] text-[#0a1628] dark:text-[#e6edf7] opacity-50 mb-3">
+              By continuing, you agree to Cred2Tech's{' '}
+              <a href="https://cred2tech.com/terms-of-use" target="_blank" rel="noreferrer" className="underline text-indigo-600 dark:text-indigo-400">
+                Terms of Use
+              </a>{' '}and{' '}
+              <a href="https://cred2tech.com/privacy-policy" target="_blank" rel="noreferrer" className="underline text-indigo-600 dark:text-indigo-400">
+                Privacy Policy
+              </a>.
             </p>
             <button
               onClick={() => navigate('/login')}
