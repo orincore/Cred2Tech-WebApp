@@ -155,6 +155,17 @@ const MsmeCaseDetailPage = () => {
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>{caseData.product_type || 'Product TBD'}</p>
         </div>
+        {/* Lets a customer go back into the wizard to fix/add applicant,
+            property, income or obligation details even after their case has
+            been allocated to a DSA (allocation moves the case into that
+            DSA's tenant — see caseOwnershipScope.js — it no longer means
+            "done editing"). Only a permanently-purged case blocks this,
+            same as the DSA side's own Open Wizard button. */}
+        {!isPurged && (
+          <TravelingBorderButton size="sm" onClick={() => navigate(`/msme/onboarding?caseId=${caseData.id}`)} className="rounded-none">
+            Update Application
+          </TravelingBorderButton>
+        )}
       </div>
 
       {isPurged && (
