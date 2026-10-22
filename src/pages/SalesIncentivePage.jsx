@@ -8,6 +8,10 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
 
 import CustomSelect from '../components/CustomSelect';
+// Same fixed code list as LenderCommissionPage/DSALenderContactsPage/LenderConfigPage, so a
+// product typed here always matches what case.product_type actually holds — free text risked
+// a rule silently never matching anything due to a spelling/casing mismatch.
+const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 const fmt = (v) => {
   if (v === null || v === undefined) return '—';
   const n = parseFloat(v);
@@ -373,7 +377,10 @@ export default function SalesIncentivePage() {
           )}
           <div style={{ flex: 1, minWidth: 120 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Product</label>
-            <input type="text" placeholder="ALL, LAP, HL..." value={filters.product} onChange={e => setFilters({ ...filters, product: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }} />
+            <CustomSelect value={filters.product} onChange={e => setFilters({ ...filters, product: e.target.value })} className="form-control" style={{ padding: '5px 10px', fontSize: 12 }}>
+              <option value="">All Products</option>
+              {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+            </CustomSelect>
           </div>
           <div className="search-field" style={{ flex: 2, minWidth: 170 }}>
             <label className="form-label" style={{ display: 'block', marginBottom: 3, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-tertiary)' }}>Search</label>
@@ -435,7 +442,10 @@ export default function SalesIncentivePage() {
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Product (optional)</label>
-                  <input placeholder="e.g. HL, LAP — blank = all" value={ruleForm.product_type} onChange={e => setRuleForm({ ...ruleForm, product_type: e.target.value })} className="form-control" />
+                  <CustomSelect value={ruleForm.product_type || ''} onChange={e => setRuleForm({ ...ruleForm, product_type: e.target.value })} className="form-control">
+                    <option value="">All Products</option>
+                    {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+                  </CustomSelect>
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Type</label>

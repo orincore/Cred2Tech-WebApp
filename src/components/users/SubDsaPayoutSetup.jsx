@@ -5,6 +5,10 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 import { getPayoutConfig, savePayoutConfig, syncMissingPayouts, getSubDsaMtdStats } from '../../api/subDsaPayoutService';
 
 import CustomSelect from '../CustomSelect';
+// Same fixed code list as LenderCommissionPage/DSALenderContactsPage/LenderConfigPage, so a
+// product typed here always matches what case.product_type actually holds — a free-text
+// "Home Loan" here would never match a case whose product_type is stored as "HL".
+const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 const fieldStyle = {
   border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)',
   color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, padding: '6px 10px', outline: 'none', width: '100%', boxSizing: 'border-box',
@@ -198,7 +202,10 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
                   <option value="">— Select Lender —</option>
                   {lenders.map((l) => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
                 </CustomSelect>
-                <input placeholder="e.g. LAP, Business Loan" value={ov.products} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, products: e.target.value } : o)))} style={fieldStyle} />
+                <CustomSelect value={ov.products || ''} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, products: e.target.value } : o)))} style={fieldStyle}>
+                  <option value="">All Products</option>
+                  {PRODUCT_TYPES.map((pt) => <option key={pt} value={pt}>{pt}</option>)}
+                </CustomSelect>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input type="number" placeholder="40" min={0} max={100} value={ov.override_rate} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, override_rate: e.target.value } : o)))} style={fieldStyle} />
                   <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>%</span>
@@ -239,7 +246,10 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>₹</span>
                   <input type="number" min={0} value={slab.payout_per_case} placeholder="2000" onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, payout_per_case: e.target.value } : s)))} style={fieldStyle} />
                 </div>
-                <input placeholder="Products (blank = ALL)" value={slab.products || ''} onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, products: e.target.value } : s)))} style={fieldStyle} />
+                <CustomSelect value={slab.products || ''} onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, products: e.target.value } : s)))} style={fieldStyle}>
+                  <option value="">All Products</option>
+                  {PRODUCT_TYPES.map((pt) => <option key={pt} value={pt}>{pt}</option>)}
+                </CustomSelect>
                 <button type="button" onClick={() => setSlabs((prev) => prev.filter((_, j) => j !== i))} style={{ background: 'var(--error-bg)', border: '1px solid var(--error)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: isMobile ? '100%' : 'auto' }}>
                   <X size={13} color="var(--error)" />
                   {isMobile && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--error)' }}>Remove</span>}
