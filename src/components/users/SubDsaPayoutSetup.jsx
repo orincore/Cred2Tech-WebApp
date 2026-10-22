@@ -8,6 +8,7 @@ import CustomSelect from '../CustomSelect';
 // Same fixed code list as LenderCommissionPage/DSALenderContactsPage/LenderConfigPage, so a
 // product typed here always matches what case.product_type actually holds — a free-text
 // "Home Loan" here would never match a case whose product_type is stored as "HL".
+// products
 const PRODUCT_TYPES = ['LAP', 'HL', 'WC', 'TL', 'BL', 'ML'];
 const fieldStyle = {
   border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)',
