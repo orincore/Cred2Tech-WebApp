@@ -141,7 +141,6 @@ const CreateUserPage = () => {
         const spamEmailPatterns = [
           /^(test|demo|sample|example|abc|xyz|temp|fake|spam)@/i,
           /@(test|demo|sample|example|temp|fake)\./i,
-          /^(admin|user|email|mail|info)@/i,
         ];
         if (!value.trim()) {
           errorMsg = 'Email is required';
@@ -202,7 +201,6 @@ const CreateUserPage = () => {
       const spamEmailPatterns = [
         /^(test|demo|sample|example|abc|xyz|temp|fake|spam)@/i,
         /@(test|demo|sample|example|temp|fake)\./i,
-        /^(admin|user|email|mail|info)@/i,
       ];
       if (spamEmailPatterns.some(pattern => pattern.test(form.email))) {
         e.email = 'Please enter a valid business email address';
