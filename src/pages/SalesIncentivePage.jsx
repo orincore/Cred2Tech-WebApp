@@ -208,10 +208,11 @@ export default function SalesIncentivePage() {
   const [updateModal, setUpdateModal] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState(null);
-  const [ruleForm, setRuleForm] = useState({
-    hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '',
+  const emptyRuleForm = {
+    hierarchy_level: 'L1', product_type: '', commission_type: 'PERCENTAGE', commission_value: '',
     calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [],
-  });
+  };
+  const [ruleForm, setRuleForm] = useState(emptyRuleForm);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -261,7 +262,7 @@ export default function SalesIncentivePage() {
         await salesIncentiveService.createRule(ruleForm);
         toast.success('Rule created');
       }
-      setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [] });
+      setRuleForm(emptyRuleForm);
       setEditingRuleId(null);
       fetchData();
     } catch (err) {
@@ -270,7 +271,7 @@ export default function SalesIncentivePage() {
   };
 
   const handleCancelEdit = () => {
-    setRuleForm({ hierarchy_level: 'L1', commission_type: 'PERCENTAGE', commission_value: '', calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [] });
+    setRuleForm(emptyRuleForm);
     setEditingRuleId(null);
   };
 
@@ -433,6 +434,10 @@ export default function SalesIncentivePage() {
                   </CustomSelect>
                 </div>
                 <div style={{ flex: '1 1 140px' }}>
+                  <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Product (optional)</label>
+                  <input placeholder="e.g. HL, LAP — blank = all" value={ruleForm.product_type} onChange={e => setRuleForm({ ...ruleForm, product_type: e.target.value })} className="form-control" />
+                </div>
+                <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Type</label>
                   <CustomSelect value={ruleForm.commission_type} onChange={e => setRuleForm({ ...ruleForm, commission_type: e.target.value })} className="form-control">
                     <option value="PERCENTAGE">Percentage (%)</option>
@@ -465,13 +470,14 @@ export default function SalesIncentivePage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Level</th><th>Base</th><th>Value</th><th>Status</th><th>Action</th>
+                      <th>Level</th><th>Product</th><th>Base</th><th>Value</th><th>Status</th><th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rules.map(r => (
                       <tr key={r.id}>
                         <td data-label="Level" style={{ fontWeight: 700 }}>{r.hierarchy_level}</td>
+                        <td data-label="Product">{r.product_type || 'All'}</td>
                         <td data-label="Base">{r.calculation_base.replace(/_/g, ' ')}</td>
                         <td data-label="Value" style={{ fontWeight: 600, color: 'var(--success)' }}>
                           {r.commission_type === 'PERCENTAGE' ? `${r.commission_value}%` : `₹${r.commission_value}`}
@@ -484,6 +490,7 @@ export default function SalesIncentivePage() {
                                 setEditingRuleId(r.id);
                                 setRuleForm({
                                   hierarchy_level: r.hierarchy_level,
+                                  product_type: r.product_type || '',
                                   commission_type: r.commission_type,
                                   commission_value: r.commission_value,
                                   calculation_base: r.calculation_base,
@@ -510,7 +517,7 @@ export default function SalesIncentivePage() {
                         </td>
                       </tr>
                     ))}
-                    {rules.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>No rules configured</td></tr>}
+                    {rules.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>No rules configured</td></tr>}
                   </tbody>
                 </table>
               </div>

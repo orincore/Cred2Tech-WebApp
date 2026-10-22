@@ -71,7 +71,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           setPayoutTrigger(cfg.payout_trigger || 'ON_DSA_RECEIPT');
           setTdsApplicable(cfg.tds_applicable !== false);
           setOverrides((cfg.overrides || []).map((o) => ({ ...o, products: o.products || '' })));
-          setSlabs(cfg.case_count_slabs || []);
+          setSlabs((cfg.case_count_slabs || []).map((s) => ({ ...s, products: s.products || '' })));
           setEffectiveFrom(cfg.effective_from ? cfg.effective_from.split('T')[0] : '');
           setSchemes((cfg.special_schemes || []).map((s) => ({
             ...s,
@@ -124,7 +124,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
   };
 
   const addOverride = () => setOverrides((prev) => [...prev, { tenant_lender_id: '', products: '', override_rate: '', effective_from: '' }]);
-  const addSlab = () => setSlabs((prev) => [...prev, { from_cases: '', to_cases: '', payout_per_case: '' }]);
+  const addSlab = () => setSlabs((prev) => [...prev, { from_cases: '', to_cases: '', payout_per_case: '', products: '' }]);
   const addScheme = () => setSchemes((prev) => [...prev, { scheme_name: '', basis: 'Cases', valid_from: '', valid_to: '', bonus_per_case: '', min_case_count: '', is_active: true }]);
 
   if (loading) {
@@ -219,7 +219,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
           <div>
             <div style={sectionHeading}>Per-Case Payout Slabs</div>
-            <div style={sectionHint}>Monthly case count → flat ₹ per case, stacks with the rate above</div>
+            <div style={sectionHint}>Monthly case count → flat ₹ per case, stacks with the rate above. Leave Products blank for one ladder across all products, or give two slabs the same product to build a separate ladder just for it.</div>
           </div>
           <button type="button" onClick={addSlab} className="btn btn-secondary btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Plus size={13} /> Add Slab
@@ -232,13 +232,14 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {slabs.map((slab, i) => (
-              <div key={i} style={{ ...rowGrid(isMobile, '1fr 1fr 2fr auto'), ...(isMobile ? { border: '1px solid var(--outline)', background: 'var(--surface)', padding: 10 } : {}) }}>
+              <div key={i} style={{ ...rowGrid(isMobile, '1fr 1fr 2fr 1.6fr auto'), ...(isMobile ? { border: '1px solid var(--outline)', background: 'var(--surface)', padding: 10 } : {}) }}>
                 <input type="number" min={1} value={slab.from_cases} placeholder="From" onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, from_cases: e.target.value } : s)))} style={fieldStyle} />
                 <input type="number" min={1} value={slab.to_cases || ''} placeholder="To (∞ if blank)" onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, to_cases: e.target.value } : s)))} style={fieldStyle} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>₹</span>
                   <input type="number" min={0} value={slab.payout_per_case} placeholder="2000" onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, payout_per_case: e.target.value } : s)))} style={fieldStyle} />
                 </div>
+                <input placeholder="Products (blank = ALL)" value={slab.products || ''} onChange={(e) => setSlabs((prev) => prev.map((s, j) => (j === i ? { ...s, products: e.target.value } : s)))} style={fieldStyle} />
                 <button type="button" onClick={() => setSlabs((prev) => prev.filter((_, j) => j !== i))} style={{ background: 'var(--error-bg)', border: '1px solid var(--error)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: isMobile ? '100%' : 'auto' }}>
                   <X size={13} color="var(--error)" />
                   {isMobile && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--error)' }}>Remove</span>}
