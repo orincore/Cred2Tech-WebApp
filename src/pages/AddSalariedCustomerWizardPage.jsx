@@ -18,7 +18,6 @@ import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchM
 import { toTitleCase, formatDate } from '../utils/helpers';
 import { withRetry } from '../utils/retryFetch';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
-import PriceTag from '../components/PriceTag';
 
 import CustomSelect from '../components/CustomSelect';
 const PROPERTY_REQUIRED = ['LAP', 'HL'];
@@ -1342,7 +1341,7 @@ const AddSalariedCustomerWizardPage = () => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
+                          Request Consent
                         </button>
                       )
                     ) : (
@@ -1495,7 +1494,7 @@ const AddSalariedCustomerWizardPage = () => {
                                             disabled={saving || walletBalance < costs.PAN_FETCH}
                                             title={walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />
+                                            Request Consent
                                           </button>
                                         )
                                       ) : (

@@ -21,7 +21,6 @@ import PullingIndicator from '../components/ui/PullingIndicator';
 import ConsentProgressStatus from '../components/ui/ConsentProgressStatus';
 import ConsentIdentityMismatchModal from '../components/ConsentIdentityMismatchModal';
 import ConsentSelfOtpModal from '../components/ConsentSelfOtpModal';
-import PriceTag from '../components/PriceTag';
 import { msmeApi } from '../api/msmeService';
 import { WIZARD_MAX_WIDTH } from '../constants/layout';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatDate } from '../utils/helpers';
@@ -172,7 +171,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // admin hasn't set one. Kept as its own object rather than folded into
   // `costs` itself so every existing `costs.X` numeric comparison
   // (disabled-state checks, "Insufficient credits" messages) stays a plain
-  // number, untouched — only the <PriceTag> label spots read this one too.
+  // number, untouched — only the price-tag label spots on the other paid
+  // pulls (GST, ITR, bank analysis, bureau, ESR) read this one too.
   const [costsActual, setCostsActual] = useState({ GST_FETCH: null, ITR_ANALYTICS: null, BANK_ANALYSIS: null, BUREAU_PULL: null, BUREAU_OBLIGATIONS: null, PAN_FETCH: null, ESR_GENERATION: null });
   const [walletBalance, setWalletBalance] = useState(0);
 
@@ -2098,7 +2098,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           className="btn btn-primary btn-lg"
                           title={!step1ConsentFieldsValid ? 'Complete every required field above before requesting consent' : (!isMsme && walletBalance < costs.PAN_FETCH) ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                         >
-                          {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
+                          Request Consent
                         </button>
                       )
                     ) : (
@@ -2257,7 +2257,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                             disabled={saving || (!isMsme && walletBalance < costs.PAN_FETCH)}
                                             title={!isMsme && walletBalance < costs.PAN_FETCH ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${costs.PAN_FETCH}.` : undefined}
                                           >
-                                            {isMsme ? 'Request Consent' : <PriceTag label="Request Consent" actual={costsActual.PAN_FETCH} discounted={costs.PAN_FETCH} />}
+                                            Request Consent
                                           </button>
                                         )
                                       ) : (
