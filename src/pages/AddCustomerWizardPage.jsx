@@ -135,7 +135,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     business_mobile: '',
     business_email: '',
     pincode: '',
-    gender: '',
+    // Gender input removed from this journey — every applicant is submitted
+    // as MALE unless an existing applicant already has a real value on file
+    // (see the load-from-backend fallback below), which is left untouched.
+    gender: 'MALE',
     is_professional: false,
     profession_type: '',
     mobile_verified: false,
@@ -435,7 +438,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // manually-typed pincode rendered the field blank even though the
       // case has a usable pincode on file.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
-      gender: primaryApp?.gender || '',
+      gender: primaryApp?.gender || 'MALE',
       is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
       profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
       // Sourced from THIS case's own primary Applicant row, not
@@ -1284,7 +1287,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: 'MALE', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1365,18 +1368,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       }));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save pincode');
-    }
-  };
-  const handleGenderChange = async (value) => {
-    setFormData(prev => ({ ...prev, gender: value }));
-    if (!caseId || !value) return;
-    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.gender === value) return;
-    try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, gender: value, dob: primaryApp.dob || formData.dob });
-      setFormData(prev => ({ ...prev, applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a) }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save gender');
     }
   };
   const handlePincodeBlur = () => savePincode(formData.pincode);
@@ -1982,13 +1973,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <input type="text" value={formData.pincode || ''} onChange={e => handlePincodeChange(e.target.value)} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
                         </FormField>
 
-                        <FormField label="Gender" name="gender" required>
-                          <CustomSelect className="form-control" value={formData.gender || ''} onChange={e => handleGenderChange(e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
+                        <FormField label="Gender" name="gender">
+                          <input type="text" value="Male" disabled className="form-control" />
                         </FormField>
 
                         <FormField label="Are You A Professional?" name="is_professional">
@@ -2224,16 +2210,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
                                     </CustomSelect>
                                   </FormField>
-                                  <FormField label="Gender" name={`cogender_${realIdx}`} required>
-                                    <CustomSelect className="form-control" value={app.gender || ''} onChange={e => updateApplicantRow(realIdx, 'gender', e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
-                                  </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
+                                  </FormField>
+                                  <FormField label="Gender" name={`cogender_${realIdx}`}>
+                                    <input type="text" value="Male" disabled className="form-control" />
                                   </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
