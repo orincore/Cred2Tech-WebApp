@@ -7,25 +7,12 @@ import Panel from '../components/ui/Panel';
 import { PlusCircle, Trash2, ChevronRight, User, Users, Info } from 'lucide-react';
 
 import CustomSelect from '../components/CustomSelect';
-const INCOME_TYPES_MSME = [
-  'Director Salary', "Partner's Salary", 'Interest on Capital',
-  'Rental Income — Bank', 'Rental Income — Cash', 'Interest Income',
-  'Dividend Income', 'Agriculture Income', 'Professional Fees', 'Other'
-];
-// A salaried employee has no business/directorial income concepts — swap
-// those out for a plain Salary/Incentive/Bonus entry instead. Incentive and
-// Bonus are kept as SEPARATE options (not one combined "Bonus / Incentive"
-// choice): the ESR engine treats them differently (incentive is a recurring
-// 3-month average, bonus is a single latest-year figure) and a combined
-// label couldn't be matched to either bucket, so it was silently excluded
-// from every lender's income calculation. Agriculture Income was previously
-// only offered on the MSME side even though a salaried applicant can
-// legitimately have agricultural land income too.
-const INCOME_TYPES_SALARIED = [
-  'Salary', 'Incentive', 'Bonus', 'Agriculture Income',
-  'Rental Income — Bank', 'Rental Income — Cash',
-  'Interest Income', 'Dividend Income', 'Other'
-];
+// Manual income entries are for supplementary income no automated pull
+// (GST/ITR/bank/salary-slip) ever captures — narrowed to just these three
+// for both MSME and Salaried cases, and for both the DSA and direct-MSME
+// wizards (they share this exact component).
+const INCOME_TYPES_MSME = ['Rental Income — Bank', 'Rental Income — Cash', 'Agriculture Income'];
+const INCOME_TYPES_SALARIED = ['Rental Income — Bank', 'Rental Income — Cash', 'Agriculture Income'];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'Rental Agreement', 'None'];
 
 // esr_financials.salaried_income_source (esrFinancials.service.js) has 5

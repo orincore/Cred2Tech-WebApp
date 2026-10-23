@@ -74,6 +74,7 @@ export const KYC_CATEGORIES = [
       { type: 'BANK_EXCEL', label: 'Bank Statement (Excel)' },
       { type: 'GST_REPORT_PDF', label: 'GST Report (PDF)' },
       { type: 'GST_REPORT_EXCEL', label: 'GST Report (Excel)' },
+      { type: 'CIBIL_REPORT_PDF', label: 'Credit Bureau Report (PDF)' },
     ],
   },
   {
