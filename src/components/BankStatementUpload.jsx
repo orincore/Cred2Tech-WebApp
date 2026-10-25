@@ -362,33 +362,6 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
 
     // Manual escape hatch for the ANALYZING phase itself (2026-09-11) —
     // distinct from fetchDownloads below, which only covers the later
-    // COMPLETED-but-files-not-ready gap. Bank/GST no longer have any active
-    // background poll (see socket supervisor notes); a request only ever
-    // advances via Signzy's own webhook callback. If that single callback
-    // is ever missed or interrupted server-side (a deploy restarting the
-    // process mid-request, a dropped connection, etc.) a request can sit in
-    // ANALYZING indefinitely with nothing to nudge it — this button calls
-    // the same status-reconciliation endpoint the (currently disabled)
-    // background worker would, so a stuck pull always has a one-click way
-    // out instead of requiring a manual DB/ops fix.
-    const [syncing, setSyncing] = useState(false);
-    const syncNow = async () => {
-        if (!reportId) return;
-        setSyncing(true);
-        try {
-            const res = await api.post('/external/bank/sync', { report_id: reportId });
-            const data = res.data;
-            if (data.status) setLocalStatus(data.status);
-            if (data.status === 'COMPLETED') toast.success('Bank analysis completed.');
-            else if (data.status === 'FAILED') toast.error('Bank statement analysis failed at the provider.');
-            else toast('Still processing at the provider — try again shortly.');
-            refresh();
-        } catch (error) {
-            toast.error(error.response?.data?.error || 'Could not check status — try again shortly.');
-        } finally {
-            setSyncing(false);
-        }
-    };
 
     // Manual escape hatch only. The provider can take minutes to finish
     // generating the report files after analysis itself completes; the server's
@@ -495,17 +468,8 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </div>
                     ) : ['ANALYZING', 'PRE_ANALYZING'].includes(status) ? (
                         <div style={{ display: 'flex', gap: 8 }}>
-                            {/* Usually redundant with the live push from the webhook —
-                                this only matters when that single callback never
-                                arrives/completes. See syncNow's own comment above. */}
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={syncNow} disabled={syncing}>
-                                {syncing ? 'Checking…' : 'Check status'}
-                            </button>
-                            {/* Last resort when "Check status" itself can't recover
-                                it (e.g. the provider-side retrieve-work-order call
-                                failing independently of our own bug) — resets this
-                                request back to INITIATED so the panel returns to
-                                the normal upload flow. Re-uses the same
+                            {/* Resets this request back to INITIATED so the panel
+                                returns to the normal upload flow. Re-uses the same
                                 handleDelete the COMPLETED state already exposes;
                                 nothing bank-specific is lost by resetting since a
                                 stuck ANALYZING request never had any data ingested
