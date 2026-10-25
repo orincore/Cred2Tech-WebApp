@@ -39,6 +39,14 @@ const MsmeDashboardPage = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentHour(new Date().getHours());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     document.title = 'Cred2Tech | MSME Dashboard';
     fetchDashboard();
@@ -81,8 +89,9 @@ const MsmeDashboardPage = () => {
   // reference number when the business never registered a real trade name — prefer
   // the reliable identity field first.
   const businessName = toTitleCase(resolveEntityName(activeCase?.customer, user?.name)) || 'User';
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const isMorning = currentHour >= 5 && currentHour < 12;
+  const isAfternoon = currentHour >= 12 && currentHour < 17;
+  const greeting = isMorning ? 'Good morning' : isAfternoon ? 'Good afternoon' : 'Good evening';
   const primaryApplicant = activeCase?.applicants?.find(a => a.type === 'PRIMARY');
   const cibilScore = primaryApplicant?.cibil_score || null;
 
@@ -123,7 +132,7 @@ const MsmeDashboardPage = () => {
           </p>
           <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 8 }}>
             {greeting}, {businessName}{' '}
-            {hour < 12 ? <Sun size={20} color="#f59e0b" /> : hour < 17 ? <CloudSun size={20} color="#f59e0b" /> : <Moon size={20} color="#6366f1" />}
+            {isMorning ? <Sun size={20} color="#f59e0b" /> : isAfternoon ? <CloudSun size={20} color="#f59e0b" /> : <Moon size={20} color="#6366f1" />}
           </h1>
         </div>
       </div>
