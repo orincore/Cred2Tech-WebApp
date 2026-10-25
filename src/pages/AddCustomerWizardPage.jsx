@@ -2207,6 +2207,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
                                   </FormField>
+                                  <FormField label="Gender" name={`cogender_${realIdx}`}>
+                                    <input type="text" value="Male" disabled className="form-control" />
+                                  </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                       <input type="email" value={app.email || ''} onChange={e => updateApplicantRow(realIdx, 'email', e.target.value)} className="form-control" placeholder="name@example.com" style={{ flex: 1, minWidth: 140 }} />
