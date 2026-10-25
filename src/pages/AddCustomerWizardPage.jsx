@@ -135,7 +135,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     business_mobile: '',
     business_email: '',
     pincode: '',
-    gender: '',
+    gender: 'MALE',
     is_professional: false,
     profession_type: '',
     mobile_verified: false,
@@ -435,7 +435,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // manually-typed pincode rendered the field blank even though the
       // case has a usable pincode on file.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
-      gender: primaryApp?.gender || '',
+      gender: primaryApp?.gender || 'MALE',
       is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
       profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
       // Sourced from THIS case's own primary Applicant row, not
@@ -1284,7 +1284,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: 'MALE', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1357,7 +1357,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!primaryApp?.id || primaryApp.pincode === value) return;
     const seq = ++pincodeSaveSeq.current;
     try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, dob: primaryApp.dob || formData.dob });
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, gender: primaryApp.gender || formData.gender || 'MALE', dob: primaryApp.dob || formData.dob });
       if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
       setFormData(prev => ({
         ...prev,
@@ -1365,18 +1365,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       }));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save pincode');
-    }
-  };
-  const handleGenderChange = async (value) => {
-    setFormData(prev => ({ ...prev, gender: value }));
-    if (!caseId || !value) return;
-    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.gender === value) return;
-    try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, gender: value, dob: primaryApp.dob || formData.dob });
-      setFormData(prev => ({ ...prev, applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a) }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save gender');
     }
   };
   const handlePincodeBlur = () => savePincode(formData.pincode);
@@ -1426,7 +1414,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             // field take effect on the primary applicant's identity (and
             // not just the customer record) — addApplicant's own
             // identity-changed check then resets pan_verified correctly.
-            app = { ...app, pincode: formData.pincode, gender: formData.gender || app.gender, dob: app.dob || formData.dob, pan_number: formData.business_pan || app.pan_number };
+            app = { ...app, pincode: formData.pincode, gender: formData.gender || app.gender || 'MALE', dob: app.dob || formData.dob, pan_number: formData.business_pan || app.pan_number };
+          } else {
+            app = { ...app, gender: app.gender || 'MALE' };
           }
           const savedApp = await caseService.addApplicant(targetCaseId, app);
           savedApps.push(savedApp);
@@ -1624,7 +1614,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     && !!formData.business_mobile
     && !!formData.business_email
     && !!formData.pincode
-    && !!formData.gender
     && (!isProfessional || !!formData.profession_type);
   // Everything above, PLUS dob — by the time this is checked (once consent
   // is granted), PAN auto-verify has already run and filled it in, so this
@@ -1982,15 +1971,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <input type="text" value={formData.pincode || ''} onChange={e => handlePincodeChange(e.target.value)} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
                         </FormField>
 
-                        <FormField label="Gender" name="gender" required>
-                          <CustomSelect className="form-control" value={formData.gender || ''} onChange={e => handleGenderChange(e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
-                        </FormField>
-
                         <FormField label="Are You A Professional?" name="is_professional">
                           <CustomSelect
                             className="form-control"
@@ -2223,14 +2203,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       <option value="SALARIED">Salaried</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
                                     </CustomSelect>
-                                  </FormField>
-                                  <FormField label="Gender" name={`cogender_${realIdx}`} required>
-                                    <CustomSelect className="form-control" value={app.gender || ''} onChange={e => updateApplicantRow(realIdx, 'gender', e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />

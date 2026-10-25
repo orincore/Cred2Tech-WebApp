@@ -49,7 +49,7 @@ const getBlankFormData = () => ({
   business_mobile: '',
   business_email: '',
   pincode: '',
-  gender: '',
+  gender: 'MALE',
   dob: '',
   mobile_verified: false,
   applicants: [],
@@ -401,7 +401,7 @@ const AddSalariedCustomerWizardPage = () => {
       business_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || caseData.customer?.pan_holder_name || caseData.customer?.business_name || ''),
       business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || '').replace(/\D/g, ''),
       business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
-      gender: isCarriedOverIdentity ? '' : (primaryApp?.gender || ''),
+      gender: isCarriedOverIdentity ? 'MALE' : (primaryApp?.gender || 'MALE'),
       pincode: isCarriedOverIdentity ? '' : (primaryApp?.pincode || caseData.customer?.pan_profiles?.[0]?.principal_pincode || ''),
       dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
       // Sourced from THIS case's own primary Applicant row, not
@@ -767,7 +767,7 @@ const AddSalariedCustomerWizardPage = () => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', otp_verified: false, is_professional: false, profession_type: '' }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', employment_type: 'SALARIED', pan_number: '', mobile: '', email: '', gender: 'MALE', otp_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -811,7 +811,7 @@ const AddSalariedCustomerWizardPage = () => {
     if (!primaryApp?.id || primaryApp.pincode === value) return;
     const seq = ++pincodeSaveSeq.current;
     try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value });
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, gender: primaryApp.gender || formData.gender || 'MALE' });
       if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
       setFormData(prev => ({
         ...prev,
@@ -819,18 +819,6 @@ const AddSalariedCustomerWizardPage = () => {
       }));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save pincode');
-    }
-  };
-  const handleGenderChange = async (value) => {
-    setFormData(prev => ({ ...prev, gender: value }));
-    if (!caseId || !value) return;
-    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.gender === value) return;
-    try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, gender: value });
-      setFormData(prev => ({ ...prev, applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a) }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save gender');
     }
   };
   const handlePincodeBlur = () => savePincode(formData.pincode);
@@ -864,14 +852,17 @@ const AddSalariedCustomerWizardPage = () => {
         const savedPrimary = await caseService.addApplicant(targetCaseId, {
           ...primaryFromBackend,
           pincode: formData.pincode,
-          gender: formData.gender || primaryFromBackend.gender
+          gender: formData.gender || primaryFromBackend.gender || 'MALE'
         });
         savedApps.push(savedPrimary);
       }
 
       const coApplicants = formData.applicants.filter(a => a.type === 'CO_APPLICANT' && a.pan_number);
       for (const app of coApplicants) {
-        const savedApp = await caseService.addApplicant(targetCaseId, app);
+        const savedApp = await caseService.addApplicant(targetCaseId, {
+          ...app,
+          gender: app.gender || 'MALE'
+        });
         savedApps.push(savedApp);
       }
 
@@ -938,8 +929,7 @@ const AddSalariedCustomerWizardPage = () => {
   const step1ConsentFieldsValid = !!formData.business_pan
     && !!formData.business_mobile
     && !!formData.business_email
-    && !!formData.pincode
-    && !!formData.gender;
+    && !!formData.pincode;
   // Everything above, PLUS business_name — by the time this is checked
   // (once consent is granted), PAN auto-verify has already run and filled
   // it in, so this only ever gates the *next* step (Save & Next), never
@@ -1266,15 +1256,6 @@ const AddSalariedCustomerWizardPage = () => {
                           </div>
                         </FormField>
 
-                        <FormField label="Gender" name="gender" required>
-                          <CustomSelect className="form-control" value={formData.gender || ''} onChange={e => handleGenderChange(e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
-                        </FormField>
-
                         <FormField label="Pincode" name="pincode" required>
                           <input
                             type="text"
@@ -1453,14 +1434,6 @@ const AddSalariedCustomerWizardPage = () => {
                                       <option value="SELF_EMPLOYED">Self Employed</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
                                     </CustomSelect>
-                                  </FormField>
-                                  <FormField label="Gender" name={`cogender_${realIdx}`} required>
-                                    <CustomSelect className="form-control" value={app.gender || ''} onChange={e => updateApplicantRow(realIdx, 'gender', e.target.value)}>
-                            <option value="">Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input
