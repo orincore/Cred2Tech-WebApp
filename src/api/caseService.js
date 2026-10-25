@@ -17,8 +17,11 @@ export const caseService = {
     return response.data;
   },
 
-  createCase: async (customer_id) => {
-    const response = await axiosInstance.post('/cases/create', { customer_id });
+  createCase: async (customer_id, extra = {}) => {
+    const payload = typeof customer_id === 'object'
+      ? customer_id
+      : { customer_id, ...(typeof extra === 'object' ? extra : { product_type: extra }) };
+    const response = await axiosInstance.post('/cases/create', payload);
     return response.data;
   },
 

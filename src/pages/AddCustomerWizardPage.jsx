@@ -408,7 +408,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
 
     setCaseId(caseData.id);
-    setFormData({
+    setFormData(prev => ({
       customer_id: caseData.customer?.id,
       // Classification lives on the Case itself, not the Customer — the
       // same PAN/customer can have one salaried case and one MSME case at
@@ -429,12 +429,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || ''),
       business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
       // Falls back to the verified PAN's own KYC pincode (principal_pincode)
-      // when the applicant row itself was never manually filled in - the
-      // salaried wizard already does this (see AddSalariedCustomerWizardPage);
-      // this page was missing it, so a case with PAN/GST verified but no
-      // manually-typed pincode rendered the field blank even though the
-      // case has a usable pincode on file.
-      pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || '',
+      // or to the already-typed pincode in state when the applicant row itself
+      // was not yet populated, preventing user-entered pincode from disappearing.
+      pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || prev.pincode || '',
       gender: primaryApp?.gender || 'MALE',
       is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
       profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
@@ -504,7 +501,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // which is why these showed "Pending" forever even after completion.
       customer_itr_profile: caseData.business_financials?.itr_analytics || null,
       customer_bank_profile: caseData.business_financials?.bank_statements || null
-    });
+    }));
 
     // Rehydrate any consent request that's still live for THIS case —
     // otherwise a page reload or a fresh login after logging out loses the
@@ -662,14 +659,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     let targetApplicants = formData.applicants;
 
     if (!targetCaseId) {
-      const newCase = await caseService.createCase(customer.id);
+      const newCase = await caseService.createCase(customer.id, { pincode: formData.pincode });
       targetCaseId = newCase.id;
+      let primaryApp = (newCase.applicants || []).find(a => a.type === 'PRIMARY');
+      if (primaryApp && formData.pincode && primaryApp.pincode !== formData.pincode) {
+        primaryApp = await caseService.addApplicant(targetCaseId, {
+          ...primaryApp,
+          pincode: formData.pincode,
+          gender: primaryApp.gender || formData.gender || 'MALE',
+          dob: primaryApp.dob || formData.dob
+        });
+      }
       // Keep any co-applicant rows the user already added on the
       // coapplicants sub-page (those exist only in formData.applicants
       // until saved) - a brand-new case can't have a PRIMARY in there yet,
       // so this is purely additive, not a dedupe.
       targetApplicants = [
-        ...(newCase.applicants || []),
+        ...(primaryApp ? [primaryApp] : (newCase.applicants || [])),
         ...formData.applicants.filter(a => a.type !== 'PRIMARY')
       ];
 
@@ -677,10 +683,27 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       setFormData(prev => ({
         ...prev,
         customer_id: targetCustomerId,
+        pincode: prev.pincode || formData.pincode,
         applicants: targetApplicants // Sync the newly created PRIMARY applicant
       }));
       navigate(`?caseId=${targetCaseId}`, { replace: true });
       localStorage.setItem('draftCaseId', targetCaseId);
+    } else if (formData.pincode) {
+      const primaryApp = targetApplicants.find(a => a.type === 'PRIMARY');
+      if (primaryApp?.id && primaryApp.pincode !== formData.pincode) {
+        const savedApp = await caseService.addApplicant(targetCaseId, {
+          ...primaryApp,
+          pincode: formData.pincode,
+          gender: primaryApp.gender || formData.gender || 'MALE',
+          dob: primaryApp.dob || formData.dob
+        });
+        targetApplicants = targetApplicants.map(a => a.type === 'PRIMARY' ? savedApp : a);
+        setFormData(prev => ({
+          ...prev,
+          pincode: prev.pincode || formData.pincode,
+          applicants: targetApplicants
+        }));
+      }
     }
 
     return { targetCaseId, targetCustomerId, targetApplicants };
@@ -1025,7 +1048,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     try {
       await msmeApi.updateProfile({ email });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to update your account email');
+      // Direct MSME case applicants can use any email address — silent on background account email sync failure
     }
   };
 
@@ -2206,9 +2229,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
-                                  </FormField>
-                                  <FormField label="Gender" name={`cogender_${realIdx}`}>
-                                    <input type="text" value="Male" disabled className="form-control" />
                                   </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
