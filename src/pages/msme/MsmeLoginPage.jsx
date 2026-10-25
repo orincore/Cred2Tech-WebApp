@@ -51,10 +51,6 @@ const MsmeLoginPage = () => {
 
   const handleSendOtp = async (e) => {
     e?.preventDefault();
-    // Defense in depth alongside the disabled input/button below — a
-    // keyboard Enter on the (disabled) field or a stray submit must not
-    // reach the OTP API while direct MSME login isn't live in production.
-    if (!IS_DEV_BUILD) return;
     if (!mobile || mobile.length !== 10) {
       setApiError('Please enter a valid 10-digit mobile number');
       return;
@@ -175,23 +171,6 @@ const MsmeLoginPage = () => {
             </p>
           </div>
 
-          {/* Direct MSME self-service login isn't live for real customers yet
-              — IS_DEV_BUILD (local + the shared dev deployment) stays fully
-              usable for testing; everyone else (production) sees this banner
-              and the mobile field/Send OTP button below are disabled so
-              nobody can actually start a login. */}
-          {!IS_DEV_BUILD && (
-            <div
-              className="flex items-start gap-3 px-4 py-4 rounded-[10px] mb-6"
-              style={{ background: 'var(--surface-variant)', border: '1px solid var(--border)' }}
-            >
-              <span className="material-symbols-outlined text-[20px]" style={{ color: 'var(--primary)' }}>schedule</span>
-              <p className="text-[13px] leading-relaxed text-[#0a1628] dark:text-[#e6edf7]">
-                <span className="font-bold">Coming soon.</span> MSME self-service sign-in isn't open yet.
-              </p>
-            </div>
-          )}
-
           {/* Error banner */}
           {apiError && (
             <div
@@ -235,8 +214,7 @@ const MsmeLoginPage = () => {
                       onFocus={() => setMobileFocused(true)}
                       onBlur={() => setMobileFocused(false)}
                       placeholder="98765 43210"
-                      autoFocus={IS_DEV_BUILD}
-                      disabled={!IS_DEV_BUILD}
+                      autoFocus
                       className="w-full bg-transparent border-0 outline-none text-[20px] font-bold tracking-wide p-0 focus:ring-0 placeholder-gray-300 dark:placeholder-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
                       style={{ color: 'var(--text-primary)' }}
                     />
@@ -248,7 +226,7 @@ const MsmeLoginPage = () => {
 
                 <TravelingBorderButton
                   type="submit"
-                  disabled={!IS_DEV_BUILD || loading}
+                  disabled={loading}
                   solid
                   className="w-full py-3.5 text-[15px] rounded-[10px]"
                 >
