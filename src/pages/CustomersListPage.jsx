@@ -1,14 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, Upload, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Search, AlertTriangle, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { caseService } from '../api/caseService';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import CopyButton from '../components/ui/CopyButton';
 import { toTitleCase, resolveEntityName, isUsableEntityName, formatStatusLabel } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import CustomerTypeModal from '../components/customers/CustomerTypeModal';
-import BulkUploadModal from '../components/customers/BulkUploadModal';
 import PageHeader from '../components/ui/PageHeader';
 import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import { useTheme } from '../context/ThemeContext';
@@ -28,7 +27,6 @@ const caseIdDisplay = (c) => formatCaseReference(c).replace(/^CASE-/, '');
 
 const PIPELINE_TOUR_STEPS = [
   { target: '[data-tour="pipeline-add-customer"]', title: 'Add a new customer', description: 'Start a brand-new case here. Choose whether it\'s a Business/MSME or Salaried customer and the wizard walks you through the rest.' },
-  { target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' },
   { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, PAN, phone, or email.' },
   { target: '[data-tour="pipeline-filters"]', title: 'Filter your pipeline', description: 'Narrow the list down by entity type, lender, or open alerts (like a pending PDD), and sort it however is most useful to you.' },
   { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Tap a stage to see only the cases sitting there right now, from Lead Created all the way through to Disbursed.' },
@@ -338,7 +336,6 @@ const CustomersListPage = () => {
   const [totalPages, setTotalPages] = useState(1);
 
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
   // Search, sort, every facet, AND the page itself all go to the backend now
   // — true server-side pagination (50 rows/request) instead of fetching up
@@ -430,33 +427,18 @@ const CustomersListPage = () => {
           title="Pipeline & Customers"
           subtitle={`${stats.totalCases} active cases · ${stats.totalCustomers} customers`}
           actions={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                type="button"
-                data-tour="pipeline-bulk-upload"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setIsBulkUploadModalOpen(true)}
-              >
-                <Upload size={13} /> Bulk Upload
-              </button>
-              <div data-tour="pipeline-add-customer" style={{ display: 'inline-flex' }}>
-                <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <UserPlus size={13} /> Add New Customer
-                  </div>
-                </TravelingBorderButton>
-              </div>
+            <div data-tour="pipeline-add-customer" style={{ display: 'inline-flex' }}>
+              <TravelingBorderButton onClick={() => setIsTypeModalOpen(true)} size="sm" solid showIcon={false} className="add-customer-btn-compact">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <UserPlus size={13} /> Add New Customer
+                </div>
+              </TravelingBorderButton>
             </div>
           }
         />
       </div>
 
       <CustomerTypeModal isOpen={isTypeModalOpen} onClose={() => setIsTypeModalOpen(false)} />
-      <BulkUploadModal
-        isOpen={isBulkUploadModalOpen}
-        onClose={() => setIsBulkUploadModalOpen(false)}
-        onSuccess={() => fetchPipeline()}
-      />
 
       {/* ─── Filter row ─── */}
       <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '16px' : '20px 20px', display: 'flex', gap: isMobile ? 16 : 24, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
