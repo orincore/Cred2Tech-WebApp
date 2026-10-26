@@ -8,11 +8,19 @@ import { PlusCircle, Trash2, ChevronRight, User, Users, Info } from 'lucide-reac
 
 import CustomSelect from '../components/CustomSelect';
 // Manual income entries are for supplementary income no automated pull
-// (GST/ITR/bank/salary-slip) ever captures — narrowed to just these three
-// for both MSME and Salaried cases, and for both the DSA and direct-MSME
-// wizards (they share this exact component).
+// (GST/ITR/bank/salary-slip) ever captures.
+// For salaried cases/applicants, Incentive and Bonus are provided as separate
+// manual options because they are distinct components under lender policies
+// (incentive is a recurring 3-month average, bonus is a single latest-year figure)
+// and may not always be present or fully captured in automated slips.
 const INCOME_TYPES_MSME = ['Rental Income — Bank', 'Rental Income — Cash', 'Agriculture Income'];
-const INCOME_TYPES_SALARIED = ['Rental Income — Bank', 'Rental Income — Cash', 'Agriculture Income'];
+const INCOME_TYPES_SALARIED = [
+  'Incentive',
+  'Bonus',
+  'Rental Income — Bank',
+  'Rental Income — Cash',
+  'Agriculture Income'
+];
 const DOC_TYPES = ['CA Certificate', 'Salary Slip', 'Form 16', 'ITR', 'Bank Credit', 'Rental Agreement', 'None'];
 
 // esr_financials.salaried_income_source (esrFinancials.service.js) has 5
