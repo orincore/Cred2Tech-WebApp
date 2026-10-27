@@ -75,7 +75,16 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           setCalculationBase(cfg.calculation_base || 'DISBURSED_AMOUNT');
           setPayoutTrigger(cfg.payout_trigger || 'ON_DSA_RECEIPT');
           setTdsApplicable(cfg.tds_applicable !== false);
-          setOverrides((cfg.overrides || []).map((o) => ({ ...o, products: o.products || '' })));
+          // Dates must be sliced to YYYY-MM-DD: a native <input type="date">
+          // renders nothing at all for a full ISO timestamp, which is why a
+          // saved override's effective date came back blank after a reload.
+          setOverrides((cfg.overrides || []).map((o) => ({
+            ...o,
+            products: o.products || '',
+            calculation_base: o.calculation_base || '',
+            effective_from: o.effective_from ? String(o.effective_from).split('T')[0] : '',
+            effective_to: o.effective_to ? String(o.effective_to).split('T')[0] : '',
+          })));
           setSlabs((cfg.case_count_slabs || []).map((s) => ({ ...s, products: s.products || '' })));
           setEffectiveFrom(cfg.effective_from ? cfg.effective_from.split('T')[0] : '');
           setSchemes((cfg.special_schemes || []).map((s) => ({
@@ -128,9 +137,9 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
     }
   };
 
-  const addOverride = () => setOverrides((prev) => [...prev, { tenant_lender_id: '', products: '', override_rate: '', effective_from: '' }]);
+  const addOverride = () => setOverrides((prev) => [...prev, { tenant_lender_id: '', products: '', override_rate: '', calculation_base: '', effective_from: '' }]);
   const addSlab = () => setSlabs((prev) => [...prev, { from_cases: '', to_cases: '', payout_per_case: '', products: '' }]);
-  const addScheme = () => setSchemes((prev) => [...prev, { scheme_name: '', basis: 'Cases', valid_from: '', valid_to: '', bonus_per_case: '', min_case_count: '', is_active: true }]);
+  const addScheme = () => setSchemes((prev) => [...prev, { scheme_name: '', basis: 'Cases', valid_from: '', valid_to: '', bonus_per_case: '', min_case_count: '', products: '', is_active: true }]);
 
   if (loading) {
     return <div style={{ padding: 20 }}><LoadingSpinner size={20} /></div>;
@@ -198,7 +207,7 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {overrides.map((ov, i) => (
-              <div key={i} style={{ ...rowGrid(isMobile, '2fr 2fr 1fr 1fr auto'), ...(isMobile ? { border: '1px solid var(--outline)', background: 'var(--surface)', padding: 10 } : {}) }}>
+              <div key={i} style={{ ...rowGrid(isMobile, '2fr 1.4fr 1fr 1.6fr 1fr auto'), ...(isMobile ? { border: '1px solid var(--outline)', background: 'var(--surface)', padding: 10 } : {}) }}>
                 <CustomSelect value={ov.tenant_lender_id} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, tenant_lender_id: e.target.value } : o)))} style={fieldStyle}>
                   <option value="">— Select Lender —</option>
                   {lenders.map((l) => <option key={l.id} value={l.id}>{l.lender_name}</option>)}
@@ -211,7 +220,16 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
                   <input type="number" placeholder="40" min={0} max={100} value={ov.override_rate} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, override_rate: e.target.value } : o)))} style={fieldStyle} />
                   <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>%</span>
                 </div>
-                <input type="date" value={ov.effective_from || ''} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, effective_from: e.target.value } : o)))} style={fieldStyle} />
+                {/* The base this override's rate multiplies. Without this field
+                    every override saved from here was stamped DISBURSED_AMOUNT,
+                    so a rate meant for the lender commission was applied to the
+                    whole disbursed tranche instead. */}
+                <CustomSelect value={ov.calculation_base || ''} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, calculation_base: e.target.value } : o)))} style={fieldStyle}>
+                  <option value="">Base: same as default</option>
+                  <option value="DISBURSED_AMOUNT">Disbursed Amount</option>
+                  <option value="LENDER_COMMISSION">Lender Commission</option>
+                </CustomSelect>
+                <input type="date" value={(ov.effective_from || '').split('T')[0]} onChange={(e) => setOverrides((prev) => prev.map((o, j) => (j === i ? { ...o, effective_from: e.target.value } : o)))} style={fieldStyle} />
                 <button type="button" onClick={() => setOverrides((prev) => prev.filter((_, j) => j !== i))} style={{ background: 'var(--error-bg)', border: '1px solid var(--error)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: isMobile ? '100%' : 'auto' }}>
                   <X size={13} color="var(--error)" />
                   {isMobile && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--error)' }}>Remove</span>}
@@ -306,6 +324,13 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
                     </CustomSelect>
                   </div>
                   <div>
+                    <label style={labelStyle}>Product (optional)</label>
+                    <CustomSelect value={sc.products || ''} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, products: e.target.value } : s)))} style={fieldStyle}>
+                      <option value="">All Products</option>
+                      {PRODUCT_TYPES.map((pt) => <option key={pt} value={pt}>{pt}</option>)}
+                    </CustomSelect>
+                  </div>
+                  <div>
                     <label style={labelStyle}>Min Cases Required</label>
                     <input type="number" min={1} placeholder="e.g. 3" value={sc.min_case_count || ''} onChange={(e) => setSchemes((prev) => prev.map((s, j) => (j === i ? { ...s, min_case_count: e.target.value } : s)))} style={fieldStyle} />
                   </div>
@@ -331,7 +356,11 @@ const SubDsaPayoutSetup = ({ userId, lenders }) => {
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--success)' }}>₹{mtd.dsa_earned.toLocaleString('en-IN')}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Sub-Sourcing Partner Share ({defaultRate}%)</div>
+          {/* Labelled as an estimate on purpose: this multiplies the whole
+              month's earnings by the DEFAULT rate, so it does not reflect any
+              per-lender override or slab/scheme bonus. The real figures are
+              the per-case payout rows. */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)', textTransform: 'uppercase' }}>Est. Share at Default {defaultRate}% (excl. overrides &amp; bonuses)</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--info)' }}>₹{Math.round(mtd.dsa_earned * defaultRate / 100).toLocaleString('en-IN')}</div>
         </div>
       </div>
