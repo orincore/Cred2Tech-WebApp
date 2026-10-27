@@ -8,6 +8,12 @@ export async function getDirectMsmeCases() {
   return data;
 }
 
+// Leads still waiting to be allocated to a DSA (sidebar badge).
+export async function getUnallocatedDirectMsmeCount() {
+  const { data } = await api.get('/admin/msme-cases/unallocated-count');
+  return data.count;
+}
+
 export async function getDirectMsmeCaseDetail(caseId) {
   const { data } = await api.get(`/admin/msme-cases/${caseId}`);
   return data;

@@ -736,7 +736,7 @@ const LENDER_ACTION_BTN = {
   paddingBottom: 0,
 };
 
-function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenProposal, compact = false, isMsme = false, onApplyForLoan }) {
+function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenProposal, compact = false, isMsme = false, onToggleLender, isSelected = false, isApplied = false }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
 
@@ -749,23 +749,42 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
     String(p.lender_id) !== String(lender.lender_id) && p.proposal_status === 'submitted'
   ) || proposals.find(p => String(p.lender_id) !== String(lender.lender_id));
 
-  // MSME self-service customers never create/send proposals directly - picking
-  // a bank here moves to step 7, a dedicated loan-terms page where they state
-  // how much they need before the case goes to the Cred2Tech admin queue (the
-  // assigned DSA creates the actual proposal for that lender after allocation).
+  // MSME self-service customers never create/send proposals directly - they
+  // tick the banks they want to apply with (any number), then continue to step
+  // 7, a dedicated loan-terms page where they state how much they need from
+  // each before the case goes to the Cred2Tech admin queue (the assigned DSA
+  // creates the actual proposals for those lenders after allocation).
   if (isMsme) {
+    // Already sent to Cred2Tech on an earlier submission - nothing to pick.
+    if (isApplied) {
+      return (
+        <div
+          title="This application has already been sent to Cred2Tech"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700,
+            fontSize: compact ? 12 : 13, padding: compact ? '5px 10px' : '10px', width: compact ? undefined : '100%',
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
+          }}
+        >
+          <CheckCircle2 size={compact ? 12 : 15} /> Already applied
+        </div>
+      );
+    }
     return (
       <button
         className={`btn ${compact ? 'btn-sm' : ''}`}
         style={{
           borderRadius: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6,
           padding: compact ? undefined : '10px', width: compact ? undefined : '100%', justifyContent: 'center',
-          background: 'linear-gradient(135deg,#2B6CB0,#553C9A)', color: '#fff', border: 'none', cursor: 'pointer'
+          background: isSelected ? 'var(--success-bg)' : 'linear-gradient(135deg,#2B6CB0,#553C9A)',
+          color: isSelected ? 'var(--success)' : '#fff',
+          border: isSelected ? '1px solid var(--success)' : 'none', cursor: 'pointer'
         }}
-        onClick={() => onApplyForLoan(lender)}
+        aria-pressed={isSelected}
+        onClick={() => onToggleLender(lender)}
       >
-        <Send size={compact ? 12 : 15} />
-        Apply for this Loan
+        {isSelected ? <CheckCircle2 size={compact ? 12 : 15} /> : <Send size={compact ? 12 : 15} />}
+        {isSelected ? 'Selected' : 'Apply for this Loan'}
       </button>
     );
   }
@@ -1004,7 +1023,7 @@ export function EsrSkeleton() {
   );
 }
 
-export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSalaried = false, onApplyForLoan }) {
+export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSalaried = false, selectedLenderIds = [], appliedLenders = [], onToggleLender, onContinueWithLenders }) {
 
   const [loading, setLoading]       = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1039,14 +1058,23 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
   // The card list is rendered from esr.raw_payload.lenders (a debugging
   // snapshot taken before the EligibilityReportLender rows were inserted, so
   // it has no real id) - resolve the real row id via lender_id so step 7 can
-  // record msme_selected_lender_esr_id correctly on submit.
-  const handleApplyForLoan = (lender) => {
-    const dbLenderId = esr?.lenders?.find(l => String(l.lender_id) === String(lender.lender_id))?.id;
+  // record the lender application correctly on submit.
+  const resolveDbLenderId = (lender) =>
+    esr?.lenders?.find(l => String(l.lender_id) === String(lender.lender_id))?.id;
+
+  // The ESR is regenerated whenever the customer updates their data, which
+  // gives every lender a new row id - so "already applied" matches on the
+  // stable lender_id (name as a fallback), never on the row id alone.
+  const isAlreadyApplied = (lender) => appliedLenders.some(a =>
+    (a.lender_id && String(a.lender_id) === String(lender.lender_id)) || a.lender_name === lender.lender_name);
+
+  const handleToggleLender = (lender) => {
+    const dbLenderId = resolveDbLenderId(lender);
     if (!dbLenderId) {
       toast.error('Could not resolve this lender - please regenerate the ESR and try again.');
       return;
     }
-    onApplyForLoan({ ...lender, dbLenderId });
+    onToggleLender({ ...lender, dbLenderId });
   };
 
   const load = useCallback(async () => {
@@ -1395,7 +1423,9 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
                       onProposalCreated={load}
                       onOpenProposal={onOpenProposal}
                       isMsme={isMsme}
-                      onApplyForLoan={handleApplyForLoan}
+                      onToggleLender={handleToggleLender}
+                      isSelected={selectedLenderIds.includes(resolveDbLenderId(lender))}
+                      isApplied={isAlreadyApplied(lender)}
                       compact
                     />
                   </div>
@@ -1452,6 +1482,24 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
           </div>
         );
       })()}
+
+      {/* MSME: lenders ticked so far - sticks to the bottom while scrolling the list. */}
+      {isMsme && selectedLenderIds.length > 0 && (
+        <div style={{
+          position: 'sticky', bottom: 0, zIndex: 5, marginTop: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+          padding: '12px 16px', background: 'var(--surface, var(--bg-elevated))',
+          border: '1.5px solid var(--primary)', boxShadow: '0 -4px 16px rgba(0,0,0,0.12)'
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            {selectedLenderIds.length} lender{selectedLenderIds.length === 1 ? '' : 's'} selected
+            <span style={{ fontWeight: 500, color: 'var(--text-tertiary)' }}> - you can apply with more than one</span>
+          </div>
+          <button className="btn btn-primary" style={{ borderRadius: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={onContinueWithLenders}>
+            Continue with {selectedLenderIds.length} lender{selectedLenderIds.length === 1 ? '' : 's'}
+          </button>
+        </div>
+      )}
 
     </div>
   );

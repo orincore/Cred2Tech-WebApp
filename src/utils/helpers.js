@@ -81,6 +81,16 @@ export const resolveEntityName = (customer, fallback = '') => {
   ].find(isUsableEntityName) || fallback;
 };
 
+// PAN for display: only the last 3 characters are shown (ABCDE1234F -> •••••••34F).
+// Keeps the length so it still looks like a PAN. Display only - not a security
+// control on its own, since the API response still carries the full value.
+export const maskPan = (pan, fallback = '—') => {
+  const value = String(pan ?? '').trim();
+  if (!value) return fallback;
+  if (value.length <= 3) return value;
+  return `${'•'.repeat(value.length - 3)}${value.slice(-3)}`;
+};
+
 // Common acronyms in status/stage codes that should stay uppercase when humanized
 // (e.g. ESR_GENERATED -> "ESR Generated", not "Esr Generated").
 const STATUS_LABEL_ACRONYMS = new Set([

@@ -6,7 +6,7 @@ import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
+import { formatDate, toTitleCase, resolveEntityName, maskPan } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
 import { getTenantSummary } from '../api/tenantService';
 import CustomSelect from '../components/CustomSelect';
@@ -150,6 +150,8 @@ const AdminMsmeCaseAllocatePage = () => {
     try {
       await allocateDirectMsmeCase(caseId, { dsa_tenant_id: selectedUser.tenant_id, dsa_user_id: selectedUser.user_id });
       toast.success(`Case successfully ${caseData.assigned_dsa_tenant_id ? 're-allocated' : 'allocated'} to Sourcing Partner`);
+      // Tells the sidebar's "Direct MSME Leads" badge to recount right away.
+      window.dispatchEvent(new Event('admin-msme-leads-changed'));
       navigate('/admin/msme-cases');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to allocate case');
@@ -185,7 +187,7 @@ const AdminMsmeCaseAllocatePage = () => {
         </button>
         <PageHeader
           title={`${isReallocation ? 'Reallocate' : 'Allocate'} Case — ${businessName}`}
-          subtitle={`PAN: ${caseData.customer?.business_pan || '—'} · ${caseData.product_type || 'Product not specified'}`}
+          subtitle={`PAN: ${maskPan(caseData.customer?.business_pan)} · ${caseData.product_type || 'Product not specified'}`}
           compact={isMobile}
         />
       </div>

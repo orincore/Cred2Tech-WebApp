@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { CreditCard } from 'lucide-react';
@@ -13,6 +14,8 @@ import LoadingSpinner from './ui/LoadingSpinner';
 // happen server-side; the Razorpay key_id comes from the order response.
 const MsmePaymentGate = ({ children }) => {
   const { user } = useMsmeAuth();
+  const [searchParams] = useSearchParams();
+  const caseId = searchParams.get('caseId');
   const [loading, setLoading] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentConfig, setPaymentConfig] = useState(null);
@@ -28,6 +31,27 @@ const MsmePaymentGate = ({ children }) => {
   const loadGate = async () => {
     try {
       setLoading(true);
+      // Opening an existing case (?caseId=) is a different question from
+      // starting a new one. The dashboard's paymentStatus only reports PAID
+      // for an unsubmitted case or an unclaimed payment, so once a case was
+      // submitted it reads UNPAID and Update/Continue asked for payment again.
+      // A case the customer already paid for is theirs to edit - getCases is
+      // scoped to their own cases, so another user's id never matches.
+      if (caseId) {
+        const casesRes = await msmeApi.getCases();
+        const all = casesRes.data.cases || [];
+        const own = all.find((c) => String(c.id) === String(caseId));
+        // A lender case (one of the cases a main application was split into) is
+        // a clone with no payment of its own - the assessment fee was paid on
+        // the main application it was created under, so that is the payment to
+        // check. Both lookups are inside the customer's own cases only.
+        const mainId = own?.msme_lender_application_as_child?.case_id;
+        const payer = mainId ? all.find((c) => c.id === mainId) : own;
+        if (payer?.case_payment?.status === 'PAID') {
+          setPaymentStatus('PAID');
+          return;
+        }
+      }
       const res = await msmeApi.getDashboard();
       setPaymentStatus(res.data.paymentStatus);
       if (res.data.paymentStatus !== 'PAID') {

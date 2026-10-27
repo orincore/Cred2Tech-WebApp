@@ -9,7 +9,8 @@ import DataPurgedBadge from '../components/case/DataPurgedBadge';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import DataTable from '../components/DataTable';
-import { formatDate, toTitleCase, resolveEntityName } from '../utils/helpers';
+import { formatDate, toTitleCase, resolveEntityName, maskPan } from '../utils/helpers';
+import AdminMsmeLeadDetailModal from '../components/msme/AdminMsmeLeadDetailModal';
 import { getDirectMsmeCases } from '../api/adminMsmeService';
 
 import CustomSelect from '../components/CustomSelect';
@@ -43,6 +44,7 @@ const AdminMsmeCasesPage = () => {
   const [showStats, setShowStats] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('ALL'); // 'ALL' | 'ALLOCATED' | 'UNALLOCATED'
+  const [viewCaseId, setViewCaseId] = useState(null); // lead shown in the View panel
 
   const fetchCases = async () => {
     try {
@@ -76,9 +78,12 @@ const AdminMsmeCasesPage = () => {
         const pan = c.customer?.business_pan || '';
         const dsaName = c.assigned_dsa_user?.name || '';
         
-        if (!businessName.toLowerCase().includes(q) && 
+        // "7828053", "case-7828053" and "CASE 7828053" all find the case.
+        const caseRef = `case-${c.id}`;
+        if (!businessName.toLowerCase().includes(q) &&
             !pan.toLowerCase().includes(q) &&
-            !dsaName.toLowerCase().includes(q)) {
+            !dsaName.toLowerCase().includes(q) &&
+            !caseRef.includes(q.replace(/\s+/g, '-'))) {
           return false;
         }
       }
@@ -91,17 +96,24 @@ const AdminMsmeCasesPage = () => {
 
   const columns = [
     {
-      key: 'business', label: 'Business',
+      // Widths are set on every column (they add up to 100%): the table uses a
+      // fixed layout, where columns without a width split what is left evenly -
+      // which made Allocation as wide as Business. Business gets the most room.
+      key: 'case_id', label: 'Case ID', width: '10%',
+      render: (c) => <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)', whiteSpace: 'nowrap' }}>{c.id}</span>
+    },
+    {
+      key: 'business', label: 'Business', width: '27%',
       render: (c) => (
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(resolveEntityName(c.customer)) || 'N/A'}</div>
-          <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>PAN: {c.customer?.business_pan || '—'}</div>
+          <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>PAN: {maskPan(c.customer?.business_pan)}</div>
           <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{formatDate(c.created_at)}</div>
         </div>
       )
     },
     {
-      key: 'loan', label: 'Requested Loan',
+      key: 'loan', label: 'Requested Loan', width: '13%',
       render: (c) => (
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>
@@ -112,7 +124,7 @@ const AdminMsmeCasesPage = () => {
       )
     },
     {
-      key: 'stage', label: 'Status',
+      key: 'stage', label: 'Status', width: '11%',
       render: (c) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
           <Badge type="level" value={c.stage} />
@@ -121,7 +133,7 @@ const AdminMsmeCasesPage = () => {
       )
     },
     {
-      key: 'payment', label: 'Payment',
+      key: 'payment', label: 'Payment', width: '8%',
       render: (c) => c.case_payment?.status === 'PAID' ? (
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success)', background: 'var(--success-bg)', padding: '3px 8px', border: '1px solid var(--success)' }}>
           Paid
@@ -131,7 +143,7 @@ const AdminMsmeCasesPage = () => {
       )
     },
     {
-      key: 'allocation', label: 'Allocation',
+      key: 'allocation', label: 'Allocation', width: '14%',
       render: (c) => c.assigned_dsa_tenant_id ? (
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(c.assigned_dsa_user?.name)}</div>
@@ -144,7 +156,7 @@ const AdminMsmeCasesPage = () => {
       )
     },
     {
-      key: 'actions', label: '', align: 'right',
+      key: 'actions', label: '', align: 'right', width: '17%',
       render: (c) => (
         // Matches Cred2Tech/frontend's reference behavior and the backend's
         // actual capability (allocateDirectCase has no stage check at all):
@@ -153,15 +165,37 @@ const AdminMsmeCasesPage = () => {
         // customer submits, which used to hide this button for every real
         // case. Already-allocated cases can be re-allocated too — the
         // allocate page's own picker handles both.
-        <button className="btn btn-secondary btn-sm" onClick={() => goToAllocate(c)}>
-          {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
+          <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => setViewCaseId(c.id)}>
+            View
+          </button>
+          <button className="btn btn-primary btn-sm" style={{ borderRadius: 0 }} onClick={() => goToAllocate(c)}>
+            {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'}
+          </button>
+        </div>
       )
     },
   ];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+    <div className="admin-msme-leads-page" style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      {/* Larger screens: one step smaller type, tighter table cells and buttons,
+          so every column and row action fits without scrolling. The sizes are
+          set inline all over this page and its table / stat cards, so they are
+          matched by their inline value. Phones keep their own layout. */}
+      <style>{`
+        @media (min-width: 769px) {
+          .admin-msme-leads-page h1 { font-size: 20px !important; }
+          .admin-msme-leads-page table th { padding: 8px 10px !important; white-space: nowrap; }
+          .admin-msme-leads-page table td { padding: 8px 10px !important; }
+          .admin-msme-leads-page [style*="font-size: 22px"] { font-size: 18px !important; }
+          .admin-msme-leads-page [style*="font-size: 16px"] { font-size: 14px !important; }
+          .admin-msme-leads-page [style*="font-size: 14px"] { font-size: 12.5px !important; }
+          .admin-msme-leads-page [style*="font-size: 13px"] { font-size: 12px !important; }
+          .admin-msme-leads-page [style*="font-size: 12px"] { font-size: 11px !important; }
+          .admin-msme-leads-page .btn-sm { height: 28px !important; padding: 0 12px !important; font-size: 12px !important; }
+        }
+      `}</style>
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Direct MSME Leads"
@@ -216,7 +250,7 @@ const AdminMsmeCasesPage = () => {
               <Search size={14} color="var(--on-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input
                 type="text"
-                placeholder="Search by Business Name, PAN, or Sourcing Partner Name..."
+                placeholder="Search by Case ID, Business Name, PAN, or Sourcing Partner Name..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 style={{
@@ -277,7 +311,7 @@ const AdminMsmeCasesPage = () => {
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {toTitleCase(resolveEntityName(c.customer)) || 'N/A'}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>PAN: {c.customer?.business_pan || '—'} · {formatDate(c.created_at)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>PAN: {maskPan(c.customer?.business_pan)} · {formatDate(c.created_at)}</div>
                   </div>
                   <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                     <Badge type="level" value={c.stage} />
@@ -318,18 +352,30 @@ const AdminMsmeCasesPage = () => {
                   </div>
                 </div>
 
-                {/* Action — already-allocated cases can be re-allocated too. */}
-                <button
-                  onClick={() => goToAllocate(c)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    width: '100%', marginTop: 12, padding: '8px 0',
-                    background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
-                    fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
-                  }}
-                >
-                  {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'} <ArrowRight size={12} />
-                </button>
+                {/* Actions — View opens the lead's details; already-allocated cases
+                    can be re-allocated too. Sharp-edged, side by side. */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button
+                    onClick={() => setViewCaseId(c.id)}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 0', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
+                      fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                    }}
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={() => goToAllocate(c)}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '8px 0', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 0,
+                      fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer',
+                    }}
+                  >
+                    {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'} <ArrowRight size={12} />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -340,6 +386,14 @@ const AdminMsmeCasesPage = () => {
         </div>
       )}
       </div>
+
+      {viewCaseId && (
+        <AdminMsmeLeadDetailModal
+          caseId={viewCaseId}
+          onClose={() => setViewCaseId(null)}
+          onAllocate={(lead) => { setViewCaseId(null); goToAllocate(lead); }}
+        />
+      )}
     </div>
   );
 };

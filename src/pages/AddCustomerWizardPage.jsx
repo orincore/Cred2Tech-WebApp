@@ -112,15 +112,36 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   };
 
   // MSME self-service customers never create/send a proposal themselves - step
-  // 6 lets them pick a bank card, which moves to step 7 (MsmeLoanTermsStep)
-  // instead of the DSA's ProposalStep - there they state how much they need
-  // before the case goes to the Cred2Tech admin queue for allocation to a DSA
-  // (who then creates and sends the actual proposal).
-  const [applyLender, setApplyLender] = useState(null);
-  const handleApplyForLoan = (lender) => {
-    setApplyLender(lender);
-    goToStep(7);
+  // 6 lets them tick one or more bank cards, then "Continue" moves to step 7
+  // (MsmeLoanTermsStep) instead of the DSA's ProposalStep - there they state
+  // how much they need from each before the case goes to the Cred2Tech admin
+  // queue for allocation to a DSA (who then creates and sends the actual
+  // proposals). Each entry is the lender card plus its resolved `dbLenderId`.
+  const [selectedLenders, setSelectedLenders] = useState([]);
+  const handleToggleLender = (lender) => {
+    setSelectedLenders((prev) => (
+      prev.some((l) => l.dbLenderId === lender.dbLenderId)
+        ? prev.filter((l) => l.dbLenderId !== lender.dbLenderId)
+        : [...prev, lender]
+    ));
   };
+  const handleRemoveLender = (dbLenderId) => {
+    setSelectedLenders((prev) => prev.filter((l) => l.dbLenderId !== dbLenderId));
+  };
+  const handleContinueWithLenders = () => goToStep(7);
+
+  // Lenders this case was already sent to Cred2Tech for (an earlier submit).
+  // Step 6 marks them "Already applied" and step 7 lists them, so coming back
+  // through the Update flow adds lenders instead of re-sending or losing them.
+  const [existingApplications, setExistingApplications] = useState([]);
+  useEffect(() => {
+    if (!isMsme || !caseId || (currentStep !== 6 && currentStep !== 7)) return undefined;
+    let cancelled = false;
+    msmeApi.getLenderApplications(caseId)
+      .then((res) => { if (!cancelled) setExistingApplications(res.data.applications || []); })
+      .catch(() => { if (!cancelled) setExistingApplications([]); });
+    return () => { cancelled = true; };
+  }, [isMsme, caseId, currentStep]);
 
   // Factory (not a plain object literal) so resetWizardState below can call
   // this again to blank the form out — reusing one literal both for the
@@ -578,7 +599,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     setStep1SubPage('business');
     setStep2SubPage('gst');
     setProposalId(null);
-    setApplyLender(null);
+    setSelectedLenders([]);
     setFormData(getInitialFormData());
     setPanVerifying(false);
     setPanVerifyFailed(false);
@@ -2792,12 +2813,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
               onOpenProposal={handleProposalCreated}
               isMsme={isMsme}
               isSalaried={formData.is_salaried}
-              onApplyForLoan={handleApplyForLoan}
+              appliedLenders={existingApplications}
+              selectedLenderIds={selectedLenders.map((l) => l.dbLenderId)}
+              onToggleLender={handleToggleLender}
+              onContinueWithLenders={handleContinueWithLenders}
             />
           )}
           {currentStep === 7 && (
             isMsme ? (
-              <MsmeLoanTermsStep caseId={caseId} lender={applyLender} onBack={() => goToStep(6)} />
+              <MsmeLoanTermsStep caseId={caseId} lenders={selectedLenders} existingApplications={existingApplications} onRemoveLender={handleRemoveLender} onBack={() => goToStep(6)} />
             ) : (
               <ProposalStep caseId={caseId} proposalId={proposalId} onBack={() => goToStep(6)} isMsme={isMsme} isSalaried={formData.is_salaried} />
             )

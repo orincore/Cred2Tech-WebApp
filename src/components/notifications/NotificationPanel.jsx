@@ -11,6 +11,7 @@ import { notificationsService } from '../../api/notificationsService';
 const EVENT_ICONS = {
   CASE_STAGE_CHANGED: FileText,
   CASE_ASSIGNED: FileText,
+  CASE_UPDATED_BY_CUSTOMER: FileText,
   CASE_DISBURSED: Coins,
   PULL_COMPLETED: CheckCircle2,
   PULL_FAILED: XCircle,

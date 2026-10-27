@@ -12,6 +12,7 @@ import FeedbackModal from '../feedback/FeedbackModal';
 import { ticketService } from '../../api/ticketService';
 import { contactSubmissionService } from '../../api/contactSubmissionService';
 import { demoRequestService } from '../../api/demoRequestService';
+import { getUnallocatedDirectMsmeCount } from '../../api/adminMsmeService';
 
 const TICKET_ADMIN_ROLES = ['SUPER_ADMIN', 'CRED2TECH_MEMBER'];
 const UNREAD_POLL_MS = 30000;
@@ -73,6 +74,22 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [hasRole]);
 
+  // Direct MSME Leads badge: how many leads are still waiting to be allocated
+  // to a DSA. Same polling pattern as above (SUPER_ADMIN only - that is who
+  // sees the nav item), plus an immediate refresh when the allocate page
+  // dispatches 'admin-msme-leads-changed', so allocating a lead doesn't leave
+  // the old count showing for up to 30 seconds.
+  const [unallocatedMsmeCount, setUnallocatedMsmeCount] = useState(0);
+  useEffect(() => {
+    if (!hasRole('SUPER_ADMIN')) return;
+    let cancelled = false;
+    const poll = () => getUnallocatedDirectMsmeCount().then((c) => { if (!cancelled) setUnallocatedMsmeCount(c); }).catch(() => {});
+    poll();
+    const interval = setInterval(poll, UNREAD_POLL_MS);
+    window.addEventListener('admin-msme-leads-changed', poll);
+    return () => { cancelled = true; clearInterval(interval); window.removeEventListener('admin-msme-leads-changed', poll); };
+  }, [hasRole]);
+
   // Virtual Workspace gate — a DSA-role user only sees the nav items in
   // virtual_workspace_restricted_nav_item_ids when it's a real array;
   // null means unrestricted (sees everything their role allows). auth.
@@ -97,6 +114,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     })
     .map((item) => {
       if (item.id === 'admin-tickets' && unreadTicketCount > 0) return { ...item, badge: String(unreadTicketCount) };
+      if (item.id === 'admin-msme-cases' && unallocatedMsmeCount > 0) return { ...item, badge: String(unallocatedMsmeCount) };
       if (item.id === 'admin-contact-submissions' && (unreadContactCount + unreadDemoCount) > 0) {
         return { ...item, badge: String(unreadContactCount + unreadDemoCount) };
       }

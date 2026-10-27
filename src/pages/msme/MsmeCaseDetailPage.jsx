@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, UploadCloud, FileText, Download, User2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileText, User2, AlertCircle, CloudDownload, HardDrive, Trash2 } from 'lucide-react';
 import { caseService } from '../../api/caseService';
-import { listDocuments, downloadDocument, uploadDocument } from '../../api/documentHelper';
-import { formatCompactINR, CASE_STAGE_LABELS } from '../../utils/helpers';
+import { msmeApi } from '../../api/msmeService';
+import CaseStageBadge from '../../components/msme/CaseStageBadge';
+import { listDocuments, downloadDocument, viewDocument, uploadDocument, deleteDocument } from '../../api/documentHelper';
+import { formatCompactINR, formatFileSize, CASE_STAGE_LABELS } from '../../utils/helpers';
+import { KYC_CATEGORIES, groupDocumentsByCategory } from '../../constants/documentCategories';
 import SectionCard from '../../components/ui/SectionCard';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
@@ -30,15 +33,58 @@ const STAGE_INFO = {
   CLOSED: { desc: 'This case has been closed.', color: 'var(--text-tertiary)' },
 };
 
-const DOC_TYPES = [
-  { value: 'PAN_CARD', label: 'PAN Card' },
-  { value: 'AADHAAR', label: 'Aadhaar' },
-  { value: 'BANK_STATEMENT', label: 'Bank Statement' },
-  { value: 'PROPERTY_DOCUMENT', label: 'Property Document' },
-  { value: 'SALE_DEED', label: 'Sale Deed' },
-  { value: 'SALARY_SLIP', label: 'Salary Slip' },
-  { value: 'OTHER', label: 'Other' },
+// Upload targets, built from the same KYC categories the DSA side files
+// documents under (constants/documentCategories.js) so whatever a customer
+// uploads lands in the group a DSA expects. "Fetched from API" is excluded -
+// that category is only ever written by our own data-pull pipeline.
+// value = `${categoryId}::${documentType}`.
+const buildUploadTargets = (isSalaried) => [
+  ...KYC_CATEGORIES
+    .filter(c => c.id !== 'api_fetched_documents' && !c.freeform && !(c.msmeOnly && isSalaried))
+    .flatMap(c => c.options.map(o => ({
+      value: `${c.id}::${o.type}`, categoryId: c.id, type: o.type, perApplicant: !!c.perApplicant,
+      label: `${c.label} - ${o.label}`,
+    }))),
+  { value: 'others::OTHER', categoryId: 'others', type: 'OTHER', perApplicant: false, label: 'Other Documents' },
 ];
+
+// One document tile - same look as the DSA Case Detail Documents tab, minus
+// Delete (a customer can add documents but not remove what the team relies on).
+const DocumentCard = ({ doc, onDownload, downloading, onDelete, deleting }) => (
+  <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderBottom: '1px solid var(--outline)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 260px' }}>
+      <FileText size={16} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'anywhere' }}>{doc.original_file_name || doc.document_type}</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', marginTop: 2 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            {doc.source_type === 'DIRECT_UPLOAD' ? <UploadCloud size={12} /> : <CloudDownload size={12} />}
+            {doc.source_type === 'DIRECT_UPLOAD' ? 'Uploaded' : doc.source_type === 'VENDOR_DOWNLOAD' ? 'API Pull' : 'System'}
+          </span>
+          <span>{formatFileSize(doc.file_size_bytes)}</span>
+          <span>{new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+        </div>
+      </div>
+    </div>
+    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+      <button className="btn btn-secondary btn-sm" onClick={() => viewDocument(doc.id).catch(() => toast.error('Failed to open document'))}>View</button>
+      <button className="btn btn-secondary btn-sm" onClick={() => onDownload(doc)} disabled={downloading}>
+        {downloading ? 'Downloading…' : 'Download'}
+      </button>
+      {onDelete && (
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => onDelete(doc)}
+          disabled={deleting}
+          title="Delete this document"
+          style={{ color: 'var(--error)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          <Trash2 size={13} /> {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+      )}
+    </div>
+  </div>
+);
 
 const MsmeCaseDetailPage = () => {
   const { caseId } = useParams();
@@ -47,10 +93,15 @@ const MsmeCaseDetailPage = () => {
 
   const [caseData, setCaseData] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [allCases, setAllCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
-  const [uploadType, setUploadType] = useState('OTHER');
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploadTarget, setUploadTarget] = useState('income_documents::BANK_STATEMENT');
+
+  const uploadTargets = buildUploadTargets(caseData?.category === 'SALARIED');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -62,12 +113,16 @@ const MsmeCaseDetailPage = () => {
   const load = async () => {
     try {
       setLoading(true);
-      const [c, docs] = await Promise.all([
+      const [c, docs, list] = await Promise.all([
         caseService.getCaseById(caseId),
         listDocuments({ caseId }),
+        // Needed to relate this case to its main application / lender cases;
+        // the page still works without it.
+        msmeApi.getCases().then((r) => r.data.cases || []).catch(() => []),
       ]);
       setCaseData(c);
       setDocuments(docs);
+      setAllCases(list);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to load case details');
     } finally {
@@ -88,7 +143,14 @@ const MsmeCaseDetailPage = () => {
     if (file.size > 15 * 1024 * 1024) return toast.error('File is too large — max 15MB.');
     setUploading(true);
     try {
-      await uploadDocument(file, caseId, uploadType);
+      const target = uploadTargets.find(t => t.value === uploadTarget) || uploadTargets[uploadTargets.length - 1];
+      // ID / address proofs are per applicant; the customer here is the primary one.
+      const primary = caseData?.applicants?.find(a => a.type === 'PRIMARY');
+      await uploadDocument(file, caseId, target.type, {
+        applicantId: target.perApplicant ? primary?.id : undefined,
+        // OTHER is shared by several categories - tag which one this belongs to.
+        category: target.type === 'OTHER' ? target.categoryId : undefined,
+      });
       toast.success('Document uploaded');
       const docs = await listDocuments({ caseId });
       setDocuments(docs);
@@ -110,6 +172,26 @@ const MsmeCaseDetailPage = () => {
     }
   };
 
+  // Delete button only opens the confirmation popup; the delete itself runs
+  // from confirmDelete once the customer confirms.
+  const handleDelete = (doc) => setDeleteTarget(doc);
+
+  const confirmDelete = async () => {
+    const doc = deleteTarget;
+    if (!doc) return;
+    setDeletingId(doc.id);
+    try {
+      await deleteDocument(doc.id);
+      toast.success('Document deleted');
+      setDeleteTarget(null);
+      setDocuments(await listDocuments({ caseId }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete document');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
@@ -127,6 +209,15 @@ const MsmeCaseDetailPage = () => {
   // this page is document upload. AddCustomerWizardPage's restoreSession()
   // independently blocks resuming this case's data via /msme/onboarding too.
   const isPurged = !!caseData.data_purged_at;
+
+  // Each lender the customer applied with is its own standalone case (own
+  // number, own DSA). The grouping exists only on this customer side: a lender
+  // case points at the main application it was created under, and the main
+  // application lists its lender cases.
+  const lenderLink = allCases.find((c) => c.id === caseData.id)?.msme_lender_application_as_child || null;
+  const lenderCases = allCases
+    .filter((c) => c.msme_lender_application_as_child?.case_id === caseData.id)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
   return (
     <div className="msme-case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: isMobile ? 16 : 24 }}>
@@ -146,14 +237,24 @@ const MsmeCaseDetailPage = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-            MSME Portal
-          </p>
           <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             CASE-{caseData.id}
+            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--primary)', background: 'var(--primary-subtle)', padding: '3px 10px' }}>
+              {caseData.product_type || 'Product TBD'}
+            </span>
             {isPurged && <DataPurgedBadge />}
           </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>{caseData.product_type || 'Product TBD'}</p>
+          {lenderLink && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: 13 }}>
+              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Lender application · {lenderLink.lender_name}</span>
+              <button
+                onClick={() => navigate(`/msme/cases/${lenderLink.case_id}`)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-tertiary)', fontWeight: 600, textDecoration: 'underline' }}
+              >
+                Part of CASE-{lenderLink.case_id}
+              </button>
+            </div>
+          )}
         </div>
         {/* Lets a customer go back into the wizard to fix/add applicant,
             property, income or obligation details even after their case has
@@ -162,9 +263,21 @@ const MsmeCaseDetailPage = () => {
             "done editing"). Only a permanently-purged case blocks this,
             same as the DSA side's own Open Wizard button. */}
         {!isPurged && (
-          <TravelingBorderButton size="sm" onClick={() => navigate(`/msme/onboarding?caseId=${caseData.id}`)} className="rounded-none">
-            Update Application
-          </TravelingBorderButton>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Only on the main application: lenders are added from there (a
+                lender case can't add more - the server refuses it). Goes
+                straight to the lender list (step 6) of the wizard. */}
+            {/* Same component and same fixed width for both header buttons so
+                they always match. */}
+            {!lenderLink && (
+              <TravelingBorderButton size="sm" width="240px" onClick={() => navigate(`/msme/onboarding?caseId=${caseData.id}&step=6`)} className="rounded-none">
+                Apply to Another Lender
+              </TravelingBorderButton>
+            )}
+            <TravelingBorderButton size="sm" width="240px" onClick={() => navigate(`/msme/onboarding?caseId=${caseData.id}`)} className="rounded-none">
+              Update Application
+            </TravelingBorderButton>
+          </div>
         )}
       </div>
 
@@ -210,17 +323,40 @@ const MsmeCaseDetailPage = () => {
             </div>
           </div>
 
-          {/* Documents */}
+          {/* Lender applications - one standalone case per lender. */}
+          {lenderCases.length > 0 && (
+            <SectionCard title="Lender Applications" subtitle="Each lender you applied with is its own case, handled by its own Relationship Manager" delay={0.08}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {lenderCases.map((c, i) => (
+                  <div key={c.id} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderBottom: i < lenderCases.length - 1 ? '1px solid var(--outline)' : 'none' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{c.msme_lender_application_as_child?.lender_name || c.lender_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                        CASE-{c.id} · {c.assigned_dsa_user?.name ? `Managed by ${c.assigned_dsa_user.name}` : 'Awaiting allocation'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <CaseStageBadge stage={c.stage} />
+                      <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/msme/cases/${c.id}`)}>View</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Documents - grouped into the same KYC categories the DSA's Case
+              Detail Documents tab uses (constants/documentCategories.js). */}
           <SectionCard title="Documents" subtitle="Everything you've submitted, plus reports we've generated for your case" delay={0.1}>
             {!isPurged && (
               <div style={{ padding: 16, borderBottom: '1px solid var(--outline)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <CustomSelect
                   className="form-control"
-                  value={uploadType}
-                  onChange={e => setUploadType(e.target.value)}
-                  style={{ width: 'auto', minWidth: 160 }}
+                  value={uploadTarget}
+                  onChange={e => setUploadTarget(e.target.value)}
+                  style={{ width: 'auto', minWidth: 240 }}
                 >
-                  {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {uploadTargets.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </CustomSelect>
                 <input ref={fileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} />
                 <TravelingBorderButton size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="rounded-none">
@@ -235,30 +371,87 @@ const MsmeCaseDetailPage = () => {
             {documents.length === 0 ? (
               <EmptyState icon={FileText} title="No documents yet" description="Documents you upload, and reports we generate for your case, will appear here." />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {documents.map((doc, i) => (
-                  <div key={doc.id} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: i < documents.length - 1 ? '1px solid var(--outline)' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                      <FileText size={16} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'break-word' }}>{doc.original_file_name || doc.file_name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ flexShrink: 0 }}
-                      onClick={() => handleDownload(doc)}
-                      disabled={downloadingId === doc.id}
-                    >
-                      <Download size={13} /> {downloadingId === doc.id ? '...' : 'Download'}
-                    </button>
+              <div style={{ padding: 16 }}>
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center',
+                  padding: '10px 14px', marginBottom: 16, background: 'var(--bg-elevated)',
+                  border: '1.5px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <HardDrive size={14} color="var(--text-tertiary)" />
+                    Storage used: <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatFileSize(documents.reduce((n, d) => n + (d.file_size_bytes || 0), 0))}</span>
                   </div>
-                ))}
+                  <div>{documents.length} document(s)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><UploadCloud size={13} color="var(--text-tertiary)" /> {documents.filter(d => d.source_type === 'DIRECT_UPLOAD').length} uploaded</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><CloudDownload size={13} color="var(--text-tertiary)" /> {documents.filter(d => d.source_type === 'VENDOR_DOWNLOAD').length} from API pulls</div>
+                </div>
+
+                {groupDocumentsByCategory(documents, { isSalaried: caseData.category === 'SALARIED' }).map(cat => {
+                  // List container: each row draws its own bottom border, so the
+                  // box only needs top/left/right here.
+                  const grid = { display: 'flex', flexDirection: 'column', background: 'var(--bg-elevated)', border: '1.5px solid var(--border)', borderBottom: 'none' };
+                  const applicants = caseData.applicants || [];
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {cat.label}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', padding: '1px 8px' }}>{cat.docs.length}</span>
+                      </div>
+                      {cat.perApplicant ? (
+                        applicants.filter(app => cat.docs.some(d => d.applicant_id === app.id)).map((app, idx) => (
+                          <div key={app.id} style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                              {app.type === 'PRIMARY' ? 'Primary Borrower' : `Co-Borrower ${idx}`}
+                            </div>
+                            <div style={grid}>
+                              {cat.docs.filter(d => d.applicant_id === app.id).map(doc => (
+                                <DocumentCard key={doc.id} doc={doc} onDownload={handleDownload} downloading={downloadingId === doc.id}
+                                  onDelete={isPurged ? undefined : handleDelete} deleting={deletingId === doc.id} />
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={grid}>
+                          {cat.docs.map(doc => (
+                            <DocumentCard key={doc.id} doc={doc} onDownload={handleDownload} downloading={downloadingId === doc.id}
+                              onDelete={isPurged ? undefined : handleDelete} deleting={deletingId === doc.id} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </SectionCard>
         </div>
+
+        {deleteTarget && (
+          <div className="modal-overlay" onClick={() => { if (!deletingId) setDeleteTarget(null); }}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Trash2 size={18} color="var(--error)" />
+                </div>
+                <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Delete document?</h2>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 6, overflowWrap: 'anywhere' }}>
+                <strong>{deleteTarget.original_file_name || deleteTarget.document_type}</strong>
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 20 }}>
+                This removes the file from your case and cannot be undone.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setDeleteTarget(null)} disabled={!!deletingId}>Cancel</button>
+                <button type="button" className="btn btn-primary" onClick={confirmDelete} disabled={!!deletingId}
+                  style={{ background: 'var(--error)', borderColor: 'var(--error)' }}>
+                  {deletingId ? 'Deleting…' : 'Yes, Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
