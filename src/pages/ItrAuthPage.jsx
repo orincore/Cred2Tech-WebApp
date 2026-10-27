@@ -2,44 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
 import { itrAuthLinkService } from '../api/itrAuthLinkService';
 import { getErrorMessage } from '../utils/helpers';
-import { ThemeToggle } from '../components/ThemeToggle';
-import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-
-// Same shell/status-screen shapes as ConsentPage.jsx — this page follows the
-// exact same customer-facing theme (brand palette, sharp-edged card, dark
-// mode support) so the two link types read as one product, not two.
-const PageShell = ({ children }) => (
-  <div className="min-h-screen flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] font-sans px-6 py-10 relative">
-    <div className="absolute top-6 right-6 z-50">
-      <ThemeToggle />
-    </div>
-    <div className="w-full max-w-lg">
-      <div className="flex justify-center mb-8">
-        <Logo size="large" />
-      </div>
-      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
-        {children}
-      </div>
-    </div>
-  </div>
-);
-
-const StatusScreen = ({ icon, iconColorClass, title, body, action }) => (
-  <div className="text-center">
-    <div className={`mx-auto mb-4 w-14 h-14 rounded-full ${iconColorClass} flex items-center justify-center`}>
-      <span className="material-symbols-outlined text-[28px]">{icon}</span>
-    </div>
-    <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">{title}</h1>
-    <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] leading-relaxed mb-2">{body}</p>
-    {action}
-  </div>
-);
+import { PageShell, StatusScreen, LoadingBlock, RequestedByBanner, ErrorNotice } from '../components/PublicLinkShell';
+import { useLang, requesterLabel } from '../lib/publicLang';
 
 const ItrAuthPage = () => {
   const [searchParams] = useSearchParams();
   const { token: pathToken } = useParams();
   const token = pathToken || searchParams.get('token');
+
+  const langCtx = useLang();
+  const { lang, t } = langCtx;
 
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState(null);
@@ -53,8 +26,8 @@ const ItrAuthPage = () => {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Authorise ITR Access';
-  }, []);
+    document.title = t('itrPageTitle');
+  }, [t]);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -64,7 +37,7 @@ const ItrAuthPage = () => {
         setDetails(data);
         if (data.status === 'AUTHORIZED') setAuthorized(true);
       } catch (err) {
-        setLoadError(getErrorMessage(err) || 'This link is invalid or has expired.');
+        setLoadError(getErrorMessage(err) || '');
       } finally {
         setLoading(false);
       }
@@ -84,7 +57,7 @@ const ItrAuthPage = () => {
       // needed again once the submission has succeeded.
       setPassword('');
     } catch (err) {
-      setSubmitError(getErrorMessage(err) || 'Failed to submit your authorisation. Please check your details and try again.');
+      setSubmitError(getErrorMessage(err) || t('submitFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -92,12 +65,12 @@ const ItrAuthPage = () => {
 
   if (!token) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="error"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Invalid Link"
-          body="This link is missing its token. Please use the link from your email."
+          title={t('invalidLinkTitle')}
+          body={t('missingTokenEmail')}
         />
       </PageShell>
     );
@@ -105,27 +78,20 @@ const ItrAuthPage = () => {
 
   if (loading) {
     return (
-      <PageShell>
-        <div className="flex flex-col items-center justify-center py-8">
-          <div className="flex flex-col gap-3 w-full mb-4">
-            <div className="skeleton" style={{ height: 14, width: '60%', borderRadius: 0 }} />
-            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
-            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
-          </div>
-          <p className="text-[13px] font-medium text-[#0a1628]/60 dark:text-[#e6edf7]/60">Loading your request…</p>
-        </div>
+      <PageShell langCtx={langCtx}>
+        <LoadingBlock text={t('loadingRequest')} />
       </PageShell>
     );
   }
 
   if (loadError) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="error"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Link Not Available"
-          body={loadError}
+          title={t('linkNotAvailable')}
+          body={loadError || t('linkInvalidOrExpired')}
         />
       </PageShell>
     );
@@ -133,12 +99,12 @@ const ItrAuthPage = () => {
 
   if (authorized) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="check_circle"
           iconColorClass="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400"
-          title="Authorisation Submitted"
-          body="Thank you. Your ITR portal access has been submitted and your representative will be notified once processing completes. You can close this page."
+          title={t('authorisationSubmitted')}
+          body={t('itrSubmittedBody')}
         />
       </PageShell>
     );
@@ -146,12 +112,15 @@ const ItrAuthPage = () => {
 
   if (details?.status === 'REVOKED') {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="block"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Request Revoked"
-          body={`This request has been revoked${details?.requested_by_name ? ` by ${details.requested_by_name}` : ''}. Please contact your representative if you still need to share your ITR data.`}
+          title={t('requestRevoked')}
+          body={t('revokedBody', {
+            by: details?.requested_by_name ? t('revokedBy', { name: details.requested_by_name }) : '',
+            what: t('itrWhat'),
+          })}
         />
       </PageShell>
     );
@@ -159,63 +128,46 @@ const ItrAuthPage = () => {
 
   if (details?.status === 'EXPIRED') {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="schedule"
           iconColorClass="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
-          title="Link Expired"
-          body="This link has expired. Please ask your representative to send you a new one."
+          title={t('linkExpired')}
+          body={t('linkExpiredBody')}
         />
       </PageShell>
     );
   }
 
+  const who = lang === 'hi'
+    ? (details?.customer_name ? ` ${details.customer_name} के` : ' आपके')
+    : (details?.customer_name ? ` ${details.customer_name}'s` : ' your');
+
   return (
-    <PageShell>
+    <PageShell langCtx={langCtx}>
       <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-        Authorise ITR Access
+        {t('itrHeading')}
       </h1>
 
-      {(details?.requested_by_name || details?.requesting_org) && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
-          <span className="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">badge</span>
-          <p className="text-[12px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
-            Requested by{' '}
-            <span className="font-bold">{details?.requested_by_name || 'a representative'}</span>
-            {details?.requesting_org && (
-              <>
-                {' '}from <span className="font-bold">{details.requesting_org}</span>
-              </>
-            )}
-          </p>
-        </div>
-      )}
+      <RequestedByBanner details={details} langCtx={langCtx} />
 
       <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
-        {details?.requested_by_name || 'A representative'}
-        {details?.requesting_org ? ` from ${details.requesting_org}` : ''} is requesting access to your Income Tax
-        Return (ITR) filing data to proceed with{details?.customer_name ? ` ${details.customer_name}'s` : ' your'} loan
-        application. Enter your Income Tax e-filing PAN/username and portal password below to authorise this securely.
+        {requesterLabel(details?.requested_by_name, details?.requesting_org, lang, t)}{' '}
+        {t('itrIntro', { who })}
       </p>
 
       <p className="text-[12px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 leading-relaxed mb-6">
-        Nothing will be accessed from the Income Tax portal unless you submit this form yourself. You can review
-        Cred2Tech's terms of use and privacy policy at{' '}
+        {t('itrNothingAccessed')} {t('termsReviewAt')}{' '}
         <a href="https://cred2tech.com" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
           cred2tech.com
         </a>.
       </p>
 
-      {submitError && (
-        <div className="flex items-center gap-2 px-3 py-2.5 mb-5 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
-          <span className="material-symbols-outlined text-[15px]">error</span>
-          {submitError}
-        </div>
-      )}
+      {submitError && <ErrorNotice message={submitError} />}
 
       <div className="mb-5">
         <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
-          PAN / ITR Username
+          {t('panUsername')}
         </label>
         <input
           type="text"
@@ -232,32 +184,25 @@ const ItrAuthPage = () => {
 
       <div className="mb-6">
         <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
-          ITR Portal Password
+          {t('itrPassword')}
         </label>
         <div className="relative">
           <input
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your portal password"
+            placeholder={t('portalPassword')}
             disabled={submitting}
-            // Explicit opt-out of mobile-keyboard text transforms — without
-            // this, some keyboards (Gboard/Samsung Keyboard etc.) carry over
-            // the all-caps shift state from the PAN field above (which
-            // deliberately sets autoCapitalize="characters"), or apply their
-            // own autocapitalize/autocorrect once this field is shown as
-            // type="text" via the eye toggle (that exemption only reliably
-            // applies to type="password"). A password is case-sensitive, so
-            // a silently auto-capitalized first letter makes a genuinely
-            // correct password fail against the provider on every attempt —
-            // this was reproduced as 8 straight provider "Incorrect Username
-            // or Password" rejections on one real case, on the exact same
-            // credentials the DSA's own desktop direct-entry form accepted
-            // (ItrAnalyticsForm.jsx never hits this — no field before it
-            // forces caps, and desktop keyboards don't autocapitalize).
-            // autoComplete="off" (not "current-password") because this
-            // isn't the customer's account on OUR site — we don't want a
-            // browser suggesting an unrelated saved password here either.
+            // Explicit opt-out of mobile-keyboard text transforms. Without
+            // this, some keyboards carry over the all-caps shift state from the
+            // PAN field above (which deliberately sets autoCapitalize="characters"),
+            // or autocapitalize/autocorrect once this field is shown as
+            // type="text" via the eye toggle. A password is case-sensitive, so a
+            // silently auto-capitalized first letter makes a correct password
+            // fail against the provider on every attempt (reproduced as 8
+            // straight provider rejections on one real case).
+            // autoComplete="off" because this isn't the customer's account on
+            // OUR site — a browser shouldn't suggest an unrelated saved password.
             autoCapitalize="none"
             autoCorrect="off"
             autoComplete="off"
@@ -268,15 +213,14 @@ const ItrAuthPage = () => {
             type="button"
             onClick={() => setShowPassword((s) => !s)}
             tabIndex={-1}
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-label={showPassword ? t('hidePassword') : t('showPassword')}
             className="absolute right-0 top-0 h-full w-10 flex items-center justify-center text-[#0a1628]/50 dark:text-[#e6edf7]/50 hover:text-indigo-600 dark:hover:text-indigo-400"
           >
             <span className="material-symbols-outlined text-[18px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
           </button>
         </div>
         <p className="mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
-          This is the same password you use to log in to the Income Tax e-filing portal — it is sent directly to the
-          portal and is never stored.
+          {t('itrPasswordNote')}
         </p>
       </div>
 
@@ -292,7 +236,7 @@ const ItrAuthPage = () => {
             <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
           </div>
         ) : (
-          <span>Authorise</span>
+          <span>{t('authorise')}</span>
         )}
       </TravelingBorderButton>
     </PageShell>

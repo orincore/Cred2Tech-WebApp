@@ -171,9 +171,17 @@ export const caseService = {
   // override the auto-resolved contact (e.g. "Send to Another Lender" —
   // this still sends the exact proposal open on screen, just to a
   // different contact, rather than finding/creating a separate proposal).
-  sendProposal: async (caseId, proposalId, contactId) => {
-    const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/send`, contactId ? { contact_id: contactId } : {});
+  // attachmentKeys = the items ticked on the send dialog (see getSendAttachments); omit to send everything.
+  sendProposal: async (caseId, proposalId, contactId, attachmentKeys) => {
+    const body = {};
+    if (contactId) body.contact_id = contactId;
+    if (Array.isArray(attachmentKeys)) body.attachment_keys = attachmentKeys;
+    const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/send`, body);
     return response.data;
+  },
+  getSendAttachments: async (caseId, proposalId) => {
+    const response = await axiosInstance.get(`/cases/${caseId}/proposals/${proposalId}/send-attachments`);
+    return response.data.items || [];
   },
   cloneProposal: async (caseId, proposalId, payload) => {
     const response = await axiosInstance.post(`/cases/${caseId}/proposals/${proposalId}/clone`, payload);

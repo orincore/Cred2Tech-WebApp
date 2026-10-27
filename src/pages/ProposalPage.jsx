@@ -978,13 +978,18 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
   return (
     <div style={{
       border: `1px solid ${!uploaded && required ? 'var(--error)' : uploaded ? 'var(--success)' : 'var(--border)'}`,
-      borderRadius: 0, overflow: 'hidden'
+      borderRadius: 0, overflow: 'hidden',
+      // Every card in a row is the same size: the grid stretches them to the tallest, the
+      // header takes the spare space and the button row stays pinned to the bottom.
+      display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box'
     }}>
-      <div style={{ padding: '10px 12px', background: uploaded ? 'var(--success-bg)' : !required ? 'var(--bg-elevated)' : 'var(--error-bg)' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, lineHeight: 1.3 }}>
+      <div style={{ flex: 1, padding: '10px 12px', background: uploaded ? 'var(--success-bg)' : !required ? 'var(--bg-elevated)' : 'var(--error-bg)' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, lineHeight: 1.3, minHeight: 32 }}>
           {label}
         </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: uploaded ? 'var(--success)' : required ? 'var(--error)' : 'var(--text-tertiary)' }}>
+        <div
+          title={uploaded ? (doc?.original_file_name || 'Uploaded') : undefined}
+          style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: uploaded ? 'var(--success)' : required ? 'var(--error)' : 'var(--text-tertiary)' }}>
           {uploaded
             ? `✓ ${doc?.original_file_name || 'Uploaded'}`
             : required ? '△ Pending' : 'Optional'}
@@ -1006,7 +1011,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
               onClick={() => onToggle?.()}
               disabled={isSubmitted}
               style={{
-                flex: 1, padding: '5px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                flex: 1, height: 28, padding: '0 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 border: isAttached ? '1px solid var(--success)' : '1px solid var(--border)',
                 borderRadius: 0, background: isAttached ? 'var(--success-bg)' : 'var(--bg-surface)',
                 color: isAttached ? 'var(--success)' : 'var(--text-secondary)'
@@ -1018,7 +1023,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
                 onClick={() => inputRef.current?.click()}
                 disabled={uploading || removing}
                 style={{
-                  padding: '5px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                  width: 32, height: 28, padding: 0, fontSize: 11, fontWeight: 600, cursor: 'pointer',
                   border: '1px solid var(--border)', borderRadius: 0,
                   background: 'var(--bg-surface)', color: 'var(--text-secondary)'
                 }}
@@ -1031,11 +1036,11 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
                 onClick={handleRemove}
                 disabled={uploading || removing}
                 style={{
-                  padding: '5px 8px', fontSize: 11, fontWeight: 600,
+                  width: 32, height: 28, padding: 0, fontSize: 11, fontWeight: 600,
                   cursor: uploading || removing ? 'not-allowed' : 'pointer',
                   border: '1px solid var(--error)', borderRadius: 0,
                   background: 'var(--bg-surface)', color: 'var(--error)',
-                  display: 'flex', alignItems: 'center'
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}
                 title="Remove this file">
                 {removing ? '…' : <Trash2 size={12} />}
@@ -1047,7 +1052,7 @@ function DocCard({ label, uploaded, doc, onToggle, required = true, isSubmitted,
             onClick={() => inputRef.current?.click()}
             disabled={isSubmitted || uploading}
             style={{
-              width: '100%', padding: '5px 8px', fontSize: 11, fontWeight: 700,
+              width: '100%', height: 28, padding: '0 8px', fontSize: 11, fontWeight: 700,
               cursor: isSubmitted || uploading ? 'not-allowed' : 'pointer',
               border: 'none', borderRadius: 0,
               background: uploading ? 'var(--text-tertiary)' : required ? 'var(--primary)' : 'var(--text-tertiary)',
@@ -1231,7 +1236,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
 
   const handleSubmit = () => setShowSubmitConfirm(true);
 
-  const performSubmit = async () => {
+  const performSubmit = async (attachmentKeys) => {
     // The dialog stays open through the whole send — its body swaps to
     // <SendingStatus /> below (driven by `submitting`) instead of closing
     // and handing off to a separate overlay.
@@ -1242,7 +1247,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
       // (and marks the proposal submitted on success) — the old
       // submitProposal call here only flipped status with no email ever
       // sent, so clicking "Send to {lender}" silently did nothing.
-      const result = await caseService.sendProposal(caseId, proposalId);
+      const result = await caseService.sendProposal(caseId, proposalId, undefined, attachmentKeys);
       setSendConfirmResult(result);
       setShowSubmitConfirm(false);
       await load();
@@ -1258,13 +1263,28 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
     if (data?.proposal?.proposal_status === 'submitted') {
       toast.error('Cannot modify a submitted proposal'); return;
     }
+    // Flip the button right away and let the request catch up; the old flow waited for the
+    // attach/detach call AND a full proposal re-fetch before the button changed.
+    const nextAttached = !doc.is_attached;
+    const setAttached = (value) => setData((prev) => {
+      if (!prev?.documents_by_category) return prev;
+      const byCategory = Object.fromEntries(Object.entries(prev.documents_by_category).map(([cat, list]) => [
+        cat,
+        list.map((d) => (d.id === doc.id ? { ...d, is_attached: value } : d)),
+      ]));
+      return { ...prev, documents_by_category: byCategory };
+    });
+    setAttached(nextAttached);
     try {
       if (doc.is_attached) await caseService.detachProposalDoc(caseId, proposalId, doc.id);
       else await caseService.attachProposalDocs(caseId, proposalId, [doc.id]);
-      // Attach/detach only flips is_attached — refresh in place rather than
-      // reloading the page and discarding unsaved form edits.
-      await refreshDocuments();
-    } catch { toast.error('Failed to update document'); }
+    } catch {
+      setAttached(!nextAttached);
+      toast.error('Failed to update document');
+      return;
+    }
+    // Quiet re-sync with the server, without blocking or touching unsaved form edits.
+    refreshDocuments().catch(() => {});
   };
 
   // A document uploaded straight from this page only ever creates the
@@ -1367,7 +1387,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
   const pendingKyc = countKycPending(applicants, allDocs, isSalaried);
 
   return (
-    <div className="proposal-page" style={{ '--pp-footer-height': `${footerHeight}px` }}>
+    <div className="proposal-page" style={{ '--pp-footer-height': `${isMobile ? footerHeight : 0}px` }}>
       <style>{`
         /* Responsive grids — collapse fixed columns on smaller screens */
         .proposal-page .pp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -1685,9 +1705,13 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
 
       {/* ── Sticky Footer ─────────────────────────────────────────────── */}
       {!isSubmitted ? (
-        <div ref={footerRef} style={{
+        <div ref={footerRef} style={isMobile ? {
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
           boxShadow: '0 -4px 24px rgba(0,0,0,0.12)'
+        } : {
+          // Desktop: sits right under the References section as a normal card instead of
+          // a full-width bar pinned over the bottom of the screen (and the sidebar).
+          marginTop: 16, border: '1px solid var(--border)', overflow: 'hidden'
         }}>
           {/* Lender branding bar — on mobile this collapses to a single ~40px
               row: lender name + Cancel share a line, and Save/Other-lender
@@ -1740,7 +1764,7 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
             </div>
           ) : (
             <div style={{
-              background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', padding: '10px 20px',
+              background: 'var(--bg-surface)', padding: '14px 20px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               flexWrap: 'wrap', gap: 10
             }}>
@@ -1810,10 +1834,85 @@ export default function ProposalPage({ caseId, proposalId, onBack, isMsme = fals
         isOpen={showSubmitConfirm}
         onClose={() => setShowSubmitConfirm(false)}
         onConfirm={performSubmit}
+        caseId={caseId}
+        proposalId={proposalId}
         sending={submitting}
         proposalNumber={data?.proposal?.proposal_number}
         lenderName={lenderName}
       />
+    </div>
+  );
+}
+
+// ─── AttachmentChecklist ──────────────────────────────────────────────────────
+// Tick boxes for what goes out with the proposal email. Everything starts ticked
+// (what used to be sent unconditionally); the parent receives the ticked keys via
+// onChange, or null while loading / if the list couldn't be loaded, which sends
+// everything as before rather than blocking the send.
+function AttachmentChecklist({ active, caseId, proposalId, onChange }) {
+  const [items, setItems] = useState(null);
+  const [checked, setChecked] = useState({});
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    setItems(null); setFailed(false); onChange(null);
+    caseService.getSendAttachments(caseId, proposalId)
+      .then((list) => {
+        if (cancelled) return;
+        setItems(list);
+        const all = Object.fromEntries(list.map((i) => [i.key, true]));
+        setChecked(all);
+        onChange(list.map((i) => i.key));
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, caseId, proposalId]);
+
+  const toggle = (key) => {
+    const next = { ...checked, [key]: !checked[key] };
+    setChecked(next);
+    onChange(items.filter((i) => next[i.key]).map((i) => i.key));
+  };
+  const setAll = (value) => {
+    const next = Object.fromEntries(items.map((i) => [i.key, value]));
+    setChecked(next);
+    onChange(value ? items.map((i) => i.key) : []);
+  };
+
+  if (failed) {
+    return <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Couldn't load the document list — all documents will be sent.</p>;
+  }
+  if (!items) {
+    return <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>Loading documents…</p>;
+  }
+
+  const tickedCount = items.filter((i) => checked[i.key]).length;
+  return (
+    <div style={{ marginTop: 14, border: '1px solid var(--border)' }}>
+      <div style={{ padding: '8px 12px', background: 'var(--bg-elevated)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-tertiary)' }}>
+          Documents to share ({tickedCount}/{items.length})
+        </span>
+        <span style={{ display: 'flex', gap: 10, fontSize: 11, fontWeight: 600 }}>
+          <button type="button" onClick={() => setAll(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary)' }}>All</button>
+          <button type="button" onClick={() => setAll(false)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary)' }}>None</button>
+        </span>
+      </div>
+      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+        {items.map((item) => (
+          <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: 13, color: 'var(--text-primary)' }}>
+            <input type="checkbox" checked={!!checked[item.key]} onChange={() => toggle(item.key)} style={{ cursor: 'pointer' }} />
+            <FileText size={14} style={{ flexShrink: 0, color: 'var(--text-tertiary)' }} />
+            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>{item.name}</span>
+          </label>
+        ))}
+      </div>
+      {tickedCount === 0 && (
+        <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--warning)' }}>Tick at least one document to send.</div>
+      )}
     </div>
   );
 }
@@ -1825,6 +1924,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, proposalId, beforeSen
   const [selectedLender, setSelectedLender] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
   const [sending, setSending] = useState(false);
+  const [attachmentKeys, setAttachmentKeys] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1844,7 +1944,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, proposalId, beforeSen
     setSending(true);
     try {
       await beforeSend?.();
-      const result = await caseService.sendProposal(caseId, proposalId, selectedContact.id);
+      const result = await caseService.sendProposal(caseId, proposalId, selectedContact.id, attachmentKeys || undefined);
       toast.success(`Proposal sent to ${contactName}!`);
       onSuccess(result);
     } catch (e) {
@@ -1927,6 +2027,9 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, proposalId, beforeSen
                   </div>
                 </div>
               )}
+              {selectedContact && (
+                <AttachmentChecklist active={isOpen && !!selectedContact} caseId={caseId} proposalId={proposalId} onChange={setAttachmentKeys} />
+              )}
             </>
           )}
         </div>
@@ -1934,7 +2037,7 @@ function SendToOtherLenderModal({ isOpen, onClose, caseId, proposalId, beforeSen
         {!sending && (
           <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
             <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 0, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cancel</button>
-            <button onClick={handleSend} disabled={!selectedContact}
+            <button onClick={handleSend} disabled={!selectedContact || (Array.isArray(attachmentKeys) && attachmentKeys.length === 0)}
               style={{
                 padding: '10px 22px', borderRadius: 0, fontWeight: 700, fontSize: 13,
                 background: selectedContact ? 'var(--success)' : 'var(--border)',
@@ -2015,11 +2118,12 @@ function SendingStatus() {
 // no way to swap in custom body content, and the send needs to show
 // <SendingStatus /> in place of the confirmation question once confirmed,
 // within the same dialog, rather than closing it and opening something else.
-function SendConfirmDialog({ isOpen, onClose, onConfirm, sending, proposalNumber, lenderName }) {
+function SendConfirmDialog({ isOpen, onClose, onConfirm, sending, proposalNumber, lenderName, caseId, proposalId }) {
+  const [attachmentKeys, setAttachmentKeys] = useState(null);
   if (!isOpen) return null;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 440, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background: 'var(--bg-surface)', width: '94%', maxWidth: 480, borderRadius: 0, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{sending ? 'Sending Proposal…' : 'Send this proposal?'}</h3>
         </div>
@@ -2027,15 +2131,22 @@ function SendConfirmDialog({ isOpen, onClose, onConfirm, sending, proposalNumber
           {sending ? (
             <SendingStatus />
           ) : (
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              Email proposal {proposalNumber || ''} with its attached documents to {lenderName}'s configured contact?
-            </p>
+            <>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Email proposal {proposalNumber || ''} to {lenderName}'s configured contact. Choose the documents to share:
+              </p>
+              <AttachmentChecklist active={isOpen} caseId={caseId} proposalId={proposalId} onChange={setAttachmentKeys} />
+            </>
           )}
         </div>
         {!sending && (
           <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--bg-elevated)' }}>
             <button onClick={onClose} className="btn btn-secondary btn-sm">Cancel</button>
-            <button onClick={onConfirm} className="btn btn-primary btn-sm">Send</button>
+            <button
+              onClick={() => onConfirm(attachmentKeys || undefined)}
+              disabled={Array.isArray(attachmentKeys) && attachmentKeys.length === 0}
+              className="btn btn-primary btn-sm"
+            >Send</button>
           </div>
         )}
       </div>

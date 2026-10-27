@@ -2,45 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
 import { gstAuthLinkService } from '../api/gstAuthLinkService';
 import { getErrorMessage } from '../utils/helpers';
-import { ThemeToggle } from '../components/ThemeToggle';
-import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
-
-// Same shell/status-screen shapes as ConsentPage.jsx/ItrAuthPage.jsx — this
-// page follows the exact same customer-facing theme (brand palette,
-// sharp-edged card, dark mode support) so all three link types read as one
-// product.
-const PageShell = ({ children }) => (
-  <div className="min-h-screen flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] font-sans px-6 py-10 relative">
-    <div className="absolute top-6 right-6 z-50">
-      <ThemeToggle />
-    </div>
-    <div className="w-full max-w-lg">
-      <div className="flex justify-center mb-8">
-        <Logo size="large" />
-      </div>
-      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
-        {children}
-      </div>
-    </div>
-  </div>
-);
-
-const StatusScreen = ({ icon, iconColorClass, title, body, action }) => (
-  <div className="text-center">
-    <div className={`mx-auto mb-4 w-14 h-14 rounded-full ${iconColorClass} flex items-center justify-center`}>
-      <span className="material-symbols-outlined text-[28px]">{icon}</span>
-    </div>
-    <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] mb-2">{title}</h1>
-    <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] leading-relaxed mb-2">{body}</p>
-    {action}
-  </div>
-);
+import { PageShell, StatusScreen, LoadingBlock, RequestedByBanner, ErrorNotice } from '../components/PublicLinkShell';
+import { useLang, requesterLabel } from '../lib/publicLang';
 
 const GstAuthPage = () => {
   const [searchParams] = useSearchParams();
   const { token: pathToken } = useParams();
   const token = pathToken || searchParams.get('token');
+
+  const langCtx = useLang();
+  const { lang, t } = langCtx;
 
   const [loading, setLoading] = useState(true);
   const [details, setDetails] = useState(null);
@@ -63,8 +35,8 @@ const GstAuthPage = () => {
   const [otpError, setOtpError] = useState('');
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Authorise GST Access';
-  }, []);
+    document.title = t('gstPageTitle');
+  }, [t]);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -75,7 +47,7 @@ const GstAuthPage = () => {
         if (data.status === 'AUTHORIZED') setAuthorized(true);
         if (data.status === 'OTP_PENDING') setOtpPending(true);
       } catch (err) {
-        setLoadError(getErrorMessage(err) || 'This link is invalid or has expired.');
+        setLoadError(getErrorMessage(err) || '');
       } finally {
         setLoading(false);
       }
@@ -99,14 +71,12 @@ const GstAuthPage = () => {
         setAuthorized(true);
       }
     } catch (err) {
-      const message = getErrorMessage(err) || 'Failed to submit your authorisation. Please check your details and try again.';
+      const message = getErrorMessage(err) || t('submitFailed');
       // Signzy only knows whether this GSTIN's portal login actually
       // supports OTP once we try it — there's no way to check ahead of time,
       // so on an OTP-mode failure point the customer at the only real
       // alternative instead of leaving them stuck.
-      setSubmitError(authType === 'OTP'
-        ? `${message} If OTP login isn't available for this GSTIN, switch to Password below and try again.`
-        : message);
+      setSubmitError(authType === 'OTP' ? t('gstOtpFallback', { message }) : message);
     } finally {
       setSubmitting(false);
     }
@@ -122,7 +92,7 @@ const GstAuthPage = () => {
       setOtpPending(false);
       setOtp('');
     } catch (err) {
-      setOtpError(getErrorMessage(err) || 'Failed to submit OTP. Please check the code and try again.');
+      setOtpError(getErrorMessage(err) || t('otpSubmitFailed'));
     } finally {
       setSubmittingOtp(false);
     }
@@ -130,12 +100,12 @@ const GstAuthPage = () => {
 
   if (!token) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="error"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Invalid Link"
-          body="This link is missing its token. Please use the link from your email."
+          title={t('invalidLinkTitle')}
+          body={t('missingTokenEmail')}
         />
       </PageShell>
     );
@@ -143,27 +113,20 @@ const GstAuthPage = () => {
 
   if (loading) {
     return (
-      <PageShell>
-        <div className="flex flex-col items-center justify-center py-8">
-          <div className="flex flex-col gap-3 w-full mb-4">
-            <div className="skeleton" style={{ height: 14, width: '60%', borderRadius: 0 }} />
-            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
-            <div className="skeleton" style={{ height: 40, borderRadius: 0 }} />
-          </div>
-          <p className="text-[13px] font-medium text-[#0a1628]/60 dark:text-[#e6edf7]/60">Loading your request…</p>
-        </div>
+      <PageShell langCtx={langCtx}>
+        <LoadingBlock text={t('loadingRequest')} />
       </PageShell>
     );
   }
 
   if (loadError) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="error"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Link Not Available"
-          body={loadError}
+          title={t('linkNotAvailable')}
+          body={loadError || t('linkInvalidOrExpired')}
         />
       </PageShell>
     );
@@ -171,12 +134,12 @@ const GstAuthPage = () => {
 
   if (authorized) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="check_circle"
           iconColorClass="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400"
-          title="Authorisation Submitted"
-          body="Thank you. Your GST portal access has been submitted and your representative will be notified once processing completes. You can close this page."
+          title={t('authorisationSubmitted')}
+          body={t('gstSubmittedBody')}
         />
       </PageShell>
     );
@@ -184,22 +147,15 @@ const GstAuthPage = () => {
 
   if (otpPending) {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-          Enter Your OTP
+          {t('enterYourOtp')}
         </h1>
         <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
-          The GST portal has sent a one-time password to the mobile number or email registered for{' '}
-          <span className="font-bold">{details?.gstin || 'this GSTIN'}</span>. Enter it below to complete your
-          authorisation.
+          {t('gstOtpSentBody', { gstin: details?.gstin || t('thisGstin') })}
         </p>
 
-        {otpError && (
-          <div className="flex items-center gap-2 px-3 py-2.5 mb-5 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
-            <span className="material-symbols-outlined text-[15px]">error</span>
-            {otpError}
-          </div>
-        )}
+        {otpError && <ErrorNotice message={otpError} />}
 
         <div className="mb-6">
           <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
@@ -210,7 +166,7 @@ const GstAuthPage = () => {
             inputMode="numeric"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-            placeholder="Enter OTP"
+            placeholder={t('enterOtpPh')}
             maxLength={8}
             autoComplete="one-time-code"
             disabled={submittingOtp}
@@ -230,7 +186,7 @@ const GstAuthPage = () => {
               <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
             </div>
           ) : (
-            <span>Submit OTP</span>
+            <span>{t('submitOtp')}</span>
           )}
         </TravelingBorderButton>
       </PageShell>
@@ -239,12 +195,15 @@ const GstAuthPage = () => {
 
   if (details?.status === 'REVOKED') {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="block"
           iconColorClass="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-          title="Request Revoked"
-          body={`This request has been revoked${details?.requested_by_name ? ` by ${details.requested_by_name}` : ''}. Please contact your representative if you still need to share your GST data.`}
+          title={t('requestRevoked')}
+          body={t('revokedBody', {
+            by: details?.requested_by_name ? t('revokedBy', { name: details.requested_by_name }) : '',
+            what: t('gstWhat'),
+          })}
         />
       </PageShell>
     );
@@ -252,68 +211,50 @@ const GstAuthPage = () => {
 
   if (details?.status === 'EXPIRED') {
     return (
-      <PageShell>
+      <PageShell langCtx={langCtx}>
         <StatusScreen
           icon="schedule"
           iconColorClass="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
-          title="Link Expired"
-          body="This link has expired. Please ask your representative to send you a new one."
+          title={t('linkExpired')}
+          body={t('linkExpiredBody')}
         />
       </PageShell>
     );
   }
 
+  const who = details?.customer_name
+    ? (lang === 'hi' ? ` ${details.customer_name} के` : ` ${details.customer_name}'s`)
+    : '';
+
   return (
-    <PageShell>
+    <PageShell langCtx={langCtx}>
       <h1 className="text-[22px] font-bold text-[#0a1628] dark:text-[#e6edf7] tracking-tight mb-2">
-        Authorise GST Access
+        {t('gstHeading')}
       </h1>
 
-      {(details?.requested_by_name || details?.requesting_org) && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
-          <span className="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">badge</span>
-          <p className="text-[12px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
-            Requested by{' '}
-            <span className="font-bold">{details?.requested_by_name || 'a representative'}</span>
-            {details?.requesting_org && (
-              <>
-                {' '}from <span className="font-bold">{details.requesting_org}</span>
-              </>
-            )}
-          </p>
-        </div>
-      )}
+      <RequestedByBanner details={details} langCtx={langCtx} />
 
       <p className="text-[#0a1628] dark:text-[#e6edf7] font-medium text-[14px] mb-6">
-        {details?.requested_by_name || 'A representative'}
-        {details?.requesting_org ? ` from ${details.requesting_org}` : ''} is requesting access to the GST filing data
-        for{details?.customer_name ? ` ${details.customer_name}'s` : ''} GSTIN{' '}
-        <span className="font-bold">{details?.gstin || '—'}</span> to proceed with the loan application. Enter your
-        GST portal username and password below to authorise this securely.
+        {requesterLabel(details?.requested_by_name, details?.requesting_org, lang, t)}{' '}
+        {t('gstIntro', { who, gstin: details?.gstin || '—' })}
       </p>
 
       <p className="text-[12px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 leading-relaxed mb-6">
-        Nothing will be accessed from the GST portal unless you submit this form yourself. You can review
-        Cred2Tech's terms of use and privacy policy at{' '}
+        {t('gstNothingAccessed')} {t('termsReviewAt')}{' '}
         <a href="https://cred2tech.com" target="_blank" rel="noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
           cred2tech.com
         </a>.
       </p>
 
-      {submitError && (
-        <div className="flex items-center gap-2 px-3 py-2.5 mb-5 text-xs font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
-          <span className="material-symbols-outlined text-[15px]">error</span>
-          {submitError}
-        </div>
-      )}
+      {submitError && <ErrorNotice message={submitError} />}
 
       {/* Not every GSTIN's GST-portal login has OTP enabled — the only way to
           find out is to try (see the OTP error guidance in handleSubmit), so
           this is a choice up front rather than a capability we can detect. */}
       <div className="mb-5 inline-flex p-0.5 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
         {[
-          { value: 'PASSWORD', label: 'Password' },
-          { value: 'OTP', label: 'OTP' },
+          { value: 'PASSWORD', label: t('optPassword') },
+          { value: 'OTP', label: t('optOtp') },
         ].map((opt) => (
           <button
             key={opt.value}
@@ -333,17 +274,17 @@ const GstAuthPage = () => {
 
       <div className="mb-5">
         <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
-          GST Portal Username
+          {t('gstUsername')}
         </label>
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="GST portal username"
+          placeholder={t('gstUsernamePh')}
           autoComplete="off"
-          // See the password field below's comment — same defensive opt-out
-          // of mobile-keyboard text transforms, here in case this username
-          // is itself case-sensitive on the GST portal.
+          // Same defensive opt-out of mobile-keyboard text transforms as the
+          // password field below, in case this username is itself
+          // case-sensitive on the GST portal.
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck="false"
@@ -355,23 +296,20 @@ const GstAuthPage = () => {
       {authType === 'PASSWORD' ? (
         <div className="mb-6">
           <label className="block text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2">
-            GST Portal Password
+            {t('gstPassword')}
           </label>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your portal password"
+              placeholder={t('portalPassword')}
               autoComplete="new-password"
               // Explicit opt-out of mobile-keyboard text transforms — see
-              // ItrAuthPage.jsx's identical fix for the same class of bug:
-              // without this, some mobile keyboards autocapitalize/autocorrect
-              // this field once it's shown as type="text" via the eye toggle
-              // (the usual type="password" exemption doesn't survive that).
-              // A portal password is case-sensitive, so a silently
-              // auto-capitalized/auto-corrected character makes a genuinely
-              // correct password fail against the provider on every attempt.
+              // ItrAuthPage.jsx's identical fix: some mobile keyboards
+              // autocapitalize/autocorrect this field once it's shown as
+              // type="text" via the eye toggle, which makes a correct
+              // (case-sensitive) portal password fail on every attempt.
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck="false"
@@ -382,23 +320,20 @@ const GstAuthPage = () => {
               type="button"
               onClick={() => setShowPassword((s) => !s)}
               tabIndex={-1}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? t('hidePassword') : t('showPassword')}
               className="absolute right-0 top-0 h-full w-10 flex items-center justify-center text-[#0a1628]/50 dark:text-[#e6edf7]/50 hover:text-indigo-600 dark:hover:text-indigo-400"
             >
               <span className="material-symbols-outlined text-[18px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
           <p className="mt-2 text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
-            This is the same password you use to log in to the GST portal — it is sent directly to the portal and is
-            never stored.
+            {t('gstPasswordNote')}
           </p>
         </div>
       ) : (
         <div className="mb-6">
           <p className="text-[11px] text-[#0a1628]/50 dark:text-[#e6edf7]/50">
-            After you submit, the GST portal will send an OTP to the mobile/email registered for this username — you'll
-            enter it on the next step. If this GSTIN doesn't have OTP login enabled, the request will fail and you'll
-            need to switch to Password.
+            {t('gstOtpNote')}
           </p>
         </div>
       )}
@@ -415,7 +350,7 @@ const GstAuthPage = () => {
             <span className="skeleton-inline" style={{ width: 56, height: 10 }} />
           </div>
         ) : (
-          <span>Authorise</span>
+          <span>{t('authorise')}</span>
         )}
       </TravelingBorderButton>
     </PageShell>
