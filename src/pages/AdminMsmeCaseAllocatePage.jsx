@@ -302,7 +302,7 @@ const AdminMsmeCaseAllocatePage = () => {
                     >
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{u.tenant.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {u.user.name} ({u.user.role?.name})</div>
+                        <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {u.user.name} ({roleLabel(u.user.role?.name)})</div>
                       </div>
                       {u.isRecommended && (
                         <span style={{
@@ -333,7 +333,7 @@ const AdminMsmeCaseAllocatePage = () => {
               </div>
               <div style={{ padding: 20 }}>
                 <InfoRow label="Name" value={toTitleCase(agent?.name)} />
-                <InfoRow label="Role" value={agent?.role?.name} />
+                <InfoRow label="Role" value={roleLabel(agent?.role?.name)} />
                 <InfoRow label="Designation" value={agent?.designation} />
                 <InfoRow label="Email" value={agent?.email} />
                 <InfoRow label="Mobile" value={agent?.mobile} />
