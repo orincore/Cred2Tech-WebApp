@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { ArrowLeft, Search, User, Building2, CheckCircle2, Sparkles, MapPin } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
-import SectionCard from '../components/ui/SectionCard';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDate, toTitleCase, resolveEntityName, maskPan } from '../utils/helpers';
@@ -177,39 +176,46 @@ const AdminMsmeCaseAllocatePage = () => {
   document.title = `Cred2Tech | ${isReallocation ? 'Reallocate' : 'Allocate'} MSME Case`;
 
   return (
-    <div style={{ overflowY: 'auto', height: '100%', background: 'var(--bg)', color: 'var(--on-surface)' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '76px 16px 32px' : '24px 24px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div>
-          <button
-            onClick={() => navigate('/admin/msme-cases')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--on-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 12, padding: 0 }}
-          >
-            <ArrowLeft size={14} /> Back to Direct MSME Leads
-          </button>
-          <PageHeader
-            title={`${isReallocation ? 'Reallocate' : 'Allocate'} Case — ${businessName}`}
-            subtitle={`PAN: ${maskPan(caseData.customer?.business_pan)} · ${caseData.product_type || 'Product not specified'}`}
-            compact={isMobile}
-          />
-        </div>
-        <SectionCard title="Case Summary">
-          <div style={{ padding: '0 20px', display: 'flex', flexWrap: 'wrap', gap: 0 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+        <button
+          onClick={() => navigate('/admin/msme-cases')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--on-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 12, padding: 0 }}
+        >
+          <ArrowLeft size={14} /> Back to Direct MSME Leads
+        </button>
+        <PageHeader
+          title={`${isReallocation ? 'Reallocate' : 'Allocate'} Case — ${businessName}`}
+          subtitle={`PAN: ${maskPan(caseData.customer?.business_pan)} · ${caseData.product_type || 'Product not specified'}`}
+          compact={isMobile}
+        />
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '12px 16px 24px' : '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--outline)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0 }}>Case Summary</h3>
+          </div>
+          <div style={{ padding: '0 20px 4px', display: 'flex', flexWrap: 'wrap' }}>
             {[
               { label: 'Requested Loan', value: (caseData.loan_amount || caseData.sanctioned_amount) ? `₹${Number(caseData.loan_amount || caseData.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified' },
               { label: 'Stage', value: <Badge type="level" value={caseData.stage} /> },
               { label: 'Payment', value: caseData.case_payment?.status === 'PAID' ? 'Paid' : 'Pending' },
               { label: 'Registered', value: formatDate(caseData.created_at) },
             ].map((item, i) => (
-              <div key={i} style={{ flex: '1 1 160px', padding: '16px 0', borderBottom: '1px solid var(--outline)', marginRight: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
+              <div key={i} style={{ minWidth: 160, flex: 1, padding: '14px 20px 14px 0', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{item.value}</span>
               </div>
             ))}
           </div>
-        </SectionCard>
+        </div>
 
         {isReallocation && (
-          <SectionCard title="Current Allocation">
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--outline)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0 }}>Current Allocation</h3>
+            </div>
             <div style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
               <CheckCircle2 size={18} color="var(--success)" />
               <div>
@@ -219,15 +225,19 @@ const AdminMsmeCaseAllocatePage = () => {
                 </div>
               </div>
             </div>
-          </SectionCard>
+          </div>
         )}
 
-        <SectionCard
-          title={isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
-          subtitle={caseState
-            ? `Sourcing Partners serving ${caseState} are recommended first — narrow further by name or state below.`
-            : 'Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.'}
-        >
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--outline)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0 }}>
+              {isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
+            </h3>
+            {caseState
+              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Sourcing Partners serving {caseState} are recommended first — narrow further by name or state below.</p>
+              : <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.</p>
+            }
+          </div>
           <div style={{ padding: 20 }}>
             {selectedUser ? (
               <div style={{
@@ -312,14 +322,15 @@ const AdminMsmeCaseAllocatePage = () => {
               </div>
             )}
           </div>
-        </SectionCard>
+        </div>
 
         {selectedUser && (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
-            <SectionCard
-              title="Sourcing Partner Agent Details"
-              actions={<User size={16} color="var(--on-muted)" />}
-            >
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--outline)' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0 }}>Sourcing Partner Agent Details</h3>
+                <User size={16} color="var(--on-muted)" />
+              </div>
               <div style={{ padding: 20 }}>
                 <InfoRow label="Name" value={toTitleCase(agent?.name)} />
                 <InfoRow label="Role" value={agent?.role?.name} />
@@ -330,12 +341,13 @@ const AdminMsmeCaseAllocatePage = () => {
                 <InfoRow label="Joined" value={formatDate(agent?.created_at)} />
                 <InfoRow label="Last Login" value={agent?.last_login_at ? formatDate(agent.last_login_at) : 'Never'} />
               </div>
-            </SectionCard>
+            </div>
 
-            <SectionCard
-              title="Tenant Details"
-              actions={<Building2 size={16} color="var(--on-muted)" />}
-            >
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--outline)' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', margin: 0 }}>Tenant Details</h3>
+                <Building2 size={16} color="var(--on-muted)" />
+              </div>
               <div style={{ padding: 20 }}>
                 <InfoRow label="Company Name" value={tenant?.name} />
                 <InfoRow label="Company Type" value={tenant?.company_type} />
@@ -362,7 +374,7 @@ const AdminMsmeCaseAllocatePage = () => {
                   </>
                 )}
               </div>
-            </SectionCard>
+            </div>
           </div>
         )}
 
