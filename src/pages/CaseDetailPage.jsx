@@ -6,7 +6,7 @@ import { getTenantLenders } from '../api/tenantLenderService';
 import { viewDocument, downloadDocument, deleteDocument } from '../api/documentHelper';
 import { getUsers } from '../api/userService';
 import {
-  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload, Trash2
+  ArrowLeft, FileText, Download, CheckCircle2, AlertCircle, Users, X, Check, HardDrive, UploadCloud, CloudDownload, Trash2, ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -14,6 +14,7 @@ import { toTitleCase, formatStatusLabel, resolveEntityName, isUsableEntityName, 
 import { formatCaseReference } from '../utils/caseReference';
 import { createSanctionForm, createDisbursementForm, resolveSanctionContext } from '../utils/caseStageForm';
 import { groupDocumentsByCategory } from '../constants/documentCategories';
+import { hasPositiveEligibility } from './EsrPage';
 import { roleLabel } from '../constants/roles';
 import StatCard from '../components/ui/StatCard';
 import Skeleton from '../components/ui/Skeleton';
@@ -199,6 +200,10 @@ export default function CaseDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Overview');
+  // "Customer's Loan Request" card (a lead Cred2Tech allocated to this partner):
+  // proposals already prepared on this case, and whether one is being prepared now.
+  const [leadProposals, setLeadProposals] = useState([]);
+  const [preparingProposal, setPreparingProposal] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
   const [selectedStage, setSelectedStage] = useState('');
   const [disbursementSummary, setDisbursementSummary] = useState(null);
@@ -450,6 +455,58 @@ export default function CaseDetailPage() {
     }
   };
 
+  // Proposals already prepared on this lead - only to label the button "View" vs
+  // "Prepare". Best-effort: the button works either way (see prepareLeadProposal).
+  const isCred2TechLead = caseData?.lead_source === 'DIRECT_MSME';
+  useEffect(() => {
+    if (!isCred2TechLead || !caseData?.id) return undefined;
+    let cancelled = false;
+    caseService.listProposals(caseData.id)
+      .then((res) => { if (!cancelled) setLeadProposals(Array.isArray(res) ? res : (res?.proposals || [])); })
+      .catch(() => { if (!cancelled) setLeadProposals([]); });
+    return () => { cancelled = true; };
+  }, [isCred2TechLead, caseData?.id]);
+
+  // Prepare (or open) the proposal for the lender the customer applied with, on their
+  // behalf - the same thing the "Prepare" button does on the ESR step, minus the trip
+  // there. The lender is found in the case's ESR by name and matched to existing
+  // proposals by lender id, exactly as that page does. The new proposal starts from the
+  // amount and tenure the customer asked for (proposal.service#createProposalDraft).
+  const prepareLeadProposal = async () => {
+    if (preparingProposal) return;
+    setPreparingProposal(true);
+    const openProposal = (proposalId) => navigate(`/customers/add?caseId=${caseData.id}&step=7&proposalId=${proposalId}`);
+    try {
+      const esr = await caseService.getESR(caseData.id);
+      const lender = (esr?.raw_payload?.lenders || []).find((l) => l.lender_name === caseData.lender_name);
+      if (!lender) {
+        toast.error(`${caseData.lender_name} isn't in this case's eligibility report. Open the ESR step to regenerate it, or choose another lender.`);
+        return;
+      }
+      const existing = (await caseService.listProposals(caseData.id));
+      const list = Array.isArray(existing) ? existing : (existing?.proposals || []);
+      const mine = list.filter((p) => String(p.lender_id) === String(lender.lender_id));
+      if (mine.length > 0) {
+        openProposal(mine[mine.length - 1].id);
+        return;
+      }
+      const created = await caseService.createProposal(caseData.id, {
+        lender_id: lender.lender_id,
+        // An eligible scheme if there is one; otherwise whatever was evaluated, so the
+        // proposal is never left with no scheme reference (same rule as the ESR step).
+        scheme_id: lender.scheme_evaluations?.find(hasPositiveEligibility)?.scheme_id
+          || lender.scheme_evaluations?.[0]?.scheme_id
+          || null,
+      });
+      toast.success(`Proposal created: ${created.proposal.proposal_number}`);
+      openProposal(created.proposal.id);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to prepare the proposal');
+    } finally {
+      setPreparingProposal(false);
+    }
+  };
+
   // Shaped like the real page (header + actions, Case Progress, two-column
   // detail cards, table card) so the load reads as "this page is filling in"
   // rather than a blank screen with a spinner.
@@ -666,6 +723,66 @@ export default function CaseDetailPage() {
       {/* Overview */}
       {activeTab === 'Overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20 }}>
+          {/* A lead Cred2Tech allocated to this partner: what the customer applied for.
+              Without this the case looks like any other, with the lender and terms
+              only buried in the notes. The amount is the case's loan amount. */}
+          {caseData.lead_source === 'DIRECT_MSME' && (() => {
+            const months = Number(caseData.msme_requested_tenure_months) || 0;
+            const rate = caseData.msme_requested_interest_rate;
+            const fields = [
+              { label: 'Lender', value: caseData.lender_name || 'Not specified' },
+              { label: 'Requested Amount', value: caseData.loan_amount ? formatCurrency(caseData.loan_amount) : 'Not specified' },
+              { label: 'Requested Tenure', value: months ? `${months % 12 === 0 ? `${months / 12} years · ` : ''}${months} months` : 'Not specified' },
+              { label: 'Expected Interest Rate', value: rate != null && rate !== '' ? `${Number(rate)}% p.a.` : 'Not specified' },
+              { label: 'Product', value: caseData.product_type || 'N/A' },
+            ];
+            return (
+              <div className="card" style={{ gridColumn: '1 / -1', borderLeft: '4px solid var(--primary)' }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Customer's Loan Request</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 0, color: 'var(--primary)', background: 'var(--primary-subtle)' }}>
+                      Lead from Cred2Tech
+                    </span>
+                    {(() => {
+                      // Label only: a proposal's lender name is the platform lender's, which
+                      // can differ slightly from the case's ("... (Small Ticket Secured Loan)"),
+                      // so match loosely. What the click does is decided by lender id.
+                      const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                      const wanted = norm(caseData.lender_name);
+                      const hasProposal = !!wanted && leadProposals.some((p) => {
+                        const name = norm(p.lender_name);
+                        return name && (wanted.includes(name) || name.includes(wanted));
+                      });
+                      return (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          style={{ borderRadius: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                          onClick={prepareLeadProposal}
+                          disabled={preparingProposal}
+                        >
+                          <ClipboardList size={13} />
+                          {preparingProposal ? 'Opening…' : hasProposal ? 'View Proposal' : 'Prepare Proposal'}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div style={{ padding: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)', gap: 16 }}>
+                  {fields.map((f) => (
+                    <div key={f.label} style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{f.label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{f.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: '0 20px 16px', fontSize: 12, color: 'var(--text-tertiary)' }}>
+                  The customer applied for this loan with the lender above through Cred2Tech and asked for these terms. Prepare their proposal against them.
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="card">
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Case Details</h3>

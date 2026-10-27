@@ -45,7 +45,7 @@ const fmtPct = (v) => v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—';
 // The final amount is part of the eligibility contract. Keep this UI-side
 // guard for older saved ESR payloads that may contain is_eligible=true with
 // a zero-value offer.
-const hasPositiveEligibility = (result) => result?.is_eligible === true
+export const hasPositiveEligibility = (result) => result?.is_eligible === true
   && Number.isFinite(Number(result?.final_eligible_loan_amount))
   && Number(result.final_eligible_loan_amount) > 0;
 
@@ -725,6 +725,8 @@ const CalcBreakdownPanel = ({ evaluations }) => {
 const LENDER_CARD_BTN_H = 38;   // card (non-compact) layout
 const LENDER_ROW_BTN_H = 30;    // compact list/table row
 
+const inr = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+
 const LENDER_ACTION_BTN = {
   borderRadius: 0,
   display: 'inline-flex',
@@ -736,7 +738,7 @@ const LENDER_ACTION_BTN = {
   paddingBottom: 0,
 };
 
-function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenProposal, compact = false, isMsme = false, onToggleLender, isSelected = false, isApplied = false }) {
+function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenProposal, compact = false, isMsme = false, onToggleLender, isSelected = false, isApplied = false, prepareLabel = 'Prepare' }) {
   const [creating, setCreating] = useState(false);
   const [showCloneDialog, setShowCloneDialog] = useState(false);
 
@@ -845,7 +847,7 @@ function LenderActions({ lender, caseId, proposals, onProposalCreated, onOpenPro
         ) : (
           <button className="btn btn-primary btn-sm" style={LENDER_ACTION_BTN}
             onClick={handlePrepare} disabled={creating}>
-            <ClipboardList size={12} /> {creating ? '...' : 'Prepare'}
+            <ClipboardList size={12} /> {creating ? '...' : prepareLabel}
           </button>
         )}
 
@@ -1146,6 +1148,15 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
   if (loading) return <EsrSkeleton />;
 
   const lenders = esr?.raw_payload?.lenders || [];
+
+  // A lead Cred2Tech allocated to this partner: the lender the customer applied
+  // with and what they asked for. null for every other case, and never shown in the
+  // customer's own view of this page.
+  const msmeRequest = !isMsme ? (esr?.msme_request || null) : null;
+  const isRequestedLender = (l) => !!msmeRequest && l.lender_name === msmeRequest.lender_name;
+  // Looked up in the full list, not the filtered one, so a lender/eligibility filter
+  // can't hide the one the banner is about.
+  const requestedLender = msmeRequest ? lenders.find(isRequestedLender) : null;
   const eligibleCount   = lenders.filter(hasPositiveEligibility).length;
   const ineligibleCount = lenders.filter(l => !hasPositiveEligibility(l)).length;
 
@@ -1316,6 +1327,45 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
         </section>
       )}
 
+      {/* The customer's request, for a lead Cred2Tech sent. Lets the partner prepare the
+          proposal for that lender on the customer's behalf in one click (it starts from
+          the amount and tenure they asked for - see proposal.service#createProposalDraft). */}
+      {esr && msmeRequest && (
+        <div style={{
+          border: '2px solid var(--primary)', background: 'var(--bg-surface)', borderRadius: 0,
+          padding: '14px 16px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+              Customer's request · Lead from Cred2Tech
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{msmeRequest.lender_name}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+              {[
+                msmeRequest.requested_amount ? `Requested ${inr(msmeRequest.requested_amount)}` : null,
+                msmeRequest.tenure_months ? `${msmeRequest.tenure_months % 12 === 0 ? `${msmeRequest.tenure_months / 12} years · ` : ''}${msmeRequest.tenure_months} months` : null,
+                msmeRequest.interest_rate != null ? `${msmeRequest.interest_rate}% p.a. expected` : null,
+              ].filter(Boolean).join(' · ') || 'No amount or tenure was specified'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+              The customer applied for this loan with this lender. Prepare the proposal for them — it starts from the amount and tenure they asked for.
+            </div>
+          </div>
+          {requestedLender ? (
+            <LenderActions
+              lender={requestedLender} caseId={caseId} proposals={proposals}
+              onProposalCreated={load} onOpenProposal={onOpenProposal}
+              compact prepareLabel="Prepare Proposal"
+            />
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--warning)', maxWidth: 260 }}>
+              This lender isn't in the current eligibility report. Regenerate the ESR, or prepare a proposal with another lender below.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lenders — compact list view */}
       {esr && lenders.length > 0 && (() => {
         const renderRow = (lender, i) => {
@@ -1326,7 +1376,7 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
           return (
             <motion.div key={lender.lender_id}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.02 }}
-              style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', borderRadius: 0, marginBottom: 12 }}
+              style={{ border: isRequestedLender(lender) ? '2px solid var(--primary)' : '1px solid var(--border)', background: 'var(--bg-surface)', borderRadius: 0, marginBottom: 12 }}
             >
               <div style={{ padding: '12px 16px', opacity: eligible ? 1 : 0.75 }}>
                 {/* Identity row: icon + name/product on the left, status badge anchored right */}
@@ -1340,6 +1390,11 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
                         {lender.product_display_name || lender.product_type}
                         {eligible && lender.best_scheme_name ? ` · ${methodLabel(lender.best_scheme_name)}` : ''}
                       </div>
+                      {isRequestedLender(lender) && (
+                        <div style={{ display: 'inline-block', marginTop: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: 'var(--primary)', background: 'var(--primary-subtle)' }}>
+                          Customer requested this lender
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Proposal status sits immediately left of the eligibility
@@ -1447,8 +1502,10 @@ export default function EsrPage({ caseId, onOpenProposal, isMsme = false, isSala
           );
         }
 
-        const visibleEligible   = filteredLenders.filter(hasPositiveEligibility);
-        const visibleIneligible = filteredLenders.filter(l => !hasPositiveEligibility(l));
+        // The lender the customer asked for goes first within its group.
+        const requestedFirst = (list) => (msmeRequest ? [...list.filter(isRequestedLender), ...list.filter(l => !isRequestedLender(l))] : list);
+        const visibleEligible   = requestedFirst(filteredLenders.filter(hasPositiveEligibility));
+        const visibleIneligible = requestedFirst(filteredLenders.filter(l => !hasPositiveEligibility(l)));
 
         return (
           <div>

@@ -101,12 +101,12 @@ export default function MsmeLoanTermsStep({ caseId, lenders = [], existingApplic
     if (problem) return toast.error(problem);
     try {
       setSubmitting(true);
-      const { data } = await msmeApi.getSourcingConsent(caseId);
+      const { data } = await msmeApi.getSourcingConsent(caseId, lenders.map((l) => l.dbLenderId));
       // Already accepted for this case (e.g. an earlier submit failed after
       // consent) - don't ask again.
       if (data.accepted) return await finishSubmit();
       setConsentError('');
-      setConsent({ version: data.version, points: data.points });
+      setConsent(data);   // the whole server-built wording, lender names and data list included
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Could not load the consent. Please try again.');
     } finally {
@@ -120,7 +120,7 @@ export default function MsmeLoanTermsStep({ caseId, lenders = [], existingApplic
     try {
       setSubmitting(true);
       setConsentError('');
-      await msmeApi.recordSourcingConsent(caseId, consent.version);
+      await msmeApi.recordSourcingConsent(caseId, consent.version, lenders.map((l) => l.dbLenderId));
       setConsent(null);
       await finishSubmit();
     } catch (err) {
@@ -272,7 +272,7 @@ export default function MsmeLoanTermsStep({ caseId, lenders = [], existingApplic
 
       <SourcingConsentModal
         isOpen={!!consent}
-        points={consent?.points}
+        content={consent}
         submitting={submitting}
         error={consentError}
         onAccept={handleAccept}

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { customerService } from '../api/customerService';
 import { caseService } from '../api/caseService';
 import { consentService } from '../api/consentService';
+import { hasCarriedOverIdentity } from '../utils/caseIdentity';
 import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
@@ -426,7 +427,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // "Continue as New Case" for a customer with an unrelated older case
     // immediately showed that older case's name/DOB/mobile/email here,
     // before this brand-new case had pulled or confirmed anything itself.
-    const isCarriedOverIdentity = !!primaryApp?.source_applicant_id;
+    // The link only counts while this case is still unconsented: a COPY of a case
+    // (a lender case Cred2Tech allocated to this partner) has the link too, but keeps
+    // the customer's consent, and its identity is its own - see utils/caseIdentity.js.
+    const isCarriedOverIdentity = hasCarriedOverIdentity(primaryApp);
 
     setCaseId(caseData.id);
     setFormData(prev => ({

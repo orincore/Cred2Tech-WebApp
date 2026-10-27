@@ -39,7 +39,9 @@ export const msmeApi = {
 
   selectLender: (esr_lender_id) => api.post('/msme/lender/select', { esr_lender_id }),
   getLenderApplications: (caseId) => api.get('/msme/case/lender-applications', { params: { caseId } }),
-  getSourcingConsent: (caseId) => api.get('/msme/case/sourcing-consent', { params: { caseId } }),
-  recordSourcingConsent: (caseId, version) => api.post('/msme/case/sourcing-consent', { caseId, version }),
+  // lenderIds: the ESR lender ids the application is about to be sent to - the
+  // wording names them and the record stores them.
+  getSourcingConsent: (caseId, lenderIds = []) => api.get('/msme/case/sourcing-consent', { params: { caseId, lenderIds: lenderIds.join(',') } }),
+  recordSourcingConsent: (caseId, version, lenderIds = []) => api.post('/msme/case/sourcing-consent', { caseId, version, lenderIds }),
   submitCase: (payload) => api.post('/msme/case/submit', payload),
 };

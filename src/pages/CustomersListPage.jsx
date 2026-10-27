@@ -32,7 +32,7 @@ const PIPELINE_TOUR_STEPS = [
   ...(IS_DEV_BUILD ? [{ target: '[data-tour="pipeline-bulk-upload"]', title: 'Bulk upload', description: 'Have many leads at once? Upload a spreadsheet here instead of adding customers one by one.' }] : []),
   { target: '[data-tour="pipeline-search"]', title: 'Search your pipeline', description: 'Find a case instantly by customer name, Case ID, lender, PAN, phone, or email.' },
   { target: '[data-tour="pipeline-filters"]', title: 'Filter your pipeline', description: 'Narrow the list down by entity type, lender, or open alerts (like a pending PDD), and sort it however is most useful to you.' },
-  { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Tap a stage to see only the cases sitting there right now, from Lead Created all the way through to Disbursed.' },
+  { target: '[data-tour="pipeline-stage-tabs"]', title: 'Filter by stage', description: 'Pick one or more stages from the dropdown to see only the cases sitting there right now, from Lead Created all the way through to Disbursed. The toggle on the right switches between your own cases and the leads Cred2Tech has sent you.' },
   { target: '[data-tour="pipeline-results"]', title: 'Your cases', description: 'Every case in your pipeline, with its bureau score, amounts, and current stage. Tap a row any time to resume, view, or continue a case.' },
 ];
 
@@ -65,6 +65,18 @@ const STAGE_MAPPING = {
   'Closed': 'CLOSED',
   'Rejected': 'REJECTED',
 };
+
+// The stage dropdown's options (everything in STAGE_MAPPING except the "All" sentinel -
+// an empty selection already means all stages).
+const STAGE_OPTIONS = Object.entries(STAGE_MAPPING)
+  .filter(([label]) => label !== 'All')
+  .map(([label, value]) => ({ value, label }));
+
+// The two sections of the pipeline, shown as the toggle beside the stage dropdown.
+const SOURCE_TOGGLE = [
+  { value: 'SELF', label: 'Self Cases', countKey: 'self' },
+  { value: 'CRED2TECH', label: 'Cred2Tech', countKey: 'cred2tech' },
+];
 
 const STAGE_LABELS = {
   LEAD_CREATED: 'Lead Created',
@@ -192,7 +204,7 @@ const MultiSelectFilter = ({ label, options, selected, onChange, allLabel, isDar
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <span style={labelSm(isDark)}>{label}</span>
+      {label && <span style={labelSm(isDark)}>{label}</span>}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -333,6 +345,10 @@ const CustomersListPage = () => {
   const [selectedCustomerTypes, setSelectedCustomerTypes] = useState([]);
   const [selectedLenders, setSelectedLenders] = useState([]);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
+  // Two sections of the pipeline: the partner's own cases, and the leads Cred2Tech
+  // allocated to them from the direct MSME portal. Starts on their own.
+  const [source, setSource] = useState('SELF');
+  const [sourceCounts, setSourceCounts] = useState({ self: 0, cred2tech: 0 });
   const [sortIndex, setSortIndex] = useState(0);
 
   const [page, setPage] = useState(1);
@@ -356,6 +372,7 @@ const CustomersListPage = () => {
         entity_type: selectedEntityTypes.join(','),
         category: selectedCustomerTypes.join(','),
         alert: selectedAlerts.join(','),
+        source,
         sort_by: SORT_OPTIONS[sortIndex].by,
         sort_order: SORT_OPTIONS[sortIndex].order,
         page,
@@ -364,6 +381,7 @@ const CustomersListPage = () => {
       const data = await caseService.getPipeline(params);
       setCases(Array.isArray(data.cases) ? data.cases : []);
       setStats({ totalCases: data.total_cases || 0, totalCustomers: data.total_customers || 0 });
+      if (data.source_counts) setSourceCounts(data.source_counts);
       setTotalPages(Math.max(1, data.total_pages || 1));
     } catch (error) {
       toast.error('Failed to load pipeline data.');
@@ -371,7 +389,7 @@ const CustomersListPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, sortIndex, page, selectedStages, selectedLenders, selectedEntityTypes, selectedCustomerTypes, selectedAlerts]);
+  }, [search, sortIndex, page, source, selectedStages, selectedLenders, selectedEntityTypes, selectedCustomerTypes, selectedAlerts]);
 
   useEffect(() => { fetchPipeline(); }, [fetchPipeline]);
 
@@ -397,10 +415,7 @@ const CustomersListPage = () => {
 
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
 
-  const handleStageToggle = (val) => {
-    setSelectedStages((prev) => (prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]));
-    setPage(1);
-  };
+  const handleSourceChange = (next) => { setSource(next); setPage(1); };
   const handleFacetChange = (setter) => (next) => { setter(next); setPage(1); };
 
   const goToCase = (c) => {
@@ -522,38 +537,47 @@ const CustomersListPage = () => {
         </div>
       </div>
 
-      {/* ─── Stage tabs (multi-select, compact) ─── */}
-      <div data-tour="pipeline-stage-tabs" className="hide-scrollbar" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
-        <button
-          onClick={() => { setSelectedStages([]); setPage(1); }}
-          style={{
-            background: selectedStages.length === 0 ? '#4f46e5' : 'transparent',
-            color: selectedStages.length === 0 ? '#fff' : mutedColor,
-            border: `1px solid ${selectedStages.length === 0 ? '#4f46e5' : 'var(--outline)'}`,
-            padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-            cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', lineHeight: 1.6,
-          }}
-        >
-          All
-        </button>
-        {Object.entries(STAGE_MAPPING).filter(([tab]) => tab !== 'All').map(([tab, enumVal]) => {
-          const active = selectedStages.includes(enumVal);
-          return (
-            <button
-              key={tab}
-              onClick={() => handleStageToggle(enumVal)}
-              style={{
-                background: active ? '#4f46e5' : 'transparent',
-                color: active ? '#fff' : mutedColor,
-                border: `1px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
-                padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', lineHeight: 1.6,
-              }}
-            >
-              {tab}
-            </button>
-          );
-        })}
+      {/* ─── Stage dropdown (multi-select) + section toggle ───
+          Left: pick one or more stages (none = all). Right: switch between the
+          partner's own cases and the leads Cred2Tech allocated to them. */}
+      <div data-tour="pipeline-stage-tabs" style={{ padding: isMobile ? '8px 16px' : '8px 20px', borderBottom: '1px solid var(--outline)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
+        <div style={{ width: isMobile ? '100%' : 260 }}>
+          <MultiSelectFilter
+            allLabel="All Stages" isDark={isDark}
+            options={STAGE_OPTIONS} selected={selectedStages}
+            onChange={handleFacetChange(setSelectedStages)}
+          />
+        </div>
+
+        <div role="group" aria-label="Show cases from" style={{ display: 'inline-flex', gap: 2, padding: 2, border: '1px solid var(--outline)', borderRadius: 0, flexShrink: 0, marginLeft: isMobile ? 'auto' : undefined }}>
+          {SOURCE_TOGGLE.map((opt) => {
+            const active = source === opt.value;
+            const count = sourceCounts[opt.countKey] || 0;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => handleSourceChange(opt.value)}
+                style={{
+                  background: active ? '#4f46e5' : 'transparent',
+                  color: active ? '#fff' : mutedColor,
+                  border: 'none', borderRadius: 0, padding: '5px 14px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', gap: 6, lineHeight: 1.4,
+                }}
+              >
+                {opt.label}
+                <span style={{
+                  minWidth: 18, padding: '0 6px', borderRadius: 0, fontSize: 10, fontWeight: 800, lineHeight: '16px', textAlign: 'center',
+                  background: active ? 'rgba(255,255,255,0.25)' : 'var(--bg-elevated)', color: active ? '#fff' : mutedColor,
+                }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ─── Content ─── */}
@@ -610,9 +634,12 @@ const CustomersListPage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12, marginBottom: c.alert_flag === 'PDD_PENDING' ? 10 : 0 }}>
                   <div><div style={labelSm(isDark)}>Employee</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.customer?.created_by?.name || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Bureau Score</div><div style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</div></div>
-                  {c.parent_case_id && (
+                  {(c.parent_case_id || c.lead_source === 'DIRECT_MSME') && (
                     <div><div style={labelSm(isDark)}>Lender</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.lender_name || '—'}</div></div>
                   )}
+                  {c.lead_source === 'DIRECT_MSME' && c.loan_amount ? (
+                    <div><div style={labelSm(isDark)}>Requested</div><div style={{ color: 'var(--on-surface)', fontWeight: 700 }}>{formatCurrency(c.loan_amount)}</div></div>
+                  ) : null}
                   <div><div style={labelSm(isDark)}>Product</div><div style={{ color: 'var(--on-surface)', wordBreak: 'break-word' }}>{c.product_type || '—'}</div></div>
                   <div><div style={labelSm(isDark)}>Sanctioned</div><div style={{ color: 'var(--on-surface)' }}>{formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div></div>
                   <div><div style={labelSm(isDark)}>Disbursed</div><div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700 }}>{formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div></div>
@@ -714,7 +741,9 @@ const CustomersListPage = () => {
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.customer?.created_by?.name || ''}</div>
                     </td>
                     <td style={cellStyle}>
-                      {c.parent_case_id && (
+                      {/* The partner's own proposal copies, and leads Cred2Tech sent for one
+                          lender, both belong to a lender. */}
+                      {(c.parent_case_id || c.lead_source === 'DIRECT_MSME') && (
                         <div style={{ color: 'var(--on-surface)' }}>{c.lender_name || '—'}</div>
                       )}
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>{c.product_type || '—'}</div>
@@ -723,6 +752,10 @@ const CustomersListPage = () => {
                       <span style={{ fontWeight: 800, color: getCibilColor(c.cibil_score, isDark) }}>{c.cibil_score || '—'}</span>
                     </td>
                     <td style={cellStyle}>
+                      {/* What the customer asked for - only a Cred2Tech lead has this. */}
+                      {c.lead_source === 'DIRECT_MSME' && c.loan_amount ? (
+                        <div style={{ color: 'var(--on-surface)', fontWeight: 700, marginBottom: 2 }}>Req: {formatCurrency(c.loan_amount)}</div>
+                      ) : null}
                       <div style={{ color: 'var(--on-surface)' }}>S: {formatCurrency(c.sanctioned_amount || c.parent_case?.sanctioned_amount)}</div>
                       <div style={{ color: isDark ? '#6ee7b7' : '#059669', fontWeight: 700, marginTop: 2 }}>D: {formatCurrency(c.total_disbursed_amount || c.parent_case?.total_disbursed_amount)}</div>
                     </td>

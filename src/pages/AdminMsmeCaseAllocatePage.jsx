@@ -26,6 +26,58 @@ const indianStates = [
   'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
 ];
 
+// Neighbouring / nearby states for each Indian state. A DSA that serves a
+// neighbouring state is shown as "Suggested" (one tier below an exact-state
+// "Recommended" match) so the admin can see nearby options without having to
+// clear the state filter manually.
+const NEARBY_STATES = {
+  'Andhra Pradesh':   ['Telangana', 'Karnataka', 'Tamil Nadu', 'Odisha', 'Chhattisgarh'],
+  'Arunachal Pradesh':['Assam', 'Nagaland', 'Manipur', 'Meghalaya', 'Sikkim'],
+  'Assam':            ['Arunachal Pradesh', 'Nagaland', 'Manipur', 'Mizoram', 'Tripura', 'Meghalaya', 'West Bengal', 'Sikkim'],
+  'Bihar':            ['Uttar Pradesh', 'Jharkhand', 'West Bengal'],
+  'Chhattisgarh':     ['Madhya Pradesh', 'Maharashtra', 'Odisha', 'Jharkhand', 'Telangana', 'Andhra Pradesh'],
+  'Goa':              ['Maharashtra', 'Karnataka'],
+  'Gujarat':          ['Rajasthan', 'Madhya Pradesh', 'Maharashtra', 'Dadra and Nagar Haveli and Daman and Diu'],
+  'Haryana':          ['Punjab', 'Himachal Pradesh', 'Uttarakhand', 'Uttar Pradesh', 'Rajasthan', 'Delhi'],
+  'Himachal Pradesh': ['Punjab', 'Haryana', 'Uttarakhand', 'Jammu and Kashmir', 'Ladakh'],
+  'Jharkhand':        ['Bihar', 'West Bengal', 'Odisha', 'Chhattisgarh', 'Uttar Pradesh'],
+  'Karnataka':        ['Goa', 'Maharashtra', 'Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Kerala'],
+  'Kerala':           ['Karnataka', 'Tamil Nadu'],
+  'Madhya Pradesh':   ['Rajasthan', 'Gujarat', 'Maharashtra', 'Chhattisgarh', 'Uttar Pradesh'],
+  'Maharashtra':      ['Gujarat', 'Madhya Pradesh', 'Chhattisgarh', 'Telangana', 'Andhra Pradesh', 'Karnataka', 'Goa', 'Dadra and Nagar Haveli and Daman and Diu'],
+  'Manipur':          ['Nagaland', 'Assam', 'Mizoram', 'Arunachal Pradesh'],
+  'Meghalaya':        ['Assam', 'Tripura'],
+  'Mizoram':          ['Assam', 'Manipur', 'Tripura'],
+  'Nagaland':         ['Arunachal Pradesh', 'Assam', 'Manipur'],
+  'Odisha':           ['West Bengal', 'Jharkhand', 'Chhattisgarh', 'Andhra Pradesh'],
+  'Punjab':           ['Haryana', 'Himachal Pradesh', 'Rajasthan', 'Jammu and Kashmir', 'Chandigarh'],
+  'Rajasthan':        ['Punjab', 'Haryana', 'Delhi', 'Uttar Pradesh', 'Madhya Pradesh', 'Gujarat'],
+  'Sikkim':           ['West Bengal', 'Assam', 'Arunachal Pradesh'],
+  'Tamil Nadu':       ['Kerala', 'Karnataka', 'Andhra Pradesh', 'Telangana', 'Puducherry'],
+  'Telangana':        ['Maharashtra', 'Chhattisgarh', 'Odisha', 'Andhra Pradesh', 'Karnataka'],
+  'Tripura':          ['Assam', 'Mizoram', 'Meghalaya'],
+  'Uttar Pradesh':    ['Uttarakhand', 'Himachal Pradesh', 'Haryana', 'Delhi', 'Rajasthan', 'Madhya Pradesh', 'Chhattisgarh', 'Jharkhand', 'Bihar'],
+  'Uttarakhand':      ['Himachal Pradesh', 'Haryana', 'Uttar Pradesh', 'Delhi'],
+  'West Bengal':      ['Sikkim', 'Assam', 'Bihar', 'Jharkhand', 'Odisha'],
+  'Chandigarh':       ['Punjab', 'Haryana'],
+  'Delhi':            ['Haryana', 'Uttar Pradesh', 'Rajasthan', 'Uttarakhand'],
+  'Jammu and Kashmir':['Himachal Pradesh', 'Punjab', 'Ladakh'],
+  'Ladakh':           ['Jammu and Kashmir', 'Himachal Pradesh'],
+  'Dadra and Nagar Haveli and Daman and Diu': ['Gujarat', 'Maharashtra'],
+  'Puducherry':       ['Tamil Nadu'],
+};
+
+// Compare state names ignoring case, spaces and punctuation: partners type
+// their state by hand, so "Tamilnadu" and "Tamil Nadu" must count as the same.
+const normState = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+
+// Returns the set of nearby states (normalised with normState) for a given state.
+function getNearbyStates(state) {
+  if (!state) return new Set();
+  const key = Object.keys(NEARBY_STATES).find(k => normState(k) === normState(state));
+  return new Set((NEARBY_STATES[key] || []).map(normState));
+}
+
 // Read-only "label: value" row, reused across the DSA/tenant detail panels.
 function InfoRow({ label, value }) {
   return (
@@ -71,13 +123,9 @@ const AdminMsmeCaseAllocatePage = () => {
         ]);
         setCaseData(caseRes);
         setTargets(Array.isArray(targetsRes) ? targetsRes : []);
-        // Pre-narrow to the MSME's own state so the most relevant DSAs are
-        // already in view without the admin having to do anything — they
-        // can still switch to "All States" from the filter.
-        const caseState = caseRes?.customer?.state?.trim();
-        if (caseState && indianStates.some(s => s.toLowerCase() === caseState.toLowerCase())) {
-          setStateFilter(caseState);
-        }
+        // The state filter deliberately starts on "All States": narrowing it to
+        // the customer's state would hide the nearby-state partners, which are
+        // meant to be suggested right under the exact-state ones.
       } catch (err) {
         toast.error('Failed to load case for allocation');
         navigate('/admin/msme-cases');
@@ -98,27 +146,40 @@ const AdminMsmeCaseAllocatePage = () => {
       }))
   ), [targets]);
 
-  // The MSME's own state — a DSA whose operational_states includes it is
-  // the recommended match, since that's the whole point of collecting
-  // operational_states at DSA registration/profile (see
-  // OrganizationProfilePage.jsx): matching leads to partners who actually
-  // service that state.
-  const caseState = caseData?.customer?.state?.trim() || '';
+  // Where the customer is - worked out by the server (stage 1 pincode, else the
+  // GST / synced profile state), since the customer record has no state of its
+  // own. A partner serving this state, or a neighbouring one, is "Suggested":
+  // that's the point of collecting operational_states at DSA registration /
+  // profile (see OrganizationProfilePage.jsx).
+  const caseState = caseData?.location?.state?.trim() || '';
 
   const query = search.trim().toLowerCase();
   const filteredUsers = useMemo(() => {
+    const nearbyStates = getNearbyStates(caseState);
     return allDsaUsers
       .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query))
       .filter(u => !stateFilter || (u.tenant.operational_states || []).some(s => s.toLowerCase() === stateFilter.toLowerCase()))
-      .map(u => ({
-        ...u,
-        isRecommended: !!caseState && (u.tenant.operational_states || []).some(s => s.toLowerCase() === caseState.toLowerCase()),
-      }))
-      // Recommended (state match) first, then alphabetical by DSA name
-      // within each group — so the list is stable and scannable, not just
-      // whatever order the API happened to return.
+      .map(u => {
+        // A partner serves the states it lists AND the state it is based in.
+        const served = [...(u.tenant.operational_states || []), u.tenant.state].filter(Boolean);
+        const servesState = !!caseState && served.some(s => normState(s) === normState(caseState));
+        const nearbyServed = !servesState && !!caseState ? served.find(s => nearbyStates.has(normState(s))) : null;
+        return {
+          ...u,
+          servesState,
+          isSuggested: servesState || !!nearbyServed,
+          // Why it is suggested, shown under the partner name.
+          suggestionReason: servesState
+            ? `Serves ${caseState}`
+            : nearbyServed ? `Serves nearby ${toTitleCase(nearbyServed)}` : '',  // e.g. "Serves nearby Karnataka"
+        };
+      })
+      // Sort: serves the customer's state → serves a nearby state → rest;
+      // alphabetical within each group.
       .sort((a, b) => {
-        if (a.isRecommended !== b.isRecommended) return a.isRecommended ? -1 : 1;
+        const tierA = a.servesState ? 0 : a.isSuggested ? 1 : 2;
+        const tierB = b.servesState ? 0 : b.isSuggested ? 1 : 2;
+        if (tierA !== tierB) return tierA - tierB;
         return (a.tenant.name || '').localeCompare(b.tenant.name || '');
       });
   }, [allDsaUsers, query, stateFilter, caseState]);
@@ -201,6 +262,7 @@ const AdminMsmeCaseAllocatePage = () => {
               { label: 'Requested Loan', value: (caseData.loan_amount || caseData.sanctioned_amount) ? `₹${Number(caseData.loan_amount || caseData.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified' },
               { label: 'Stage', value: <Badge type="level" value={caseData.stage} /> },
               { label: 'Payment', value: caseData.case_payment?.status === 'PAID' ? 'Paid' : 'Pending' },
+              { label: 'Location', value: [caseData.location?.state, caseData.location?.pincode].filter(Boolean).join(' – ') || '—' },
               { label: 'Registered', value: formatDate(caseData.created_at) },
             ].map((item, i) => (
               <div key={i} style={{ minWidth: 160, flex: 1, padding: '14px 20px 14px 0', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -234,7 +296,7 @@ const AdminMsmeCaseAllocatePage = () => {
               {isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
             </h3>
             {caseState
-              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Sourcing Partners serving {caseState} are recommended first — narrow further by name or state below.</p>
+              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Customer is in {caseState}. Sourcing Partners serving {caseState} or a nearby state are suggested at the top — narrow further by name or state below.</p>
               : <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.</p>
             }
           </div>
@@ -300,17 +362,20 @@ const AdminMsmeCaseAllocatePage = () => {
                       onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{u.tenant.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {u.user.name} ({roleLabel(u.user.role?.name)})</div>
+                        {u.suggestionReason && (
+                          <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{u.suggestionReason}</div>
+                        )}
                       </div>
-                      {u.isRecommended && (
+                      {u.isSuggested && (
                         <span style={{
                           display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
                           padding: '3px 8px', fontSize: 11, fontWeight: 700,
-                          color: 'var(--success)', background: 'var(--success-bg)', borderRadius: 999,
+                          color: 'var(--success)', background: 'var(--success-bg)', borderRadius: 0,
                         }}>
-                          <Sparkles size={11} /> Recommended
+                          <Sparkles size={11} /> Suggested
                         </span>
                       )}
                     </div>
@@ -383,7 +448,7 @@ const AdminMsmeCaseAllocatePage = () => {
             className="btn btn-secondary"
             onClick={() => navigate('/admin/msme-cases')}
             disabled={allocating}
-            style={{ minWidth: 120, justifyContent: 'center' }}
+            style={{ minWidth: 120, justifyContent: 'center', borderRadius: 0 }}
           >
             Cancel
           </button>
@@ -391,7 +456,7 @@ const AdminMsmeCaseAllocatePage = () => {
             className="btn btn-primary"
             onClick={handleAllocate}
             disabled={allocating || !selectedUser}
-            style={{ minWidth: 180, justifyContent: 'center' }}
+            style={{ minWidth: 180, justifyContent: 'center', borderRadius: 0 }}
           >
             {allocating ? <LoadingSpinner size={16} color="currentColor" /> : (isReallocation ? 'Confirm Reallocation' : 'Confirm Allocation')}
           </button>
