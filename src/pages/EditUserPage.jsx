@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { getUserById, getUsers, updateUser } from '../api/userService';
 import { getRoles } from '../api/roleService';
 import { useAuth } from '../context/AuthContext';
-import { ROLES, HIERARCHY_LEVELS } from '../constants/roles';
+import { ROLES, HIERARCHY_LEVELS, roleLabel } from '../constants/roles';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
@@ -380,7 +380,7 @@ const EditUserPage = () => {
                   onBlur={e => e.target.style.borderBottomColor = 'var(--outline)'}
                 >
                   <option value="">None (root level)</option>
-                  {tenantUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role?.name || u.role})</option>)}
+                  {tenantUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name || u.role)})</option>)}
                 </CustomSelect>
               </div>
             </div>

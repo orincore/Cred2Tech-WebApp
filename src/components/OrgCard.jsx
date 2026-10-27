@@ -1,6 +1,7 @@
 import React from 'react';
 import { getInitials } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
+import { roleLabel } from '../constants/roles';
 
 // ─── Role colors ──────────────────────────────────────────────
 const roleColor = (role) => {
@@ -15,9 +16,13 @@ const roleColor = (role) => {
 };
 
 const roleBg = (role) => roleColor(role) + '18';
+// Short badge word for the avatar tag (Admin/Member/Partner/...) — the last
+// word of the full display label, never the raw enum (roleLabel already
+// renders DSA_ADMIN/DSA_MEMBER/SUB_DSA as their Sourcing-Partner names).
 const formatRole = (r) => {
-  const roleName = typeof r === 'object' ? (r?.name || r?.id || 'Member') : (r || 'Member');
-  return roleName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const roleName = typeof r === 'object' ? (r?.name || r?.id) : r;
+  const label = roleLabel(roleName || 'Member');
+  return label.split(' ').pop();
 };
 
 // ─── Org Node Card (reusable with dark/light mode support) ──────
@@ -137,7 +142,7 @@ const OrgCard = ({
             {initials}
           </div>
           <span style={{ fontSize: 10, fontWeight: 700, color: roleLabelColor, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            {formatRole(node.role).split(' ')[0]}
+            {formatRole(node.role)}
           </span>
         </div>
 

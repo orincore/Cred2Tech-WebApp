@@ -468,7 +468,7 @@ export default function DSALenderContactsPage() {
                                   </div>
                                   <div>
                                     <label style={inputLabel}>SOURCING PARTNER CODE</label>
-                                    <input value={editState.dsa_code} onChange={e => updateEditField(contact.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. DSA-1234" />
+                                    <input value={editState.dsa_code} onChange={e => updateEditField(contact.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. SP-1234" />
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -513,7 +513,7 @@ export default function DSALenderContactsPage() {
                               </div>
                               <div>
                                 <label style={inputLabel}>SOURCING PARTNER CODE</label>
-                                <input value={newContactDrafts[lender.id].dsa_code} onChange={e => updateNewContactField(lender.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. DSA-1234" />
+                                <input value={newContactDrafts[lender.id].dsa_code} onChange={e => updateNewContactField(lender.id, 'dsa_code', e.target.value)} style={inputStyle} placeholder="e.g. SP-1234" />
                               </div>
                               <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 8 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>

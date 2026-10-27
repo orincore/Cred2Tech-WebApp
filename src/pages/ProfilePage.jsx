@@ -10,6 +10,7 @@ import * as mfaApi from '../api/mfaService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
+import { roleLabel } from '../constants/roles';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
@@ -583,14 +584,6 @@ const ProfilePage = () => {
   // (unlike PATCH /users/:id) doesn't include CRED2TECH_MEMBER.
   const canEditOrg = ['SUPER_ADMIN', 'DSA_ADMIN'].includes(roleName);
 
-  const toTitleCase = (str) => {
-    if (!str) return '';
-    return str
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-  };
-
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -785,7 +778,7 @@ const ProfilePage = () => {
                     <span style={{
                       fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--primary)',
                       background: isDark ? 'rgba(99,102,241,0.18)' : 'rgba(79,70,229,0.1)', padding: '4px 10px', borderRadius: 0,
-                    }}>{toTitleCase(roleName)}</span>
+                    }}>{roleLabel(roleName)}</span>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1331,7 +1324,7 @@ const ProfilePage = () => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <InfoCard icon={Briefcase} title="Role & Access" isDark={isDark}>
-                      <InfoRow isDark={isDark} label="Platform Role" value={toTitleCase(u.role?.name) || '—'} />
+                      <InfoRow isDark={isDark} label="Platform Role" value={roleLabel(roleName) || '—'} />
                       <InfoRow isDark={isDark} label="Role ID" value={u.role_id ?? '—'} mono last />
                     </InfoCard>
 

@@ -329,7 +329,7 @@ const CreateTenantPage = () => {
       const dsaAdminRole = roles.find(r => r.name === 'DSA_ADMIN');
 
       if (!dsaAdminRole) {
-        throw new Error('DSA_ADMIN role not found in database. Please ensure roles are seeded (restart backend).');
+        throw new Error('Sourcing Partner Admin role not found in database. Please ensure roles are seeded (restart backend).');
       }
 
       // Step 3: Create initial admin user for this tenant

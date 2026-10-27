@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { getInitials } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from './TravelingBorderButton';
+import { roleLabel } from '../constants/roles';
 
 // ─── Role colors ──────────────────────────────────────────────
 const roleColor = (role) => {
@@ -17,7 +18,7 @@ const roleColor = (role) => {
 };
 
 const roleBg = (role) => roleColor(role) + '18';
-const formatRoleText = (r) => (r?.name || r || 'Member').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+const formatRoleText = (r) => roleLabel((r?.name || r) || 'Member');
 
 // ─── User Side Panel Component ───────────────────────────────
 const UserSidePanel = ({ selected, onClose, navigate, children, showViewProfile = true }) => {

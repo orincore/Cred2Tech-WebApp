@@ -12,6 +12,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Panel from '../components/ui/Panel';
 
 import CustomSelect from '../components/CustomSelect';
+import { roleLabel } from '../constants/roles';
 const REPORT_ICONS = {
   'case-pipeline': GitBranch,
   'product-wise': Package,
@@ -36,12 +37,12 @@ const REPORT_TAB_LABELS = {
   'lender-wise': 'Lender-wise Business MIS',
   'volume-trend': 'Volume & Disbursement Trend MIS',
   'sales-team': 'Sales Team Performance MIS',
-  'sub-dsa-performance': 'Sub-DSA Partner Performance MIS',
+  'sub-dsa-performance': 'Sub-Sourcing Partner Performance MIS',
   pdd: 'PDD MIS',
   'part-disbursement': 'Part Disbursement / Tranche Tracking MIS',
   'slab-achievement': 'Lender Commission Slab Achievement MIS',
   'sales-incentive-ledger': 'Sales Incentive Payout MIS',
-  'sub-dsa-payout-ledger': 'Sub-DSA Payout Ledger MIS',
+  'sub-dsa-payout-ledger': 'Sub-Sourcing Partner Payout Ledger MIS',
   'revenue-profitability': 'Revenue, Expense & Profitability MIS',
   'case-ageing': 'Case Ageing / TAT MIS',
   'case-master': 'Case / Customer Master MIS'
@@ -88,14 +89,18 @@ const cellClass = (col) => (isNumericCol(col) ? 'num' : col.type === 'date' ? 'd
 
 // The report endpoints return raw enum values for basis / status / stage /
 // channel columns (NET_DISBURSED, INVOICE_RAISED, SUB_DSA, PENDING...). Show
-// them as readable labels: "Net Disbursed", "Invoice Raised", "Sub DSA",
-// "Pending". Only whole-value UPPER_SNAKE enums are touched (letters only), so
-// references/IDs with digits ("INV_2026_001") and names ("HDFC Bank") pass
-// through unchanged.
-const KEEP_UPPER = new Set(['PDD', 'DSA', 'TDS', 'GST', 'ITR', 'EMI', 'ROI', 'LAP', 'TAT', 'KYC', 'PAN', 'ESR', 'MSME', 'MIS', 'NA']);
+// them as readable labels: "Net Disbursed", "Invoice Raised", "Sub-Sourcing
+// Partner", "Pending". Only whole-value UPPER_SNAKE enums are touched
+// (letters only), so references/IDs with digits ("INV_2026_001") and names
+// ("HDFC Bank") pass through unchanged.
+const KEEP_UPPER = new Set(['PDD', 'TDS', 'GST', 'ITR', 'EMI', 'ROI', 'LAP', 'TAT', 'KYC', 'PAN', 'ESR', 'MSME', 'MIS', 'NA']);
 const titleWord = (w) => (KEEP_UPPER.has(w) ? w : w.charAt(0) + w.slice(1).toLowerCase());
 const ENUM_LIKE_COLUMN = /status|basis|stage|channel|trigger|type|level|flag/i;
+// DSA-rooted role/channel enums never go through the generic word-split —
+// they always render via roleLabel's Sourcing-Partner names instead.
+const DSA_ENUM_LABELS = { SUB_DSA: roleLabel('SUB_DSA'), DSA_ADMIN: roleLabel('DSA_ADMIN'), DSA_MEMBER: roleLabel('DSA_MEMBER') };
 function prettifyEnum(value, col) {
+  if (DSA_ENUM_LABELS[value]) return DSA_ENUM_LABELS[value];
   if (/^[A-Z]+(?:_[A-Z]+)+$/.test(value)) return value.split('_').map(titleWord).join(' ');
   // A single all-caps word (PENDING, PAID) in an enum-style column reads
   // oddly next to "Net Disbursed" — same treatment there only.
@@ -334,7 +339,7 @@ export default function MisReportsPage() {
         <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           {options.teamMembers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          {options.subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} (Sub-DSA)</option>)}
+          {options.subDsaUsers.map(u => <option key={u.id} value={u.id}>{u.name} (Sub-Sourcing Partner)</option>)}
         </CustomSelect>
       );
     }
@@ -351,7 +356,7 @@ export default function MisReportsPage() {
         <CustomSelect {...commonProps} value={value} onChange={e => set(e.target.value)}>
           <option value="all">All</option>
           <option value="SALES_TEAM">Sales Team</option>
-          <option value="SUB_DSA">Sub-DSA</option>
+          <option value="SUB_DSA">Sub-Sourcing Partner</option>
         </CustomSelect>
       );
     }
@@ -377,7 +382,7 @@ export default function MisReportsPage() {
 
   const FILTER_LABELS = {
     periodFrom: 'Period From', periodTo: 'Period To', asOfDate: 'Report As Of Date', periodMonth: 'Payout Period',
-    month: 'Month', granularity: 'Granularity', product: 'Product', lenderId: 'Lender', subDsaUserId: 'Sub-DSA Partner',
+    month: 'Month', granularity: 'Granularity', product: 'Product', lenderId: 'Lender', subDsaUserId: 'Sub-Sourcing Partner',
     sourcingPartnerId: 'Sourcing Partner', hierarchyLevel: 'Hierarchy Level', sourcingChannel: 'Sourcing Channel',
     stage: 'Stage', status: 'Status'
   };

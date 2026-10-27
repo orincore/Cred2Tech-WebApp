@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { createUser, getUsers } from '../api/userService';
 import { getRoles } from '../api/roleService';
 import { useAuth } from '../context/AuthContext';
-import { HIERARCHY_LEVELS, ROLES } from '../constants/roles';
+import { HIERARCHY_LEVELS, ROLES, roleLabel } from '../constants/roles';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import { countries } from '../lib/countries';
@@ -477,7 +477,7 @@ const CreateUserPage = () => {
                 >
                   <option value="">None (root level)</option>
                   {eligibleManagers.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.role?.name || u.role})</option>
+                    <option key={u.id} value={u.id}>{u.name} ({roleLabel(u.role?.name || u.role)})</option>
                   ))}
                 </CustomSelect>
                 <div style={{ color: 'var(--on-muted)', fontSize: 11, fontWeight: 500, marginTop: 4 }}>Select a manager from your tenant. Leave blank if none</div>

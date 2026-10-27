@@ -9,6 +9,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 import UserSidePanel from '../components/UserSidePanel';
 import PageHeader from '../components/ui/PageHeader';
 import PageTour from '../components/tour/PageTour';
+import { roleLabel } from '../constants/roles';
 
 const HIERARCHY_TOUR_STEPS = [
   { target: '[data-tour="hierarchy-view-toggle"]', title: 'Tree or list view', description: 'Switch between an org-chart Tree view and a flat, sortable List view of your whole team, whichever is easier to scan.' },
@@ -143,8 +144,8 @@ const roleColor = (role) => {
 
 const roleBg = (role) => roleColor(role) + '18';
 const formatRole = (r) => {
-  const roleName = typeof r === 'object' ? (r?.name || r?.id || 'Member') : (r || 'Member');
-  return roleName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const roleName = typeof r === 'object' ? (r?.name || r?.id) : r;
+  return roleLabel(roleName || 'Member');
 };
 const shortCode = (name) => (name || '').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3);
 
