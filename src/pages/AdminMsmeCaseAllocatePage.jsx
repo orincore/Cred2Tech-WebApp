@@ -177,22 +177,21 @@ const AdminMsmeCaseAllocatePage = () => {
   document.title = `Cred2Tech | ${isReallocation ? 'Reallocate' : 'Allocate'} MSME Case`;
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)' }}>
-      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
-        <button
-          onClick={() => navigate('/admin/msme-cases')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--on-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 12, padding: 0 }}
-        >
-          <ArrowLeft size={14} /> Back to Direct MSME Leads
-        </button>
-        <PageHeader
-          title={`${isReallocation ? 'Reallocate' : 'Allocate'} Case — ${businessName}`}
-          subtitle={`PAN: ${maskPan(caseData.customer?.business_pan)} · ${caseData.product_type || 'Product not specified'}`}
-          compact={isMobile}
-        />
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '0 16px 24px' : '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ overflowY: 'auto', height: '100%', background: 'var(--bg)', color: 'var(--on-surface)' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '76px 16px 32px' : '24px 24px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div>
+          <button
+            onClick={() => navigate('/admin/msme-cases')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--on-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 12, padding: 0 }}
+          >
+            <ArrowLeft size={14} /> Back to Direct MSME Leads
+          </button>
+          <PageHeader
+            title={`${isReallocation ? 'Reallocate' : 'Allocate'} Case — ${businessName}`}
+            subtitle={`PAN: ${maskPan(caseData.customer?.business_pan)} · ${caseData.product_type || 'Product not specified'}`}
+            compact={isMobile}
+          />
+        </div>
         <SectionCard title="Case Summary">
           <div style={{ padding: '0 20px', display: 'flex', flexWrap: 'wrap', gap: 0 }}>
             {[
@@ -389,5 +388,6 @@ const AdminMsmeCaseAllocatePage = () => {
     </div>
   );
 };
+
 
 export default AdminMsmeCaseAllocatePage;
