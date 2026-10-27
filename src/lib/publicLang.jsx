@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import CustomSelect from '../components/CustomSelect';
 
 // Language support for the three customer-facing link pages (ConsentPage,
 // GstAuthPage, ItrAuthPage). Only static page text is translated here; names,
@@ -235,17 +236,16 @@ export function requesterLabel(name, org, lang, t) {
   return lang === 'hi' ? `${org} के ${who}` : `${who} from ${org}`;
 }
 
-export const LanguageSelect =({ lang, setLang, t }) => (
-  <label className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#0a1628] dark:text-[#e6edf7]">
+export const LanguageSelect = ({ lang, setLang, t }) => (
+  <div className="inline-flex items-center gap-1.5 text-[#0a1628] dark:text-[#e6edf7]">
     <span className="material-symbols-outlined text-[16px]" aria-hidden="true">translate</span>
-    <span className="sr-only">{t('language')}</span>
-    <select
+    <CustomSelect
       value={lang}
       onChange={(e) => setLang(e.target.value)}
       aria-label={t('language')}
-      className="px-2 py-1.5 bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 cursor-pointer"
+      style={{ minWidth: 104, padding: '6px 10px', fontSize: 12, fontWeight: 600 }}
     >
       {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-    </select>
-  </label>
+    </CustomSelect>
+  </div>
 );
