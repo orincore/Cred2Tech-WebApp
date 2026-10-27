@@ -78,12 +78,12 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className="modal-box" style={{ maxWidth: 640, width: '96vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-box" style={{ maxWidth: 640, width: '96vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', padding: 0, borderRadius: 0 }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
           <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Bulk Upload Cases</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 4, marginBottom: 0 }}>Upload a multi-sheet Excel file to create cases and auto-generate ESR</p>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Bulk Upload Cases</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>Upload a multi-sheet Excel file to create cases and auto-generate ESR</p>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={handleClose} aria-label="Close">
             <X size={18} />
@@ -111,11 +111,12 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
             <div
               onClick={() => fileInputRef.current?.click()}
               style={{
-                border: '2px dashed var(--border-strong)', borderRadius: 'var(--radius-lg)', padding: 32,
-                textAlign: 'center', background: 'var(--bg-elevated)', cursor: 'pointer'
+                border: '2px dashed var(--border-strong)', borderRadius: 0, padding: 32,
+                textAlign: 'center', background: 'var(--bg-elevated)', cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center'
               }}
             >
-              <Upload size={30} color="var(--text-tertiary)" style={{ marginBottom: 10 }} />
+              <Upload size={30} color="var(--text-tertiary)" style={{ marginBottom: 10, display: 'block' }} />
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--primary)', marginBottom: 4 }}>
                 Click to select a file
               </div>
@@ -147,7 +148,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
           {/* Results */}
           {result && (
             <div className={`notice ${failedRows > 0 ? 'notice-warning' : ''}`} style={{
-              marginTop: 20, flexDirection: 'column', alignItems: 'stretch',
+              marginTop: 20, flexDirection: 'column', alignItems: 'stretch', borderRadius: 0,
               background: failedRows > 0 ? 'var(--error-bg)' : 'var(--success-bg)',
               borderColor: failedRows > 0 ? 'var(--error)' : 'var(--success)'
             }}>
@@ -163,7 +164,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
               </div>
 
               {result.createdCases?.length > 0 && (
-                <div style={{ marginTop: 12, maxHeight: 180, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div style={{ marginTop: 12, maxHeight: 180, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 0, border: '1px solid var(--border)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'var(--text-tertiary)' }}>
@@ -192,7 +193,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
               )}
 
               {result.warnings?.length > 0 && (
-                <div style={{ marginTop: 12, maxHeight: 150, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--warning)' }}>
+                <div style={{ marginTop: 12, maxHeight: 150, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 0, border: '1px solid var(--warning)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--warning)', textAlign: 'left', color: 'var(--warning)' }}>
@@ -215,7 +216,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
               )}
 
               {result.errors?.length > 0 && (
-                <div style={{ marginTop: 12, maxHeight: 150, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 'var(--radius)', border: '1px solid var(--error)' }}>
+                <div style={{ marginTop: 12, maxHeight: 150, overflowY: 'auto', fontSize: 12, background: 'var(--bg-surface)', borderRadius: 0, border: '1px solid var(--error)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--error)', textAlign: 'left', color: 'var(--error)' }}>
@@ -241,7 +242,7 @@ const BulkUploadModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
           <button type="button" className="btn btn-secondary" onClick={handleClose}>
             {result ? 'Close' : 'Cancel'}
           </button>
