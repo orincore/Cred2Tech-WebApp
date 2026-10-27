@@ -177,7 +177,7 @@ const AdminMsmeCaseAllocatePage = () => {
   document.title = `Cred2Tech | ${isReallocation ? 'Reallocate' : 'Allocate'} MSME Case`;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)' }}>
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <button
           onClick={() => navigate('/admin/msme-cases')}
@@ -192,13 +192,20 @@ const AdminMsmeCaseAllocatePage = () => {
         />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 24px' : '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: isMobile ? '0 16px 24px' : '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
         <SectionCard title="Case Summary">
-          <div style={{ padding: 20, display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 16 }}>
-            <InfoRow label="Requested Loan" value={(caseData.loan_amount || caseData.sanctioned_amount) ? `₹${Number(caseData.loan_amount || caseData.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified'} />
-            <InfoRow label="Stage" value={<Badge type="level" value={caseData.stage} />} />
-            <InfoRow label="Payment" value={caseData.case_payment?.status === 'PAID' ? 'Paid' : 'Pending'} />
-            <InfoRow label="Registered" value={formatDate(caseData.created_at)} />
+          <div style={{ padding: '0 20px', display: 'flex', flexWrap: 'wrap', gap: 0 }}>
+            {[
+              { label: 'Requested Loan', value: (caseData.loan_amount || caseData.sanctioned_amount) ? `₹${Number(caseData.loan_amount || caseData.sanctioned_amount).toLocaleString('en-IN')}` : 'Not Specified' },
+              { label: 'Stage', value: <Badge type="level" value={caseData.stage} /> },
+              { label: 'Payment', value: caseData.case_payment?.status === 'PAID' ? 'Paid' : 'Pending' },
+              { label: 'Registered', value: formatDate(caseData.created_at) },
+            ].map((item, i) => (
+              <div key={i} style={{ flex: '1 1 160px', padding: '16px 0', borderBottom: '1px solid var(--outline)', marginRight: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.label}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{item.value}</span>
+              </div>
+            ))}
           </div>
         </SectionCard>
 
@@ -361,12 +368,19 @@ const AdminMsmeCaseAllocatePage = () => {
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingBottom: 8 }}>
-          <button className="btn btn-secondary" onClick={() => navigate('/admin/msme-cases')} disabled={allocating}>Cancel</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate('/admin/msme-cases')}
+            disabled={allocating}
+            style={{ minWidth: 120, justifyContent: 'center' }}
+          >
+            Cancel
+          </button>
           <button
             className="btn btn-primary"
             onClick={handleAllocate}
             disabled={allocating || !selectedUser}
-            style={{ minWidth: 160, justifyContent: 'center' }}
+            style={{ minWidth: 180, justifyContent: 'center' }}
           >
             {allocating ? <LoadingSpinner size={16} color="currentColor" /> : (isReallocation ? 'Confirm Reallocation' : 'Confirm Allocation')}
           </button>
