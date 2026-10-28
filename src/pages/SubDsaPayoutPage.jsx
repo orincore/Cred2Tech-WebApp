@@ -29,8 +29,13 @@ const STATUS_META = {
   REJECTED: { label: 'Rejected', color: 'var(--error)', bg: 'var(--error-bg)' },
 };
 
+// Must mirror subDsaPayout.service.js's VALID_TRANSITIONS exactly. Offering
+// INVOICE_RAISED from DRAFT (and listing it first, so the dialog preselected
+// it) meant the default choice was always refused with "Invalid transition":
+// an invoice is raised through the separate generate-invoice call, never by
+// setting this status by hand.
 const VALID_TRANSITIONS = {
-  DRAFT: ['INVOICE_RAISED', 'PDD_PENDING', 'REJECTED'],
+  DRAFT: ['PDD_PENDING', 'REJECTED'],
   INVOICE_RAISED: ['UNDER_REVIEW', 'REJECTED'],
   UNDER_REVIEW: ['RECONCILED', 'REJECTED'],
   RECONCILED: ['PAID', 'REJECTED'],

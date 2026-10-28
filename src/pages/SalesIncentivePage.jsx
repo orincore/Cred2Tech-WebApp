@@ -475,6 +475,46 @@ export default function SalesIncentivePage() {
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Effective From</label>
                   <input type="date" value={ruleForm.effective_from ? ruleForm.effective_from.split('T')[0] : ''} onChange={e => setRuleForm({ ...ruleForm, effective_from: e.target.value })} className="form-control" />
                 </div>
+                {/* Monthly volume slab ladder. Like case_count_slabs, the API
+                    has always accepted volume_slabs; there was no field for it,
+                    so volume-based sales incentives could not be configured.
+                    Amounts are in Crores, matching how the engine reads them. */}
+                <div style={{ flexBasis: '100%', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Monthly Volume Bonus (optional)</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Extra % on the disbursed amount once the month's volume reaches a tier. Ranges in ₹ Crores; leave "To" blank for the top tier.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setRuleForm({ ...ruleForm, volume_slabs: [...(ruleForm.volume_slabs || []), { from_amount: '', to_amount: '', percent_rate: '' }] })}
+                    >+ Add Tier</button>
+                  </div>
+                  {(ruleForm.volume_slabs || []).length === 0 ? (
+                    <div style={{ padding: 10, border: '1px dashed var(--border)', fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                      No volume tiers — only the rate above applies.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {(ruleForm.volume_slabs || []).map((s, idx) => (
+                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr auto', gap: 8, alignItems: 'center' }}>
+                          <input type="number" step="0.01" min="0" placeholder="From (Cr)" value={s.from_amount ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, volume_slabs: ruleForm.volume_slabs.map((x, j) => j === idx ? { ...x, from_amount: e.target.value } : x) })} />
+                          <input type="number" step="0.01" min="0" placeholder="To (Cr, blank = ∞)" value={s.to_amount ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, volume_slabs: ruleForm.volume_slabs.map((x, j) => j === idx ? { ...x, to_amount: e.target.value } : x) })} />
+                          <input type="number" step="0.01" min="0" placeholder="Bonus %" value={s.percent_rate ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, volume_slabs: ruleForm.volume_slabs.map((x, j) => j === idx ? { ...x, percent_rate: e.target.value } : x) })} />
+                          <button type="button" className="btn btn-ghost btn-icon" aria-label="Remove tier"
+                            onClick={() => setRuleForm({ ...ruleForm, volume_slabs: ruleForm.volume_slabs.filter((_, j) => j !== idx) })}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Monthly case-count bonus ladder. The API has always
                     accepted case_count_slabs on create/update; there was simply
                     no field for it here, so sales-team slabs could not be
@@ -537,7 +577,11 @@ export default function SalesIncentivePage() {
                         <td data-label="Value" style={{ fontWeight: 600, color: 'var(--success)' }}>
                           {r.commission_type === 'PERCENTAGE' ? `${r.commission_value}%` : `₹${r.commission_value}`}
                         </td>
-                        <td data-label="Status"><StatusBadge status={r.status} /></td>
+                        {/* display_status reflects the rule's actual date
+                            window; r.status is only the stamp from when it was
+                            saved and keeps reading SCHEDULED after the rule has
+                            started applying. */}
+                        <td data-label="Status"><StatusBadge status={r.display_status || r.status} /></td>
                         <td data-label="Action">
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
                             <button
