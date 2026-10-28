@@ -4,8 +4,9 @@ import { toast } from 'react-hot-toast';
 import {
   ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
   Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock, Trash2, Ban, MonitorSmartphone,
-  ChevronLeft, ChevronRight, Pencil, Save,
+  ChevronLeft, ChevronRight, Pencil, Save, HardDrive,
 } from 'lucide-react';
+import StorageMeter from '../components/storage/StorageMeter';
 import {
   getTenantSummary, updateTenant, updateTenantStatus, updateTenantVirtualWorkspace,
   grantFreeVirtualWorkspace, adminSubscribeVirtualWorkspace, adminUpgradeVirtualWorkspacePlan,
@@ -707,6 +708,40 @@ const AdminTenantManagePage = () => {
                 <StatCard label="Team Size" value={data.team_size} />
                 <StatCard label="Last Activity" value={data.last_activity ? formatDate(data.last_activity) : '—'} />
               </div>
+              {data.storage && (
+                <Card
+                  icon={HardDrive}
+                  title="Document Storage"
+                  subtitle="Everything this account holds in S3 — uploaded files plus documents pulled via API. 5 GB free; paid plans above that."
+                >
+                  <StorageMeter storage={data.storage} />
+                  {data.storage.applies && (
+                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--outline)', fontSize: 12.5, color: 'var(--on-muted)', lineHeight: 1.8 }}>
+                      {data.storage.subscription ? (
+                        <>
+                          <div>
+                            <b style={{ color: 'var(--on-surface)' }}>Plan:</b>{' '}
+                            {data.storage.subscription.plan_gb} GB · ₹{data.storage.subscription.base_amount_inr}/month + 18% GST ·{' '}
+                            <span style={{ fontWeight: 700, color: ['ACTIVE', 'PENDING'].includes(data.storage.subscription.status) ? 'var(--success)' : 'var(--warning)' }}>
+                              {data.storage.subscription.status}
+                            </span>
+                            {data.storage.limit_gb === data.storage.free_gb && data.storage.subscription.status !== 'CREATED' && ' (not in force — free limit applies)'}
+                          </div>
+                          {data.storage.subscription.current_period_end && (
+                            <div>
+                              <b style={{ color: 'var(--on-surface)' }}>Paid through:</b> {formatDateTime(data.storage.subscription.current_period_end)}
+                              {data.storage.subscription.pending_cancellation && <span style={{ color: 'var(--warning)', fontWeight: 600 }}> · cancelling at cycle end</span>}
+                              {data.storage.subscription.scheduled_plan_gb && <span> · switching to {data.storage.subscription.scheduled_plan_gb} GB</span>}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div><b style={{ color: 'var(--on-surface)' }}>Plan:</b> Free — {data.storage.free_gb} GB included, no paid plan.</div>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
               <Card icon={Wallet} title="Recent Wallet Transactions" subtitle="Last 5 — see the Wallet & Credits tab for the full history">
                 {data.recent_wallet_transactions?.length > 0 ? (
                   <div style={{ overflowX: 'auto' }}>

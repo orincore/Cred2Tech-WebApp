@@ -22,9 +22,18 @@ const useResponsive = () => {
 };
 
 const PAGE_SIZE = 25;
-const STREAM_LABEL = { WALLET: 'Wallet recharge', MSME_FEE: 'MSME fee', SUBSCRIPTION: 'Subscription' };
-const STREAM_COLOR = { WALLET: 'var(--primary)', MSME_FEE: 'var(--success)', SUBSCRIPTION: 'var(--warning)' };
-const STREAMS = ['WALLET', 'MSME_FEE', 'SUBSCRIPTION'];
+const STREAM_LABEL = { WALLET: 'Wallet recharge', MSME_FEE: 'MSME fee', SUBSCRIPTION: 'Virtual Workspace', STORAGE: 'Storage plan' };
+const STREAM_COLOR = { WALLET: 'var(--primary)', MSME_FEE: 'var(--success)', SUBSCRIPTION: 'var(--warning)', STORAGE: 'var(--info, #7c5cff)' };
+const STREAMS = ['WALLET', 'MSME_FEE', 'SUBSCRIPTION', 'STORAGE'];
+// Bytes -> a readable size (1 GB = 1024³ B, the same unit the storage limit uses).
+const fmtBytes = (b) => {
+  const n = Number(b || 0);
+  if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(2)} TB`;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+};
 // ▲/▼ + percentage for a comparison metric; says so plainly when there is no
 // previous figure to compare against (a % of zero is meaningless).
 const changeText = (d) => {
@@ -336,7 +345,7 @@ const AdminWalletRevenuePage = () => {
                   <Grid
                     cols={[{ key: 'k', label: 'Step' }, { key: 'v', label: 'Amount', num: true }, { key: 'n', label: 'What it means' }]}
                     rows={[
-                      { key: 'g', k: 'Gross billed (incl. GST)', v: inr(t.total), n: `${num(t.invoices)} invoices across wallet recharges, MSME fees and subscriptions` },
+                      { key: 'g', k: 'Gross billed (incl. GST)', v: inr(t.total), n: `${num(t.invoices)} invoices across wallet recharges, MSME fees, Virtual Workspace and storage plans` },
                       ...(report.unclassified.invoices > 0 ? [{ key: 'u', k: `Less: GST not recorded (${report.unclassified.invoices} older payments)`, v: `− ${inr(report.unclassified.total)}`, n: 'Received before GST was recorded — cannot be split into revenue and tax, so excluded here' }] : []),
                       { key: 'x', k: 'Less: GST collected (18%)', v: `− ${inr(t.gst)}`, n: 'Payable to the government — not our revenue' },
                     ]}
@@ -363,6 +372,55 @@ const AdminWalletRevenuePage = () => {
                     foot={{ k: 'Total', invoices: num(t.invoices), taxable: inr(t.taxable), share: '100%', avg: t.invoices ? inr(t.taxable / t.invoices) : '—', gst: inr(t.gst), total: inr(t.total) }}
                   />
                 </Section>
+
+                {report.storage_plans && (
+                  <Section title="Storage plans — right now" hint={`A live snapshot as of ${formatDateTime(report.storage_plans.as_of)}, not tied to the period above. The money actually collected for storage in the period is the “Storage plan” row in Revenue by source.`}>
+                    {(() => {
+                      const sp = report.storage_plans;
+                      const usedPct = sp.total_capacity_bytes ? Math.min(100, (sp.total_used_bytes / sp.total_capacity_bytes) * 100) : 0;
+                      return (
+                        <>
+                          <Grid
+                            cols={[{ key: 'k', label: 'Measure' }, { key: 'v', label: 'Value', num: true }, { key: 'n', label: 'What it means' }]}
+                            rows={[
+                              { key: 'a', k: 'DSA accounts', v: num(sp.accounts), n: `${num(sp.paid_accounts)} on a paid plan · ${num(sp.free_accounts)} on the free 5 GB` },
+                              { key: 'm', k: 'Monthly recurring (excl. GST)', v: inr(sp.recurring.base), n: `${num(sp.recurring.accounts)} renewing plan(s); ${inr(sp.recurring.gst)} GST on top = ${inr(sp.recurring.total)} billed each month` },
+                              { key: 'e', k: 'Plans ending', v: num(sp.ending_accounts), n: 'Cancelled or set to cancel — will drop out of recurring revenue' },
+                              { key: 'f', k: 'Plans with a failing payment', v: num(sp.payment_failing_accounts), n: 'Razorpay could not charge; in the grace period before dropping to the free tier' },
+                              { key: 'u', k: 'Storage used', v: `${fmtBytes(sp.total_used_bytes)} of ${fmtBytes(sp.total_capacity_bytes)}`, n: `${usedPct.toFixed(1)}% of all capacity sold or given (distinct files only)` },
+                              { key: 'x', k: 'Accounts full / 95%+ / 80%+', v: `${num(sp.full_accounts)} / ${num(sp.critical_accounts)} / ${num(sp.warning_accounts)}`, n: 'Full accounts are blocked from new document pulls and uploads — likely upgrade candidates' },
+                            ]}
+                          />
+                          {sp.by_plan.length > 0 && (
+                            <div style={{ marginTop: 12 }}>
+                              <Grid
+                                cols={[{ key: 'gb', label: 'Plan' }, { key: 'accounts', label: 'Accounts', num: true }, { key: 'b', label: 'Monthly (excl. GST)', num: true }, { key: 'g', label: 'GST', num: true }, { key: 't', label: 'Billed monthly', num: true }]}
+                                rows={sp.by_plan.map((p) => ({ key: p.gb, gb: `${p.gb} GB`, accounts: num(p.accounts), b: inr(p.mrr_base), g: inr(p.mrr_gst), t: inr(p.mrr_total) }))}
+                                foot={{ gb: 'Total', accounts: num(sp.recurring.accounts), b: inr(sp.recurring.base), g: inr(sp.recurring.gst), t: inr(sp.recurring.total) }}
+                              />
+                            </div>
+                          )}
+                          {sp.near_limit.length > 0 && (
+                            <div style={{ marginTop: 12 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', marginBottom: 6 }}>
+                                Closest to their limit{sp.near_limit_total > sp.near_limit.length ? ` (top ${sp.near_limit.length} of ${num(sp.near_limit_total)})` : ''}
+                              </div>
+                              <Grid
+                                cols={[
+                                  { key: 'name', label: 'Account' },
+                                  { key: 'plan', label: 'Plan' },
+                                  { key: 'used', label: 'Used', num: true },
+                                  { key: 'pct', label: '%', num: true, render: (r) => <span style={{ fontWeight: 700, color: r.level === 'full' ? 'var(--error)' : 'var(--warning)' }}>{r.percent}%</span> },
+                                ]}
+                                rows={sp.near_limit.map((a) => ({ key: a.tenant_id, ...a, used: `${fmtBytes(a.used_bytes)} of ${a.limit_gb} GB` }))}
+                              />
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </Section>
+                )}
 
                 <Section title="Month by month" hint="Net revenue each month, split by source.">
                   {(() => {
@@ -465,10 +523,10 @@ const AdminWalletRevenuePage = () => {
                     rows={['B2B', 'B2C'].map((k) => ({ key: k, k, ...report.by_category[k] }))}
                   />
                 </Section>
-                <Section title="By supply" hint="Wallet recharges, Direct-MSME eligibility fees and Virtual Workspace subscriptions are separate supplies, each with its own invoice series.">
+                <Section title="By supply" hint="Wallet recharges, Direct-MSME eligibility fees, Virtual Workspace subscriptions and storage plans are separate supplies. Subscriptions and storage plans share the SUB/ invoice series.">
                   <Grid
                     cols={[{ key: 'k', label: 'Supply' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
-                    rows={['WALLET', 'MSME_FEE', 'SUBSCRIPTION'].map((k) => ({ key: k, k: STREAM_LABEL[k], ...report.by_stream[k] }))}
+                    rows={STREAMS.map((k) => ({ key: k, k: STREAM_LABEL[k], ...report.by_stream[k] }))}
                     foot={{ k: 'Total', invoices: num(t.invoices), ...taxFoot(t) }}
                   />
                 </Section>

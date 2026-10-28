@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone, Bell } from 'lucide-react';
+import { HardDrive, User, Shield, ShieldCheck, LogOut, Check, Copy, Pencil, Lock, Trash2, Briefcase, Network, Clock, Ban, LayoutGrid, ChevronRight, Mail, Smartphone, Bell } from 'lucide-react';
 import OsIcon from '../components/OsIcon';
 import toast from 'react-hot-toast';
 import { getMe } from '../api/authService';
@@ -15,6 +15,7 @@ import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
 import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
+import StorageCard from '../components/storage/StorageCard';
 import {
   isPushSupported,
   getNotificationPermission,
@@ -338,6 +339,9 @@ const ProfilePage = () => {
         { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'Manage your MFA methods' },
         { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
         { id: 'notifications', icon: Bell, label: 'Notifications', subtitle: 'Push and in-app preferences' },
+        // Document storage is an account-wide limit on Sourcing Partner (DSA) accounts —
+        // everyone in the account sees usage; only the admin can buy a plan.
+        ...(authUser?.tenant_type === 'DSA' ? [{ id: 'storage', icon: HardDrive, label: 'Storage', subtitle: 'Usage, limits and storage plans' }] : []),
         ...(canManageSubscription ? [{ id: 'subscription', icon: LayoutGrid, label: 'Subscription', subtitle: 'Plan, billing, and upgrades' }] : []),
       ];
 
@@ -1362,6 +1366,14 @@ const ProfilePage = () => {
                   </p>
                   {/* Self-contained — fetches its own status, offers subscribe/switch-plan/cancel. Same component OrganizationProfilePage uses. */}
                   <VirtualWorkspaceSubscriptionCard />
+                </>
+              ) : activeSection === 'storage' ? (
+                <>
+                  <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Storage</h2>
+                  <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 26px' }}>
+                    How much of your account's document storage is used, and your storage plan. The whole account shares one limit.
+                  </p>
+                  <StorageCard />
                 </>
               ) : activeSection === 'notifications' ? (
                 <>
