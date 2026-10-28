@@ -56,6 +56,7 @@ export const ROUTE_TITLES = [
   { path: '/admin/lenders', title: 'Lender Configuration' },
   { path: '/admin/msme-cases', title: 'MSME Cases' },
   { path: '/admin/transactions', title: 'Transactions' },
+  { path: '/admin/wallet-revenue', title: 'Wallet Revenue & GST' },
 
   // Customers / Case journey
   { path: '/customers/add', title: 'New Customer' },

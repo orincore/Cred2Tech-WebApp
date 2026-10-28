@@ -64,6 +64,7 @@ const AdminContactSubmissionsPage = lazy(() => import('../pages/AdminContactSubm
 const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'));
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
+const AdminWalletRevenuePage = lazy(() => import('../pages/AdminWalletRevenuePage'));
 const AdminDataPurgePage = lazy(() => import('../pages/AdminDataPurgePage'));
 const AdminSendNotificationPage = lazy(() => import('../pages/AdminSendNotificationPage'));
 const AdminNotificationAnalyticsPage = lazy(() => import('../pages/AdminNotificationAnalyticsPage'));
@@ -298,6 +299,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/transactions" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminTransactionsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/wallet-revenue" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminWalletRevenuePage /></ProtectedRoute>
             } />
             {/* Manual data purge (CT-004-DPP right-to-erasure requests) —
                 Cred2Tech's own admin only, never DSA_ADMIN. */}

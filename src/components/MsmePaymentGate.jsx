@@ -8,6 +8,8 @@ import { useMsmeAuth } from '../context/MsmeAuthContext';
 import { loadRazorpay } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from './ui/LoadingSpinner';
+import MsmeFeeBreakdown, { feeTotal } from './msme/MsmeFeeBreakdown';
+import GstNumberField, { gstinError } from './msme/GstNumberField';
 
 // Wraps the MSME self-service onboarding: children render only once the
 // one-time assessment fee is PAID. Payment order + signature verification
@@ -23,6 +25,8 @@ const MsmePaymentGate = ({ children }) => {
   const [promoCode, setPromoCode] = useState('');
   const [promoChecking, setPromoChecking] = useState(false);
   const [promoError, setPromoError] = useState('');
+  // Optional GST number for the tax invoice; pre-filled with the customer's last one.
+  const [gstin, setGstin] = useState('');
 
   useEffect(() => {
     loadGate();
@@ -57,6 +61,7 @@ const MsmePaymentGate = ({ children }) => {
       if (res.data.paymentStatus !== 'PAID') {
         const configRes = await msmeApi.getPaymentConfig();
         setPaymentConfig(configRes.data);
+        setGstin(configRes.data?.saved_gstin || '');
       }
     } catch (err) {
       console.error(err);
@@ -97,11 +102,12 @@ const MsmePaymentGate = ({ children }) => {
   };
 
   const handlePayment = async () => {
+    if (gstinError(gstin)) return toast.error(gstinError(gstin));
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
       const appliedPromo = promoCode.trim() && !promoError ? promoCode.trim() : null;
-      const res = await msmeApi.createPaymentOrder(false, appliedPromo);
+      const res = await msmeApi.createPaymentOrder(false, appliedPromo, gstin.trim());
       const { order_id, amount_paise, currency, key_id } = res.data;
 
       const options = {
@@ -216,16 +222,10 @@ const MsmePaymentGate = ({ children }) => {
               }}
             >
               <div style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Assessment Fee</div>
-              {paymentConfig.promo_valid && paymentConfig.discounted_amount_inr != null ? (
-                <>
-                  <div style={{ fontSize: 15, color: 'var(--on-muted)', textDecoration: 'line-through' }}>₹{paymentConfig.amount_inr}</div>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--success)' }}>₹{paymentConfig.discounted_amount_inr}</div>
-                  <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 2 }}>You save ₹{paymentConfig.discount_amount_inr}</div>
-                </>
-              ) : (
-                <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--on-surface)' }}>₹{paymentConfig.amount_inr}</div>
-              )}
+              <MsmeFeeBreakdown config={paymentConfig} />
+              <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8, textAlign: 'left' }}>Inclusive of 18% GST</div>
               <div style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 8 }}>One-time payment. Valid for 90 days.</div>
+              <GstNumberField value={gstin} onChange={setGstin} disabled={actionLoading} />
             </motion.div>
           )}
 
@@ -260,11 +260,11 @@ const MsmePaymentGate = ({ children }) => {
 
           <button
             onClick={handlePayment}
-            disabled={actionLoading || !paymentConfig}
+            disabled={actionLoading || !paymentConfig || !!gstinError(gstin)}
             className="btn btn-primary btn-lg"
             style={{ width: '100%', justifyContent: 'center', borderRadius: 0 }}
           >
-            {actionLoading ? 'Processing...' : `Pay ₹${paymentConfig?.discounted_amount_inr ?? paymentConfig?.amount_inr ?? '...'} to Continue`}
+            {actionLoading ? 'Processing...' : `Pay ${paymentConfig ? `₹${feeTotal(paymentConfig).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '...'} to Continue`}
           </button>
         </motion.div>
       </div>

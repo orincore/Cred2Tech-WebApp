@@ -112,6 +112,13 @@ export const NAV_ITEMS = [
     roles: ['SUPER_ADMIN'],
   },
   {
+    id: 'admin-wallet-revenue',
+    label: 'Wallet Revenue & GST',
+    path: '/admin/wallet-revenue',
+    icon: Receipt,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
     id: 'admin-data-purge',
     label: 'Data Purge',
     path: '/admin/purge',

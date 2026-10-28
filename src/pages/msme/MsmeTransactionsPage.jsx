@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { Receipt } from 'lucide-react';
 import { msmeApi } from '../../api/msmeService';
-import { formatCompactINR } from '../../utils/helpers';
 import SectionCard from '../../components/ui/SectionCard';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -18,10 +17,34 @@ const PURPOSE_LABELS = {
   DIRECT_MSME_ELIGIBILITY: 'Eligibility Check',
 };
 
+const inr2 = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const MsmeTransactionsPage = () => {
   const navigate = useNavigate();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  const downloadInvoice = async (p) => {
+    setDownloadingId(p.id);
+    try {
+      const res = await msmeApi.downloadPaymentInvoice(p.id);
+      const disposition = res.headers?.['content-disposition'] || '';
+      const fileName = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `invoice-${p.id}.pdf`;
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Could not download the invoice');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -85,6 +108,7 @@ const MsmeTransactionsPage = () => {
                     <th>Status</th>
                     <th>Case</th>
                     <th>Payment ID</th>
+                    <th>Invoice</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -95,7 +119,14 @@ const MsmeTransactionsPage = () => {
                     >
                       <td data-label="Date" style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{formatDateTime(p.created_at)}</td>
                       <td data-label="Purpose">{PURPOSE_LABELS[p.purpose] || p.purpose}</td>
-                      <td data-label="Amount" style={{ fontWeight: 700 }}>{formatCompactINR(p.amount_inr)}</td>
+                      <td data-label="Amount" style={{ fontWeight: 700 }}>
+                        {inr2(p.amount_inr)}
+                        {p.gst_amount_inr !== null && p.gst_amount_inr !== undefined && (
+                          <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-tertiary)', marginTop: 2, lineHeight: 1.5 }}>
+                            Fee {inr2(p.taxable_amount_inr)} + GST (18%) {inr2(p.gst_amount_inr)}
+                          </div>
+                        )}
+                      </td>
                       <td data-label="Status">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                           <Badge type="paymentStatus" value={p.status} />
@@ -119,6 +150,23 @@ const MsmeTransactionsPage = () => {
                       </td>
                       <td data-label="Payment ID" style={{ color: 'var(--text-tertiary)', fontSize: 12, fontFamily: 'monospace' }}>
                         {p.razorpay_payment_id || '—'}
+                      </td>
+                      <td data-label="Invoice">
+                        {p.invoice_available ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ borderRadius: 0 }}
+                              disabled={downloadingId === p.id}
+                              onClick={() => downloadInvoice(p)}
+                            >
+                              {downloadingId === p.id ? 'Preparing…' : 'Download'}
+                            </button>
+                            {p.invoice_number && <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-tertiary)' }}>{p.invoice_number}</span>}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                        )}
                       </td>
                     </motion.tr>
                   ))}

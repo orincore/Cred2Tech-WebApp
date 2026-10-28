@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
+import MsmeFeeBreakdown from './MsmeFeeBreakdown';
+import GstNumberField, { gstinError } from './GstNumberField';
 
 /**
  * Presentational payment modal for the MSME "start a new case" flow —
@@ -8,7 +10,7 @@ import { ShieldCheck } from 'lucide-react';
  * that triggers useEligibilityPayment() (currently the dashboard and
  * /msme/cases). All state/logic lives in the hook; this just renders it.
  */
-const EligibilityPaymentModal = ({ isOpen, paymentConfig, actionLoading, onCancel, onPayNow }) => (
+const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow }) => (
   <AnimatePresence>
     {isOpen && paymentConfig && (
       <div className="modal-overlay">
@@ -33,9 +35,15 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, actionLoading, onCance
 
           <div style={{ background: 'var(--bg-elevated)', padding: 20, marginBottom: 24, border: '1px solid var(--border)' }}>
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px', marginBottom: 8 }}>Amount Due</div>
-            <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)' }}>₹{paymentConfig.amount_inr}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 6 }}>One-time payment · Valid for 90 days</div>
+            <MsmeFeeBreakdown config={paymentConfig} valueColor="var(--text-primary)" mutedColor="var(--text-tertiary)" />
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>One-time payment · Inclusive of 18% GST · Valid for 90 days</div>
           </div>
+
+          {onGstinChange && (
+            <div style={{ marginBottom: 24, marginTop: -8 }}>
+              <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 12 }}>
             <button
@@ -50,7 +58,7 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, actionLoading, onCance
               className="btn btn-primary"
               style={{ flex: 1, justifyContent: 'center', borderRadius: 0 }}
               onClick={onPayNow}
-              disabled={actionLoading}
+              disabled={actionLoading || !!gstinError(gstin)}
             >
               {actionLoading ? 'Processing...' : 'Pay Now'}
             </button>

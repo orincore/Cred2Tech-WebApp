@@ -22,6 +22,7 @@ export const msmeApi = {
   getDashboard: () => api.get('/msme/dashboard'),
   getCases: () => api.get('/msme/cases'),
   getPayments: () => api.get('/msme/payments'),
+  downloadPaymentInvoice: (paymentId) => api.get(`/msme/payments/${paymentId}/invoice`, { responseType: 'blob' }),
   updateProfile: (data) => api.put('/msme/profile', data),
 
   initiateEligibility: () => api.post('/msme/eligibility/initiate'),
@@ -31,7 +32,7 @@ export const msmeApi = {
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
   getPaymentConfig: (promoCode = null) => api.get('/msme/payment/config', { params: promoCode ? { promo_code: promoCode } : {} }),
-  createPaymentOrder: (forceNew = false, promoCode = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode }),
+  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode, gstin: gstin || null }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
   runEligibility: () => api.post('/msme/eligibility/run'),
