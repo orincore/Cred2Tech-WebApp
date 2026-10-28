@@ -196,6 +196,9 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // download-report call, kept on screen (not just a transient toast) for
     // a Signzy support escalation. See IS_DEV_BUILD above.
     const [providerError, setProviderError] = useState(null);
+    // Per-bank-account charge breakdown returned by /bank/analyze — kept after
+    // the upload panel closes so the DSA can see exactly what was billed.
+    const [billing, setBilling] = useState(null);
 
     const handleFileChange = (index, field, value) => {
         const newFiles = [...files];
@@ -301,7 +304,10 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
             const res = await api.post(`/external/bank/analyze`, payload);
             const data = res.data;
 
-            toast.success("Bank Analysis Successfully Scheduled");
+            toast.success(data.billing && data.billing.units > 1
+                ? `Bank Analysis Scheduled — ${data.billing.units} bank accounts`
+                : "Bank Analysis Successfully Scheduled");
+            setBilling(data.billing || null);
             setLocalReportId(data.bankRequest.report_id);
             setLocalStatus('ANALYZING');
             setIsUploadOpen(false); // Close the inline drop-down securely
@@ -487,7 +493,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             disabled={disabled}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
-                            {isMsme ? 'Upload PDF' : <PriceTag label="Upload PDF" actual={analyzeCostActual} discounted={analyzeCost} />}
+                            {isMsme ? 'Upload PDF' : <PriceTag label="Upload PDF (per bank)" actual={analyzeCostActual} discounted={analyzeCost} />}
                         </button>
                     )}
                 </div>
@@ -529,6 +535,31 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                 </div>
             )}
 
+            {!isMsme && billing && billing.accounts?.length > 0 && (
+                <div style={{ padding: isMobile ? '14px 16px' : '16px 24px', borderTop: '1px solid var(--border)', fontSize: 13 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                        Charge breakdown — per bank account
+                    </div>
+                    {billing.accounts.map((a, i) => (
+                        <div key={`${a.ifscCode}-${a.accountNumber}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 0', color: 'var(--text-primary)' }}>
+                            <span>{a.bankName || 'Bank'} · A/c ••••{String(a.accountNumber || '').slice(-4)}{a.ifscCode ? ` · ${a.ifscCode}` : ''}</span>
+                            {billing.perUnit != null && <span style={{ fontWeight: 700 }}>{billing.perUnit} credits</span>}
+                        </div>
+                    ))}
+                    {billing.failedFiles?.length > 0 && (
+                        <div style={{ color: 'var(--text-tertiary)', marginTop: 6 }}>
+                            Not charged — couldn't be read: {billing.failedFiles.map(f => f.fileName || 'file').join(', ')}
+                        </div>
+                    )}
+                    {billing.totalCredits != null && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontWeight: 800 }}>
+                            <span>Total ({billing.units} {billing.units === 1 ? 'account' : 'accounts'})</span>
+                            <span>{billing.totalCredits} credits</span>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Expando File UI (Only visible when isUploadOpen is true) */}
             {isUploadOpen && (
                 <div style={{ padding: '24px', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
@@ -541,6 +572,13 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         into smaller parts (e.g. one file per half-year) and add each part below with
                         "Add Another File" — we'll combine them into one full year's analysis.
                     </div>
+
+                    {!isMsme && (
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 16, lineHeight: 1.5 }}>
+                            Charged once per bank account — several files from the same account cost one analysis.
+                            Files that can't be read are not charged.
+                        </div>
+                    )}
 
                     {!isMsme && walletBalance < analyzeCost && (
                         <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
@@ -601,7 +639,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
-                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : <PriceTag label="Analyze" actual={analyzeCostActual} discounted={analyzeCost} />}
+                                {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : <PriceTag label="Analyze (per bank)" actual={analyzeCostActual} discounted={analyzeCost} />}
                             </button>
                         </div>
                     </div>

@@ -28,7 +28,7 @@ const MsmeDashboardPage = () => {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const {
-    actionLoading, showPaymentModal, paymentConfig,
+    actionLoading, showPaymentModal, paymentConfig, gstin, setGstin,
     startNewCase, initiatePayment, closePaymentModal,
   } = useEligibilityPayment({ prefill: { name: user?.name, email: user?.email, mobile: user?.mobile } });
 
@@ -107,6 +107,8 @@ const MsmeDashboardPage = () => {
       <EligibilityPaymentModal
         isOpen={showPaymentModal}
         paymentConfig={paymentConfig}
+        gstin={gstin}
+        onGstinChange={setGstin}
         actionLoading={actionLoading}
         onCancel={closePaymentModal}
         onPayNow={initiatePayment}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Target, ChevronDown, ChevronUp, FileText, X, Edit, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { salesIncentiveService } from '../api/salesIncentiveService';
@@ -217,6 +217,11 @@ export default function SalesIncentivePage() {
     calculation_base: 'DISBURSED_AMOUNT', effective_from: '', volume_slabs: [], case_count_slabs: [],
   };
   const [ruleForm, setRuleForm] = useState(emptyRuleForm);
+  // The Edit buttons sit in the rules table BELOW the form, inside the same
+  // scrollable modal body. Populating the form without moving the viewport
+  // looked like nothing happened at all ("the screen does not move") because
+  // the fields that changed were off-screen above.
+  const ruleFormRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -433,7 +438,7 @@ export default function SalesIncentivePage() {
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1 }}>
-              <form onSubmit={handleRuleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 24, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
+              <form ref={ruleFormRef} onSubmit={handleRuleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 24, background: 'var(--bg-elevated)', padding: 16, borderRadius: 0 }}>
                 <div style={{ flex: '1 1 140px' }}>
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Level</label>
                   <CustomSelect required value={ruleForm.hierarchy_level} onChange={e => setRuleForm({ ...ruleForm, hierarchy_level: e.target.value })} className="form-control">
@@ -470,6 +475,46 @@ export default function SalesIncentivePage() {
                   <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Effective From</label>
                   <input type="date" value={ruleForm.effective_from ? ruleForm.effective_from.split('T')[0] : ''} onChange={e => setRuleForm({ ...ruleForm, effective_from: e.target.value })} className="form-control" />
                 </div>
+                {/* Monthly case-count bonus ladder. The API has always
+                    accepted case_count_slabs on create/update; there was simply
+                    no field for it here, so sales-team slabs could not be
+                    configured at all from the UI. */}
+                <div style={{ flexBasis: '100%', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Monthly Case-Count Bonus (optional)</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Flat ₹ per case once the month's case count reaches a tier. Stacks on top of the rate above.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setRuleForm({ ...ruleForm, case_count_slabs: [...(ruleForm.case_count_slabs || []), { from_cases: '', to_cases: '', payout_per_case: '' }] })}
+                    >+ Add Tier</button>
+                  </div>
+                  {(ruleForm.case_count_slabs || []).length === 0 ? (
+                    <div style={{ padding: 10, border: '1px dashed var(--border)', fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                      No case-count tiers — only the rate above applies.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {(ruleForm.case_count_slabs || []).map((s, idx) => (
+                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr auto', gap: 8, alignItems: 'center' }}>
+                          <input type="number" min="1" placeholder="From case" value={s.from_cases ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, case_count_slabs: ruleForm.case_count_slabs.map((x, j) => j === idx ? { ...x, from_cases: e.target.value } : x) })} />
+                          <input type="number" min="1" placeholder="To (∞ if blank)" value={s.to_cases ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, case_count_slabs: ruleForm.case_count_slabs.map((x, j) => j === idx ? { ...x, to_cases: e.target.value } : x) })} />
+                          <input type="number" min="0" placeholder="₹ per case" value={s.payout_per_case ?? ''} className="form-control"
+                            onChange={e => setRuleForm({ ...ruleForm, case_count_slabs: ruleForm.case_count_slabs.map((x, j) => j === idx ? { ...x, payout_per_case: e.target.value } : x) })} />
+                          <button type="button" className="btn btn-ghost btn-icon" aria-label="Remove tier"
+                            onClick={() => setRuleForm({ ...ruleForm, case_count_slabs: ruleForm.case_count_slabs.filter((_, j) => j !== idx) })}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ flexBasis: '100%', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
                   {editingRuleId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">Cancel</button>}
                   <button type="submit" className="btn btn-primary">{editingRuleId ? 'Update' : 'Add'}</button>
@@ -508,6 +553,7 @@ export default function SalesIncentivePage() {
                                   volume_slabs: r.volume_slabs || [],
                                   case_count_slabs: r.case_count_slabs || [],
                                 });
+                                ruleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                               }}
                               className="btn btn-ghost btn-sm"
                               style={{ color: 'var(--primary)', padding: 0 }}

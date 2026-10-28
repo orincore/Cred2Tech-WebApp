@@ -63,6 +63,29 @@ const compactField = {
 };
 
 const formatINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const formatINR2 = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Total charged, with the taxable value / single 18% GST split underneath when
+// the payment recorded it. Rows that never recorded GST (MSME fees,
+// subscriptions, legacy top-ups) say so instead of showing an invented split.
+const AmountBreakdown = ({ t, align = 'right' }) => {
+  const b = t.breakdown;
+  const line = { fontSize: 10, color: 'var(--on-muted)', marginTop: 2, whiteSpace: 'nowrap' };
+  return (
+    <div style={{ textAlign: align }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</div>
+      {b?.gst_recorded ? (
+        <>
+          <div style={line}>Taxable {formatINR2(b.taxable)}</div>
+          <div style={line}>GST{b.gst_rate ? ` (${Math.round(b.gst_rate * 100)}%)` : ''} {formatINR2(b.gst)}</div>
+        </>
+      ) : (
+        <div style={{ ...line, fontStyle: 'italic', whiteSpace: 'normal', maxWidth: 190, marginLeft: 'auto' }}>{b?.note || 'GST not recorded'}</div>
+      )}
+      {b?.discount > 0 && <div style={{ ...line, color: 'var(--success)' }}>Promo −{formatINR2(b.discount)}</div>}
+    </div>
+  );
+};
 
 const StatusPill = ({ status, flag, webhook }) => {
   const style = STATUS_STYLE[status] || { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
@@ -190,7 +213,7 @@ const AdminTransactionsPage = () => {
 
   const columns = [
     {
-      key: 'created_at', label: 'Date & Time', width: '20%', padding: '16px 12px',
+      key: 'created_at', label: 'Date & Time', width: '18%', padding: '16px 12px',
       render: (t) => (
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(t.created_at)}</div>
@@ -210,9 +233,9 @@ const AdminTransactionsPage = () => {
       ),
     },
     { key: 'status', label: 'Status', align: 'center', width: '9%', padding: '16px 12px', render: (t) => <StatusPill status={t.status} flag={t.reconciliation_flag} webhook={t.webhook} /> },
-    { key: 'amount', label: 'Amount', align: 'right', width: '10%', padding: '16px 12px', render: (t) => <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</span> },
+    { key: 'amount', label: 'Amount', align: 'right', width: '14%', padding: '16px 12px', render: (t) => <AmountBreakdown t={t} /> },
     {
-      key: 'party', label: 'User / Tenant', width: '22%', padding: '16px 12px',
+      key: 'party', label: 'User / Tenant', width: '20%', padding: '16px 12px',
       render: (t) => (
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -221,6 +244,9 @@ const AdminTransactionsPage = () => {
           <div style={{ fontSize: 10, color: 'var(--on-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3 }}>
             {t.user?.email || (t.tenant ? `Tenant · ${t.tenant.name}` : '—')}
           </div>
+          {t.buyer_gstin && (
+            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--on-surface)', marginTop: 3 }}>GSTIN {t.buyer_gstin}</div>
+          )}
         </div>
       ),
     },
@@ -245,7 +271,7 @@ const AdminTransactionsPage = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: isMobile ? 8 : 16, marginBottom: 16 }}>
           <StatCard title="Total Transactions" value={summary?.total_count ?? '—'} icon={Receipt} loading={!summary} />
           <StatCard title="Total Volume" value={summary ? formatINR(summary.total_amount) : '—'} icon={IndianRupee} color="var(--primary)" loading={!summary} />
-          <StatCard title="Successful" value={summary?.success_count ?? '—'} subtitle={summary ? formatINR(summary.success_amount) : undefined} icon={CheckCircle2} color="var(--success)" loading={!summary} />
+          <StatCard title="Successful" value={summary?.success_count ?? '—'} subtitle={summary ? `${formatINR(summary.success_amount)} · GST ${formatINR2(summary.success_gst_amount)}` : undefined} icon={CheckCircle2} color="var(--success)" loading={!summary} />
           <StatCard title="Pending" value={summary?.pending_count ?? '—'} icon={Clock} color="var(--warning)" loading={!summary} />
           <StatCard title="Failed / Review" value={summary ? summary.failed_count + summary.review_count : '—'} icon={XCircle} color="var(--error)" loading={!summary} />
           <StatCard
@@ -342,7 +368,7 @@ const AdminTransactionsPage = () => {
                         <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{formatDateTime(t.created_at)}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</div>
+                        <AmountBreakdown t={t} />
                         <span style={{ background: style.bg, color: style.color, padding: '2px 8px', borderRadius: 0, fontSize: 10, fontWeight: 800, display: 'inline-block', marginTop: 3 }}>
                           {t.status}
                         </span>

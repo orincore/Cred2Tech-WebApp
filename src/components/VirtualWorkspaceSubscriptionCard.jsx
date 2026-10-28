@@ -19,6 +19,7 @@ const STATUS_LABEL = {
 };
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const money2 = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Small square icon chip, reused for the card header and every info/warning
 // banner below it, so the same visual language repeats instead of a bare
@@ -186,12 +187,12 @@ const PlanCard = ({ plan, variant, selected, onSelect, scheduled = false }) => {
       {hasIntro ? (
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>{money(plan.first_cycle_price_credits)}</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--on-muted)' }}>first month, then {money(plan.monthly_price_credits)}/mo</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--on-muted)' }}>first month, then {money(plan.monthly_price_credits)}/mo + 18% GST</span>
         </div>
       ) : (
         <div>
           <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>{money(plan.monthly_price_credits)}</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-muted)' }}>/mo</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-muted)' }}>/mo + 18% GST</span>
         </div>
       )}
 
@@ -260,8 +261,32 @@ const VirtualWorkspaceSubscriptionCard = () => {
   // onConfirm } — onConfirm is the async action the primary button runs.
   const [confirmModal, setConfirmModal] = useState(null);
 
+  // GST tax invoices for this tenant's auto-debit charges (none for wallet-credit subscriptions).
+  const [invoices, setInvoices] = useState([]);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState(null);
+
+  const downloadInvoice = async (inv) => {
+    setDownloadingInvoiceId(inv.id);
+    try {
+      const res = await api.get(`/virtual-workspace/subscription/invoices/${inv.id}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${inv.invoice_number.replace(/\//g, '-')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download the invoice');
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
+  };
+
   const fetchStatus = useCallback(async () => {
     try {
+      api.get('/virtual-workspace/subscription/invoices').then((r) => setInvoices(r.data.invoices || [])).catch(() => {});
       const res = await api.get('/virtual-workspace/subscription');
       setStatus(res.data);
       const currentPlanId = res.data.subscription?.plan_id || res.data.plans?.[0]?.id || '';
@@ -454,6 +479,11 @@ const VirtualWorkspaceSubscriptionCard = () => {
     const unusedCredit = (subscription.effective_amount_credits || 0) * (remainingMs / cycleLengthMs);
     return Math.max(1, Math.round(selectedSwitchPlan.monthly_price_credits - unusedCredit));
   })();
+
+  // Auto-pay (card/UPI) charges are plan price + 18% GST. Wallet-credit
+  // subscriptions spend credits that already carried GST when they were bought.
+  const chargesGst = subscription?.payment_method !== 'WALLET_CREDITS';
+  const estimatedChargeNow = chargesGst ? Math.round(estimatedProratedCharge * 118) / 100 : estimatedProratedCharge;
 
   const handleSwitchPlan = async () => {
     if (!switchPlanId || !selectedSwitchPlan) return toast.error('Select a plan');
@@ -776,7 +806,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
                 {selectedSwitchPlan && String(switchPlanId) !== String(subscription.plan_id) && upgradeDiff > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', background: 'var(--primary-subtle)', borderLeft: '3px solid var(--primary)' }}>
                     <button className="btn btn-primary btn-sm" onClick={handleSwitchPlan} disabled={busy} style={{ borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <ArrowUpCircle size={14} strokeWidth={2} /> {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name}, pay ${money(estimatedProratedCharge)} now`}
+                      <ArrowUpCircle size={14} strokeWidth={2} /> {busy ? 'Upgrading…' : `Upgrade to ${selectedSwitchPlan.name}, pay ${money2(estimatedChargeNow)} now${chargesGst ? ' (incl. 18% GST)' : ''}`}
                     </button>
                     <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>
                       {subscription.payment_method === 'RAZORPAY_AUTOPAY'
@@ -838,7 +868,7 @@ const VirtualWorkspaceSubscriptionCard = () => {
               />
             </div>
             <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '0 0 14px' }}>
-              You'll be charged right now as part of authorizing auto-pay (card or UPI), and it renews the same date every month. An upgrade charges a prorated amount for your remaining days and raises the mandate in the same step.
+              You'll be charged the plan price plus 18% GST right now as part of authorizing auto-pay (card or UPI), and it renews the same date every month at the same price plus GST. An upgrade charges a prorated amount for your remaining days and raises the mandate in the same step.
             </p>
             <button className="btn btn-primary btn-sm" onClick={handleSubscribe} disabled={busy || !planId} style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               <RefreshCw size={14} strokeWidth={2} /> {busy ? 'Starting…' : 'Subscribe'}
@@ -857,6 +887,32 @@ const VirtualWorkspaceSubscriptionCard = () => {
         onConfirm={confirmModal?.onConfirm}
         onDismiss={() => setConfirmModal(null)}
       />
+
+      {invoices.length > 0 && (
+        <div style={{ marginTop: 20, borderTop: '1px solid var(--outline)', paddingTop: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Tax invoices
+          </div>
+          {invoices.map((inv) => (
+            <div key={inv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--outline)', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', fontFamily: 'monospace' }}>{inv.invoice_number}</div>
+                <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
+                  {formatDateTime(inv.charged_at)} · {money2(inv.base_amount_inr)} + GST (18%) {money2(inv.gst_amount_inr)} = <b>{money2(inv.total_amount_inr)}</b>
+                </div>
+              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ borderRadius: 0 }}
+                disabled={downloadingInvoiceId === inv.id}
+                onClick={() => downloadInvoice(inv)}
+              >
+                {downloadingInvoiceId === inv.id ? 'Preparing…' : 'Download'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

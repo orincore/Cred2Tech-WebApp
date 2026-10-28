@@ -34,7 +34,7 @@ const SERVICE_LABELS = {
   PAN_FETCH: 'PAN Verification',
   GST_FETCH: 'GST Return Analysis',
   ITR_ANALYTICS: 'Income Tax Return Analysis',
-  BANK_ANALYSIS: 'Bank Statement Analysis',
+  BANK_ANALYSIS: 'Bank Statement Analysis (per bank account)',
   BUREAU_PULL: 'Credit Bureau Report',
   SALARY_OCR: 'Salary Slip Reading',
   PROFILE_ADVANCE: 'Mobile Number Verification',

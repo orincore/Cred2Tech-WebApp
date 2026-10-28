@@ -10,6 +10,7 @@ import StatCard from '../components/ui/StatCard';
 import EmptyState from '../components/ui/EmptyState';
 import Badge from '../components/ui/Badge';
 import DataTable from '../components/DataTable';
+import PlanPaymentsTab from '../components/wallet/PlanPaymentsTab';
 import { formatDateTime } from '../utils/helpers';
 import { getErrorMessage } from '../utils/helpers';
 import { walletService } from '../api/walletService';
@@ -593,7 +594,7 @@ const MyWalletPage = () => {
   const { isMobile } = useResponsive();
   const { hasRole } = useAuth();
   const canManageEmployeeCredits = hasRole('DSA_ADMIN');
-  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'recharges' | 'employees'
+  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'recharges' | 'plans' | 'employees'
   const [showRechargeModal, setShowRechargeModal] = useState(false);
 
   const [balance, setBalance] = useState(null);
@@ -921,6 +922,9 @@ const MyWalletPage = () => {
           {[
             { key: 'transactions', label: 'Transaction History' },
             { key: 'recharges', label: 'Recharge History' },
+            // Subscription / storage-plan payments (Razorpay auto-debit) with their GST invoices.
+            // Billed to the account, so the account admin sees them.
+            ...(canManageEmployeeCredits ? [{ key: 'plans', label: 'Plan Payments' }] : []),
             ...(canManageEmployeeCredits ? [{ key: 'employees', label: 'Employee Credits' }] : []),
           ].map((tab) => (
             <button
@@ -1107,6 +1111,8 @@ const MyWalletPage = () => {
               </div>
             )}
           </>
+        ) : activeTab === 'plans' && canManageEmployeeCredits ? (
+          <PlanPaymentsTab isMobile={isMobile} />
         ) : (
           <div className="card" style={{ padding: 0, borderRadius: 0, borderTop: 'none' }}>
             <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--outline)' }}>

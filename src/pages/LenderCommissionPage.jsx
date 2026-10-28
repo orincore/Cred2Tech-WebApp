@@ -315,21 +315,13 @@ function GenerateInvoiceModal({ onClose, availableMonths, availableLenders, onSu
                         <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, verticalAlign: 'top' }}>{formatCurrency(c.amount)}</td>
                       </tr>
                     ))}
-                    <tr style={{ borderBottom: 'none' }}>
-                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
-                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>CGST</td>
-                      <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
-                      <td style={{ padding: 10, textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>9</td>
-                      <td style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>%</td>
-                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700 }}>{formatCurrency((previewData?.gst || 0) / 2)}</td>
-                    </tr>
                     <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
                       <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
-                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>SGST</td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderRight: '1px solid #E5E7EB' }}>GST</td>
                       <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>
-                      <td style={{ padding: 10, textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>9</td>
+                      <td style={{ padding: 10, textAlign: 'right', borderRight: '1px solid #E5E7EB' }}>18</td>
                       <td style={{ padding: 10, textAlign: 'center', borderRight: '1px solid #E5E7EB' }}>%</td>
-                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700 }}>{formatCurrency((previewData?.gst || 0) / 2)}</td>
+                      <td style={{ padding: 10, textAlign: 'right', fontWeight: 700 }}>{formatCurrency(previewData?.gst || 0)}</td>
                     </tr>
                     <tr style={{ borderBottom: '2px solid #111827' }}>
                       <td style={{ padding: 10, borderRight: '1px solid #E5E7EB' }}></td>

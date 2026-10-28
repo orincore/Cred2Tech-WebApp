@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { msmeApi } from '../api/msmeService';
 import { loadRazorpay } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
+import { gstinError } from '../components/msme/GstNumberField';
 
 /**
  * Shared "start a NEW case" flow for the MSME portal — extracted from
@@ -24,6 +25,8 @@ export function useEligibilityPayment({ prefill } = {}) {
   const [actionLoading, setActionLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentConfig, setPaymentConfig] = useState(null);
+  // Optional GST number for the tax invoice; pre-filled with the customer's last one.
+  const [gstin, setGstin] = useState('');
 
   const goToOnboarding = () => navigate('/msme/onboarding');
 
@@ -39,6 +42,7 @@ export function useEligibilityPayment({ prefill } = {}) {
     try {
       const conf = await msmeApi.getPaymentConfig();
       setPaymentConfig(conf.data);
+      setGstin(conf.data?.saved_gstin || '');
       setShowPaymentModal(true);
     } catch (err) {
       toast.error('Failed to load pricing');
@@ -48,10 +52,11 @@ export function useEligibilityPayment({ prefill } = {}) {
   };
 
   const initiatePayment = async () => {
+    if (gstinError(gstin)) return toast.error(gstinError(gstin));
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
-      const orderRes = await msmeApi.createPaymentOrder(true); // forceNew — never attach to the old resumable case
+      const orderRes = await msmeApi.createPaymentOrder(true, null, gstin.trim()); // forceNew — never attach to the old resumable case
       const { order_id, amount_paise, currency, key_id } = orderRes.data;
 
       const options = {
@@ -117,6 +122,8 @@ export function useEligibilityPayment({ prefill } = {}) {
     actionLoading,
     showPaymentModal,
     paymentConfig,
+    gstin,
+    setGstin,
     startNewCase,
     initiatePayment,
     closePaymentModal: () => setShowPaymentModal(false),
