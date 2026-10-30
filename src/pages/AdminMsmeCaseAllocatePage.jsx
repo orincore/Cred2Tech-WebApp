@@ -26,57 +26,9 @@ const indianStates = [
   'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
 ];
 
-// Neighbouring / nearby states for each Indian state. A DSA that serves a
-// neighbouring state is shown as "Suggested" (one tier below an exact-state
-// "Recommended" match) so the admin can see nearby options without having to
-// clear the state filter manually.
-const NEARBY_STATES = {
-  'Andhra Pradesh':   ['Telangana', 'Karnataka', 'Tamil Nadu', 'Odisha', 'Chhattisgarh'],
-  'Arunachal Pradesh':['Assam', 'Nagaland', 'Manipur', 'Meghalaya', 'Sikkim'],
-  'Assam':            ['Arunachal Pradesh', 'Nagaland', 'Manipur', 'Mizoram', 'Tripura', 'Meghalaya', 'West Bengal', 'Sikkim'],
-  'Bihar':            ['Uttar Pradesh', 'Jharkhand', 'West Bengal'],
-  'Chhattisgarh':     ['Madhya Pradesh', 'Maharashtra', 'Odisha', 'Jharkhand', 'Telangana', 'Andhra Pradesh'],
-  'Goa':              ['Maharashtra', 'Karnataka'],
-  'Gujarat':          ['Rajasthan', 'Madhya Pradesh', 'Maharashtra', 'Dadra and Nagar Haveli and Daman and Diu'],
-  'Haryana':          ['Punjab', 'Himachal Pradesh', 'Uttarakhand', 'Uttar Pradesh', 'Rajasthan', 'Delhi'],
-  'Himachal Pradesh': ['Punjab', 'Haryana', 'Uttarakhand', 'Jammu and Kashmir', 'Ladakh'],
-  'Jharkhand':        ['Bihar', 'West Bengal', 'Odisha', 'Chhattisgarh', 'Uttar Pradesh'],
-  'Karnataka':        ['Goa', 'Maharashtra', 'Andhra Pradesh', 'Telangana', 'Tamil Nadu', 'Kerala'],
-  'Kerala':           ['Karnataka', 'Tamil Nadu'],
-  'Madhya Pradesh':   ['Rajasthan', 'Gujarat', 'Maharashtra', 'Chhattisgarh', 'Uttar Pradesh'],
-  'Maharashtra':      ['Gujarat', 'Madhya Pradesh', 'Chhattisgarh', 'Telangana', 'Andhra Pradesh', 'Karnataka', 'Goa', 'Dadra and Nagar Haveli and Daman and Diu'],
-  'Manipur':          ['Nagaland', 'Assam', 'Mizoram', 'Arunachal Pradesh'],
-  'Meghalaya':        ['Assam', 'Tripura'],
-  'Mizoram':          ['Assam', 'Manipur', 'Tripura'],
-  'Nagaland':         ['Arunachal Pradesh', 'Assam', 'Manipur'],
-  'Odisha':           ['West Bengal', 'Jharkhand', 'Chhattisgarh', 'Andhra Pradesh'],
-  'Punjab':           ['Haryana', 'Himachal Pradesh', 'Rajasthan', 'Jammu and Kashmir', 'Chandigarh'],
-  'Rajasthan':        ['Punjab', 'Haryana', 'Delhi', 'Uttar Pradesh', 'Madhya Pradesh', 'Gujarat'],
-  'Sikkim':           ['West Bengal', 'Assam', 'Arunachal Pradesh'],
-  'Tamil Nadu':       ['Kerala', 'Karnataka', 'Andhra Pradesh', 'Telangana', 'Puducherry'],
-  'Telangana':        ['Maharashtra', 'Chhattisgarh', 'Odisha', 'Andhra Pradesh', 'Karnataka'],
-  'Tripura':          ['Assam', 'Mizoram', 'Meghalaya'],
-  'Uttar Pradesh':    ['Uttarakhand', 'Himachal Pradesh', 'Haryana', 'Delhi', 'Rajasthan', 'Madhya Pradesh', 'Chhattisgarh', 'Jharkhand', 'Bihar'],
-  'Uttarakhand':      ['Himachal Pradesh', 'Haryana', 'Uttar Pradesh', 'Delhi'],
-  'West Bengal':      ['Sikkim', 'Assam', 'Bihar', 'Jharkhand', 'Odisha'],
-  'Chandigarh':       ['Punjab', 'Haryana'],
-  'Delhi':            ['Haryana', 'Uttar Pradesh', 'Rajasthan', 'Uttarakhand'],
-  'Jammu and Kashmir':['Himachal Pradesh', 'Punjab', 'Ladakh'],
-  'Ladakh':           ['Jammu and Kashmir', 'Himachal Pradesh'],
-  'Dadra and Nagar Haveli and Daman and Diu': ['Gujarat', 'Maharashtra'],
-  'Puducherry':       ['Tamil Nadu'],
-};
-
 // Compare state names ignoring case, spaces and punctuation: partners type
 // their state by hand, so "Tamilnadu" and "Tamil Nadu" must count as the same.
 const normState = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
-
-// Returns the set of nearby states (normalised with normState) for a given state.
-function getNearbyStates(state) {
-  if (!state) return new Set();
-  const key = Object.keys(NEARBY_STATES).find(k => normState(k) === normState(state));
-  return new Set((NEARBY_STATES[key] || []).map(normState));
-}
 
 // Read-only "label: value" row, reused across the DSA/tenant detail panels.
 function InfoRow({ label, value }) {
@@ -123,9 +75,6 @@ const AdminMsmeCaseAllocatePage = () => {
         ]);
         setCaseData(caseRes);
         setTargets(Array.isArray(targetsRes) ? targetsRes : []);
-        // The state filter deliberately starts on "All States": narrowing it to
-        // the customer's state would hide the nearby-state partners, which are
-        // meant to be suggested right under the exact-state ones.
       } catch (err) {
         toast.error('Failed to load case for allocation');
         navigate('/admin/msme-cases');
@@ -148,41 +97,32 @@ const AdminMsmeCaseAllocatePage = () => {
 
   // Where the customer is - worked out by the server (stage 1 pincode, else the
   // GST / synced profile state), since the customer record has no state of its
-  // own. A partner serving this state, or a neighbouring one, is "Suggested":
-  // that's the point of collecting operational_states at DSA registration /
-  // profile (see OrganizationProfilePage.jsx).
-  const caseState = caseData?.location?.state?.trim() || '';
+  // own. A DSA's operational_states (collected at DSA registration / profile -
+  // see OrganizationProfilePage.jsx) is the list of states it actually services,
+  // and the list below is limited to an EXACT match on it: no neighbouring
+  // states, no "closest" partner. Only a state that is one of the canonical
+  // Indian states is enforced; a blank or unrecognised state can't be matched
+  // against anything, so the admin falls back to picking a state manually.
+  const caseStateRaw = caseData?.location?.state?.trim() || '';
+  const caseState = indianStates.find(s => normState(s) === normState(caseStateRaw)) || '';
+  const effectiveState = caseState || stateFilter;
 
   const query = search.trim().toLowerCase();
   const filteredUsers = useMemo(() => {
-    const nearbyStates = getNearbyStates(caseState);
     return allDsaUsers
       .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query))
-      .filter(u => !stateFilter || (u.tenant.operational_states || []).some(s => s.toLowerCase() === stateFilter.toLowerCase()))
-      .map(u => {
-        // A partner serves the states it lists AND the state it is based in.
-        const served = [...(u.tenant.operational_states || []), u.tenant.state].filter(Boolean);
-        const servesState = !!caseState && served.some(s => normState(s) === normState(caseState));
-        const nearbyServed = !servesState && !!caseState ? served.find(s => nearbyStates.has(normState(s))) : null;
-        return {
-          ...u,
-          servesState,
-          isSuggested: servesState || !!nearbyServed,
-          // Why it is suggested, shown under the partner name.
-          suggestionReason: servesState
-            ? `Serves ${caseState}`
-            : nearbyServed ? `Serves nearby ${toTitleCase(nearbyServed)}` : '',  // e.g. "Serves nearby Karnataka"
-        };
-      })
-      // Sort: serves the customer's state → serves a nearby state → rest;
-      // alphabetical within each group.
-      .sort((a, b) => {
-        const tierA = a.servesState ? 0 : a.isSuggested ? 1 : 2;
-        const tierB = b.servesState ? 0 : b.isSuggested ? 1 : 2;
-        if (tierA !== tierB) return tierA - tierB;
-        return (a.tenant.name || '').localeCompare(b.tenant.name || '');
-      });
-  }, [allDsaUsers, query, stateFilter, caseState]);
+      // Exact match on the states the partner selected as served (normState
+      // forgives case/spacing only - "Tamilnadu" = "Tamil Nadu" - never a
+      // different state). The state a partner is merely based in does not count.
+      .filter(u => !effectiveState || (u.tenant.operational_states || []).some(s => normState(s) === normState(effectiveState)))
+      .map(u => ({
+        ...u,
+        // With a known customer state every row left is, by the filter above, a match.
+        isSuggested: !!caseState,
+        suggestionReason: caseState ? `Serves ${caseState}` : '',
+      }))
+      .sort((a, b) => (a.tenant.name || '').localeCompare(b.tenant.name || ''));
+  }, [allDsaUsers, query, effectiveState, caseState]);
 
   const selectUser = async (u) => {
     setSelectedUser(u);
@@ -296,7 +236,7 @@ const AdminMsmeCaseAllocatePage = () => {
               {isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
             </h3>
             {caseState
-              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Customer is in {caseState}. Sourcing Partners serving {caseState} or a nearby state are suggested at the top — narrow further by name or state below.</p>
+              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Customer is in {caseState}. Only Sourcing Partners that serve {caseState} are listed — narrow further by name below.</p>
               : <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.</p>
             }
           </div>
@@ -337,15 +277,21 @@ const AdminMsmeCaseAllocatePage = () => {
                     <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
                       <MapPin size={12} /> State
                     </label>
-                    <CustomSelect
-                      className="form-control"
-                      value={stateFilter}
-                      onChange={e => setStateFilter(e.target.value)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <option value="">All States</option>
-                      {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
-                    </CustomSelect>
+                    {caseState ? (
+                      <div className="form-control" style={{ display: 'flex', alignItems: 'center', fontWeight: 600, background: 'var(--bg-elevated)' }}>
+                        {caseState}
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        className="form-control"
+                        value={stateFilter}
+                        onChange={e => setStateFilter(e.target.value)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <option value="">All States</option>
+                        {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
+                      </CustomSelect>
+                    )}
                   </div>
                 </div>
 
@@ -381,7 +327,7 @@ const AdminMsmeCaseAllocatePage = () => {
                     </div>
                   ))}
                   {filteredUsers.length === 0 && (
-                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching Sourcing Partner found</div>
+                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>{caseState && !query ? `No Sourcing Partner serves ${caseState} yet` : 'No matching Sourcing Partner found'}</div>
                   )}
                 </div>
               </div>

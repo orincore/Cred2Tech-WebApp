@@ -14,6 +14,8 @@ import { itrAuthLinkService } from '../api/itrAuthLinkService';
 import PriceTag from './PriceTag';
 
 import CustomSelect from './CustomSelect';
+import StorageFullNotice from './storage/StorageFullNotice';
+import useStorageGate from '../hooks/useStorageGate';
 const formatInr = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const ItrAnalyticsForm = ({
@@ -109,6 +111,7 @@ const ItrAnalyticsForm = ({
     const [showPassword, setShowPassword] = useState(false);
 
     const [loading, setLoading] = useState(false);
+    const storageGate = useStorageGate();
     const [isOpen, setIsOpen] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [refetching, setRefetching] = useState(false);
@@ -501,7 +504,7 @@ const ItrAnalyticsForm = ({
                                         // from this case's own not-yet-synced applicant contact fields,
                                         // even when the customer's real email/mobile exists and the
                                         // backend will actually resolve and use it.
-                                        disabled={disabled || sendingLink}
+                                        disabled={disabled || sendingLink || storageGate.blocked}
                                         title={disabled ? 'Live ITR analysis is disabled for this test/injected case.' : channelMissingContact ? 'No contact on file for this case yet — will try the customer\'s saved email/mobile on send' : (walletBalance < itrCost ? `Wallet is currently below the ${itrCost}-credit cost — top up before the customer submits, or the pull will fail then.` : "Send the customer a link to enter their own ITR portal credentials")}
                                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                                     >
@@ -592,6 +595,8 @@ const ItrAnalyticsForm = ({
                         
                     </div>
 
+                    <StorageFullNotice gate={storageGate} service="ITR data" />
+
                     {!isMsme && walletBalance < itrCost && (
                         <div style={{ padding: 12, borderRadius: 0, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 16 }}>
                             <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {itrCost}.
@@ -661,7 +666,7 @@ const ItrAnalyticsForm = ({
                             type="button"
                             className="btn btn-primary"
                             onClick={handleAnalyze}
-                            disabled={loading || (!isMsme && walletBalance < itrCost)}
+                            disabled={loading || storageGate.blocked || (!isMsme && walletBalance < itrCost)}
                         >
                             {loading ? 'Submitting...' : isMsme ? 'Analyze' : <PriceTag label="Analyze" actual={itrCostActual} discounted={itrCost} />}
                         </button>

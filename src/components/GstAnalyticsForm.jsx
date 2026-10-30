@@ -12,6 +12,8 @@ import { gstAuthLinkService } from '../api/gstAuthLinkService';
 import PriceTag from './PriceTag';
 
 import CustomSelect from './CustomSelect';
+import StorageFullNotice from './storage/StorageFullNotice';
+import useStorageGate from '../hooks/useStorageGate';
 // GST pull window is fixed, not user-editable or shown on screen: the latest
 // 2 years (24 months), ending 2 months before the current month — not a
 // manually-picked range that can be set incorrectly or go stale.
@@ -47,6 +49,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
     });
 
     const [loading, setLoading] = useState(false);
+    const storageGate = useStorageGate();
     const [cancelling, setCancelling] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -691,6 +694,8 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         </div>
                     )}
 
+                    <StorageFullNotice gate={storageGate} service="GST data" />
+
                     {!isMsme && gstCost != null && walletBalance < gstCost && (
                         <div style={{ padding: 12, background: 'var(--error-bg)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, marginBottom: 20 }}>
                             <AlertCircle size={16} /> Insufficient credits. Wallet: {walletBalance}, Required: {gstCost}.
@@ -705,7 +710,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         // read blank purely from this case's own not-yet-synced applicant
                         // contact fields, even when the customer's real email/mobile exists
                         // and the backend will actually resolve and use it.
-                        disabled={disabled || loading || sendingLink || !formData.gstin
+                        disabled={disabled || loading || sendingLink || !formData.gstin || storageGate.blocked
                             || (!isMsme && gstCost != null && walletBalance < gstCost)}
                         className="btn btn-primary"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
