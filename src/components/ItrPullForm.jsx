@@ -3,6 +3,8 @@ import { toast } from 'react-hot-toast';
 import { CheckCircle2, AlertCircle, RefreshCw, FileText, Download } from 'lucide-react';
 import FormField from './ui/FormField';
 import api from '../api/axiosInstance';
+import StorageFullNotice from './storage/StorageFullNotice';
+import useStorageGate from '../hooks/useStorageGate';
 
 const ItrPullForm = ({ caseId, customerId, prefillPan, walletBalance, itrCost, onComplete, existingItrProfile }) => {
     const [authType, setAuthType] = useState('PASSWORD');
@@ -14,6 +16,7 @@ const ItrPullForm = ({ caseId, customerId, prefillPan, walletBalance, itrCost, o
     });
 
     const [loading, setLoading] = useState(false);
+    const storageGate = useStorageGate();
     const [profile, setProfile] = useState(existingItrProfile || null);
 
     const handlePullRequest = async () => {
@@ -93,6 +96,7 @@ const ItrPullForm = ({ caseId, customerId, prefillPan, walletBalance, itrCost, o
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <StorageFullNotice gate={storageGate} service="ITR data" style={{ marginBottom: 0 }} />
              {walletBalance < itrCost && (
                 <div style={{ padding: 12, borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: 'var(--error)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600}}>
                     <AlertCircle size={16} /> Insufficient credits to pull ITR. Wallet has {walletBalance}, needs {itrCost}.
@@ -126,7 +130,7 @@ const ItrPullForm = ({ caseId, customerId, prefillPan, walletBalance, itrCost, o
                 )}
             </div>
 
-            <button type="button" className="btn btn-secondary" style={{ width: 'fit-content', marginTop: 8 }} onClick={handlePullRequest} disabled={loading || walletBalance < itrCost}>
+            <button type="button" className="btn btn-secondary" style={{ width: 'fit-content', marginTop: 8 }} onClick={handlePullRequest} disabled={loading || storageGate.blocked || walletBalance < itrCost}>
                 {loading ? 'Processing Extractor...' : (itrCost ? `💳 Execute Pull (~${itrCost} Credits)` : '💳 Execute Pull')}
             </button>
         </div>

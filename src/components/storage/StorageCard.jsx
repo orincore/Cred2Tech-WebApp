@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Check, Lock, ArrowUpCircle, ArrowDownCircle, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Check, Lock, ArrowUpCircle, ArrowDownCircle, RefreshCw, FolderOpen } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axiosInstance';
 import { storageService } from '../../api/storageService';
@@ -9,6 +10,8 @@ import { getErrorMessage, formatDateTime } from '../../utils/helpers';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ConfirmModal from '../ui/ConfirmModal';
 import StorageMeter from './StorageMeter';
+import ManageStorage from './ManageStorage';
+import { notifyStorageChanged } from '../../hooks/useStorageGate';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const LIVE = ['ACTIVE', 'PENDING', 'HALTED'];
@@ -17,7 +20,7 @@ const box = { background: 'var(--surface)', border: '1px solid var(--outline)', 
 const eyebrow = { fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 };
 
 /**
- * Profile → Storage. Shows how much of the account's storage is used (5 GB free)
+ * Profile → Storage. Shows how much of the account's storage is used (2 GB free)
  * and lets the account admin buy a paid plan: 10–50 GB at ₹5 per GB per month
  * + 18% GST, auto-debited through a Razorpay mandate. Everyone in the account
  * sees usage; only the DSA_ADMIN (who pays) can change the plan.
@@ -31,10 +34,20 @@ const StorageCard = () => {
   const [confirm, setConfirm] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [downloadingId, setDownloadingId] = useState(null);
+  // ?view=manage opens the file manager (linked from the banner, pull screens and emails).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const managing = searchParams.get('view') === 'manage' && isAdmin;
+  const setManaging = (on) => {
+    const next = new URLSearchParams(searchParams);
+    if (on) next.set('view', 'manage'); else next.delete('view');
+    setSearchParams(next, { replace: false });
+  };
 
   const refresh = useCallback(async () => {
     try {
-      setData(await storageService.status());
+      const status = await storageService.status();
+      setData(status);
+      notifyStorageChanged();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to load storage');
     } finally {
@@ -52,8 +65,15 @@ const StorageCard = () => {
 
   useEffect(() => { refresh(); loadInvoices(); }, [refresh, loadInvoices]);
 
+  // #plans (from the banner / emails' Upgrade Plan links): scroll the plans into view once they render.
+  const wantsPlans = typeof window !== 'undefined' && window.location.hash === '#plans';
+  useEffect(() => {
+    if (!loading && !managing && wantsPlans) document.getElementById('storage-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loading, managing, wantsPlans]);
+
   if (loading) return <div style={{ padding: 40 }}><LoadingSpinner /></div>;
   if (!data) return null;
+  if (managing) return <ManageStorage onBack={() => { setManaging(false); refresh(); }} />;
 
   const sub = data.subscription;
   const live = !!sub && LIVE.includes(sub.status);
@@ -78,6 +98,7 @@ const StorageCard = () => {
             razorpay_signature: response.razorpay_signature,
           });
           setData(next);
+          notifyStorageChanged(); // a bigger plan lifts the full-storage banner / pull blocks at once
           toast.success(success);
           loadInvoices();
         } catch (err) {
@@ -178,6 +199,15 @@ const StorageCard = () => {
           Counts every document your account holds: files you upload plus reports pulled from GST, ITR, bank and bureau APIs. A file shared by several cases is counted once.
           1 GB = 1,024 MB.
         </p>
+        {isAdmin && (
+          <button
+            className={data.is_full || data.level !== 'ok' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+            style={{ borderRadius: 0, marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => setManaging(true)}
+          >
+            <FolderOpen size={14} /> Manage Storage
+          </button>
+        )}
       </div>
 
       {data.applies && (
@@ -213,7 +243,7 @@ const StorageCard = () => {
           )}
 
           {/* Plans */}
-          <div style={box}>
+          <div style={box} id="storage-plans">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
               <div style={eyebrow}>Plans</div>
               <button className="btn btn-ghost btn-sm" onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><RefreshCw size={12} /> Refresh</button>

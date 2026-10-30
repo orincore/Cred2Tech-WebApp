@@ -10,6 +10,8 @@ import { useCasePullStatus, selectPullForApplicant, usePhaseTransition } from '.
 
 import { IS_DEV_BUILD } from '../utils/devBuild';
 import PriceTag from './PriceTag';
+import StorageFullNotice from './storage/StorageFullNotice';
+import useStorageGate from '../hooks/useStorageGate';
 // Dev-only visibility into Signzy's statementanalysis/retrieve-work-order and
 // download-report entitlement gap (confirmed broken on both preprod — bad
 // credentials — and production — 403 not entitled — 2026-09-02). Never shown
@@ -181,6 +183,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     // Store physical file data
     const [files, setFiles] = useState([{ fileName: '', fileBase64: '', password: '', fileSize: null, pages: null }]);
     const [loading, setLoading] = useState(false);
+    const storageGate = useStorageGate();
     // Index of the file row currently being validated server-side — between
     // picking a file and it either sticking or getting rejected.
     const [validatingIndex, setValidatingIndex] = useState(null);
@@ -424,6 +427,9 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
     return (
         <>
         <div style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--warning)', borderRadius: 0, overflow: 'hidden' }}>
+            {status !== 'COMPLETED' && (
+                <StorageFullNotice gate={storageGate} service="bank statement analysis" style={{ margin: isMobile ? '12px 16px 0' : '16px 24px 0' }} />
+            )}
             {/* Summary Row */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(200px, 1fr) minmax(200px, 2fr) auto', gap: isMobile ? 10 : 16, alignItems: 'center', padding: isMobile ? '14px 16px' : '16px 24px', backgroundColor: 'var(--bg-base)' }}>
                 {/* Left: Name and Type */}
@@ -490,7 +496,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                             type="button"
                             className="btn btn-primary btn-sm"
                             onClick={() => setIsUploadOpen(!isUploadOpen)}
-                            disabled={disabled}
+                            disabled={disabled || storageGate.blocked}
                             title={disabled ? 'Live bank statement analysis is disabled for this test/injected case.' : undefined}
                         >
                             {isMsme ? 'Upload PDF' : <PriceTag label="Upload PDF (per bank)" actual={analyzeCostActual} discounted={analyzeCost} />}
@@ -638,7 +644,7 @@ const BankStatementUpload = ({ caseId, customerId, applicantId, applicantType, a
                         </button>
                         <div style={{ display: 'flex', gap: 12 }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIsUploadOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={handleAnalyze} disabled={loading || storageGate.blocked || validatingIndex !== null || (!isMsme && walletBalance < analyzeCost)}>
                                 {loading ? 'Wait...' : validatingIndex !== null ? 'Checking file…' : isMsme ? 'Analyze' : <PriceTag label="Analyze (per bank)" actual={analyzeCostActual} discounted={analyzeCost} />}
                             </button>
                         </div>

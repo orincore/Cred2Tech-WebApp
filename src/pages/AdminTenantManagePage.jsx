@@ -712,7 +712,7 @@ const AdminTenantManagePage = () => {
                 <Card
                   icon={HardDrive}
                   title="Document Storage"
-                  subtitle="Everything this account holds in S3 — uploaded files plus documents pulled via API. 5 GB free; paid plans above that."
+                  subtitle="Everything this account holds in S3 — uploaded files plus documents pulled via API. 2 GB free; paid plans above that."
                 >
                   <StorageMeter storage={data.storage} />
                   {data.storage.applies && (

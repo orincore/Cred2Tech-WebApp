@@ -383,7 +383,7 @@ const AdminWalletRevenuePage = () => {
                           <Grid
                             cols={[{ key: 'k', label: 'Measure' }, { key: 'v', label: 'Value', num: true }, { key: 'n', label: 'What it means' }]}
                             rows={[
-                              { key: 'a', k: 'DSA accounts', v: num(sp.accounts), n: `${num(sp.paid_accounts)} on a paid plan · ${num(sp.free_accounts)} on the free 5 GB` },
+                              { key: 'a', k: 'DSA accounts', v: num(sp.accounts), n: `${num(sp.paid_accounts)} on a paid plan · ${num(sp.free_accounts)} on the free 2 GB` },
                               { key: 'm', k: 'Monthly recurring (excl. GST)', v: inr(sp.recurring.base), n: `${num(sp.recurring.accounts)} renewing plan(s); ${inr(sp.recurring.gst)} GST on top = ${inr(sp.recurring.total)} billed each month` },
                               { key: 'e', k: 'Plans ending', v: num(sp.ending_accounts), n: 'Cancelled or set to cancel — will drop out of recurring revenue' },
                               { key: 'f', k: 'Plans with a failing payment', v: num(sp.payment_failing_accounts), n: 'Razorpay could not charge; in the grace period before dropping to the free tier' },

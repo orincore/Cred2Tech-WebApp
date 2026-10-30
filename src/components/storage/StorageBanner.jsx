@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { HardDrive, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { storageService } from '../../api/storageService';
+import { STORAGE_CHANGED_EVENT } from '../../hooks/useStorageGate';
 
 // Same cadence as the wallet / Virtual Workspace banners.
 const POLL_MS = 5 * 60 * 1000;
@@ -10,14 +11,17 @@ const DSA_ROLES = ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'];
 
 /**
  * Site-wide warning (rendered once in AppLayout, beside the wallet banner) when
- * the account's storage is 80%+ full, so nobody finds out only when a pull or an
- * upload is refused. Hidden entirely while there is plenty of room.
+ * the account's storage is 85%+ full (the threshold lives on the server, in
+ * storagePlans.WARN_AT), so nobody finds out only when a pull or an upload is
+ * refused. Hidden entirely while there is plenty of room. Refreshes right away
+ * when files are deleted or a plan changes (STORAGE_CHANGED_EVENT).
  */
 const StorageBanner = () => {
   const { hasRole } = useAuth();
   const navigate = useNavigate();
   const [s, setS] = useState(null);
   const isDsa = hasRole(DSA_ROLES);
+  const isAdmin = hasRole('DSA_ADMIN');
 
   const load = useCallback(async () => {
     if (!isDsa) return;
@@ -27,7 +31,8 @@ const StorageBanner = () => {
   useEffect(() => {
     load();
     const id = setInterval(load, POLL_MS);
-    return () => clearInterval(id);
+    window.addEventListener(STORAGE_CHANGED_EVENT, load);
+    return () => { clearInterval(id); window.removeEventListener(STORAGE_CHANGED_EVENT, load); };
   }, [load]);
 
   if (!isDsa || !s || !s.applies || s.level === 'ok') return null;
@@ -49,9 +54,21 @@ const StorageBanner = () => {
             : `Storage is ${Math.floor(s.percent)}% full (${s.used_gb} of ${s.limit_gb} GB).`}
         </span>
       </div>
-      <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage')}>
-        Manage storage
-      </button>
+      {isAdmin ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage&view=manage')}>
+            Manage Storage
+          </button>
+          {/* Only offered once full — below that the banner is a heads-up, not a wall. */}
+          {full && (
+            <button className="btn btn-primary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage#plans')}>
+              Upgrade Plan
+            </button>
+          )}
+        </div>
+      ) : (
+        <span style={{ fontWeight: 600, color: danger ? 'var(--error)' : 'var(--warning)' }}>Ask your account admin to manage storage.</span>
+      )}
     </div>
   );
 };

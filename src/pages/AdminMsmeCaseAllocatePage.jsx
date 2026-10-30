@@ -72,13 +72,6 @@ const AdminMsmeCaseAllocatePage = () => {
         ]);
         setCaseData(caseRes);
         setTargets(Array.isArray(targetsRes) ? targetsRes : []);
-        // Pre-narrow to the MSME's own state so the most relevant DSAs are
-        // already in view without the admin having to do anything — they
-        // can still switch to "All States" from the filter.
-        const caseState = caseRes?.customer?.state?.trim();
-        if (caseState && indianStates.some(s => s.toLowerCase() === caseState.toLowerCase())) {
-          setStateFilter(caseState);
-        }
       } catch (err) {
         toast.error('Failed to load case for allocation');
         navigate('/admin/msme-cases');
@@ -99,30 +92,25 @@ const AdminMsmeCaseAllocatePage = () => {
       }))
   ), [targets]);
 
-  // The MSME's own state — a DSA whose operational_states includes it is
-  // the recommended match, since that's the whole point of collecting
-  // operational_states at DSA registration/profile (see
-  // OrganizationProfilePage.jsx): matching leads to partners who actually
-  // service that state.
-  const caseState = caseData?.customer?.state?.trim() || '';
+  // The MSME's own state. A DSA's operational_states (collected at DSA
+  // registration/profile — see OrganizationProfilePage.jsx) is the list of
+  // states it actually services, and the list below is limited to an EXACT
+  // match on it: no neighbouring states, no "closest" partner. Only a state
+  // that is one of the canonical Indian states is enforced; a blank or
+  // free-typed state on the case can't be matched against anything, so the
+  // admin falls back to picking a state manually in that case.
+  const caseStateRaw = caseData?.customer?.state?.trim() || '';
+  const caseState = indianStates.find(s => s.toLowerCase() === caseStateRaw.toLowerCase()) || '';
+  const effectiveState = caseState || stateFilter;
 
   const query = search.trim().toLowerCase();
   const filteredUsers = useMemo(() => {
     return allDsaUsers
       .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query))
-      .filter(u => !stateFilter || (u.tenant.operational_states || []).some(s => s.toLowerCase() === stateFilter.toLowerCase()))
-      .map(u => ({
-        ...u,
-        isRecommended: !!caseState && (u.tenant.operational_states || []).some(s => s.toLowerCase() === caseState.toLowerCase()),
-      }))
-      // Recommended (state match) first, then alphabetical by DSA name
-      // within each group — so the list is stable and scannable, not just
-      // whatever order the API happened to return.
-      .sort((a, b) => {
-        if (a.isRecommended !== b.isRecommended) return a.isRecommended ? -1 : 1;
-        return (a.tenant.name || '').localeCompare(b.tenant.name || '');
-      });
-  }, [allDsaUsers, query, stateFilter, caseState]);
+      .filter(u => !effectiveState || (u.tenant.operational_states || []).some(s => s?.trim().toLowerCase() === effectiveState.toLowerCase()))
+      .map(u => ({ ...u, isRecommended: !!caseState }))
+      .sort((a, b) => (a.tenant.name || '').localeCompare(b.tenant.name || ''));
+  }, [allDsaUsers, query, effectiveState, caseState]);
 
   const selectUser = async (u) => {
     setSelectedUser(u);
@@ -219,7 +207,7 @@ const AdminMsmeCaseAllocatePage = () => {
         <SectionCard
           title={isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
           subtitle={caseState
-            ? `Sourcing Partners serving ${caseState} are recommended first — narrow further by name or state below.`
+            ? `Only Sourcing Partners that serve ${caseState} (the customer's state) are listed — narrow further by name below.`
             : 'Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.'}
         >
           <div style={{ padding: 20 }}>
@@ -259,15 +247,21 @@ const AdminMsmeCaseAllocatePage = () => {
                     <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
                       <MapPin size={12} /> State
                     </label>
-                    <CustomSelect
-                      className="form-control"
-                      value={stateFilter}
-                      onChange={e => setStateFilter(e.target.value)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <option value="">All States</option>
-                      {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
-                    </CustomSelect>
+                    {caseState ? (
+                      <div className="form-control" style={{ display: 'flex', alignItems: 'center', fontWeight: 600, background: 'var(--bg-elevated)' }}>
+                        {caseState}
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        className="form-control"
+                        value={stateFilter}
+                        onChange={e => setStateFilter(e.target.value)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <option value="">All States</option>
+                        {indianStates.map(s => <option key={s} value={s}>{s}</option>)}
+                      </CustomSelect>
+                    )}
                   </div>
                 </div>
 
@@ -294,13 +288,13 @@ const AdminMsmeCaseAllocatePage = () => {
                           padding: '3px 8px', fontSize: 11, fontWeight: 700,
                           color: 'var(--success)', background: 'var(--success-bg)', borderRadius: 999,
                         }}>
-                          <Sparkles size={11} /> Recommended
+                          <Sparkles size={11} /> Serves {caseState}
                         </span>
                       )}
                     </div>
                   ))}
                   {filteredUsers.length === 0 && (
-                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>No matching Sourcing Partner found</div>
+                    <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--on-muted)' }}>{caseState && !query ? `No Sourcing Partner serves ${caseState} yet` : 'No matching Sourcing Partner found'}</div>
                   )}
                 </div>
               </div>

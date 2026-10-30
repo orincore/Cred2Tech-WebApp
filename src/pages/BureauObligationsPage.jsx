@@ -10,6 +10,8 @@ import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, P
 import PriceTag from '../components/PriceTag';
 
 import CustomSelect from '../components/CustomSelect';
+import StorageFullNotice from '../components/storage/StorageFullNotice';
+import useStorageGate from '../hooks/useStorageGate';
 const fmt = (n) => n != null ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
 const getCibilColor = (score) => {
@@ -162,7 +164,8 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   const [data, setData]           = useState(null);
   const [editEmi, setEditEmi]     = useState({});         // { [oblId]: value }
   const [addingFor, setAddingFor] = useState(null);        // applicant_id
-  const [retryingFor, setRetryingFor] = useState(null);     // applicant_id currently re-pulling bureau data
+  const storageGate = useStorageGate();
+  const [retryingFor, setRetryingFor] = useState(null);    // applicant_id currently re-pulling bureau data
   const [newObl, setNewObl]       = useState({ lender_name: '', loan_type: '', loan_amount: '', outstanding_amount: '', emi_per_month: '', remarks: '' });
   // Every field in the "Add Loan Not in Bureau" form is mandatory — checked
   // as a string/select emptiness test (not truthiness) so a genuine "0" in
@@ -517,6 +520,8 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
         </div>
       )}
 
+      <StorageFullNotice gate={storageGate} service="bureau data" />
+
       {/* Per-applicant cards */}
       {grouped.map(({ applicant, obligations: allObligations, total_emi, active_count }, idx) => {
         const obligations = allObligations.filter(o => Number(o.outstanding_amount) > 0);
@@ -553,7 +558,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handlePullBureau(applicant.id)}
-                  disabled={retryingFor === applicant.id}
+                  disabled={retryingFor === applicant.id || storageGate.blocked}
                   title="Report PDF was not saved during the original pull — click to re-pull and capture it"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'var(--warning)', color: 'var(--warning)' }}
                 >
@@ -578,7 +583,7 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => handlePullBureau(applicant.id)}
-                    disabled={retryingFor === applicant.id || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
+                    disabled={retryingFor === applicant.id || storageGate.blocked || (!isMsme && bureauCost != null && walletBalance < bureauCost)}
                     title={!isMsme && bureauCost != null && walletBalance < bureauCost ? `Insufficient credits. Wallet: ${walletBalance}, Required: ${bureauCost}.` : undefined}
                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                   >
