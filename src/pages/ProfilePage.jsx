@@ -41,9 +41,9 @@ const useResponsive = () => {
 const EASE = [0.32, 0.72, 0, 1];
 
 const initials = (name) => {
-  if (!name) return '—';
+  if (!name) return '?';
   const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0]?.toUpperCase() || '—';
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0]?.toUpperCase() || '?';
 };
 
 // ─── Double-Bezel primitives ────────────────────────────────────────────────
@@ -332,16 +332,16 @@ const ProfilePage = () => {
   };
 
   const sidebarItems = isMsmeUser
-    ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' }]
+    ? [{ id: 'profile', icon: User, label: 'Account Information', subtitle: 'Your name, email and phone' }]
     : [
-        { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Change your Account information' },
-        { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your Password' },
-        { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'Manage your MFA methods' },
-        { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'View your account details' },
-        { id: 'notifications', icon: Bell, label: 'Notifications', subtitle: 'Push and in-app preferences' },
+        { id: 'profile', icon: User, label: 'Account Information', subtitle: 'Your name, email and phone' },
+        { id: 'password', icon: Shield, label: 'Password', subtitle: 'Change your password' },
+        { id: 'mfa', icon: ShieldCheck, label: 'Two-Factor Auth', subtitle: 'How you confirm your login' },
+        { id: 'additional', icon: User, label: 'Additional Info', subtitle: 'Role and organization' },
+        { id: 'notifications', icon: Bell, label: 'Notifications', subtitle: 'Push and in-app alerts' },
         // Document storage is an account-wide limit on Sourcing Partner (DSA) accounts —
         // everyone in the account sees usage; only the admin can buy a plan.
-        ...(authUser?.tenant_type === 'DSA' ? [{ id: 'storage', icon: HardDrive, label: 'Storage', subtitle: 'Usage, limits and storage plans' }] : []),
+        ...(authUser?.tenant_type === 'DSA' ? [{ id: 'storage', icon: HardDrive, label: 'Storage', subtitle: 'Space used and storage plans' }] : []),
         ...(canManageSubscription ? [{ id: 'subscription', icon: LayoutGrid, label: 'Subscription', subtitle: 'Plan, billing, and upgrades' }] : []),
       ];
 
@@ -513,7 +513,7 @@ const ProfilePage = () => {
         logout();
         return;
       }
-      toast.success('Session revoked — that device has been signed out.');
+      toast.success('Session revoked. That device is signed out.');
       setRevokeSessionTarget(null);
       await loadSessions();
     } catch (err) {
@@ -539,7 +539,7 @@ const ProfilePage = () => {
         logout();
         return;
       }
-      toast.success(result?.message || 'Device blocked — it can no longer log in to this account.');
+      toast.success(result?.message || 'Device blocked. It can no longer log in to this account.');
       setBanSessionTarget(null);
       await Promise.all([loadSessions(), loadBlockedDevices()]);
     } catch (err) {
@@ -951,19 +951,19 @@ const ProfilePage = () => {
                         <div>
                           <label style={fieldLabel}>Full Name</label>
                           <div style={fieldWrap(false)}>
-                            <p style={{ ...fieldInput, margin: 0 }}>{u.name || '—'}</p>
+                            <p style={{ ...fieldInput, margin: 0 }}>{u.name || 'Not set'}</p>
                           </div>
                         </div>
                         <div>
                           <label style={fieldLabel}>Email Address</label>
                           <div style={fieldWrap(false)}>
-                            <p style={{ ...fieldInput, margin: 0 }}>{u.email || '—'}</p>
+                            <p style={{ ...fieldInput, margin: 0 }}>{u.email || 'Not set'}</p>
                           </div>
                         </div>
                         <div>
                           <label style={fieldLabel}>Mobile Number</label>
                           <div style={fieldWrap(false, true)}>
-                            <p style={{ ...fieldInput, margin: 0, color: 'var(--on-muted)' }}>{u.mobile || '—'}</p>
+                            <p style={{ ...fieldInput, margin: 0, color: 'var(--on-muted)' }}>{u.mobile || 'Not set'}</p>
                             <Lock size={14} strokeWidth={1.75} color="var(--on-muted)" style={{ flexShrink: 0, opacity: 0.6 }} title="Your mobile number is your verified login identity and can't be changed here." />
                           </div>
                         </div>
@@ -1323,20 +1323,20 @@ const ProfilePage = () => {
                     )}
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '8px 0 26px' }}>
-                    {canSelfEdit ? 'Account, role, and hierarchy details — edit via the button above.' : 'Read-only account, role, and hierarchy details. Contact your administrator to make changes.'}
+                    {canSelfEdit ? 'Your account, role and hierarchy details. Use the edit button above to change them.' : 'Read-only account, role, and hierarchy details. Contact your administrator to make changes.'}
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <InfoCard icon={Briefcase} title="Role & Access" isDark={isDark}>
-                      <InfoRow isDark={isDark} label="Platform Role" value={roleLabel(roleName) || '—'} />
-                      <InfoRow isDark={isDark} label="Role ID" value={u.role_id ?? '—'} mono last />
+                      <InfoRow isDark={isDark} label="Platform Role" value={roleLabel(roleName) || 'Not set'} />
+                      <InfoRow isDark={isDark} label="Role ID" value={u.role_id ?? 'Not set'} mono last />
                     </InfoCard>
 
                     <InfoCard icon={Network} title="Hierarchy & Organization" isDark={isDark}>
-                      <InfoRow isDark={isDark} label="Organization" value={u.tenant?.name || '—'} />
-                      <InfoRow isDark={isDark} label="Hierarchy Level" value={u.hierarchy_level ?? '—'} />
+                      <InfoRow isDark={isDark} label="Organization" value={u.tenant?.name || 'Not set'} />
+                      <InfoRow isDark={isDark} label="Hierarchy Level" value={u.hierarchy_level ?? 'Not set'} />
                       <InfoRow isDark={isDark} label="Hierarchy Path" value={formatHierarchyPath(u.hierarchy_path) || 'Root'} />
-                      <InfoRow isDark={isDark} label="Manager ID" value={u.manager_id ? `#${u.manager_id}` : '—'} mono last />
+                      <InfoRow isDark={isDark} label="Manager ID" value={u.manager_id ? `#${u.manager_id}` : 'None'} mono last />
                     </InfoCard>
 
                     {canEditOrg && (
@@ -1362,7 +1362,7 @@ const ProfilePage = () => {
                 <>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Subscription</h2>
                   <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 26px' }}>
-                    Your Virtual Workspace plan, billing details, and upgrade or plan-management options.
+                    Your Virtual Workspace plan and billing.
                   </p>
                   {/* Self-contained — fetches its own status, offers subscribe/switch-plan/cancel. Same component OrganizationProfilePage uses. */}
                   <VirtualWorkspaceSubscriptionCard />
@@ -1371,7 +1371,7 @@ const ProfilePage = () => {
                 <>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Storage</h2>
                   <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 26px' }}>
-                    How much of your account's document storage is used, and your storage plan. The whole account shares one limit.
+                    See how much storage your account has used and manage your plan. Everyone in your account shares one limit.
                   </p>
                   <StorageCard />
                 </>
@@ -1379,7 +1379,7 @@ const ProfilePage = () => {
                 <>
                   <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--on-surface)', margin: '0 0 4px' }}>Push Notifications</h2>
                   <p style={{ fontSize: 13, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 24px' }}>
-                    Receive browser push notifications for in-app alerts. You can change this in your browser settings at any time.
+                    Get alerts in your browser. You can turn this off any time in your browser settings.
                   </p>
 
                   <Shell isDark={isDark}>
@@ -1392,7 +1392,7 @@ const ProfilePage = () => {
                               Push notifications not supported
                             </p>
                             <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--on-muted)' }}>
-                              Your browser or device doesn't support push notifications. Try a modern browser like Chrome or Firefox.
+                              Your browser does not support push notifications. Try Chrome or Firefox.
                             </p>
                           </div>
                         </div>
@@ -1473,7 +1473,7 @@ const ProfilePage = () => {
                   </Shell>
 
                   <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--on-muted)', opacity: 0.65 }}>
-                    In-app notifications (the bell icon in the top bar) are always active when you are signed in.
+                    Alerts under the bell icon at the top are always on while you are signed in.
                   </p>
                 </>
               ) : null}
@@ -1590,8 +1590,8 @@ const ProfilePage = () => {
             iconColor="#b91c1c"
             title="Ban this device?"
             message={`${banSessionTarget.isCurrentDevice
-              ? "You'll be signed out immediately, and this device's IP address won't be able to log in to this account again — even with the correct password."
-              : `${banSessionTarget.device_label || 'This device'} will be signed out immediately, and its IP address${banSessionTarget.ip_address ? ` (${banSessionTarget.ip_address})` : ''} won't be able to log in to this account again — even with the correct password.`} Use this if you believe someone else has your credentials.`}
+              ? "You'll be signed out right away, and this device's IP address will not be able to log in to this account again, even with the correct password."
+              : `${banSessionTarget.device_label || 'This device'} will be signed out right away, and its IP address${banSessionTarget.ip_address ? ` (${banSessionTarget.ip_address})` : ''} will not be able to log in to this account again, even with the correct password.`} Use this if you think someone else has your login details.`}
             onCancel={closeBanSession}
             onConfirm={confirmBanSession}
             confirmLabel="Ban Device"

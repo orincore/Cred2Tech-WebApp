@@ -278,10 +278,10 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
         // Skip/Next row off. maxHeight + its own scroll is a safety net for
         // a long description on a short phone in landscape.
         position: 'fixed', left: 12, right: 12, bottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
-        borderRadius: 16,
+        borderRadius: 0,
         maxHeight: '80dvh', overflowY: 'auto',
       }
-    : { position: 'fixed', top: cardTop, left: cardLeft, width: CARD_WIDTH, borderRadius: 14 };
+    : { position: 'fixed', top: cardTop, left: cardLeft, width: CARD_WIDTH, borderRadius: 0 };
 
   const isLast = stepIndex === totalSteps - 1;
 
@@ -318,7 +318,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
       <motion.div
         style={{
           position: 'fixed', top: spot.top, left: spot.left, width: spot.width, height: spot.height,
-          borderRadius: 12, border: '2px solid var(--primary)', pointerEvents: 'none', zIndex: 9999,
+          borderRadius: 0, border: '2px solid var(--primary)', pointerEvents: 'none', zIndex: 9999,
           transition: 'top 0.35s cubic-bezier(0.32,0.72,0,1), left 0.35s cubic-bezier(0.32,0.72,0,1), width 0.35s cubic-bezier(0.32,0.72,0,1), height 0.35s cubic-bezier(0.32,0.72,0,1)',
         }}
         animate={RING_GLOW_ANIMATE}
@@ -350,7 +350,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
                 <span
                   key={i}
                   style={{
-                    width: i === stepIndex ? 16 : 6, height: 6, borderRadius: 3,
+                    width: i === stepIndex ? 16 : 6, height: 6, borderRadius: 0,
                     background: i === stepIndex ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(79,70,229,0.18)'),
                     transition: 'width 0.25s ease, background 0.25s ease',
                     display: 'inline-block',
@@ -384,7 +384,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
             <button
               className="btn btn-ghost btn-sm"
               onClick={onSkip}
-              style={{ borderRadius: 8, paddingLeft: 8, paddingRight: 10 }}
+              style={{ borderRadius: 0, paddingLeft: 8, paddingRight: 10 }}
             >
               Skip, I know everything
             </button>
@@ -394,7 +394,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
                   className="btn btn-ghost btn-sm"
                   onClick={onBack}
                   aria-label="Back"
-                  style={{ borderRadius: 8, padding: '6px 8px' }}
+                  style={{ borderRadius: 0, padding: '6px 8px' }}
                 >
                   <ChevronLeft size={14} />
                 </button>
@@ -402,7 +402,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
               <button
                 className="btn btn-primary btn-sm"
                 onClick={onNext}
-                style={{ borderRadius: 8 }}
+                style={{ borderRadius: 0 }}
               >
                 {isLast ? 'Got it!' : 'Next'}
               </button>

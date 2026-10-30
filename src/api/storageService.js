@@ -9,6 +9,20 @@ export const storageService = {
   // also removes the file from S3 so the space is freed.
   files: async () => (await api.get('/storage/files')).data,
   deleteFiles: async (documentIds) => (await api.post('/storage/files/delete', { document_ids: documentIds })).data,
+  // One zip of the selected files (a backup before deleting). Resolves to the zip as a Blob.
+  downloadFiles: async (documentIds) => {
+    try {
+      const res = await api.post('/storage/files/download', { document_ids: documentIds }, { responseType: 'blob' });
+      const m = /filename="?([^";]+)"?/i.exec(res.headers['content-disposition'] || '');
+      return { blob: res.data, fileName: m ? m[1] : 'cred2tech-files.zip', count: Number(res.headers['x-zip-file-count']) || documentIds.length };
+    } catch (err) {
+      // An error body arrives as a Blob because of responseType; turn it back into the JSON message.
+      if (err.response?.data instanceof Blob) {
+        try { err.response.data = JSON.parse(await err.response.data.text()); } catch { /* keep the generic error */ }
+      }
+      throw err;
+    }
+  },
   subscribe: async (planGb) => (await api.post('/storage/subscribe', { plan_gb: planGb })).data,
   confirm: async (payload) => (await api.post('/storage/confirm', payload)).data,
   upgrade: async (planGb) => (await api.post('/storage/upgrade', { plan_gb: planGb })).data,

@@ -139,7 +139,7 @@ function EmployeeCard({ employee, ledgers, onUpdate, isAdmin }) {
     <div className="card employee-card" style={{ overflow: 'hidden' }}>
       <div className="group-header" onClick={() => setExpanded(!expanded)} style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: 'var(--bg-surface)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 24, height: 24, borderRadius: 0, background: 'var(--error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Target size={14} color="var(--error)" />
           </div>
           <div>

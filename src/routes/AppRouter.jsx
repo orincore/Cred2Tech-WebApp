@@ -20,6 +20,7 @@ const ItrAuthPage = lazy(() => import('../pages/ItrAuthPage'));
 const GstAuthPage = lazy(() => import('../pages/GstAuthPage'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage'));
 const ProfilePage = lazy(() => import('../pages/ProfilePage'));
+const ManageStoragePage = lazy(() => import('../pages/ManageStoragePage'));
 const UsersListPage = lazy(() => import('../pages/UsersListPage'));
 const UserDetailPage = lazy(() => import('../pages/UserDetailPage'));
 const CreateUserPage = lazy(() => import('../pages/CreateUserPage'));
@@ -185,6 +186,11 @@ const AppRouter = () => (
             <Route path="/profile" element={
               <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
                 <ProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/storage/manage" element={
+              <ProtectedRoute allowedRoles={['DSA_ADMIN']}>
+                <ManageStoragePage />
               </ProtectedRoute>
             } />
             <Route path="/users" element={

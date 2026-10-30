@@ -592,7 +592,7 @@ function LenderCommissionCard({ lender, onUpdateClick }) {
     <div className="card lender-card" style={{ overflow: 'hidden', borderLeft: '4px solid var(--info)' }}>
       <div className="group-header" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'var(--bg-surface)' }} onClick={() => setIsExpanded(!isExpanded)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 0, background: 'var(--info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--info)' }}>
             <Landmark size={16} strokeWidth={2.5} />
           </div>
           <div>

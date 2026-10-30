@@ -25,7 +25,7 @@ const LEVEL = {
 
 const SOURCES = [
   { key: 'uploaded', label: 'Uploaded documents', hint: 'Files you or your team uploaded', color: '#6366f1' },
-  { key: 'api_pulled', label: 'Pulled via API', hint: 'GST, ITR, bank and bureau reports', color: '#14b8a6' },
+  { key: 'api_pulled', label: 'Pulled via Cred2Tech', hint: 'GST, ITR, bank and bureau reports', color: '#14b8a6' },
   { key: 'system_generated', label: 'System-generated', hint: 'Reports built from pulled data', color: '#a78bfa' },
 ];
 
@@ -68,8 +68,8 @@ const StorageMeter = ({ storage, compact = false }) => {
         style={{ position: 'relative', height: compact ? 12 : 16, background: 'var(--bg-elevated)', border: '1px solid var(--outline)', overflow: 'hidden' }}
       >
         <div style={{ width: `${fill}%`, height: '100%', background: level.color, transition: 'width 0.5s ease, background 0.3s ease' }} />
-        {/* faint markers where the bar turns amber (80%) and red (95%) */}
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: '80%', width: 1, background: 'var(--outline)' }} />
+        {/* faint markers where the bar turns amber (85%) and red (95%) */}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: '85%', width: 1, background: 'var(--outline)' }} />
         <div style={{ position: 'absolute', top: 0, bottom: 0, left: '95%', width: 1, background: 'var(--outline)' }} />
       </div>
 
@@ -88,8 +88,8 @@ const StorageMeter = ({ storage, compact = false }) => {
           <span>
             {level.label}.{' '}
             {storage.is_full
-              ? 'New GST, ITR, bank and bureau pulls and new uploads are paused until you free up space or upgrade. Nothing you already have is deleted.'
-              : 'When it is full, new pulls and uploads pause until you free up space or upgrade.'}
+              ? 'New GST, ITR, bank and bureau pulls and new uploads are paused. Free up space or upgrade to continue. Nothing you already have is deleted.'
+              : 'Once it is full, new pulls and uploads stop until you free up space or upgrade.'}
           </span>
         </div>
       )}

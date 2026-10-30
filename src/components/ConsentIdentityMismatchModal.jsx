@@ -24,7 +24,7 @@ const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
               width: 44, height: 44,
-              borderRadius: '50%',
+              borderRadius: 0,
               background: 'var(--error-bg)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
@@ -46,7 +46,7 @@ const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
           {steps.map(({ icon: Icon, accent, accentBg, text }, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{
-                width: 34, height: 34, borderRadius: '50%',
+                width: 34, height: 34, borderRadius: 0,
                 background: accentBg, border: `1px solid ${accent}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,

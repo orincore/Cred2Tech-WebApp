@@ -56,7 +56,7 @@ const StorageBanner = () => {
       </div>
       {isAdmin ? (
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage&view=manage')}>
+          <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/storage/manage')}>
             Manage Storage
           </button>
           {/* Only offered once full — below that the banner is a heads-up, not a wall. */}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Lock, ArrowUpCircle, ArrowDownCircle, RefreshCw, FolderOpen } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axiosInstance';
@@ -10,7 +10,6 @@ import { getErrorMessage, formatDateTime } from '../../utils/helpers';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ConfirmModal from '../ui/ConfirmModal';
 import StorageMeter from './StorageMeter';
-import ManageStorage from './ManageStorage';
 import { notifyStorageChanged } from '../../hooks/useStorageGate';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -34,14 +33,12 @@ const StorageCard = () => {
   const [confirm, setConfirm] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [downloadingId, setDownloadingId] = useState(null);
-  // ?view=manage opens the file manager (linked from the banner, pull screens and emails).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const managing = searchParams.get('view') === 'manage' && isAdmin;
-  const setManaging = (on) => {
-    const next = new URLSearchParams(searchParams);
-    if (on) next.set('view', 'manage'); else next.delete('view');
-    setSearchParams(next, { replace: false });
-  };
+  // Manage Storage is its own page now. Old links (?view=manage) still land there.
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('view') === 'manage') navigate('/storage/manage', { replace: true });
+  }, [searchParams, navigate]);
 
   const refresh = useCallback(async () => {
     try {
@@ -68,12 +65,11 @@ const StorageCard = () => {
   // #plans (from the banner / emails' Upgrade Plan links): scroll the plans into view once they render.
   const wantsPlans = typeof window !== 'undefined' && window.location.hash === '#plans';
   useEffect(() => {
-    if (!loading && !managing && wantsPlans) document.getElementById('storage-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [loading, managing, wantsPlans]);
+    if (!loading && wantsPlans) document.getElementById('storage-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loading, wantsPlans]);
 
   if (loading) return <div style={{ padding: 40 }}><LoadingSpinner /></div>;
   if (!data) return null;
-  if (managing) return <ManageStorage onBack={() => { setManaging(false); refresh(); }} />;
 
   const sub = data.subscription;
   const live = !!sub && LIVE.includes(sub.status);
@@ -102,7 +98,7 @@ const StorageCard = () => {
           toast.success(success);
           loadInvoices();
         } catch (err) {
-          toast.error(getErrorMessage(err) || 'Could not confirm the payment — it will apply automatically once Razorpay confirms it.');
+          toast.error(getErrorMessage(err) || 'We could not confirm the payment yet. It will apply on its own once Razorpay confirms it.');
           refresh();
         } finally { setBusy(false); }
       },
@@ -120,12 +116,12 @@ const StorageCard = () => {
 
   const doSubscribe = (gb) => run(async () => {
     const res = await storageService.subscribe(gb);
-    await openCheckout({ subscriptionId: res.razorpay_subscription_id, keyId: res.key_id, description: `${gb} GB storage plan — ${inr(res.total_inr)}/month incl. GST`, confirmFn: storageService.confirm, success: `${gb} GB storage plan is active` });
+    await openCheckout({ subscriptionId: res.razorpay_subscription_id, keyId: res.key_id, description: `${gb} GB storage plan, ${inr(res.total_inr)}/month incl. GST`, confirmFn: storageService.confirm, success: `${gb} GB storage plan is active` });
   });
 
   const doUpgrade = (gb) => run(async () => {
     const res = await storageService.upgrade(gb);
-    await openCheckout({ subscriptionId: res.razorpay_subscription_id, keyId: res.key_id, description: `Upgrade to ${gb} GB — ${inr(res.charge_now_total_inr)} today incl. GST`, confirmFn: storageService.confirmUpgrade, success: `Upgraded to ${gb} GB` });
+    await openCheckout({ subscriptionId: res.razorpay_subscription_id, keyId: res.key_id, description: `Upgrade to ${gb} GB, ${inr(res.charge_now_total_inr)} today incl. GST`, confirmFn: storageService.confirmUpgrade, success: `Upgraded to ${gb} GB` });
   });
 
   const doDowngrade = (gb) => run(async () => {
@@ -148,7 +144,7 @@ const StorageCard = () => {
     if (canSubscribe) {
       ask({
         title: `Subscribe to ${plan.gb} GB?`, danger: false, confirmLabel: 'Continue to payment',
-        message: `${priceLine}, auto-debited from your card or UPI. You are charged now, and again each month until you cancel. Your storage limit becomes ${plan.gb} GB as soon as the payment succeeds.`,
+        message: `${priceLine}, charged automatically from your card or UPI. You pay now and again every month until you cancel. Your limit becomes ${plan.gb} GB as soon as the payment goes through.`,
         onConfirm: () => { closeConfirm(); doSubscribe(plan.gb); },
       });
     } else if (live && plan.gb > sub.plan_gb) {
@@ -196,14 +192,13 @@ const StorageCard = () => {
         <div style={eyebrow}>Storage used</div>
         <StorageMeter storage={data} />
         <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '14px 0 0', lineHeight: 1.6 }}>
-          Counts every document your account holds: files you upload plus reports pulled from GST, ITR, bank and bureau APIs. A file shared by several cases is counted once.
-          1 GB = 1,024 MB.
+          This counts every file in your account: files you upload and reports pulled through Cred2Tech (GST, ITR, bank and bureau). A file shared by several cases is counted once.
         </p>
         {isAdmin && (
           <button
             className={data.is_full || data.level !== 'ok' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
             style={{ borderRadius: 0, marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            onClick={() => setManaging(true)}
+            onClick={() => navigate('/storage/manage')}
           >
             <FolderOpen size={14} /> Manage Storage
           </button>
@@ -220,8 +215,8 @@ const StorageCard = () => {
                 {sub.plan_gb} GB · {inr(sub.base_amount_inr)}/month <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--on-muted)' }}>+ 18% GST</span>
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--on-muted)', marginTop: 6, lineHeight: 1.7 }}>
-                {sub.status === 'HALTED' && <div style={{ color: 'var(--error)', fontWeight: 600 }}>Last payment failed. Your plan stays active until {formatDateTime(sub.grace_period_ends_at)}, then storage returns to {data.free_gb} GB.</div>}
-                {sub.pending_cancellation && <div style={{ color: 'var(--warning)', fontWeight: 600 }}>Cancelling — ends {paidUntil ? formatDateTime(paidUntil) : 'at the end of this cycle'}. Storage then returns to {data.free_gb} GB.</div>}
+                {sub.status === 'HALTED' && <div style={{ color: 'var(--error)', fontWeight: 600 }}>Your last payment failed. Your plan stays active until {formatDateTime(sub.grace_period_ends_at)}, then storage goes back to {data.free_gb} GB.</div>}
+                {sub.pending_cancellation && <div style={{ color: 'var(--warning)', fontWeight: 600 }}>Cancelling. Your plan ends {paidUntil ? formatDateTime(paidUntil) : 'at the end of this cycle'}, then storage goes back to {data.free_gb} GB.</div>}
                 {sub.scheduled_plan_gb && !sub.pending_cancellation && <div>Switching to {sub.scheduled_plan_gb} GB on {paidUntil ? formatDateTime(paidUntil) : 'the next cycle'}.</div>}
                 {live && !sub.pending_cancellation && sub.status !== 'HALTED' && paidUntil && <div>Next charge {formatDateTime(paidUntil)}.</div>}
               </div>
@@ -232,7 +227,7 @@ const StorageCard = () => {
                   disabled={busy}
                   onClick={() => ask({
                     title: 'Cancel your storage plan?', danger: true, confirmLabel: 'Cancel plan',
-                    message: `Auto-debit stops. You keep ${sub.plan_gb} GB until ${paidUntil ? formatDateTime(paidUntil) : 'the end of this cycle'}, then storage returns to ${data.free_gb} GB. Nothing is deleted — but if you are using more than ${data.free_gb} GB then, new pulls and uploads pause until you free up space or subscribe again.`,
+                    message: `Auto-debit stops. You keep ${sub.plan_gb} GB until ${paidUntil ? formatDateTime(paidUntil) : 'the end of this cycle'}, then storage goes back to ${data.free_gb} GB. Nothing is deleted. If you are using more than ${data.free_gb} GB by then, new pulls and uploads pause until you free up space or subscribe again.`,
                     onConfirm: () => { closeConfirm(); doCancel(); },
                   })}
                 >
@@ -249,7 +244,7 @@ const StorageCard = () => {
               <button className="btn btn-ghost btn-sm" onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><RefreshCw size={12} /> Refresh</button>
             </div>
             <p style={{ fontSize: 12.5, color: 'var(--on-muted)', margin: '0 0 14px', lineHeight: 1.6 }}>
-              Every account gets {data.free_gb} GB free. A paid plan is your <b>total</b> storage (it replaces the free {data.free_gb} GB), billed at {inr(data.price_per_gb_inr)} per GB per month + 18% GST, auto-debited by Razorpay.
+              Every account gets {data.free_gb} GB free. A paid plan is your <b>total</b> storage and replaces the free {data.free_gb} GB. It costs {inr(data.price_per_gb_inr)} per GB per month plus 18% GST, charged automatically through Razorpay.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
               <div style={{ border: `1px solid ${!onPaidPlan ? 'var(--primary)' : 'var(--outline)'}`, padding: 14, background: 'var(--bg)' }}>

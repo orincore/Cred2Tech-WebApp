@@ -431,7 +431,7 @@ const MsmeCaseDetailPage = () => {
           <div className="modal-overlay" onClick={() => { if (!deletingId) setDeleteTarget(null); }}>
             <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 0, background: 'var(--error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Trash2 size={18} color="var(--error)" />
                 </div>
                 <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Delete document?</h2>
@@ -457,7 +457,7 @@ const MsmeCaseDetailPage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <SectionCard title="Your Relationship Manager" delay={0.15}>
             <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 0, background: 'var(--primary-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <User2 size={18} color="var(--primary)" />
               </div>
               <div style={{ minWidth: 0 }}>
