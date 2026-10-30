@@ -36,7 +36,7 @@ const ConsentSelfOtpModal = ({ isOpen, dataPoints, maskedMobile, submitting, err
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 40, height: 40, borderRadius: '50%',
+              width: 40, height: 40, borderRadius: 0,
               background: 'var(--primary-subtle)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,

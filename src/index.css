@@ -545,14 +545,27 @@ tbody td {
   animation: fadeIn 0.15s ease;
 }
 
+/* Dialogs follow the rest of the app: sharp corners and a thin outline, no rounding. */
 .modal-box {
   background: var(--bg-surface);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--outline);
+  border-radius: 0;
   box-shadow: var(--shadow-lg);
   padding: 32px;
   max-width: 460px;
   width: 90%;
   animation: slideUp 0.2s ease;
+}
+
+.modal-box .btn,
+.modal-box .btn-icon,
+.modal-box .notice,
+.modal-box .badge,
+.modal-box .card,
+.modal-box input,
+.modal-box select,
+.modal-box textarea {
+  border-radius: 0;
 }
 
 /* ---- Animations ---- */

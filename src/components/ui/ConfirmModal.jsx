@@ -37,7 +37,7 @@ const ConfirmModal = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
               width: 42, height: 42,
-              borderRadius: '50%',
+              borderRadius: 0,
               background: danger ? 'var(--error-bg)' : 'var(--warning-bg)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,

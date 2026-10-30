@@ -23,7 +23,7 @@ const FileLimitModal = ({ isOpen, onClose, fileName, reasonDetail }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{
                             width: 42, height: 42,
-                            borderRadius: '50%',
+                            borderRadius: 0,
                             background: 'var(--error-bg)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0,
@@ -54,7 +54,7 @@ const FileLimitModal = ({ isOpen, onClose, fileName, reasonDetail }) => {
                     {steps.map(({ icon: Icon, text }, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                             <div style={{
-                                width: 28, height: 28, borderRadius: '50%',
+                                width: 28, height: 28, borderRadius: 0,
                                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)',

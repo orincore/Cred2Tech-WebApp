@@ -30,7 +30,7 @@ const StorageFullNotice = ({ gate, service, style }) => {
       </div>
       {gate.isAdmin && (
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage&view=manage')}>
+          <button type="button" className="btn btn-secondary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/storage/manage')}>
             Manage Storage
           </button>
           <button type="button" className="btn btn-primary btn-sm" style={{ borderRadius: 0 }} onClick={() => navigate('/profile?tab=storage#plans')}>
