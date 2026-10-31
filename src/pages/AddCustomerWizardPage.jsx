@@ -157,7 +157,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     business_mobile: '',
     business_email: '',
     pincode: '',
-    gender: 'MALE',
+    gender: '', // no default: chosen on Stage 1 and sent to the bureau vendor as-is
     is_professional: false,
     profession_type: '',
     mobile_verified: false,
@@ -457,7 +457,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // or to the already-typed pincode in state when the applicant row itself
       // was not yet populated, preventing user-entered pincode from disappearing.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || prev.pincode || '',
-      gender: primaryApp?.gender || 'MALE',
+      gender: primaryApp?.gender || '',
       is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
       profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
       // Sourced from THIS case's own primary Applicant row, not
@@ -691,7 +691,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         primaryApp = await caseService.addApplicant(targetCaseId, {
           ...primaryApp,
           pincode: formData.pincode,
-          gender: primaryApp.gender || formData.gender || 'MALE',
+          gender: formData.gender || primaryApp.gender || '',
           dob: primaryApp.dob || formData.dob
         });
       }
@@ -719,7 +719,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         const savedApp = await caseService.addApplicant(targetCaseId, {
           ...primaryApp,
           pincode: formData.pincode,
-          gender: primaryApp.gender || formData.gender || 'MALE',
+          gender: formData.gender || primaryApp.gender || '',
           dob: primaryApp.dob || formData.dob
         });
         targetApplicants = targetApplicants.map(a => a.type === 'PRIMARY' ? savedApp : a);
@@ -1332,7 +1332,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const addCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
-      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: 'MALE', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
+      applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
   };
 
@@ -1405,7 +1405,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (!primaryApp?.id || primaryApp.pincode === value) return;
     const seq = ++pincodeSaveSeq.current;
     try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, gender: primaryApp.gender || formData.gender || 'MALE', dob: primaryApp.dob || formData.dob });
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, gender: formData.gender || primaryApp.gender || '', dob: primaryApp.dob || formData.dob });
       if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
       setFormData(prev => ({
         ...prev,
@@ -1421,6 +1421,25 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     if (/^\d{6}$/.test(value)) savePincode(value);
   };
 
+  // Primary applicant's gender dropdown. Saved straight away (same reason as
+  // the pincode above) so a bureau pull never runs against a stale/unset
+  // gender; handleStep1Submit also sends it on every Save & Next.
+  const handleGenderChange = async (value) => {
+    setFormData(prev => ({ ...prev, gender: value }));
+    if (!caseId) return; // no case yet - ensureDraftSaved/handleStep1Submit persist it
+    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
+    if (!primaryApp?.id || primaryApp.gender === value) return;
+    try {
+      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, gender: value, pincode: primaryApp.pincode || formData.pincode, dob: primaryApp.dob || formData.dob });
+      setFormData(prev => ({
+        ...prev,
+        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
+      }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save gender');
+    }
+  };
+
   const handleStep1Submit = async (e) => {
     e.preventDefault();
     if (!formData.business_pan) return toast.error("Business PAN is required.");
@@ -1429,8 +1448,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // alone isn't enough for the vendor to match a record, which otherwise
     // only surfaces later as a confusing "no obligations found" bureau error.
     if (!formData.dob) return toast.error("Date of Birth / Incorporation is required.");
+    if (!formData.gender) return toast.error("Please select the applicant's gender.");
     const coApplicantMissingDob = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
     if (coApplicantMissingDob) return toast.error(`Date of Birth is required for co-applicant ${coApplicantMissingDob.name || coApplicantMissingDob.pan_number}.`);
+    const coApplicantMissingGender = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.gender);
+    if (coApplicantMissingGender) return toast.error(`Please select the gender for co-applicant ${coApplicantMissingGender.name || coApplicantMissingGender.pan_number}.`);
     const coApplicantMissingProfession = formData.applicants.find(a => a.type === 'CO_APPLICANT' && (a.is_professional === true || a.is_professional === 'true') && !a.profession_type);
     if (coApplicantMissingProfession) return toast.error(`Profession is required for co-applicant ${coApplicantMissingProfession.name || coApplicantMissingProfession.pan_number}.`);
 
@@ -1462,9 +1484,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
             // field take effect on the primary applicant's identity (and
             // not just the customer record) — addApplicant's own
             // identity-changed check then resets pan_verified correctly.
-            app = { ...app, pincode: formData.pincode, gender: formData.gender || app.gender || 'MALE', dob: app.dob || formData.dob, pan_number: formData.business_pan || app.pan_number };
+            app = { ...app, pincode: formData.pincode, gender: formData.gender || app.gender || '', dob: app.dob || formData.dob, pan_number: formData.business_pan || app.pan_number };
           } else {
-            app = { ...app, gender: app.gender || 'MALE' };
+            app = { ...app, gender: app.gender || '' };
           }
           const savedApp = await caseService.addApplicant(targetCaseId, app);
           savedApps.push(savedApp);
@@ -1666,13 +1688,15 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // Everything above, PLUS dob — by the time this is checked (once consent
   // is granted), PAN auto-verify has already run and filled it in, so this
   // only ever gates the *next* step (Save & Next), never Request Consent.
-  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob;
+  // Gender is required too (Stage 1 dropdown): the bureau vendor is sent
+  // exactly what is chosen here, so it can no longer be left to a default.
+  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob && !!formData.gender;
   const step1BusinessValid = step1BusinessFieldsValid && !!formData.mobile_verified;
   // Gates the final Step 1 submit ("Continue to Financials") in addition to
   // the business-subpage fields above — handleStep1Submit also requires
   // every co-applicant that has a PAN entered to have a DOB too.
   const step1CoApplicantsValid = step1BusinessValid
-    && !formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
+    && !formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.pan_number && (!a.dob || !a.gender));
   // Same product/property requirement handleStep3Submit already
   // toast-validates on submit.
   const step3Valid = !!formData.product_type
@@ -2019,6 +2043,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           <input type="text" value={formData.pincode || ''} onChange={e => handlePincodeChange(e.target.value)} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
                         </FormField>
 
+                        <FormField label="Gender" name="gender" required>
+                          <CustomSelect
+                            className="form-control"
+                            value={formData.gender || ''}
+                            onChange={e => handleGenderChange(e.target.value)}
+                          >
+                            <option value="" disabled>Select gender</option>
+                            <option value="MALE">Male</option>
+                            <option value="FEMALE">Female</option>
+                            <option value="OTHER">Other</option>
+                          </CustomSelect>
+                        </FormField>
+
                         <FormField label="Are You A Professional?" name="is_professional">
                           <CustomSelect
                             className="form-control"
@@ -2254,6 +2291,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   </FormField>
                                   <FormField label="Pincode" name={`copincode_${realIdx}`} required>
                                     <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
+                                  </FormField>
+                                  <FormField label="Gender" name={`cogender_${realIdx}`} required>
+                                    <CustomSelect className="form-control" value={app.gender || ''} onChange={e => updateApplicantRow(realIdx, 'gender', e.target.value)}>
+                                      <option value="" disabled>Select gender</option>
+                                      <option value="MALE">Male</option>
+                                      <option value="FEMALE">Female</option>
+                                      <option value="OTHER">Other</option>
+                                    </CustomSelect>
                                   </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
