@@ -10,6 +10,7 @@ import Skeleton from '../components/ui/Skeleton';
 import { CheckCircle2, Check, Pencil, Landmark, FileText, Lightbulb, AlertCircle, Wallet, UserPlus } from 'lucide-react';
 import PanRecordPanel from '../components/ui/PanRecordPanel';
 import { hasCarriedOverIdentity } from '../utils/caseIdentity';
+import { decideCaseUrlSync } from '../utils/caseUrlSync';
 import api from '../api/axiosInstance';
 import SalarySlipUploader from '../components/onboarding/SalarySlipUploader';
 import CaseWizardStepper, { SALARIED_ORIGIN_STEPS } from '../components/ui/CaseWizardStepper';
@@ -218,12 +219,21 @@ const AddSalariedCustomerWizardPage = () => {
   // that self-navigation, caseId already equals the new urlCaseId and the
   // guard short-circuits — only an EXTERNAL change (a different case, or
   // dropping caseId entirely) leaves them mismatched.
+  //
+  // One more disagreement is NOT external: when ensureDraftSaved() creates the case itself (first
+  // "Request Consent" click) setCaseId(newId) and navigate(`?caseId=newId`) do not necessarily land in the
+  // same render - React Router 7 runs navigations as transitions - so for one render the state has the new
+  // case while the URL has none. That used to look like "the user left the case": the whole wizard was reset
+  // (blank form, consent request gone), the case reloaded from the server, and Request Consent had to be
+  // clicked again. The id the wizard just created is remembered in selfCreatedCaseIdRef and that moment is
+  // ignored - see utils/caseUrlSync.js.
+  const selfCreatedCaseIdRef = useRef(null);
   useEffect(() => {
-    const normalizedUrlCaseId = urlCaseId || null;
-    const normalizedCaseId = caseId == null ? null : String(caseId);
-    if (normalizedUrlCaseId === normalizedCaseId) return;
+    const { action, clearSelfCreated } = decideCaseUrlSync({ urlCaseId, caseId, selfCreatedCaseId: selfCreatedCaseIdRef.current });
+    if (clearSelfCreated) selfCreatedCaseIdRef.current = null;
+    if (action === 'none') return;
 
-    if (urlCaseId) {
+    if (action === 'restore') {
       restoreSession();
       return;
     }
@@ -413,6 +423,8 @@ const AddSalariedCustomerWizardPage = () => {
       targetCaseId = savedCase.id;
       targetCustomerId = savedCase.customer_id;
 
+      // Remember it BEFORE the state/URL updates, so the URL effect knows the next mismatch is ours.
+      selfCreatedCaseIdRef.current = String(targetCaseId);
       setCaseId(targetCaseId);
       setFormData(prev => ({
         ...prev,

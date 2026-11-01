@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
 import { CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet, UserPlus } from 'lucide-react';
 import PanRecordPanel from '../components/ui/PanRecordPanel';
+import { decideCaseUrlSync } from '../utils/caseUrlSync';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -337,13 +338,21 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // or null; caseId (state, set to caseData.id/newCase.id from a JSON API
   // response) is a number. `urlCaseId === caseId` would never match a real
   // case id and would re-fetch/reset on every single render.
+  //
+  // One more disagreement is NOT external: when ensureDraftSaved() creates the case itself (first
+  // "Request Consent" click) setCaseId(newId) and navigate(`?caseId=newId`) do not necessarily land in the
+  // same render - React Router 7 runs navigations as transitions - so for one render the state has the new
+  // case while the URL has none. That used to look like "the user left the case": the whole wizard was reset
+  // (blank form, consent request gone), the case reloaded from the server, and Request Consent had to be
+  // clicked again. The id the wizard just created is remembered in selfCreatedCaseIdRef and that moment is
+  // ignored - see utils/caseUrlSync.js.
+  const selfCreatedCaseIdRef = useRef(null);
   useEffect(() => {
-    const normalizedUrlCaseId = urlCaseId || null;
-    const normalizedCaseId = caseId == null ? null : String(caseId);
-    if (normalizedUrlCaseId === normalizedCaseId) return;
-    if (urlCaseId) {
+    const { action, clearSelfCreated } = decideCaseUrlSync({ urlCaseId, caseId, selfCreatedCaseId: selfCreatedCaseIdRef.current });
+    if (clearSelfCreated) selfCreatedCaseIdRef.current = null;
+    if (action === 'restore') {
       restoreSession();
-    } else {
+    } else if (action === 'reset') {
       resetWizardState();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -714,6 +723,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         ...formData.applicants.filter(a => a.type !== 'PRIMARY')
       ];
 
+      // Remember it BEFORE the state/URL updates, so the URL effect knows the next mismatch is ours.
+      selfCreatedCaseIdRef.current = String(targetCaseId);
       setCaseId(targetCaseId);
       setFormData(prev => ({
         ...prev,
