@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { DSA_TOUR_ROLES } from '../constants/roles';
 import { subscribeTours, toursInProgress } from '../lib/tourCoordinator';
 import { enablePush, getLocalPushPreference, getNotificationPermission, isPushSupported } from '../lib/pushNotifications';
+import { notificationMessage } from '../utils/notificationText';
 
 /**
  * NotificationContext — mounted inside AuthProvider so it has access to auth.user.
@@ -202,7 +203,7 @@ export function NotificationProvider({ children }) {
               <div style={{ marginTop: 3, fontWeight: 800, wordBreak: 'break-word' }}>
                 {notification.title}
               </div>
-              {notification.message && <div style={{ marginTop: 3, color: 'var(--text-secondary)', lineHeight: 1.4, wordBreak: 'break-word' }}>{notification.message}</div>}
+              {notificationMessage(notification) && <div style={{ marginTop: 3, color: 'var(--text-secondary)', lineHeight: 1.4, wordBreak: 'break-word' }}>{notificationMessage(notification)}</div>}
             </div>
           </div>
         ), {
