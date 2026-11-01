@@ -6,6 +6,7 @@ import { FaApple, FaAndroid, FaWindows, FaLinux } from 'react-icons/fa6';
 import toast from 'react-hot-toast';
 import { useNotifications } from '../../context/NotificationContext';
 import { notificationsService } from '../../api/notificationsService';
+import { notificationMessage } from '../../utils/notificationText';
 
 // ─── Event-type → icon map ──────────────────────────────────────
 const EVENT_ICONS = {
@@ -342,7 +343,7 @@ const NotificationRow = ({ notification, onTap }) => {
         </div>
         {isLoginAlertCard ? (
           <LoginAlertCard metadata={notification.metadata} />
-        ) : notification.message && (
+        ) : notificationMessage(notification) && (
           <p style={{
             margin: '4px 0 0',
             fontSize: 13,
@@ -350,7 +351,7 @@ const NotificationRow = ({ notification, onTap }) => {
             lineHeight: 1.5,
             wordBreak: 'break-word',
           }}>
-            {notification.message}
+            {notificationMessage(notification)}
           </p>
         )}
         {couponCode && (
