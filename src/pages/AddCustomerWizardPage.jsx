@@ -8,7 +8,8 @@ import { subscribeToConsentRequest } from '../lib/realtime';
 import FormField from '../components/ui/FormField';
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
-import { Search, CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Check, AlertCircle, Landmark, SatelliteDish, Clock, Pencil, Wallet, UserPlus } from 'lucide-react';
+import PanRecordPanel from '../components/ui/PanRecordPanel';
 import GstAnalyticsForm from '../components/GstAnalyticsForm';
 import ItrAnalyticsForm from '../components/ItrAnalyticsForm';
 import BankStatementUpload from '../components/BankStatementUpload';
@@ -161,6 +162,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     is_professional: false,
     profession_type: '',
     mobile_verified: false,
+    consent_approved: false,
     is_locked: false,
     // True only for cases that originated from the salaried wizard
     // (case.category === 'SALARIED') — drives which stepper labels show.
@@ -223,7 +225,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         // downstream consumer (BureauObligationsPage, EsrStep) already
         // reads — nothing further down needs to know about the split.
         const esrApiCode = formData.is_salaried ? 'ESR_GENERATION_SALARIED' : 'ESR_GENERATION_MSME';
-        const find = (code) => data.find(d => d.api_code === code);
+        // PAN_FETCH is served by BEFISC now; the retired Signzy row can still be listed beside it.
+        const find = (code) => (code === 'PAN_FETCH' && data.find(d => d.api_code === code && d.vendor === 'BEFISC'))
+          || data.find(d => d.api_code === code);
         const codes = { GST_FETCH: 'GST_FETCH', ITR_ANALYTICS: 'ITR_ANALYTICS', BANK_ANALYSIS: 'BANK_ANALYSIS', BUREAU_PULL: 'BUREAU_PULL', BUREAU_OBLIGATIONS: 'BUREAU_OBLIGATIONS', PAN_FETCH: 'PAN_FETCH', ESR_GENERATION: esrApiCode };
         const nextCosts = {};
         const nextActual = {};
@@ -307,7 +311,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // co-applicant — keyed by applicant index (mirrors coappPanVerifyingMap).
   const [coappGstFetchingMap, setCoappGstFetchingMap] = useState({});
   const [coappGstFetchFailedMap, setCoappGstFetchFailedMap] = useState({});
-  const [duplicateWarning, setDuplicateWarning] = useState(null);
 
   // Re-runs on every urlCaseId change, not just on mount — this used to be
   // `useEffect(() => { restoreSession(); }, [])`, which only ever fires
@@ -451,15 +454,20 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       business_name: isCarriedOverIdentity ? '' : (toTitleCase(resolveEntityName(caseData.customer)) || ''),
       proprietor_name: isCarriedOverIdentity ? '' : (caseData.customer?.proprietor_name || ''),
       dob: isCarriedOverIdentity ? '' : toDateInputValue(caseData.customer?.dob),
-      business_mobile: isCarriedOverIdentity ? '' : (caseData.customer?.business_mobile || ''),
-      business_email: isCarriedOverIdentity ? '' : (caseData.customer?.business_email || ''),
+      // Contact details and the professional answer are THIS case's own: the backend reports them from
+      // this case's primary applicant (empty for a case just started next to an existing customer), so
+      // there is nothing from another case to hide here. Blanking them on isCarriedOverIdentity threw
+      // away what the user had typed and saved the moment the page was reloaded before consent was
+      // approved. Only the identity fields below (name / DOB) still describe another case.
+      business_mobile: caseData.customer?.business_mobile || '',
+      business_email: caseData.customer?.business_email || '',
       // Falls back to the verified PAN's own KYC pincode (principal_pincode)
       // or to the already-typed pincode in state when the applicant row itself
       // was not yet populated, preventing user-entered pincode from disappearing.
       pincode: primaryApp?.pincode || currentPanProfile?.principal_pincode || prev.pincode || '',
       gender: primaryApp?.gender || '',
-      is_professional: isCarriedOverIdentity ? false : (caseData.customer?.is_professional || false),
-      profession_type: isCarriedOverIdentity ? '' : (caseData.customer?.profession_type || ''),
+      is_professional: caseData.customer?.is_professional || false,
+      profession_type: caseData.customer?.profession_type || '',
       // Sourced from THIS case's own primary Applicant row, not
       // caseData.customer.mobile_verified — that field lives on the
       // shared Customer record and is reused across every case for the
@@ -472,6 +480,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       // case.service.js createCase/createSalariedCase/createCaseFromExisting
       // and consent.service.js approveConsent).
       mobile_verified: primaryApp?.otp_verified || false,
+      // Once consent is approved the PAN is fixed (the server refuses any change). Unlike mobile_verified,
+      // the mobile "Edit" pencil never clears this, so the PAN stays locked while the number is corrected.
+      consent_approved: primaryApp?.otp_verified || false,
       is_locked: !!caseData.is_locked,
       pan_verified: panVerifiedNow,
       pan_profile: currentPanProfile,
@@ -617,7 +628,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     setCoappPanVerifyingMap({});
     setCoappGstFetchingMap({});
     setCoappGstFetchFailedMap({});
-    setDuplicateWarning(null);
     setCoappConsent({});
     setCoappConsentRequesting({});
   };
@@ -780,7 +790,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     const unsubscribe = subscribeToConsentRequest(consentRequest.id, (payload) => {
       if (payload.status === 'GRANTED') {
         setConsentRequest((prev) => (prev ? { ...prev, status: 'GRANTED' } : prev));
-        setFormData((prev) => ({ ...prev, mobile_verified: true }));
+        setFormData((prev) => ({ ...prev, mobile_verified: true, consent_approved: true }));
         toast.success('Customer approved — pulling their data now.');
       }
     });
@@ -841,7 +851,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       await consentService.approveSelf({ id: selfConsentModal.id, otp, case_id: selfConsentModal.caseId });
       if (selfConsentModal.target === 'primary') {
         setConsentRequest({ id: selfConsentModal.id, status: 'GRANTED' });
-        setFormData((prev) => ({ ...prev, mobile_verified: true }));
+        setFormData((prev) => ({ ...prev, mobile_verified: true, consent_approved: true }));
       } else {
         const idx = selfConsentModal.target;
         setCoappConsent((prev) => ({ ...prev, [idx]: { id: selfConsentModal.id, status: 'GRANTED' } }));
@@ -1027,6 +1037,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
       const entityName = data.name || '';
       const entityDob = toDateInputValue(data.dob);
 
+      // Gender and pincode come back from the PAN record; the server has already saved them on the
+      // applicant, so this only mirrors them into local state (a later Save & Next re-sends the
+      // applicant row, and must not carry the pre-verify blanks).
+      const entityGender = data.gender || '';
+      const entityPincode = data.pincode || '';
+
       if (isCoapplicant) {
         const list = [...formData.applicants];
         list[idx] = {
@@ -1034,6 +1050,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           id: applicantId,
           name: entityName && !list[idx].name ? entityName : list[idx].name,
           dob: entityDob || list[idx].dob,
+          gender: entityGender || list[idx].gender || '',
+          pincode: entityPincode || list[idx].pincode || '',
           pan_verified: true,
         };
         setFormData(prev => ({ ...prev, applicants: list }));
@@ -1042,6 +1060,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
           ...prev,
           business_name: entityName && !prev.business_name ? entityName : prev.business_name,
           dob: entityDob && !prev.dob ? entityDob : prev.dob,
+          gender: entityGender || prev.gender,
+          pincode: entityPincode || prev.pincode,
+          applicants: prev.applicants.map(a => a.type === 'PRIMARY'
+            ? { ...a, gender: entityGender || a.gender || '', pincode: entityPincode || a.pincode || '' }
+            : a),
           pan_verified: true
         }));
       }
@@ -1051,7 +1074,23 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     } catch (err) {
       const errMsg = err.response?.data?.error_message || err.response?.data?.error || err.message || 'Failed to verify PAN';
       toast.error(errMsg);
-      if (!isCoapplicant) setPanVerifyFailed(true);
+      if (err.response?.data?.code === 'PAN_PHONE_NOT_VERIFIED') {
+        // Defensive only: the server released no PAN details because this PAN was neither phone-verified nor
+        // consented on this case (cases consented earlier are honoured server-side, so they never land here).
+        // Send the user back to "Request Consent"; consent_approved stays set, so the PAN itself remains locked,
+        // and the auto-verify below re-runs once consent is approved.
+        if (isCoapplicant) {
+          setFormData(prev => ({ ...prev, applicants: prev.applicants.map((a, i) => (i === idx ? { ...a, otp_verified: false, consent_approved: true } : a)) }));
+          setCoappConsent(prev => { const next = { ...prev }; delete next[idx]; return next; });
+          coappPanAutoVerifyAttempted.current[idx] = null;
+        } else {
+          setFormData(prev => ({ ...prev, mobile_verified: false }));
+          setConsentRequest(null);
+          panAutoVerifyAttempted.current = null;
+        }
+      } else if (!isCoapplicant) {
+        setPanVerifyFailed(true);
+      }
     } finally {
       if (isCoapplicant) setCoappPanVerifyingMap(prev => ({ ...prev, [idx]: false }));
       else setPanVerifying(false);
@@ -1274,60 +1313,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, formData.applicants, coappGstFetchingMap, caseId, formData.customer_id, formData.is_salaried, isBulkInjectedCase]);
 
-  const checkPanDuplicate = async (pan) => {
-    // Tenant-wide duplicate lookup is a DSA workflow; MSME borrowers must not
-    // query (or be shown) other customers' records.
-    if (isMsme) return;
-    if (!pan || pan.length !== 10) return;
-    try {
-      const res = await api.get('/customers/check-existing-by-pan', { params: { pan } });
-      if (res.data?.existingCustomerFound && res.data.customer?.id) {
-        setDuplicateWarning({
-          id: res.data.customer.id,
-          name: res.data.customer.business_name,
-          pan: res.data.customer.business_pan,
-          mobile: res.data.customer.business_mobile,
-          summary: res.data.reusable_summary
-        });
-      } else {
-        setDuplicateWarning(null);
-      }
-    } catch (err) {
-      if (err.response?.status === 404) setDuplicateWarning(null);
-      else console.error('[PAN duplicate check]', err);
-    }
-  };
-
-  const handleContinueAsNewCase = async () => {
-    if (!duplicateWarning) return;
-    try {
-      setSaving(true);
-      const res = await api.post('/cases/create-from-existing', {
-        customer_id: duplicateWarning.id,
-        // Same fix as AddSalariedCustomerWizardPage.jsx's own call — without
-        // this, a DSA starting a new MSME case here for a customer whose
-        // most recent case happened to be SALARIED would silently get a
-        // SALARIED case back instead.
-        category: 'MSME'
-      });
-      // The response is now the FULLY populated case (see
-      // case.controller.js#createFromExisting) — apply it directly, with no
-      // second getCaseById fetch and no loading/skeleton flip at all. The
-      // mount effect (`useEffect(() => { restoreSession(); }, [])`) never
-      // re-fires on a caseId change anyway, so relying on it (or on a
-      // restoreSession() re-fetch of data we already have) was both
-      // unnecessary and, before this fix, the entire reason this button's
-      // click looked like a page reload.
-      applyCaseData(res.data);
-      toast.success('New case created with existing customer data!');
-      setDuplicateWarning(null);
-      navigate(`/customers/add?caseId=${res.data.id}`);
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to create new case from existing customer.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Every case is a brand-new case: there is no "existing customer" lookup on the PAN any more and no
+  // "Continue as New Case" step. (A PAN has one customer record per tenant; its cases, applicants and
+  // consent are all per case.)
 
   const addCoApplicantRow = () => {
     setFormData(prev => ({
@@ -1378,67 +1366,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     setStep1SubPage('coapplicants');
   };
 
-  // Pincode (and every other field on this sub-page) otherwise only reaches
-  // the backend via handleStep1Submit, which fires solely from the Step 1
-  // form's own "Continue" button. CaseWizardStepper's onStepClick lets a
-  // user jump straight to any already-unlocked step (any step once consent
-  // is granted — see isStepUnlocked there), bypassing that submit entirely,
-  // so a pincode typed and then left via the stepper was silently never saved.
-  // Persisting on blur closes that gap without needing to touch the
-  // stepper's own free-navigation behavior.
-  //
-  // Blur alone still isn't enough: a DSA who types the 6th digit and
-  // immediately clicks another control relies on blur firing (and its save
-  // request landing) before that click's own handler reads state — a race a
-  // fast typist/clicker can lose. savePincode is called the instant the
-  // field holds a complete 6-digit value (see the input's onChange below),
-  // well before the user could plausibly click elsewhere; onBlur still
-  // calls it too, as a fallback for a pincode that's shorter than 6 digits
-  // on blur. pincodeSaveSeq guards against an in-flight save's response
-  // landing after a newer edit (e.g. the user immediately corrects a digit,
-  // producing a second complete 6-digit value) — only the latest request is
-  // allowed to write formData.
-  const pincodeSaveSeq = useRef(0);
-  const savePincode = async (value) => {
-    if (!caseId) return; // no case yet - handleStep1Submit will persist it once one exists
-    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.pincode === value) return;
-    const seq = ++pincodeSaveSeq.current;
-    try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, pincode: value, gender: formData.gender || primaryApp.gender || '', dob: primaryApp.dob || formData.dob });
-      if (seq !== pincodeSaveSeq.current) return; // a newer save superseded this one
-      setFormData(prev => ({
-        ...prev,
-        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
-      }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save pincode');
-    }
-  };
-  const handlePincodeBlur = () => savePincode(formData.pincode);
-  const handlePincodeChange = (value) => {
-    setFormData(prev => ({ ...prev, pincode: value }));
-    if (/^\d{6}$/.test(value)) savePincode(value);
-  };
-
-  // Primary applicant's gender dropdown. Saved straight away (same reason as
-  // the pincode above) so a bureau pull never runs against a stale/unset
-  // gender; handleStep1Submit also sends it on every Save & Next.
-  const handleGenderChange = async (value) => {
-    setFormData(prev => ({ ...prev, gender: value }));
-    if (!caseId) return; // no case yet - ensureDraftSaved/handleStep1Submit persist it
-    const primaryApp = formData.applicants.find(a => a.type === 'PRIMARY');
-    if (!primaryApp?.id || primaryApp.gender === value) return;
-    try {
-      const savedApp = await caseService.addApplicant(caseId, { ...primaryApp, gender: value, pincode: primaryApp.pincode || formData.pincode, dob: primaryApp.dob || formData.dob });
-      setFormData(prev => ({
-        ...prev,
-        applicants: prev.applicants.map(a => a.type === 'PRIMARY' ? savedApp : a)
-      }));
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save gender');
-    }
-  };
+  // Gender and pincode are no longer typed in: PAN verification (/external/pan/verify) returns
+  // them from the PAN record and saves them onto the applicant server-side; handleVerifyPan below
+  // only mirrors them into local state.
 
   const handleStep1Submit = async (e) => {
     e.preventDefault();
@@ -1448,11 +1378,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     // alone isn't enough for the vendor to match a record, which otherwise
     // only surfaces later as a confusing "no obligations found" bureau error.
     if (!formData.dob) return toast.error("Date of Birth / Incorporation is required.");
-    if (!formData.gender) return toast.error("Please select the applicant's gender.");
     const coApplicantMissingDob = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
     if (coApplicantMissingDob) return toast.error(`Date of Birth is required for co-applicant ${coApplicantMissingDob.name || coApplicantMissingDob.pan_number}.`);
-    const coApplicantMissingGender = formData.applicants.find(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.gender);
-    if (coApplicantMissingGender) return toast.error(`Please select the gender for co-applicant ${coApplicantMissingGender.name || coApplicantMissingGender.pan_number}.`);
     const coApplicantMissingProfession = formData.applicants.find(a => a.type === 'CO_APPLICANT' && (a.is_professional === true || a.is_professional === 'true') && !a.profession_type);
     if (coApplicantMissingProfession) return toast.error(`Profession is required for co-applicant ${coApplicantMissingProfession.name || coApplicantMissingProfession.pan_number}.`);
 
@@ -1683,20 +1610,19 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   const step1ConsentFieldsValid = !!formData.business_pan
     && !!formData.business_mobile
     && !!formData.business_email
-    && !!formData.pincode
     && (!isProfessional || !!formData.profession_type);
   // Everything above, PLUS dob — by the time this is checked (once consent
   // is granted), PAN auto-verify has already run and filled it in, so this
   // only ever gates the *next* step (Save & Next), never Request Consent.
-  // Gender is required too (Stage 1 dropdown): the bureau vendor is sent
-  // exactly what is chosen here, so it can no longer be left to a default.
-  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob && !!formData.gender;
+  // Gender and pincode are not asked for any more: they come from the verified PAN record
+  // (and so cannot gate Request Consent either, which happens before the PAN is verified).
+  const step1BusinessFieldsValid = step1ConsentFieldsValid && !!formData.dob;
   const step1BusinessValid = step1BusinessFieldsValid && !!formData.mobile_verified;
   // Gates the final Step 1 submit ("Continue to Financials") in addition to
   // the business-subpage fields above — handleStep1Submit also requires
   // every co-applicant that has a PAN entered to have a DOB too.
   const step1CoApplicantsValid = step1BusinessValid
-    && !formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.pan_number && (!a.dob || !a.gender));
+    && !formData.applicants.some(a => a.type === 'CO_APPLICANT' && a.pan_number && !a.dob);
   // Same product/property requirement handleStep3Submit already
   // toast-validates on submit.
   const step3Valid = !!formData.product_type
@@ -1740,10 +1666,16 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
         /* Responsive form grids — mobile-first collapse of fixed columns */
         .wizard-page .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .wizard-page .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+        /* Rows whose field count changes with the answers above them (profession, industry...): the
+           columns always share the full width instead of leaving an empty cell. */
+        .wizard-page .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; }
+        /* Small uppercase caption that titles a group of fields inside a card. */
+        .wizard-page .field-group-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin: 0 0 14px; }
         @media (max-width: 900px) {
           .wizard-page .grid-3 { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 640px) {
+          .wizard-page .grid-auto { grid-template-columns: 1fr; gap: 16px; }
           .wizard-page .grid-2, .wizard-page .grid-3 { grid-template-columns: 1fr; gap: 16px; }
           .wizard-page .modal-box { padding: 24px 16px !important; }
           /* Cards eat too much of the already-narrow phone viewport with their
@@ -1846,86 +1778,36 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
               {step1SubPage === 'business' && (
                 <>
-                  {duplicateWarning && !caseId && !isMsme && (
-                    <div className="notice" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning)', padding: 20, flexDirection: 'column', alignItems: 'stretch' }}>
-                      <div style={{ display: 'flex', gap: 16 }}>
-                        <div style={{ width: 44, height: 44, borderRadius: 0, background: 'var(--warning-bg)', border: '1px solid var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Search size={22} color="var(--warning)" />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                            <div>
-                              <h4 style={{ fontWeight: 700, fontSize: 15, color: 'var(--warning)', marginBottom: 2 }}>Existing customer found: {duplicateWarning.name || 'N/A'}</h4>
-                              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>PAN {duplicateWarning.pan} is already registered in your tenant. You can reuse the existing data for a new case.</p>
-                            </div>
-                            {duplicateWarning.summary?.latest_case_id && (
-                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/cases/${duplicateWarning.summary.latest_case_id}`)}>View Existing Case</button>
-                            )}
-                          </div>
-
-                          {duplicateWarning.summary && (
-                            <div style={{ background: 'var(--bg-elevated)', borderRadius: 0, padding: 12, marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', gridColumn: '1/-1', marginBottom: -4 }}>Reusable Data Available:</div>
-                              {duplicateWarning.summary?.gst?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> GST Data</div>}
-                              {duplicateWarning.summary?.itr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> ITR Analytics</div>}
-                              {duplicateWarning.summary?.bank?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bank Statement</div>}
-                              {duplicateWarning.summary?.bureau?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Bureau Score</div>}
-                              {duplicateWarning.summary?.salary_ocr?.available && <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={14} color="var(--success)" /> Salary Slips</div>}
-                            </div>
-                          )}
-
-                          <button type="button" className="btn btn-primary" onClick={handleContinueAsNewCase} disabled={saving}>
-                            {saving ? 'Creating...' : 'Continue as New Case →'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Business Entity Card */}
                   <div className="card">
-                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                       <h3 style={{ fontSize: 16, fontWeight: 700 }}>Business Entity</h3>
-
                     </div>
 
                     <div style={{ padding: 24 }}>
+                      <div className="field-group-title">Identity &amp; contact</div>
                       <div className="grid-2" style={{ marginBottom: 24 }}>
-                        <FormField label="PAN Number" name="business_pan" required disabled={!!caseId && formData.pan_verified}>
+                        <FormField label="PAN Number" name="business_pan" required disabled={formData.consent_approved || (!!caseId && formData.pan_verified)}>
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            {/* The PAN is fixed once consent is approved: consent was given by the holder of THIS
+                            PAN, on the phone number registered to it, so it cannot carry over to a different PAN.
+                            (A verified PAN has necessarily been through consent, so there is no "Edit" any more;
+                            the server refuses a change as well. A wrong PAN means starting a new case.) */}
                             <input
                               type="text"
                               value={formData.business_pan}
                               onChange={e => setFormData({ ...formData, business_pan: e.target.value.toUpperCase() })}
-                              onBlur={() => checkPanDuplicate(formData.business_pan)}
                               className="form-control"
                               placeholder="E.G. AABCE1234F"
-                              disabled={!!caseId && formData.pan_verified}
+                              disabled={formData.consent_approved || (!!caseId && formData.pan_verified)}
+                              title={formData.consent_approved ? 'The PAN cannot be changed once consent has been approved' : undefined}
                               style={{ textTransform: 'uppercase' }}
                             />
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                               {formData.pan_verified ? (
-                                <>
-                                  <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <CheckCircle2 size={13} /> PAN Verified
-                                  </span>
-                                  {/* A mistyped PAN must be correctable, not permanently
-                                locked — same "Edit" affordance the mobile field
-                                already has just below. Unlocking here re-runs
-                                verification against whatever gets typed next
-                                (the backend resets pan_verified once the value
-                                actually changes), so this never leaves a stale
-                                "Verified" badge on a corrected PAN. */}
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm"
-                                    onClick={() => setFormData(prev => ({ ...prev, pan_verified: false }))}
-                                    title="Edit PAN number"
-                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                                  >
-                                    <Pencil size={13} /> Edit
-                                  </button>
-                                </>
+                                <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 10px', borderRadius: 0, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <CheckCircle2 size={13} /> PAN Verified
+                                </span>
                               ) : panVerifying ? (
                                 <PullingIndicator label="Verifying PAN…" />
                               ) : panVerifyFailed ? (
@@ -1999,7 +1881,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           </div>
                         </FormField>
 
-                        <FormField label="Mobile Number" name="business_mobile" required disabled={formData.mobile_verified}>
+                        <FormField
+                          label="Mobile Number"
+                          name="business_mobile"
+                          required
+                          disabled={formData.mobile_verified}
+                          hint={!formData.mobile_verified ? 'Use the number registered with this PAN — consent is sent only to it.' : undefined}
+                        >
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                             <input type="tel" value={formData.business_mobile} onChange={e => setFormData({ ...formData, business_mobile: e.target.value })} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
                             {formData.mobile_verified && (
@@ -2022,7 +1910,10 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                         </FormField>
                       </div>
 
-                      <div className="grid-3" style={{ marginBottom: 24 }}>
+                      {/* Email, "professional?" and (only when Yes) the profession share ONE row, so the row
+                          is always full: 2 columns normally, 3 when the profession picker appears. */}
+                      <div className="field-group-title" style={{ marginTop: 4 }}>Email &amp; profile</div>
+                      <div className={isProfessional ? 'grid-3' : 'grid-2'} style={{ marginBottom: 24 }}>
                         <FormField label="Email Address" name="business_email" required>
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                             <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
@@ -2039,23 +1930,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           </div>
                         </FormField>
 
-                        <FormField label="Pincode" name="pincode" required>
-                          <input type="text" value={formData.pincode || ''} onChange={e => handlePincodeChange(e.target.value)} onBlur={handlePincodeBlur} className="form-control" placeholder="e.g. 400004" maxLength={6} />
-                        </FormField>
-
-                        <FormField label="Gender" name="gender" required>
-                          <CustomSelect
-                            className="form-control"
-                            value={formData.gender || ''}
-                            onChange={e => handleGenderChange(e.target.value)}
-                          >
-                            <option value="" disabled>Select gender</option>
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </CustomSelect>
-                        </FormField>
-
                         <FormField label="Are You A Professional?" name="is_professional">
                           <CustomSelect
                             className="form-control"
@@ -2069,10 +1943,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             <option value="true">Yes</option>
                           </CustomSelect>
                         </FormField>
-                      </div>
 
-                      {(formData.is_professional === true || formData.is_professional === 'true') && (
-                        <div className="grid-2" style={{ marginBottom: 24 }}>
+                        {isProfessional && (
                           <FormField label="Select Your Profession" name="profession_type" required>
                             <CustomSelect className="form-control" value={formData.profession_type || ''} onChange={e => setFormData({ ...formData, profession_type: e.target.value })}>
                               <option value="">Select Profession</option>
@@ -2082,8 +1954,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                               <option value="Other">Other</option>
                             </CustomSelect>
                           </FormField>
-                        </div>
-                      )}
+                        )}
+                      </div>
 
                       {/* Hidden until consent is actually granted — before that,
                     business_name/dob are always empty (they're only ever
@@ -2094,51 +1966,18 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                     keyframe for the reveal keeps this consistent with the
                     rest of the app rather than introducing a new animation. */}
                       {formData.mobile_verified && (
-                        <div className="grid-3" style={{ marginBottom: 24, animation: 'slideUp 0.35s ease' }}>
-                          <FormField label="Business Name / Full Name" name="business_name" disabled>
-                            <input
-                              type="text"
-                              value={formData.business_name}
-                              onChange={e => setFormData({ ...formData, business_name: e.target.value })}
-                              className="form-control"
-                              placeholder="Autofetched via PAN"
-                              disabled
-                            />
-                          </FormField>
-
-                          {/* Entity type (constitution of business — Proprietorship /
-                        Partnership / Pvt Ltd / etc.) comes back from the same
-                        PAN-to-IntelliBiz pull as the GSTIN above (see
-                        external.pan.controller.js's constitutionOfBusiness),
-                        already persisted to Customer.entity_type — surfaced
-                        here on Step 1 right where that pull ran, instead of
-                        only showing up later on the case/customer profile. */}
-                          <FormField label="Entity Type" name="entity_type" disabled>
-                            <input
-                              type="text"
-                              value={formData.pan_profile?.constitution_of_business || ''}
-                              className="form-control"
-                              placeholder="Autofetched via PAN"
-                              disabled
-                              readOnly
-                            />
-                          </FormField>
-
-                          {/* Never user-editable — always auto-fetched by PAN
-                        verification by the time this is visible at all — so
-                        a plain read-only text field (not a date-picker,
-                        which implies an editable value) showing a
-                        human-formatted date. */}
-                          <FormField label="Date Of Birth / Incorporation" name="dob" disabled>
-                            <input
-                              type="text"
-                              value={formData.dob ? formatDate(formData.dob) : ''}
-                              className="form-control"
-                              placeholder="Autofetched via PAN"
-                              disabled
-                              readOnly
-                            />
-                          </FormField>
+                        <div style={{ marginBottom: 8 }}>
+                          {/* Never user-editable: all of it comes from the PAN record (entity type is the
+                              constitution derived from the PAN, persisted to Customer.entity_type). Gender
+                              and pincode used to be typed here; they are shown only when the record has them
+                              (a company PAN has no gender). */}
+                          <PanRecordPanel
+                            fields={[
+                              { key: 'business_name', label: 'Business Name / Full Name', value: formData.business_name, alwaysShow: true },
+                              { key: 'entity_type', label: 'Entity Type', value: formData.pan_profile?.constitution_of_business },
+                              { key: 'dob', label: 'Date Of Birth / Incorporation', value: formData.dob ? formatDate(formData.dob) : '', alwaysShow: true },
+                            ]}
+                          />
                         </div>
                       )}
                     </div>
@@ -2204,8 +2043,13 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           case's applicant data (see resetWizardState/the urlCaseId
                           effect above for the equivalent fix at the case level). */}
                       {formData.applicants.filter(a => a.type === 'CO_APPLICANT').length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed var(--border-strong)', borderRadius: 0, color: 'var(--text-tertiary)' }}>
-                          No Co-Applicants appended to this profile yet.
+                        <div style={{ textAlign: 'center', padding: '40px 24px', border: '1px dashed var(--border-strong)', borderRadius: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                          <UserPlus size={28} color="var(--text-tertiary)" />
+                          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>No co-applicants added yet</div>
+                          <div style={{ fontSize: 13, color: 'var(--text-tertiary)', maxWidth: 440, lineHeight: 1.5 }}>
+                            Add a co-applicant if another person's income or credit profile should be considered for this case.
+                          </div>
+                          <button type="button" onClick={addCoApplicantRow} className="btn btn-secondary btn-sm" style={{ fontWeight: 600, marginTop: 4 }}>+ Add Co-Applicant</button>
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -2215,7 +2059,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                             return (
                               <div key={realIdx} className="coapp-box" style={{ backgroundColor: 'var(--bg-base)', border: '1px solid var(--border)', padding: 24, borderRadius: 0 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                                  <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>Applicant #{coApplicantIdx + 1}</h4>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+                                    {/* Who this is, as soon as the PAN record has said so. */}
+                                    <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', margin: 0 }}>
+                                      Applicant #{coApplicantIdx + 1}{app.pan_verified && app.name ? ` · ${app.name}` : ''}
+                                    </h4>
+                                    {app.pan_verified && <span className="badge" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>PAN verified</span>}
+                                    {app.otp_verified && <span className="badge" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>Consented</span>}
+                                  </div>
                                   <button
                                     type="button"
                                     className="btn btn-danger btn-sm"
@@ -2233,27 +2084,14 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                         onChange={e => updateApplicantRow(realIdx, 'pan_number', e.target.value.toUpperCase())}
                                         className="form-control"
                                         style={{ textTransform: 'uppercase', flex: 1, minWidth: 140 }}
-                                        disabled={app.pan_verified}
+                                        disabled={app.pan_verified || !!app.consent_approved || !!app.otp_verified}
+                                        title={(app.consent_approved || app.otp_verified) ? 'The PAN cannot be changed once consent has been approved' : undefined}
                                         placeholder="E.G. AABCE1234F"
                                       />
                                       {app.pan_verified ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                          <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                                            <CheckCircle2 size={16} /> Verified
-                                          </span>
-                                          {/* Same correction affordance as the primary
-                                      applicant's PAN — a wrong co-applicant PAN
-                                      shouldn't be permanently stuck once verified. */}
-                                          <button
-                                            type="button"
-                                            className="btn btn-ghost btn-sm"
-                                            onClick={() => updateApplicantRow(realIdx, 'pan_verified', false)}
-                                            title="Edit PAN number"
-                                            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                                          >
-                                            <Pencil size={12} /> Edit
-                                          </button>
-                                        </div>
+                                        <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                          <CheckCircle2 size={16} /> Verified
+                                        </span>
                                       ) : coappPanVerifyingMap[realIdx] ? (
                                         <PullingIndicator label="Verifying PAN…" />
                                       ) : (app.pan_number || '').length === 10 ? (
@@ -2261,7 +2099,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       ) : null}
                                     </div>
                                   </FormField>
-                                  <FormField label="Mobile Number" name={`comob_${realIdx}`}>
+                                  <FormField
+                                    label="Mobile Number"
+                                    name={`comob_${realIdx}`}
+                                    hint={!app.otp_verified ? 'Use the number registered with this PAN — consent is sent only to it.' : undefined}
+                                  >
                                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                       <input type="tel" value={app.mobile || ''} onChange={e => updateApplicantRow(realIdx, 'mobile', e.target.value)} className="form-control" placeholder="9820012345" style={{ flex: 1, minWidth: 140 }} disabled={app.otp_verified} />
                                       {app.otp_verified && (
@@ -2270,7 +2112,11 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                           <button
                                             type="button"
                                             className="btn btn-ghost btn-sm"
-                                            onClick={() => { updateApplicantRow(realIdx, 'otp_verified', false); setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; }); }}
+                                            onClick={() => {
+                                              // consent_approved keeps this co-applicant's PAN locked while the number is corrected.
+                                              setFormData(prev => ({ ...prev, applicants: prev.applicants.map((a, i) => (i === realIdx ? { ...a, otp_verified: false, consent_approved: true } : a)) }));
+                                              setCoappConsent(prev => { const next = { ...prev }; delete next[realIdx]; return next; });
+                                            }}
                                             title="Edit mobile number (you'll need to request consent again)"
                                             style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
                                           >
@@ -2281,23 +2127,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                     </div>
                                   </FormField>
                                 </div>
-                                <div className="grid-3" style={{ marginBottom: 16 }}>
+                                <div className="grid-2" style={{ marginBottom: 16 }}>
                                   <FormField label="Employment Type" name={`coemp_${realIdx}`}>
                                     <CustomSelect className="form-control" value={app.employment_type || 'SELF_EMPLOYED'} onChange={e => updateApplicantRow(realIdx, 'employment_type', e.target.value)}>
                                       <option value="SELF_EMPLOYED">Self Employed</option>
                                       <option value="SALARIED">Salaried</option>
                                       <option value="INCOME_NOT_CONSIDERED">Income not considered</option>
-                                    </CustomSelect>
-                                  </FormField>
-                                  <FormField label="Pincode" name={`copincode_${realIdx}`} required>
-                                    <input type="text" value={app.pincode || ''} onChange={e => updateApplicantRow(realIdx, 'pincode', e.target.value)} className="form-control" placeholder="400004" maxLength={6} />
-                                  </FormField>
-                                  <FormField label="Gender" name={`cogender_${realIdx}`} required>
-                                    <CustomSelect className="form-control" value={app.gender || ''} onChange={e => updateApplicantRow(realIdx, 'gender', e.target.value)}>
-                                      <option value="" disabled>Select gender</option>
-                                      <option value="MALE">Male</option>
-                                      <option value="FEMALE">Female</option>
-                                      <option value="OTHER">Other</option>
                                     </CustomSelect>
                                   </FormField>
                                   <FormField label="Email" name={`coemail_${realIdx}`}>
@@ -2334,7 +2169,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                   </FormField>
                                 </div>
 
-                                <div className="grid-2" style={{ marginBottom: 16 }}>
+                                {/* 1 to 3 fields depending on the answers; the row always shares the full width. */}
+                                <div className="grid-auto" style={{ marginBottom: 16 }}>
                                   <FormField label="Are You A Professional?" name={`coprof_${realIdx}`}>
                                     <CustomSelect
                                       className="form-control"
@@ -2387,28 +2223,12 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                 Name" field a DSA could hand-type ahead of (or instead
                                 of) the PAN pull. */}
                                 {app.pan_verified && (
-                                  <div className="grid-2" style={{ animation: 'slideUp 0.35s ease' }}>
-                                    <FormField label="Full Name" name={`coname_${realIdx}`} disabled>
-                                      <input
-                                        type="text"
-                                        value={app.name || ''}
-                                        className="form-control"
-                                        placeholder="Autofetched via PAN"
-                                        disabled
-                                        readOnly
-                                      />
-                                    </FormField>
-                                    <FormField label="Date Of Birth" name={`codob_${realIdx}`} disabled>
-                                      <input
-                                        type="text"
-                                        value={app.dob ? formatDate(app.dob) : ''}
-                                        className="form-control"
-                                        placeholder="Autofetched via PAN"
-                                        disabled
-                                        readOnly
-                                      />
-                                    </FormField>
-                                  </div>
+                                  <PanRecordPanel
+                                    fields={[
+                                      { key: `coname_${realIdx}`, label: 'Full Name', value: app.name, alwaysShow: true },
+                                      { key: `codob_${realIdx}`, label: 'Date Of Birth', value: app.dob ? formatDate(app.dob) : '', alwaysShow: true },
+                                    ]}
+                                  />
                                 )}
                               </div>
                             );

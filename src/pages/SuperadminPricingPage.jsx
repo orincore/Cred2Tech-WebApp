@@ -461,6 +461,10 @@ const SuperadminPricingPage = () => {
   // renders — BEFISC/SCOREME never both appear on the same row, so their
   // relative order against each other doesn't matter.
   const VENDOR_ORDER = { SIGNZY: 0, BEFISC: 1, SCOREME: 1 };
+  // PAN_FETCH moved from Signzy to BEFISC's PAN All-in-One. Until the old SIGNZY row is retired
+  // it still exists, so list the live vendor first: that is the row shown (and edited) by default,
+  // and the only one that actually sets the price charged.
+  const LIVE_VENDOR_FIRST = { PAN_FETCH: 'BEFISC' };
   const apiPricingGroups = useMemo(() => {
     const map = new Map();
     for (const p of apiPricingRows) {
@@ -469,7 +473,11 @@ const SuperadminPricingPage = () => {
     }
     return Array.from(map.entries()).map(([api_code, rows]) => ({
       api_code,
-      rows: [...rows].sort((a, b) => (VENDOR_ORDER[a.vendor] ?? 9) - (VENDOR_ORDER[b.vendor] ?? 9)),
+      rows: [...rows].sort((a, b) => {
+        const live = LIVE_VENDOR_FIRST[api_code];
+        if (live && (a.vendor === live) !== (b.vendor === live)) return a.vendor === live ? -1 : 1;
+        return (VENDOR_ORDER[a.vendor] ?? 9) - (VENDOR_ORDER[b.vendor] ?? 9);
+      }),
     }));
   }, [apiPricingRows]);
 

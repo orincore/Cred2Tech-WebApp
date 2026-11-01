@@ -6,14 +6,16 @@ import { ShieldAlert, X, Smartphone, UserCheck } from 'lucide-react';
  * identityVerification.service.js#verifyConsentMobileOwnership, surfaced as
  * a 403 from POST /consent/request) — replaces a toast for this specific
  * error since it's a security-relevant stop, not a routine failure, and
- * needs enough room to actually explain why the mobile number was rejected
- * and what to do about it, not just flash past in a corner.
+ * needs enough room to actually explain why the phone number was rejected
+ * and what to do about it, not just flash past in a corner. The backend
+ * message carries the PAN's masked phone number (first and last 2 digits),
+ * which is the number the user must use.
  */
 const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
   if (!isOpen) return null;
 
   const steps = [
-    { icon: Smartphone, accent: 'var(--info)', accentBg: 'var(--info-bg)', text: "Confirm the mobile number directly with the customer. It must be the number registered to their own PAN." },
+    { icon: Smartphone, accent: 'var(--info)', accentBg: 'var(--info-bg)', text: "Confirm the number with the customer. Use only the contact number registered with their PAN — its first and last 2 digits are shown above." },
     { icon: UserCheck, accent: 'var(--success)', accentBg: 'var(--success-bg)', text: 'Update the mobile number above, then click "Request Consent" again.' },
   ];
 
@@ -31,7 +33,7 @@ const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
             }}>
               <ShieldAlert size={22} color="var(--error)" />
             </div>
-            <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>Mobile number doesn't match this PAN</h2>
+            <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>Incorrect phone number</h2>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close" style={{ flexShrink: 0 }}>
             <X size={18} />
@@ -39,7 +41,7 @@ const ConsentIdentityMismatchModal = ({ isOpen, onClose, message, pan }) => {
         </div>
 
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 22, lineHeight: 1.6 }}>
-          {message || `We could not verify that this mobile number is registered to PAN ${pan || ''}. For security, consent can only be sent to the PAN holder's own mobile number, so someone else cannot approve consent on their behalf.`}
+          {message || `This phone number does not match the contact number registered with PAN ${pan || ''}. For security, consent can only be sent to the PAN holder's own registered number, so someone else cannot approve consent on their behalf.`}
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
