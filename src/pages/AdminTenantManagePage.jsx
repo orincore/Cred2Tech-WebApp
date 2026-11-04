@@ -67,13 +67,58 @@ const ReferenceTypeBadge = ({ type }) => {
 // api_pricing server-side, same table the Pricing admin page reads — never
 // a raw code like "GST_FETCH") plus who it ran for, finally the reference-
 // type label as a last resort so this is never a bare "—".
+// A customer's name is never shown on this page (owner decision, 2026-11-04):
+// an API row is identified by the API name and the case id only.
 const transactionReasonLabel = (t) => {
   if (t.remarks) return t.remarks;
-  if (t.service_name) {
-    const who = t.customer_name ? `${t.customer_name}${t.case_id ? ` · Case ${t.case_id}` : ''}` : null;
-    return who ? `${t.service_name} — ${who}` : t.service_name;
-  }
+  if (t.service_name) return t.case_id ? `${t.service_name} — Case ${t.case_id}` : t.service_name;
   return referenceTypeMeta(t.reference_type).label;
+};
+
+// One wallet-ledger row's description. A failed API call shows up as TWO
+// rows (the charge, then the refund, often minutes apart) and the refund's
+// stored remark is only "System Refund for failed execution", so for both
+// rows this states plainly WHICH API failed, the real failure reason recorded
+// for that call, and when it was charged and refunded. Every other row type
+// keeps its existing label.
+const TransactionReason = ({ t }) => {
+  const caseText = t.case_id ? ` · Case ${t.case_id}` : '';
+  const reasonLine = t.failure_reason && (
+    <div style={{ color: 'var(--error)', fontSize: 11.5, marginTop: 3, lineHeight: 1.4 }}>
+      <strong>Reason:</strong> {t.failure_reason}
+    </div>
+  );
+
+  if (t.reference_type === 'REFUND' && t.is_api_refund && t.service_name) {
+    return (
+      <div>
+        <div style={{ color: 'var(--on-surface)', fontWeight: 600 }}>Refund: {t.service_name} failed{caseText}</div>
+        {reasonLine}
+        {t.call_time && (
+          <div style={{ fontSize: 11, marginTop: 3 }}>The {t.service_name} charge was made on {formatDateTime(t.call_time)}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (t.reference_type === 'API_CALL' && t.usage_status === 'FAILED') {
+    return (
+      <div>
+        <div style={{ color: 'var(--on-surface)', fontWeight: 600 }}>
+          {t.service_name || 'API call'}{caseText}
+          <span style={{ color: 'var(--error)', fontWeight: 800, marginLeft: 8, fontSize: 10.5 }}>FAILED</span>
+        </div>
+        {reasonLine}
+        {t.refunded_at && (
+          <div style={{ fontSize: 11, marginTop: 3 }}>
+            Refunded +{t.refunded_amount ?? t.amount} on {formatDateTime(t.refunded_at)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <>{transactionReasonLabel(t)}</>;
 };
 
 const TABS = [
@@ -759,7 +804,7 @@ const AdminTenantManagePage = () => {
                           <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)', background: i % 2 === 1 ? 'var(--bg-surface)' : 'transparent' }}>
                             <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>{formatDateTime(tx.created_at)}</td>
                             <td style={{ padding: '10px 12px 10px 0' }}><ReferenceTypeBadge type={tx.reference_type} /></td>
-                            <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}>{transactionReasonLabel(tx)}</td>
+                            <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}><TransactionReason t={tx} /></td>
                             <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
                               {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
                             </td>
@@ -1036,7 +1081,7 @@ const AdminTenantManagePage = () => {
                             <tr key={tx.id} style={{ borderTop: '1px solid var(--outline)', background: i % 2 === 1 ? 'var(--bg-surface)' : 'transparent' }}>
                               <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>{formatDateTime(tx.created_at)}</td>
                               <td style={{ padding: '10px 12px 10px 0', whiteSpace: 'nowrap' }}><ReferenceTypeBadge type={tx.reference_type} /></td>
-                              <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}>{transactionReasonLabel(tx)}</td>
+                              <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}><TransactionReason t={tx} /></td>
                               <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: tx.transaction_type === 'CREDIT' ? '#10b981' : '#f43f5e' }}>
                                 {tx.transaction_type === 'CREDIT' ? '+' : '-'} {tx.amount}
                               </td>

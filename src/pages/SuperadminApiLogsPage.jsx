@@ -212,6 +212,9 @@ const LogDetailModal = ({ logId, onClose }) => {
             {row('Status', detail.status)}
             {row('Response', detail.response_status)}
             {row('Credits Used', detail.credits_used)}
+            {detail.status === 'REFUNDED' && row('Refunded', detail.refunded_at
+              ? `+${detail.refunded_amount ?? detail.credits_used} on ${formatDateTime(detail.refunded_at)} (wallet entry #${detail.refund_txn_id})`
+              : 'Yes (refund time not found)')}
             {row('Sourcing Partner', detail.tenant_name)}
             {row('Triggered By', detail.triggered_by_user)}
             {row('Customer Email', detail.customer_email)}
@@ -236,6 +239,45 @@ const LogDetailModal = ({ logId, onClose }) => {
           </>
         )}
       </div>
+    </div>
+  );
+};
+
+// What an admin reads on a failed/refunded/blocked API row: the REAL reason
+// (the call's recorded error_message, shown inline instead of only behind the
+// "raw" link), and for a refunded call WHEN the credits went back. A refund
+// does not create a log row of its own (the original row flips to REFUNDED and
+// keeps its original timestamp), so without the refund time a refund posted
+// minutes later looked unrelated to this call.
+const BLOCKED_REASONS = {
+  BLOCKED_INSUFFICIENT_CREDITS: 'Blocked: the wallet did not have enough credits for this call.',
+  BLOCKED_INACTIVE_API: 'Blocked: this API is not active for the tenant.',
+};
+const FailureNote = ({ l, onOpen }) => {
+  const recorded = String(l.error_message || '').trim();
+  const reason = recorded
+    || BLOCKED_REASONS[l.status]
+    || (l.status === 'REFUNDED' ? 'The call did not complete. No further detail was recorded.' : 'The call failed. No further detail was recorded.');
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div title={reason} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, color: 'var(--error)', fontSize: 11, fontWeight: 600, lineHeight: 1.4 }}>
+        <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 2 }} />
+        <span style={{ wordBreak: 'break-word' }}>{reason}</span>
+      </div>
+      {l.status === 'REFUNDED' && (
+        <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 2 }}>
+          {l.refunded_at
+            ? `Refunded +${l.refunded_amount ?? l.credits_used} credits on ${formatDateTime(l.refunded_at)} (this row keeps the time of the original call)`
+            : 'Refunded (refund time not found)'}
+        </div>
+      )}
+      <button
+        onClick={onOpen}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--on-muted)', fontSize: 11, fontWeight: 700, marginTop: 3, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+        title="View the full raw request and response for this call"
+      >
+        View raw detail
+      </button>
     </div>
   );
 };
@@ -495,7 +537,7 @@ const SuperadminApiLogsPage = () => {
           </div>
         ) : (
           <>
-          <div style={{ padding: '20px 60px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ padding: '16px 20px 16px 60px', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
             <div style={{ background: 'var(--bg-surface)', padding: 16, borderRadius: 0, border: '1px solid var(--outline)' }}>
               <h4 style={{ color: 'var(--on-muted)', fontSize: 11, textTransform: 'uppercase', fontWeight: 700, margin: '0 0 4px', letterSpacing: '0.02em' }}>Total API Pings</h4>
               <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-surface)' }}>{summary.total_api_calls.toLocaleString()}</div>
@@ -527,7 +569,7 @@ const SuperadminApiLogsPage = () => {
       )}
 
       {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '10px 16px' : '20px 60px', display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
+      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '10px 16px' : '14px 20px 14px 60px', display: 'flex', gap: isMobile ? 12 : 24, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
         {/* Search */}
         <div style={{ flex: isMobile ? 1 : 2, minWidth: isMobile ? 140 : 180, maxWidth: isMobile ? 200 : 280 }}>
           <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Search</span>
@@ -665,7 +707,7 @@ const SuperadminApiLogsPage = () => {
       ) : (
         <>
           {/* Sub-header — also where the fullscreen toggle and Excel export live */}
-          <div style={{ padding: isMobile ? '10px 16px' : '14px 60px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, background: 'var(--bg)', flexShrink: 0, flexWrap: 'wrap' }}>
+          <div style={{ padding: isMobile ? '10px 16px' : '10px 20px 10px 60px', borderBottom: '1px solid var(--outline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, background: 'var(--bg)', flexShrink: 0, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: 700, color: 'var(--on-surface)' }}>API Execution Logs</span>
               <span style={{ fontSize: isMobile ? 11 : 12, color: 'var(--on-muted)', fontWeight: 500 }}>Page {filters.page} of {totalPages}</span>
@@ -762,12 +804,7 @@ const SuperadminApiLogsPage = () => {
                               <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} /> {l.error_message || 'Failed'}
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setDetailLogId(l.id)}
-                              style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--error)', fontSize: 11, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                            >
-                              <AlertTriangle size={11} /> View raw error
-                            </button>
+                            <FailureNote l={l} onOpen={() => setDetailLogId(l.id)} />
                           )
                         )}
                       </div>
@@ -779,13 +816,17 @@ const SuperadminApiLogsPage = () => {
           ) : (
           <DataTable
             columns={[
-              { key: 'timestamp', label: 'Timestamp', width: '12%', sortable: true, render: (l) => formatDateTime(l.timestamp) },
-              { key: 'tenant_name', label: 'SP', width: '12%', render: (l) => l.tenant_name || '—' },
-              { key: 'vendor', label: 'Vendor', width: '9%', sortable: true, render: (l) => l.vendor || '—' },
-              { key: 'api_code', label: 'API Triggered', width: '12%', sortable: true, render: (l) => (
-                <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{l.api_code}</span>
+              // Compact layout: widths add up to 100%, cells wrap instead of being cut
+              // off with "…" (DataTable's default is one nowrap line), and the font and
+              // padding are smaller, so every column and the full failure reason are
+              // visible without horizontal scrolling.
+              { key: 'timestamp', label: 'Timestamp', width: '11%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{formatDateTime(l.timestamp)}</span> },
+              { key: 'tenant_name', label: 'SP', width: '11%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12, wordBreak: 'break-word' }}>{l.tenant_name || '—'}</span> },
+              { key: 'vendor', label: 'Vendor', width: '8%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{l.vendor || '—'}</span> },
+              { key: 'api_code', label: 'API Triggered', width: '12%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, wordBreak: 'break-word' }}>{l.api_code}</span>
               )},
-              { key: 'response_status', label: 'Response', width: '8%', render: (l) => {
+              { key: 'response_status', label: 'Response', width: '7%', padding: '9px 8px', render: (l) => {
                 const badge = getResponseBadge(l.response_status);
                 return (
                   <span style={{ background: badge.bg, color: badge.color, padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -793,8 +834,8 @@ const SuperadminApiLogsPage = () => {
                   </span>
                 );
               }},
-              { key: 'credits_used', label: 'Cost', width: '7%', sortable: true, render: (l) => l.credits_used },
-              { key: 'status', label: 'Status', width: '10%', sortable: true, render: (l) => {
+              { key: 'credits_used', label: 'Cost', width: '5%', sortable: true, padding: '9px 8px', render: (l) => <span style={{ fontSize: 12 }}>{l.credits_used}</span> },
+              { key: 'status', label: 'Status', width: '9%', sortable: true, padding: '9px 8px', render: (l) => {
                 const badge = getStatusBadge(l.status);
                 return (
                   <span style={{
@@ -806,9 +847,9 @@ const SuperadminApiLogsPage = () => {
                   </span>
                 );
               }},
-              { key: 'customer_email', label: 'Customer / Mobile', width: '20%', render: (l) => (
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>
+              { key: 'customer_email', label: 'Customer / Failure reason', width: '37%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
+                <div style={{ wordBreak: 'break-word' }}>
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>
                     {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                   </span>
                   {hasError(l) && (
@@ -817,13 +858,7 @@ const SuperadminApiLogsPage = () => {
                         <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} /> {l.error_message || 'Failed'}
                       </div>
                     ) : (
-                      <button
-                        onClick={() => setDetailLogId(l.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 11, fontWeight: 700, marginTop: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                        title="View the full raw request/response for this failed call"
-                      >
-                        <AlertTriangle size={11} /> View raw error
-                      </button>
+                      <FailureNote l={l} onOpen={() => setDetailLogId(l.id)} />
                     )
                   )}
                 </div>
@@ -840,7 +875,7 @@ const SuperadminApiLogsPage = () => {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div style={{ padding: isMobile ? '10px 16px' : '16px 60px', display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', borderTop: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
+            <div style={{ padding: isMobile ? '10px 16px' : '12px 20px 12px 60px', display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', borderTop: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
               <button
                 disabled={filters.page === 1}
                 onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
