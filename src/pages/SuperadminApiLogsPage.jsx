@@ -282,6 +282,18 @@ const FailureNote = ({ l, onOpen }) => {
   );
 };
 
+// A generated CIBIL report prints a reference number that only we know. It is
+// kept on the report-generation log row so a printed report can be traced back to
+// its pull. Shown as one muted line inside the existing text cell, only for those rows.
+const ReportReference = ({ l }) => {
+  if (l.source !== 'VENDOR_CALL' || !l.reference_id || !String(l.api_code || '').endsWith('GENERATE_REPORT_PDF')) return null;
+  return (
+    <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 2, wordBreak: 'break-all' }}>
+      Report reference: <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--on-surface)' }}>{l.reference_id}</span>
+    </div>
+  );
+};
+
 const SuperadminApiLogsPage = () => {
   const { isMobile, isTablet } = useResponsive();
   const { theme } = useTheme();
@@ -798,6 +810,7 @@ const SuperadminApiLogsPage = () => {
                         <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-surface)', wordBreak: 'break-all' }}>
                           {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                         </div>
+                        <ReportReference l={l} />
                         {hasError(l) && (
                           l.source !== 'API' ? (
                             <div style={{ marginTop: 4, display: 'flex', alignItems: 'flex-start', gap: 4, color: 'var(--error)', fontSize: 11, fontWeight: 600 }}>
@@ -852,6 +865,7 @@ const SuperadminApiLogsPage = () => {
                   <span style={{ fontSize: 12, fontWeight: 500 }}>
                     {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                   </span>
+                  <ReportReference l={l} />
                   {hasError(l) && (
                     l.source !== 'API' ? (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, color: '#dc2626', fontSize: 11, fontWeight: 600, marginTop: 4 }}>
