@@ -66,7 +66,29 @@ const TABS = [
   { id: 'register', label: 'Invoice Register' },
   { id: 'exceptions', label: 'Exceptions' },
   { id: 'usage', label: 'Usage (Credits)' },
+  { id: 'vendor_spend', label: 'Vendor Spend' },
 ];
+
+// Clean, rate-card names for the Vendor Spend tab (the backend stores messy /
+// null api_name values). Keyed by api_code; falls back to the stored name,
+// then the raw code.
+const VENDOR_SPEND_API_LABELS = {
+  BUREAU_PULL: 'Cibil Report',
+  BANK_ANALYSIS: 'Bank Statement Analysis',
+  GST_FETCH: 'GST Analysis',
+  ITR_ANALYTICS: 'ITR Analysis',
+  PAN_FETCH: 'PAN All-in-One',
+  PROFILE_ADVANCE: 'Mobile Number Verification',
+  SALARY_OCR: 'Salary Slip Reading',
+  ESR_GENERATION_SALARIED: 'Eligibility Report — Salaried',
+  ESR_GENERATION_MSME: 'Eligibility Report — Self-Employed',
+  ITR_FETCH: 'ITR Analysis (legacy)',
+  DIRECT_MSME_ELIGIBILITY: 'Direct MSME Eligibility',
+  VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace',
+};
+const vendorSpendApiLabel = (a) => VENDOR_SPEND_API_LABELS[a?.api_code] || a?.api_name || a?.api_code || '—';
+const VENDOR_SPEND_VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', Cred2Tech: 'Cred2Tech', DEFAULT: 'Internal / platform' };
+const vendorSpendVendorLabel = (v) => VENDOR_SPEND_VENDOR_LABELS[v] || v;
 const SEVERITY_STYLE = {
   high: { color: 'var(--error)', bg: 'var(--error-bg)' },
   medium: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
@@ -481,6 +503,59 @@ const ExportPicker = ({ disabled, busy, onDownload }) => {
   );
 };
 
+// Multi-select dropdown (checkboxes). Empty selection = no filter (all shown).
+// The menu is position:fixed off the button's rect so it is never clipped by a
+// scroll container — same approach as ExportPicker above.
+const MultiSelectDropdown = ({ label, options, selected, onChange, width = 170 }) => {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btn = useRef(null);
+  const panel = useRef(null);
+
+  const toggleOpen = () => {
+    if (open) { setOpen(false); return; }
+    const r = btn.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 268)) });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (!panel.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  const flip = (v) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  const summary = selected.length === 0 ? `All ${label.toLowerCase()}` : selected.length === 1 ? selected[0] : `${selected.length} selected`;
+
+  return (
+    <>
+      <button ref={btn} type="button" onClick={toggleOpen} title={`Filter by ${label.toLowerCase()} — select one or more`}
+        style={{ ...compactField, width, display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, cursor: 'pointer', color: selected.length ? 'var(--on-surface)' : 'var(--on-muted)', borderColor: selected.length ? 'var(--primary)' : undefined }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
+        <ChevronDown size={11} style={{ opacity: 0.6, flexShrink: 0 }} />
+      </button>
+      {open && pos && (
+        <div ref={panel} role="dialog" aria-label={`Choose ${label}`} style={{ position: 'fixed', top: pos.top, left: pos.left, width: 252, maxWidth: 'calc(100vw - 16px)', maxHeight: 'min(60vh, 360px)', overflowY: 'auto', zIndex: 10000, background: 'var(--bg-surface)', border: '1px solid var(--outline)', boxShadow: 'var(--shadow-lg)', padding: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ flex: 1, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--on-muted)' }}>{label}</span>
+            <button type="button" onClick={() => onChange([])} disabled={!selected.length} style={{ ...compactField, height: 22, lineHeight: '20px', padding: '0 6px', cursor: selected.length ? 'pointer' : 'default', opacity: selected.length ? 1 : 0.5 }}>Clear</button>
+          </div>
+          {options.length === 0 && <div style={{ padding: 8, fontSize: 12, color: 'var(--on-muted)' }}>No options</div>}
+          {options.map((o) => (
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="checkbox" checked={selected.includes(o)} onChange={() => flip(o)} style={{ margin: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{o}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </>
+  );
+};
+
 const AdminWalletRevenuePage = () => {
   const { isMobile } = useResponsive();
   const [years, setYears] = useState([]);
@@ -573,6 +648,44 @@ const AdminWalletRevenuePage = () => {
     }
   }, [periodParams, tab, regPage, search, category, regStream, regDocType, regSort]);
   useEffect(() => { fetchRegister(); }, [fetchRegister]);
+
+  // Vendor spend (cost of service) — fetched only when its tab is open, for the
+  // selected period (same IST boundaries as every other tab).
+  const [vendorSpend, setVendorSpend] = useState(null);
+  const [vendorSpendLoading, setVendorSpendLoading] = useState(false);
+  useEffect(() => {
+    if (!periodParams || tab !== 'vendor_spend') return;
+    let cancelled = false;
+    setVendorSpendLoading(true);
+    walletRevenueService.vendorCostReport(periodParams)
+      .then((d) => { if (!cancelled) setVendorSpend(d); })
+      .catch((err) => { if (!cancelled) toast.error(err.response?.data?.error || 'Failed to load vendor spend'); })
+      .finally(() => { if (!cancelled) setVendorSpendLoading(false); });
+    return () => { cancelled = true; };
+  }, [periodParams, tab]);
+
+  // The "Spend by API" section can be narrowed to its own date range,
+  // independent of the page period above. When both dates are set we fetch a
+  // second report for that custom range (IST, via the same endpoint) and the
+  // API table renders from it; otherwise it uses the page-period report.
+  const [apiFrom, setApiFrom] = useState('');
+  const [apiTo, setApiTo] = useState('');
+  const [vendorSpendApi, setVendorSpendApi] = useState(null);
+  const [vendorSpendApiLoading, setVendorSpendApiLoading] = useState(false);
+  const apiRangeActive = Boolean(apiFrom && apiTo);
+  // Multi-select filters for the Spend by API table (empty = all).
+  const [apiVendorSel, setApiVendorSel] = useState([]);
+  const [apiServiceSel, setApiServiceSel] = useState([]);
+  useEffect(() => {
+    if (tab !== 'vendor_spend' || !apiRangeActive) { setVendorSpendApi(null); return; }
+    let cancelled = false;
+    setVendorSpendApiLoading(true);
+    walletRevenueService.vendorCostReport({ period: 'CUSTOM', from: apiFrom, to: apiTo })
+      .then((d) => { if (!cancelled) setVendorSpendApi(d); })
+      .catch((err) => { if (!cancelled) toast.error(err.response?.data?.error || 'Failed to load Spend by API for that range'); })
+      .finally(() => { if (!cancelled) setVendorSpendApiLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, apiFrom, apiTo, apiRangeActive]);
 
   // `sections`: the sheets picked in the export menu ([] = the whole workbook).
   const handleExport = async (sections = []) => {
@@ -1380,9 +1493,140 @@ const AdminWalletRevenuePage = () => {
               })()
             )}
 
-            <div style={{ fontSize: 11, color: 'var(--on-muted)', lineHeight: 1.6, marginTop: 8 }}>
-              <b>Scope &amp; basis.</b> {report.basis} This page covers wallet recharge, Direct-MSME eligibility-fee and Virtual Workspace subscription invoices (subscriptions paid from wallet credits carry no new GST and are not listed). Input tax credit is not tracked. Figures are a working aid; confirm with your chartered accountant before filing.
-            </div>
+            {tab === 'vendor_spend' && (
+              vendorSpendLoading && !vendorSpend ? (
+                <div style={{ padding: 60 }}><LoadingSpinner fullPage /></div>
+              ) : !vendorSpend ? (
+                <EmptyState icon={Receipt} title="No vendor spend yet" description="No successful vendor calls in this period." />
+              ) : (
+                (() => {
+                  const vs = vendorSpend;
+                  const tot = vs.totals;
+                  const realVendors = vs.vendors.filter((v) => v.cost_total > 0);
+                  const donutSlices = realVendors.map((v, i) => ({ name: vendorSpendVendorLabel(v.vendor), value: v.cost_total, color: PALETTE[i % PALETTE.length] }));
+                  const topApis = vs.apis.filter((a) => a.cost_total > 0).slice(0, 8);
+                  // "Spend by API" uses its own date range when one is set.
+                  const apiReport = apiRangeActive && vendorSpendApi ? vendorSpendApi : vs;
+                  const apiTot = apiReport.totals;
+                  // Multi-select vendor / API-service filters, applied here (not
+                  // in Grid) so the TOTAL row and share column reflect exactly
+                  // what is shown. Empty selection = everything.
+                  const apiVendorOptions = [...new Set(apiReport.apis.map((a) => vendorSpendVendorLabel(a.display_vendor)))].sort();
+                  const apiServiceOptions = [...new Set(apiReport.apis.map((a) => vendorSpendApiLabel(a)))].sort();
+                  const filteredApis = apiReport.apis.filter((a) =>
+                    (apiVendorSel.length === 0 || apiVendorSel.includes(vendorSpendVendorLabel(a.display_vendor))) &&
+                    (apiServiceSel.length === 0 || apiServiceSel.includes(vendorSpendApiLabel(a)))
+                  );
+                  const fTot = filteredApis.reduce((t, a) => {
+                    t.success_calls += a.success_calls; t.failed_calls += a.failed_calls; t.total_calls += a.total_calls;
+                    t.cost_base += a.cost_base; t.cost_gst += a.cost_gst; t.cost_total += a.cost_total; return t;
+                  }, { success_calls: 0, failed_calls: 0, total_calls: 0, cost_base: 0, cost_gst: 0, cost_total: 0 });
+                  const apiFiltered = apiVendorSel.length > 0 || apiServiceSel.length > 0;
+                  const chipLabel = { fontSize: 10, fontWeight: 800, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2 };
+                  return (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 12 }}>
+                        <CompactStat label="Total paid to vendors" value={inr(tot.cost_total)} sub="GST-inclusive · success only" color="var(--primary)" />
+                        <CompactStat label="Base (ex-GST)" value={inr(tot.cost_base)} sub="before GST" color="var(--success)" />
+                        <CompactStat label="GST (18%)" value={inr(tot.cost_gst)} sub="recoverable input credit" color="var(--warning)" />
+                        <CompactStat label="Successful calls (billed)" value={num(tot.success_calls)} sub={`${realVendors.length} paid vendor${realVendors.length === 1 ? '' : 's'}`} color="var(--info)" />
+                        <CompactStat label="Failed calls (not billed)" value={num(tot.failed_calls)} sub={`${num(tot.total_calls)} total calls`} color={tot.failed_calls > 0 ? 'var(--error)' : 'var(--text-tertiary)'} />
+                      </div>
+
+                      <ChartGrid min={340}>
+                        <ChartCard title="Spend share by vendor" hint="GST-inclusive amount paid to each vendor this period (successful calls only).">
+                          <DonutChart size={150} ariaLabel="Spend share by vendor" centerLabel="Total" centerValue={inr(tot.cost_total)} format={inr}
+                            slices={donutSlices.length ? donutSlices : [{ name: 'No spend', value: 1, color: 'var(--text-tertiary)' }]} />
+                        </ChartCard>
+                        <ChartCard title="Top APIs by spend" hint="GST-inclusive cost per API, highest first.">
+                          <BarChart ariaLabel="Top APIs by spend" format={inr} tipFormat={inr}
+                            labels={topApis.map((a) => { const n = vendorSpendApiLabel(a); return n.length > 14 ? `${n.slice(0, 13)}…` : n; })}
+                            series={[{ name: 'Spend', color: 'var(--primary)', values: topApis.map((a) => a.cost_total) }]} />
+                        </ChartCard>
+                      </ChartGrid>
+
+                      <Section title="Spend by vendor" hint="How much Cred2Tech paid each vendor this period. Cost is charged on successful calls only; failed calls are shown for context. GST-inclusive, with base and GST split out.">
+                        <Grid
+                          cols={[
+                            { key: 'vendor', label: 'Vendor', text: (r) => vendorSpendVendorLabel(r.vendor), sort: (r) => vendorSpendVendorLabel(r.vendor), render: (r) => vendorSpendVendorLabel(r.vendor) },
+                            { key: 'success_calls', label: 'Success', num: true, render: (r) => num(r.success_calls) },
+                            { key: 'failed_calls', label: 'Failed', num: true, render: (r) => num(r.failed_calls) },
+                            { key: 'total_calls', label: 'Total calls', num: true, render: (r) => num(r.total_calls) },
+                            { key: 'cost_base', label: 'Base (ex-GST)', num: true, render: (r) => inr(r.cost_base) },
+                            { key: 'cost_gst', label: 'GST 18%', num: true, render: (r) => inr(r.cost_gst) },
+                            { key: 'cost_total', label: 'Total paid', num: true, render: (r) => inr(r.cost_total) },
+                            { key: 'share', label: 'Share', num: true, sort: (r) => r.cost_total, render: (r) => pct(r.cost_total, tot.cost_total) },
+                          ]}
+                          rows={vs.vendors.map((v) => ({ ...v, key: v.vendor }))}
+                          foot={{ vendor: 'TOTAL', success_calls: num(tot.success_calls), failed_calls: num(tot.failed_calls), total_calls: num(tot.total_calls), cost_base: inr(tot.cost_base), cost_gst: inr(tot.cost_gst), cost_total: inr(tot.cost_total), share: '' }}
+                          exportTitle="Vendor spend by vendor"
+                          empty="No vendor calls in this period"
+                        />
+                      </Section>
+
+                      <Section
+                        title="Spend by API"
+                        hint="Every API we were charged for — plus ones we called at no vendor cost — by vendor. Cost is success-only; failed calls shown too. Unit cost is the current GST-inclusive vendor rate. Sort any column; filter by vendor or API."
+                      >
+                        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--outline)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                            <span style={chipLabel}>Date range</span>
+                            <input type="date" value={apiFrom} max={apiTo || undefined} onChange={(e) => setApiFrom(e.target.value)} style={{ ...compactField, width: 150 }} title="From (IST, inclusive)" />
+                            <span style={{ color: 'var(--on-muted)', fontSize: 12 }}>→</span>
+                            <input type="date" value={apiTo} min={apiFrom || undefined} onChange={(e) => setApiTo(e.target.value)} style={{ ...compactField, width: 150 }} title="To (IST, inclusive)" />
+                            {apiRangeActive && (
+                              <button type="button" onClick={() => { setApiFrom(''); setApiTo(''); }} style={{ ...compactField, cursor: 'pointer', fontWeight: 700 }}>Clear</button>
+                            )}
+                            <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: apiRangeActive ? 'var(--primary)' : 'var(--on-muted)', whiteSpace: 'nowrap' }}>
+                              {apiRangeActive
+                                ? (vendorSpendApiLoading ? 'Loading range…' : `Showing ${apiReport.period?.from} → ${apiReport.period?.to} (IST)`)
+                                : `Using page period · ${vs.period?.from} → ${vs.period?.to} (IST)`}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                            <span style={chipLabel}>Filter</span>
+                            <MultiSelectDropdown label="Vendors" options={apiVendorOptions} selected={apiVendorSel} onChange={setApiVendorSel} width={160} />
+                            <MultiSelectDropdown label="APIs" options={apiServiceOptions} selected={apiServiceSel} onChange={setApiServiceSel} width={190} />
+                            {apiFiltered && (
+                              <button type="button" onClick={() => { setApiVendorSel([]); setApiServiceSel([]); }} style={{ ...compactField, cursor: 'pointer', fontWeight: 700 }}>Clear filters</button>
+                            )}
+                          </div>
+                        </div>
+                        <Grid
+                          filterable={false}
+                          cols={[
+                            { key: 'vendor', label: 'Vendor', sort: (r) => vendorSpendVendorLabel(r.display_vendor), render: (r) => vendorSpendVendorLabel(r.display_vendor) },
+                            { key: 'api', label: 'API', sort: (r) => vendorSpendApiLabel(r), render: (r) => vendorSpendApiLabel(r) },
+                            { key: 'success_calls', label: 'Success', num: true, render: (r) => num(r.success_calls) },
+                            { key: 'failed_calls', label: 'Failed', num: true, render: (r) => num(r.failed_calls) },
+                            { key: 'total_calls', label: 'Total calls', num: true, render: (r) => num(r.total_calls) },
+                            { key: 'unit_cost', label: 'Unit cost', num: true, render: (r) => inr(r.unit_cost) },
+                            { key: 'cost_base', label: 'Base (ex-GST)', num: true, render: (r) => inr(r.cost_base) },
+                            { key: 'cost_gst', label: 'GST 18%', num: true, render: (r) => inr(r.cost_gst) },
+                            { key: 'cost_total', label: 'Total paid', num: true, render: (r) => inr(r.cost_total) },
+                            { key: 'share', label: 'Share', num: true, sort: (r) => r.cost_total, render: (r) => pct(r.cost_total, fTot.cost_total) },
+                          ]}
+                          rows={filteredApis.map((a) => ({ ...a, key: `${a.api_code}|${a.vendor}` }))}
+                          foot={{ vendor: apiFiltered ? 'TOTAL (filtered)' : 'TOTAL', api: '', success_calls: num(fTot.success_calls), failed_calls: num(fTot.failed_calls), total_calls: num(fTot.total_calls), unit_cost: '', cost_base: inr(fTot.cost_base), cost_gst: inr(fTot.cost_gst), cost_total: inr(fTot.cost_total), share: '' }}
+                          exportTitle="Vendor spend by API"
+                          empty="No vendor calls match these filters"
+                        />
+                      </Section>
+
+                      <div style={{ fontSize: 11, color: 'var(--on-muted)', lineHeight: 1.6, marginTop: 8 }}>
+                        <b>How this is counted.</b> Every call is shown (successful and failed), but only <b>successful</b> calls are billed — failed, refunded and blocked calls are not a charge. Each successful call is valued at the current vendor rate (<code>vendor_cost</code>, GST-inclusive); there is no per-call historical price snapshot, so a past call is valued at today's rate. The 18% GST is a recoverable input tax credit, reported separately from the GST we collect on sales. Headline figures use the page period {vs.period?.label} ({vs.period?.from} → {vs.period?.to}, IST); the Spend by API table can be narrowed to its own range above.
+                      </div>
+                    </>
+                  );
+                })()
+              )
+            )}
+
+            {tab !== 'vendor_spend' && (
+              <div style={{ fontSize: 11, color: 'var(--on-muted)', lineHeight: 1.6, marginTop: 8 }}>
+                <b>Scope &amp; basis.</b> {report.basis} This page covers wallet recharge, Direct-MSME eligibility-fee and Virtual Workspace subscription invoices (subscriptions paid from wallet credits carry no new GST and are not listed). Input tax credit is not tracked. Figures are a working aid; confirm with your chartered accountant before filing.
+              </div>
+            )}
           </>
         )}
       </div>

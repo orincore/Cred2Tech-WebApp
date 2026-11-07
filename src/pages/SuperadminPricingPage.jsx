@@ -44,12 +44,26 @@ const SERVICE_LABELS = {
 };
 const serviceLabel = (p) => SERVICE_LABELS[p.api_code] || p.api_name || p.api_code;
 
-// The Vendor Costs tab shows each row's own real api_name instead — e.g.
-// Signzy's "GST Analysis" vs ScoreMe's "GST Analysis — ScoreMe" for the
-// exact same service — since that's the whole point of that tab: showing
-// what each vendor's own product is actually called, not collapsing it
-// into one generic cross-vendor name the way serviceLabel does above.
-const vendorApiLabel = (p) => p.api_name || p.api_code;
+// Clean, consistent service names for the Vendor Costs tab — the rate-card
+// names, keyed by api_code. The tab already groups by vendor (a "Signzy" /
+// "BEFISC" / "ScoreMe" header per section), so the service name itself does
+// not need to carry the vendor too: "GST Analysis" under the ScoreMe header
+// is clearer than "GST Analysis — ScoreMe". This also fixes rows whose stored
+// api_name was null or stale ("GST Verification", "ITR Analytics V3",
+// "Bureau Score Pull — Signzy"). Falls back to the stored name, then the raw
+// code, for any api_code not mapped here.
+const VENDOR_SERVICE_LABELS = {
+  BUREAU_PULL: 'Cibil Report',
+  BANK_ANALYSIS: 'Bank Statement Analysis',
+  GST_FETCH: 'GST Analysis',
+  ITR_ANALYTICS: 'ITR Analysis',
+  PAN_FETCH: 'PAN All-in-One',
+  PROFILE_ADVANCE: 'Mobile Number Verification',
+  SALARY_OCR: 'Salary Slip Reading',
+  ESR_GENERATION_SALARIED: 'Eligibility Report — Salaried',
+  ESR_GENERATION_MSME: 'Eligibility Report — Self-Employed',
+};
+const vendorApiLabel = (p) => VENDOR_SERVICE_LABELS[p.api_code] || p.api_name || p.api_code;
 
 // Salary Slip Reading and both ESR Generation rows are Cred2Tech's own
 // product, not a real vendor call — SALARY_OCR is billed against a
@@ -66,6 +80,18 @@ const vendorCostDisplayVendor = (p) => CRED2TECH_INTERNAL_API_CODES.has(p.api_co
 // API — shown only on the Vendor Costs tab, never the customer-facing one.
 const VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', CRED2TECH: 'Cred2Tech' };
 const vendorLabel = (v) => VENDOR_LABELS[v] || v;
+
+// vendor_cost is stored GST-inclusive (vendor rate card = "base + 18% GST",
+// which is what the vendor actually invoices — see backend seed_core.js and
+// adminApiLogs.controller.js#splitGstInclusive, the single source for this
+// split). Shown on the Vendor Costs tab as "base + GST" so the breakdown is
+// visible, not just the blended figure.
+const VENDOR_GST_RATE = 0.18;
+const gstSplit = (inclusive) => {
+  const base = (inclusive || 0) / (1 + VENDOR_GST_RATE);
+  return { base, gst: (inclusive || 0) - base };
+};
+const inr2 = (n) => `₹${(n || 0).toFixed(2)}`;
 
 const formatScheduledDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -508,8 +534,15 @@ const SuperadminPricingPage = () => {
   // ESR_GENERATION_*) — Virtual Workspace's subscription fee is the one
   // 'DEFAULT' row left out entirely, since nothing (not even an internal
   // engine) is ever "called" to produce it.
+  // PAN_FETCH's old SIGNZY row is retired (the customer journey moved to
+  // BEFISC's PAN All-in-One — see seed_core.js). It lingers in the DB only
+  // until a later migration drops it, but it is no longer a vendor we call,
+  // so hide it here rather than show PAN twice (a live BEFISC row and a dead
+  // Signzy one). Display-only filter: the row stays in the DB for pricing/
+  // historical cost attribution.
   const vendorCostRows = useMemo(() => apiPricingRows.filter(p =>
-    CRED2TECH_INTERNAL_API_CODES.has(p.api_code) || (p.vendor && p.vendor !== 'DEFAULT')
+    !(p.api_code === 'PAN_FETCH' && p.vendor === 'SIGNZY') &&
+    (CRED2TECH_INTERNAL_API_CODES.has(p.api_code) || (p.vendor && p.vendor !== 'DEFAULT'))
   ), [apiPricingRows]);
   const filteredVendorRows = useMemo(() => {
     const q = search.toLowerCase();
@@ -1098,7 +1131,9 @@ const SuperadminPricingPage = () => {
                             <div>
                               <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vendor Charges Us</div>
                               <div style={{ fontSize: 15, fontWeight: 800, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</div>
-                              {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                              {p.vendor_cost
+                                ? <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>{inr2(gstSplit(p.vendor_cost).base)} base + {inr2(gstSplit(p.vendor_cost).gst)} GST 18%</div>
+                                : <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
                             </div>
                             <div>
                               <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>We Charge Customer</div>
@@ -1165,7 +1200,9 @@ const SuperadminPricingPage = () => {
                   return (
                     <>
                       <span style={{ fontWeight: 800, fontSize: 13, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</span>
-                      {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                      {p.vendor_cost
+                        ? <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>{inr2(gstSplit(p.vendor_cost).base)} base + {inr2(gstSplit(p.vendor_cost).gst)} GST</div>
+                        : <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
                       <PendingPriceBadge row={p} onCancel={handleCancelPending} />
                     </>
                   );

@@ -27,6 +27,8 @@ const downloadBlob = (response, fallbackName) => {
 export const walletRevenueService = {
   financialYears: async () => (await axiosInstance.get('/admin/wallet-revenue/financial-years')).data,
   summary: async (period = {}) => (await axiosInstance.get('/admin/wallet-revenue/summary', { params: buildParams(period) })).data,
+  // Vendor spend (what we pay each vendor) for the same period params as summary.
+  vendorCostReport: async (period = {}) => (await axiosInstance.get('/admin/wallet-revenue/vendor-cost-report', { params: buildParams(period) })).data,
   register: async (params = {}) => (await axiosInstance.get('/admin/wallet-revenue/register', { params: buildParams(params) })).data,
   // `sections`: sheet names to include (see exportSections); leave empty for the whole workbook.
   exportExcel: async (period = {}, sections = []) => {
