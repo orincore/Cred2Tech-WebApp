@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
+import { VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED } from '../constants/features';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
@@ -297,7 +298,8 @@ const ProfilePage = () => {
   // VirtualWorkspaceSubscriptionCard's own self-gating and the same card's
   // existing home on OrganizationProfilePage) — DSA_MEMBER/SUB_DSA staff
   // don't manage tenant billing, so the tab doesn't appear for them.
-  const canManageSubscription = hasRole('DSA_ADMIN');
+  // Also off while Virtual Workspace is free (constants/features.js).
+  const canManageSubscription = VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && hasRole('DSA_ADMIN');
 
   // ─── Push notification preferences ──────────────────────────────────────────
   const pushSupported = isPushSupported();

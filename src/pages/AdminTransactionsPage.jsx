@@ -73,7 +73,7 @@ const AmountBreakdown = ({ t, align = 'right' }) => {
   const line = { fontSize: 10, color: 'var(--on-muted)', marginTop: 2, whiteSpace: 'nowrap' };
   return (
     <div style={{ textAlign: align }}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)', whiteSpace: 'nowrap' }}>{formatINR(t.amount_inr)}</div>
       {b?.gst_recorded ? (
         <>
           <div style={line}>Taxable {formatINR2(b.taxable)}</div>
@@ -90,9 +90,9 @@ const AmountBreakdown = ({ t, align = 'right' }) => {
 const StatusPill = ({ status, flag, webhook }) => {
   const style = STATUS_STYLE[status] || { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
   return (
-    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ background: style.bg, color: style.color, padding: '3px 10px', borderRadius: 0, fontSize: 10, fontWeight: 800, letterSpacing: '0.03em' }}>
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
+        <span style={{ background: style.bg, color: style.color, padding: '3px 8px', borderRadius: 0, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.02em', overflowWrap: 'anywhere', textAlign: 'center', lineHeight: 1.3 }}>
           {status}
         </span>
         {/* Compact stand-in for a whole "Webhook" column — a filled dot when
@@ -211,62 +211,70 @@ const AdminTransactionsPage = () => {
     }
   };
 
+  // Compact, no-clipping cells. The shared DataTable lays out with `table-layout: fixed` and
+  // clips (ellipsis) anything wider than its column, which hid long statuses, e-mails, order
+  // ids and timestamps. Here every cell wraps instead of clipping, text is a size smaller and
+  // padding is tighter, so the whole row is readable without a horizontal scroll.
+  const cell = { padding: '9px 8px', whiteSpace: 'normal', overflow: 'visible' };
+  const wrap = { overflowWrap: 'anywhere' };
+  const primary = { fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', lineHeight: 1.35, ...wrap };
+  const secondary = { fontSize: 10, color: 'var(--on-muted)', marginTop: 2, lineHeight: 1.35, ...wrap };
+
   const columns = [
     {
-      key: 'created_at', label: 'Date & Time', width: '18%', padding: '16px 12px',
+      key: 'created_at', label: 'Date & Time', width: '15%', ...cell,
       render: (t) => (
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(t.created_at)}</div>
-          {t.completed_at && <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 3 }}>Completed {formatDateTime(t.completed_at)}</div>}
+          <div style={primary}>{formatDateTime(t.created_at)}</div>
+          {t.completed_at && <div style={secondary}>Completed {formatDateTime(t.completed_at)}</div>}
         </div>
       ),
     },
     {
-      key: 'type', label: 'Type', width: '20%', padding: '16px 12px',
+      key: 'type', label: 'Type', width: '18%', ...cell,
       render: (t) => (
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{t.type_label}</div>
-          <div style={{ fontSize: 10, color: 'var(--on-muted)', marginTop: 3 }}>
+          <div style={primary}>{t.type_label}</div>
+          <div style={secondary}>
             {t.purpose}{t.case_id ? ` · Case #${t.case_id}` : ''}
           </div>
         </div>
       ),
     },
-    { key: 'status', label: 'Status', align: 'center', width: '9%', padding: '16px 12px', render: (t) => <StatusPill status={t.status} flag={t.reconciliation_flag} webhook={t.webhook} /> },
-    { key: 'amount', label: 'Amount', align: 'right', width: '14%', padding: '16px 12px', render: (t) => <AmountBreakdown t={t} /> },
+    { key: 'status', label: 'Status', align: 'center', width: '12%', ...cell, render: (t) => <StatusPill status={t.status} flag={t.reconciliation_flag} webhook={t.webhook} /> },
+    { key: 'amount', label: 'Amount', align: 'right', width: '14%', ...cell, render: (t) => <AmountBreakdown t={t} /> },
     {
-      key: 'party', label: 'User / Tenant', width: '20%', padding: '16px 12px',
+      key: 'party', label: 'User / Tenant', width: '22%', ...cell,
       render: (t) => (
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={primary}>
             {t.user?.name || t.tenant?.name || '—'}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--on-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 3 }}>
+          <div style={secondary}>
             {t.user?.email || (t.tenant ? `Tenant · ${t.tenant.name}` : '—')}
           </div>
           {t.buyer_gstin && (
-            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--on-surface)', marginTop: 3 }}>GSTIN {t.buyer_gstin}</div>
+            <div style={{ ...secondary, fontFamily: 'monospace', color: 'var(--on-surface)' }}>GSTIN {t.buyer_gstin}</div>
           )}
         </div>
       ),
     },
     {
-      key: 'order_id', label: 'Razorpay Order ID', width: '19%', padding: '16px 12px',
-      render: (t) => <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--on-surface)' }}>{t.razorpay_order_id || '—'}</span>,
+      key: 'order_id', label: 'Razorpay Order ID', width: '19%', ...cell,
+      render: (t) => <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--on-surface)', ...wrap }}>{t.razorpay_order_id || '—'}</span>,
     },
   ];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--on-surface)', overflow: 'hidden' }}>
-      <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
+      <div style={{ padding: isMobile ? '68px 16px 0' : '20px 16px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title="Transactions"
-          subtitle="A complete record of every payment made on the platform, including MSME eligibility fees, Sourcing Partner wallet top-ups, and Virtual Workspace subscriptions, verified against Razorpay for accuracy."
           compact={isMobile}
         />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '0 16px 16px' : '0 24px 24px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
         {/* ─── Summary stat cards ─── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: isMobile ? 8 : 16, marginBottom: 16 }}>
           <StatCard title="Total Transactions" value={summary?.total_count ?? '—'} icon={Receipt} loading={!summary} />

@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
+import { VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED } from '../constants/features';
 
 import CustomSelect from '../components/CustomSelect';
 // Same list CreateTenantPage offers — kept in sync there rather than shared,
@@ -713,7 +714,7 @@ const OrganizationProfilePage = () => {
           </form>
         )}
 
-        <VirtualWorkspaceSubscriptionCard />
+        {VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && <VirtualWorkspaceSubscriptionCard />}
       </div>
     </div>
   );
