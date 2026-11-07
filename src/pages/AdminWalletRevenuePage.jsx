@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
+import { useSearchParams } from 'react-router-dom';
 import {
   IndianRupee, Receipt, Percent, FileSpreadsheet, AlertTriangle, CheckCircle2, Search, Tag, Layers,
 } from 'lucide-react';
@@ -74,6 +75,7 @@ const FLAG_LABEL = {
   NO_INVOICE: 'No invoice', GST_NOT_RECORDED: 'GST not recorded', INVOICE_TAXABLE_MISMATCH: 'Taxable mismatch',
   GST_RATE_MISMATCH: 'GST ≠ rate', REFUND_REVIEW: 'Refund review',
   STATE_UNKNOWN: 'State unknown', INVALID_GSTIN: 'Bad GSTIN', INVOICE_NUMBER_TOO_LONG: 'No. > 16 chars', NO_BUYER_SNAPSHOT: 'No snapshot',
+  TAX_HEADS_MISMATCH: 'Heads ≠ GST', STATE_DEFAULTED: 'State defaulted', TAX_SPLIT_NOT_RECORDED: 'Not split',
 };
 
 const compactField = {
@@ -118,12 +120,24 @@ const Grid = ({ cols, rows, foot, empty = 'No data for this period' }) => (
   </table>
 );
 
-const taxCols = [
+// GST by head: CGST 9% + SGST 9% when the buyer is in Karnataka, IGST 18% for any other state
+// (decided per invoice by the backend). `unsplit_gst` is GST on invoices issued before the
+// heads were shown; that column appears only when the period has such invoices.
+const gstHeadCols = (showUnsplit) => [
+  { key: 'cgst', label: 'CGST (9%)', num: true, render: (r) => inr(r.cgst) },
+  { key: 'sgst', label: 'SGST (9%)', num: true, render: (r) => inr(r.sgst) },
+  { key: 'igst', label: 'IGST (18%)', num: true, render: (r) => inr(r.igst) },
+  ...(showUnsplit ? [{ key: 'unsplit_gst', label: 'GST not split', num: true, render: (r) => inr(r.unsplit_gst) }] : []),
+  { key: 'gst', label: 'GST total', num: true, render: (r) => inr(r.gst) },
+];
+const taxCols = (showUnsplit) => [
   { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
-  { key: 'gst', label: 'GST (18%)', num: true, render: (r) => inr(r.gst) },
+  ...gstHeadCols(showUnsplit),
   { key: 'total', label: 'Gross', num: true, render: (r) => inr(r.total) },
 ];
-const taxFoot = (t) => ({ taxable: inr(t.taxable), gst: inr(t.gst), total: inr(t.total) });
+const taxFoot = (t) => ({
+  taxable: inr(t.taxable), cgst: inr(t.cgst), sgst: inr(t.sgst), igst: inr(t.igst), unsplit_gst: inr(t.unsplit_gst), gst: inr(t.gst), total: inr(t.total),
+});
 
 const Pill = ({ children, style }) => (
   <span style={{ display: 'inline-block', padding: '2px 8px', fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', ...style }}>{children}</span>
@@ -137,7 +151,18 @@ const AdminWalletRevenuePage = () => {
   const [month, setMonth] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [tab, setTab] = useState('revenue');
+  // The tab lives in the URL (?tab=gst) so a refresh, a shared link or the back button
+  // lands on the same tab. An unknown or missing value falls back to the first tab.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const tab = TABS.some((x) => x.id === requestedTab) ? requestedTab : 'revenue';
+  const setTab = useCallback((id) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', id);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -213,7 +238,10 @@ const AdminWalletRevenuePage = () => {
 
   const t = report?.totals;
   const highCount = report ? report.exceptions.filter((e) => e.severity === 'high').length : 0;
-  const integrityOk = report && report.integrity.total_ties_to_payments && report.integrity.gst_ties_to_payments && report.integrity.gst_is_18_percent_of_taxable;
+  // The head checks are absent from an older API response; treat "absent" as fine, "false" as a failure.
+  const headsOk = !report || (report.integrity.tax_heads_add_up_to_gst !== false && report.integrity.tax_heads_tie_to_payments !== false);
+  const integrityOk = report && report.integrity.total_ties_to_payments && report.integrity.gst_ties_to_payments && report.integrity.gst_is_18_percent_of_taxable && headsOk;
+  const showUnsplit = !!t && Number(t.unsplit_gst || 0) > 0;
 
   const monthRows = report ? report.monthly.map((m) => ({ ...m, key: m.month })) : [];
   const quarterRows = report ? report.quarterly.map((q) => ({ ...q, key: q.quarter })) : [];
@@ -259,7 +287,7 @@ const AdminWalletRevenuePage = () => {
         {/* ─── KPIs ─── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: isMobile ? 8 : 16, marginBottom: 16 }}>
           <StatCard title="Taxable Value (Revenue)" value={t ? inr(t.taxable) : '—'} subtitle={report ? `${changeText(report.comparison.net_revenue)} vs ${report.comparison.previous_period.label}` : 'Total received − GST'} icon={IndianRupee} color="var(--primary)" loading={!report} />
-          <StatCard title="GST Collected (18%)" value={t ? inr(t.gst) : '—'} subtitle="Single GST on taxable value" icon={Percent} color="var(--warning)" loading={!report} />
+          <StatCard title="GST Collected (18%)" value={t ? inr(t.gst) : '—'} subtitle="CGST + SGST + IGST on taxable value" icon={Percent} color="var(--warning)" loading={!report} />
           <StatCard title="Gross Receipts" value={t ? inr(t.total) : '—'} subtitle={t ? `${num(t.invoices)} invoices · avg ${inr(t.avg_invoice_value)}` : undefined} icon={Receipt} color="var(--success)" loading={!report} />
           <StatCard title="Promo Discounts Given" value={t ? inr(t.promo_discount) : '—'} subtitle={t ? `${num(t.promo_value_credits)} promotional credits` : undefined} icon={Tag} color="var(--info)" loading={!report} />
           <StatCard
@@ -272,11 +300,21 @@ const AdminWalletRevenuePage = () => {
           />
         </div>
 
+        {/* ─── GST by head: Karnataka buyer → CGST + SGST, any other state → IGST ─── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: isMobile ? 8 : 16, marginBottom: 16 }}>
+          <StatCard title="CGST (9%)" value={t ? inr(t.cgst) : '—'} subtitle="Buyer in Karnataka" icon={Percent} color="var(--warning)" loading={!report} />
+          <StatCard title="SGST (9%)" value={t ? inr(t.sgst) : '—'} subtitle="Buyer in Karnataka" icon={Percent} color="var(--warning)" loading={!report} />
+          <StatCard title="IGST (18%)" value={t ? inr(t.igst) : '—'} subtitle="Buyer outside Karnataka" icon={Percent} color="var(--info)" loading={!report} />
+          {showUnsplit && (
+            <StatCard title="GST not split" value={inr(t.unsplit_gst)} subtitle="Older invoices, issued before the heads were shown" icon={AlertTriangle} color="var(--text-tertiary)" loading={!report} />
+          )}
+        </div>
+
         {report && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 16, fontSize: 12, fontWeight: 700, background: integrityOk ? 'var(--success-bg)' : 'var(--error-bg)', color: integrityOk ? 'var(--success)' : 'var(--error)' }}>
             {integrityOk ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
             {integrityOk
-              ? `Totals tie to the database: ${num(report.integrity.invoices_in_period)} invoices, gross and GST match the raw payment sums, and GST is 18% of the taxable value on every row.`
+              ? `Totals tie to the database: ${num(report.integrity.invoices_in_period)} invoices, gross and GST match the raw payment sums, GST is 18% of the taxable value on every row, and CGST + SGST + IGST add up to the GST on every invoice.`
               : 'Integrity check FAILED — these figures do not tie to the raw payment records. Do not file from this view.'}
           </div>
         )}
@@ -347,7 +385,7 @@ const AdminWalletRevenuePage = () => {
                     rows={[
                       { key: 'g', k: 'Gross billed (incl. GST)', v: inr(t.total), n: `${num(t.invoices)} invoices across wallet recharges, MSME fees, Virtual Workspace and storage plans` },
                       ...(report.unclassified.invoices > 0 ? [{ key: 'u', k: `Less: GST not recorded (${report.unclassified.invoices} older payments)`, v: `− ${inr(report.unclassified.total)}`, n: 'Received before GST was recorded — cannot be split into revenue and tax, so excluded here' }] : []),
-                      { key: 'x', k: 'Less: GST collected (18%)', v: `− ${inr(t.gst)}`, n: 'Payable to the government — not our revenue' },
+                      { key: 'x', k: 'Less: GST collected (18%)', v: `− ${inr(t.gst)}`, n: `CGST ${inr(t.cgst)} + SGST ${inr(t.sgst)} + IGST ${inr(t.igst)}${showUnsplit ? ` + ${inr(t.unsplit_gst)} not split` : ''} — payable to the government, not our revenue` },
                     ]}
                     foot={{ k: 'NET REVENUE (taxable value)', v: inr(t.taxable), n: `${pct(t.taxable, t.total)} of gross billed` }}
                   />
@@ -505,34 +543,34 @@ const AdminWalletRevenuePage = () => {
               <>
                 <Section title="Month-wise" hint="Each top-up is counted in the IST month it was credited. Months with no activity are shown as zero.">
                   <Grid
-                    cols={[{ key: 'month', label: 'Month' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
+                    cols={[{ key: 'month', label: 'Month' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={monthRows}
                     foot={{ month: 'Total', invoices: num(t.invoices), ...taxFoot(t) }}
                   />
                 </Section>
                 <Section title="Quarter-wise (GST quarters, Apr–Mar)" hint="Use for quarterly returns (QRMP). Quarters outside the selected range are not shown.">
                   <Grid
-                    cols={[{ key: 'quarter', label: 'Quarter' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
+                    cols={[{ key: 'quarter', label: 'Quarter' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={quarterRows}
                     foot={{ quarter: 'Total', invoices: num(t.invoices), ...taxFoot(t) }}
                   />
                 </Section>
                 <Section title="B2B vs B2C" hint="B2B = buyer has a valid GSTIN. B2C = unregistered buyer (or a GSTIN that is not a valid format).">
                   <Grid
-                    cols={[{ key: 'k', label: 'Category' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
+                    cols={[{ key: 'k', label: 'Category' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={['B2B', 'B2C'].map((k) => ({ key: k, k, ...report.by_category[k] }))}
                   />
                 </Section>
                 <Section title="By supply" hint="Wallet recharges, Direct-MSME eligibility fees, Virtual Workspace subscriptions and storage plans are separate supplies. Subscriptions and storage plans share the SUB/ invoice series.">
                   <Grid
-                    cols={[{ key: 'k', label: 'Supply' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
+                    cols={[{ key: 'k', label: 'Supply' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={STREAMS.map((k) => ({ key: k, k: STREAM_LABEL[k], ...report.by_stream[k] }))}
                     foot={{ k: 'Total', invoices: num(t.invoices), ...taxFoot(t) }}
                   />
                 </Section>
-                <Section title="By place of supply (buyer state)" hint="Buyer state comes from the GSTIN when present, otherwise the tenant’s state field (abbreviations such as ‘MH’ are understood).">
+                <Section title="By place of supply (buyer state)" hint="Karnataka buyers are charged CGST + SGST; every other state is charged IGST. Buyer state is the GSTIN’s state code when the buyer has one, otherwise the state they registered with (then their pincode).">
                   <Grid
-                    cols={[{ key: 'name', label: 'State', render: (r) => `${r.code === 'UNKNOWN' ? '—' : r.code} ${r.name}` }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols]}
+                    cols={[{ key: 'name', label: 'State', render: (r) => `${r.code === 'UNKNOWN' ? '—' : r.code} ${r.name}` }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={report.by_state.map((s) => ({ ...s, key: s.code }))}
                   />
                 </Section>
@@ -549,11 +587,20 @@ const AdminWalletRevenuePage = () => {
               <>
                 <Section title="GST return summary — outward taxable supplies" hint={report.gst_summary.note}>
                   <Grid
-                    cols={[{ key: 'v', label: 'Taxable value', num: true }, { key: 'g', label: 'GST payable (18%)', num: true }]}
-                    rows={[{ v: inr(report.gst_summary.outward_taxable_value), g: inr(report.gst_summary.gst) }]}
+                    cols={[
+                      { key: 'v', label: 'Taxable value', num: true },
+                      { key: 'cgst', label: 'CGST (9%)', num: true }, { key: 'sgst', label: 'SGST (9%)', num: true }, { key: 'igst', label: 'IGST (18%)', num: true },
+                      ...(showUnsplit ? [{ key: 'unsplit', label: 'GST not split', num: true }] : []),
+                      { key: 'g', label: 'GST payable (total)', num: true },
+                    ]}
+                    rows={[{
+                      v: inr(report.gst_summary.outward_taxable_value),
+                      cgst: inr(report.gst_summary.cgst), sgst: inr(report.gst_summary.sgst), igst: inr(report.gst_summary.igst),
+                      unsplit: inr(report.gst_summary.unsplit_gst), g: inr(report.gst_summary.gst),
+                    }]}
                   />
                 </Section>
-                <Section title="B2B invoices (buyer has a valid GSTIN)" hint="Registered buyers. Place of supply is the buyer’s state.">
+                <Section title="B2B invoices (buyer has a valid GSTIN)" hint="Registered buyers. Place of supply is the state code in the buyer’s GSTIN: 29 (Karnataka) is CGST + SGST, any other code is IGST.">
                   <Grid
                     cols={[
                       { key: 'invoice_number', label: 'Invoice no.', render: (r) => r.invoice_number || '—' },
@@ -562,21 +609,21 @@ const AdminWalletRevenuePage = () => {
                       { key: 'pos', label: 'Place of supply', render: (r) => `${r.pos_code || '—'} ${r.pos_name || ''}` },
                       { key: 'gst_rate', label: 'Rate', num: true, render: (r) => `${(r.gst_rate * 100).toFixed(0)}%` },
                       { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
-                      { key: 'gst', label: 'GST (18%)', num: true, render: (r) => inr(r.gst) },
+                      ...gstHeadCols(showUnsplit),
                       { key: 'total', label: 'Invoice value', num: true, render: (r) => inr(r.total) },
                     ]}
                     rows={report.b2b.map((r) => ({ ...r, key: `${r.stream}-${r.topup_id}` }))}
                     empty="No B2B invoices"
                   />
                 </Section>
-                <Section title="B2C (unregistered buyers) — by buyer state" hint="Consolidated by state and rate, not invoice-wise.">
+                <Section title="B2C (unregistered buyers) — by buyer state" hint="Consolidated by state and rate, not invoice-wise. Buyer state is the state they registered with (then their pincode): Karnataka is CGST + SGST, any other state is IGST.">
                   <Grid
                     cols={[
                       { key: 'pos', label: 'Buyer state', render: (r) => `${r.pos_code || '—'} ${r.pos_name || 'Unknown'}` },
                       { key: 'gst_rate', label: 'Rate', num: true, render: (r) => `${(r.gst_rate * 100).toFixed(0)}%` },
                       { key: 'invoices', label: 'Invoices', num: true },
                       { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
-                      { key: 'gst', label: 'GST (18%)', num: true, render: (r) => inr(r.gst) },
+                      ...gstHeadCols(showUnsplit),
                     ]}
                     rows={report.b2c.map((r, i) => ({ ...r, key: i }))}
                     empty="No B2C invoices"
@@ -620,7 +667,7 @@ const AdminWalletRevenuePage = () => {
                         { key: 'category', label: 'Type' },
                         { key: 'pos', label: 'Place of supply', render: (r) => `${r.pos_code || '—'} ${r.pos_name || ''}` },
                         { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
-                        { key: 'gst', label: 'GST (18%)', num: true, render: (r) => inr(r.gst) },
+                        ...gstHeadCols(showUnsplit),
                         { key: 'total', label: 'Invoice value', num: true, render: (r) => inr(r.total) },
                         { key: 'flags', label: 'Flags', render: (r) => (r.flags.length === 0 ? '—' : r.flags.map((f) => <Pill key={f} style={{ ...SEVERITY_STYLE.low, marginRight: 4 }}>{FLAG_LABEL[f] || f}</Pill>)) },
                       ]}
