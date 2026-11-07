@@ -4,6 +4,8 @@ import { Download, Mail, CheckCircle2, Clock, Wallet, HardDrive, LayoutGrid } fr
 import api from '../../api/axiosInstance';
 import DataTable from '../DataTable';
 import EmptyState from '../ui/EmptyState';
+import CustomerRefundLines from '../CustomerRefundLines';
+import { walletService } from '../../api/walletService';
 import { formatDateTime, getErrorMessage } from '../../utils/helpers';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -77,6 +79,18 @@ const PlanPaymentsTab = ({ isMobile, initialRows = null }) => {
     }
   };
 
+  const [creditNoteBusy, setCreditNoteBusy] = useState(null);
+  const downloadCreditNote = async (refund) => {
+    setCreditNoteBusy(refund.id);
+    try {
+      await walletService.downloadCreditNote(refund.id, refund.credit_note_number);
+    } catch {
+      toast.error('Could not download the credit note');
+    } finally {
+      setCreditNoteBusy(null);
+    }
+  };
+
   const emailIt = async (inv) => {
     setEmailingId(inv.id);
     try {
@@ -104,7 +118,15 @@ const PlanPaymentsTab = ({ isMobile, initialRows = null }) => {
   const columns = [
     { key: 'charged_at', label: 'Date', width: '15%', padding: '16px 12px', render: (i) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(i.charged_at)}</span> },
     { key: 'product', label: 'Plan', width: '14%', padding: '16px 12px', render: (i) => <ProductBadge inv={i} /> },
-    { key: 'description', label: 'Details', width: '20%', padding: '16px 12px', render: (i) => <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{i.description}</span> },
+    {
+      key: 'description', label: 'Details', width: '20%', padding: '16px 12px', whiteSpace: 'normal',
+      render: (i) => (
+        <div>
+          <span style={{ fontSize: 12, color: 'var(--on-surface)' }}>{i.description}</span>
+          <CustomerRefundLines refunds={i.refunds} onDownload={downloadCreditNote} busyId={creditNoteBusy} />
+        </div>
+      ),
+    },
     {
       key: 'total', label: 'Amount Paid', align: 'right', width: '14%', padding: '16px 12px',
       render: (i) => (
@@ -146,6 +168,7 @@ const PlanPaymentsTab = ({ isMobile, initialRows = null }) => {
                 </div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--on-surface)', marginTop: 8 }}>{i.description}</div>
+              <CustomerRefundLines refunds={i.refunds} onDownload={downloadCreditNote} busyId={creditNoteBusy} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)' }}>
                 <div>
                   <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--on-surface)' }}>{i.invoice_number}</div>

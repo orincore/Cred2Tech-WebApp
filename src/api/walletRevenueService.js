@@ -28,9 +28,23 @@ export const walletRevenueService = {
   financialYears: async () => (await axiosInstance.get('/admin/wallet-revenue/financial-years')).data,
   summary: async (period = {}) => (await axiosInstance.get('/admin/wallet-revenue/summary', { params: buildParams(period) })).data,
   register: async (params = {}) => (await axiosInstance.get('/admin/wallet-revenue/register', { params: buildParams(params) })).data,
-  exportExcel: async (period = {}) => {
-    const response = await axiosInstance.get('/admin/wallet-revenue/export.xlsx', { params: buildParams(period), responseType: 'blob' });
+  // `sections`: sheet names to include (see exportSections); leave empty for the whole workbook.
+  exportExcel: async (period = {}, sections = []) => {
+    const response = await axiosInstance.get('/admin/wallet-revenue/export.xlsx', {
+      params: buildParams({ ...period, sections: sections.length ? sections.join(',') : undefined }), responseType: 'blob',
+    });
     downloadBlob(response, 'Cred2Tech_Wallet_Revenue_GST.xlsx');
+  },
+  exportSections: async () => (await axiosInstance.get('/admin/wallet-revenue/export-sections')).data.sections,
+  // The invoice register with the screen's search / filters / sort, all pages.
+  exportRegister: async (params = {}) => {
+    const response = await axiosInstance.get('/admin/wallet-revenue/register/export.xlsx', { params: buildParams(params), responseType: 'blob' });
+    downloadBlob(response, 'Cred2Tech_Invoice_Register.xlsx');
+  },
+  // Any table(s) exactly as shown: { title, tables: [{ title, subtitle, columns: [{label, type, total}], rows: [[...]] }] }.
+  exportTables: async (payload) => {
+    const response = await axiosInstance.post('/admin/wallet-revenue/export-table.xlsx', payload, { responseType: 'blob' });
+    downloadBlob(response, 'Cred2Tech_Export.xlsx');
   },
 };
 
