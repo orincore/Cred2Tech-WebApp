@@ -1592,7 +1592,6 @@ const AdminWalletRevenuePage = () => {
 
                       <Section
                         title="Spend by environment"
-                        hint="Where the vendor calls were made from — Production, the shared Dev server, and Localhost (developer machines). Every environment hits the same vendor accounts, so all of it is on the vendor's invoice. Counted from the vendor call ledger, which started recording on 9 Nov 2026; calls before that are not in it, so this can be lower than the vendor totals above for earlier periods. Cost is the GST-inclusive rate on each successful billable call; billable calls with no rate set yet are counted as 'No rate' and not costed."
                       >
                         <Grid
                           filterable={false}
