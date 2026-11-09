@@ -90,7 +90,27 @@ function useScale(series, height, { stacked = false, includeZero = true } = {}) 
   }, [series, height, stacked, includeZero]);
 }
 
-const Axes = ({ ticks, y, labels, xAt, fmt, height, labelEvery }) => (
+const LABEL_LINE_H = 12;
+const LABEL_CHAR_W = 5.8; // average glyph width of the 10px/600 axis font, in viewBox units
+
+/** Greedy word-wrap of an axis label to `maxChars` per line (a word longer than a line is split). */
+export function wrapAxisLabel(text, maxChars) {
+  const lines = [];
+  let cur = '';
+  const flush = () => { if (cur) { lines.push(cur); cur = ''; } };
+  String(text ?? '').split(/\s+/).filter(Boolean).forEach((word) => {
+    let w = word;
+    while (w.length > maxChars) { flush(); lines.push(w.slice(0, maxChars)); w = w.slice(maxChars); }
+    if (!w) return;
+    if (!cur) cur = w;
+    else if (cur.length + 1 + w.length <= maxChars) cur += ` ${w}`;
+    else { flush(); cur = w; }
+  });
+  flush();
+  return lines.length ? lines : [''];
+}
+
+const Axes = ({ ticks, y, labels, xAt, fmt, height, labelEvery, wrapped }) => (
   <>
     {ticks.map((t) => (
       <g key={t}>
@@ -98,7 +118,13 @@ const Axes = ({ ticks, y, labels, xAt, fmt, height, labelEvery }) => (
         <text x={PAD.l - 8} y={y(t) + 3.5} textAnchor="end" fontSize="10" fill={AXIS} fontWeight="600">{fmt(t)}</text>
       </g>
     ))}
-    {labels.map((l, i) => (i % labelEvery === 0 ? <text key={l} x={xAt(i)} y={height - 9} textAnchor="middle" fontSize="10" fill={AXIS} fontWeight="600">{l}</text> : null))}
+    {wrapped
+      ? labels.map((l, i) => (
+        <text key={`${l}-${i}`} x={xAt(i)} y={height - 9} textAnchor="middle" fontSize="10" fill={AXIS} fontWeight="600">
+          {wrapped[i].map((line, li) => <tspan key={li} x={xAt(i)} dy={li === 0 ? 0 : LABEL_LINE_H}>{line}</tspan>)}
+        </text>
+      ))
+      : labels.map((l, i) => (i % labelEvery === 0 ? <text key={`${l}-${i}`} x={xAt(i)} y={height - 9} textAnchor="middle" fontSize="10" fill={AXIS} fontWeight="600">{l}</text> : null))}
   </>
 );
 
@@ -151,7 +177,7 @@ export const LineChart = ({ labels, series, height = 230, format = inrShort, tip
  * Bar chart, grouped or stacked.
  * @param {{labels: string[], series: {name: string, color: string, values: number[]}[], stacked?: boolean, height?: number}} p
  */
-export const BarChart = ({ labels, series, stacked = false, height = 230, format = inrShort, tipFormat = inrFull, ariaLabel = 'Bar chart' }) => {
+export const BarChart = ({ labels, series, stacked = false, height = 230, format = inrShort, tipFormat = inrFull, ariaLabel = 'Bar chart', wrapLabels = false }) => {
   const wrap = useRef(null);
   const [hover, setHover] = useState(null);
   const { ticks, y } = useScale(series, height, { stacked });
@@ -163,7 +189,11 @@ export const BarChart = ({ labels, series, stacked = false, height = 230, format
   const groupW = Math.min(slot * 0.7, 64);
   const barW = stacked ? groupW : groupW / series.length;
   const xCenter = (i) => PAD.l + slot * i + slot / 2;
-  const labelEvery = Math.ceil(n / 10);
+  // wrapLabels: show every label in full by wrapping it over as many lines as it needs (no
+  // skipping, no truncation) and growing the SVG below the plot to fit; the plot itself keeps its height.
+  const wrapped = wrapLabels ? labels.map((l) => wrapAxisLabel(l, Math.max(6, Math.floor((slot - 6) / LABEL_CHAR_W)))) : null;
+  const extraH = wrapped ? (Math.max(...wrapped.map((w) => w.length)) - 1) * LABEL_LINE_H : 0;
+  const labelEvery = wrapLabels ? 1 : Math.ceil(n / 10);
   const zero = y(0);
 
   const onMove = (e) => {
@@ -176,8 +206,8 @@ export const BarChart = ({ labels, series, stacked = false, height = 230, format
   return (
     <div>
       <div ref={wrap} style={{ position: 'relative' }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-        <svg viewBox={`0 0 ${W} ${height}`} width="100%" role="img" aria-label={ariaLabel} style={{ display: 'block' }}>
-          <Axes ticks={ticks} y={y} labels={labels} xAt={xCenter} fmt={format} height={height} labelEvery={labelEvery} />
+        <svg viewBox={`0 0 ${W} ${height + extraH}`} width="100%" role="img" aria-label={ariaLabel} style={{ display: 'block' }}>
+          <Axes ticks={ticks} y={y} labels={labels} xAt={xCenter} fmt={format} height={height} labelEvery={labelEvery} wrapped={wrapped} />
           {hover && <rect x={PAD.l + slot * hover.i} y={PAD.t} width={slot} height={height - PAD.t - PAD.b} fill="var(--bg-elevated)" opacity="0.7" />}
           {labels.map((_, i) => {
             let pos = 0; let neg = 0;

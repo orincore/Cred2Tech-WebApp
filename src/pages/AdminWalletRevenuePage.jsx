@@ -87,6 +87,10 @@ const VENDOR_SPEND_API_LABELS = {
   VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace',
 };
 const vendorSpendApiLabel = (a) => VENDOR_SPEND_API_LABELS[a?.api_code] || a?.api_name || a?.api_code || '—';
+// Full "API · vendor" label for chart bars. The same API can be served by two vendors
+// (Cibil Report by Signzy and by BEFISC, PAN All-in-One likewise), so a name alone gives
+// identical bars. Shown in full: the chart wraps long labels (BarChart wrapLabels).
+const vendorSpendApiChartLabel = (a) => `${vendorSpendApiLabel(a)} · ${vendorSpendVendorLabel(a?.display_vendor)}`;
 const VENDOR_SPEND_VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', Cred2Tech: 'Cred2Tech', DEFAULT: 'Internal / platform' };
 const vendorSpendVendorLabel = (v) => VENDOR_SPEND_VENDOR_LABELS[v] || v;
 // Where a vendor call was made from — production, the shared dev server, or a developer's machine.
@@ -1557,8 +1561,8 @@ const AdminWalletRevenuePage = () => {
                             slices={donutSlices.length ? donutSlices : [{ name: 'No spend', value: 1, color: 'var(--text-tertiary)' }]} />
                         </ChartCard>
                         <ChartCard title="Top APIs by spend" hint="GST-inclusive cost per API, highest first.">
-                          <BarChart ariaLabel="Top APIs by spend" format={inr} tipFormat={inr}
-                            labels={topApis.map((a) => { const n = vendorSpendApiLabel(a); return n.length > 14 ? `${n.slice(0, 13)}…` : n; })}
+                          <BarChart ariaLabel="Top APIs by spend" format={inr} tipFormat={inr} wrapLabels
+                            labels={topApis.map(vendorSpendApiChartLabel)}
                             series={[{ name: 'Spend', color: 'var(--primary)', values: topApis.map((a) => a.cost_total) }]} />
                         </ChartCard>
                       </ChartGrid>
