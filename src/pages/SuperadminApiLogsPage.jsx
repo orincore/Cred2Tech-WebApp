@@ -308,7 +308,7 @@ const SuperadminApiLogsPage = () => {
 
   // Filters
   const [filters, setFilters] = useState({
-    page: 1, limit: 50, status: '', api_code: '', vendor: '',
+    page: 1, limit: 50, status: '', api_code: '', vendor: '', environment: '',
     date_from: '', date_to: '', search: '', sort_by: 'timestamp', sort_dir: 'desc',
   });
   const [totalPages, setTotalPages] = useState(1);
@@ -467,11 +467,11 @@ const SuperadminApiLogsPage = () => {
 
   const hasError = (l) => !!l.error_message || l.status === 'FAILED' || l.status === 'REFUNDED' || String(l.status || '').startsWith('BLOCKED');
 
-  const hasActiveFilters = search || filters.api_code || filters.status || filters.vendor || filters.date_from || filters.date_to;
+  const hasActiveFilters = search || filters.api_code || filters.status || filters.vendor || filters.environment || filters.date_from || filters.date_to;
 
   const clearAllFilters = () => {
     setSearch('');
-    setFilters((f) => ({ ...f, api_code: '', status: '', vendor: '', date_from: '', date_to: '', search: '', page: 1 }));
+    setFilters((f) => ({ ...f, api_code: '', status: '', vendor: '', environment: '', date_from: '', date_to: '', search: '', page: 1 }));
   };
 
   return (
@@ -644,6 +644,21 @@ const SuperadminApiLogsPage = () => {
               >
                 <option value="">All Vendors</option>
                 {vendors.map(v => <option key={v} value={v}>{v}</option>)}
+              </CustomSelect>
+            </div>
+
+            {/* Environment: where the hit came from */}
+            <div style={{ flex: isMobile ? '1 1 45%' : 1, minWidth: isMobile ? 120 : 130 }}>
+              <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Environment</span>
+              <CustomSelect
+                value={filters.environment}
+                onChange={e => setFilters({ ...filters, environment: e.target.value, page: 1 })}
+                style={{ ...underlineInput(!!filters.environment), appearance: 'none', cursor: 'pointer', borderBottomColor: filters.environment ? '#4f46e5' : 'var(--outline)', color: filters.environment ? '#4f46e5' : 'var(--on-surface)', fontSize: isMobile ? 13 : 13 }}
+              >
+                <option value="">All Environments</option>
+                <option value="production">Production</option>
+                <option value="development">Dev server</option>
+                <option value="local">Localhost</option>
               </CustomSelect>
             </div>
 
