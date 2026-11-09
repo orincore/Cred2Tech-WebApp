@@ -1525,9 +1525,13 @@ const AdminWalletRevenuePage = () => {
                   // Multi-select vendor / API-service filters, applied here (not
                   // in Grid) so the TOTAL row and share column reflect exactly
                   // what is shown. Empty selection = everything.
-                  const apiVendorOptions = [...new Set(apiReport.apis.map((a) => vendorSpendVendorLabel(a.display_vendor)))].sort();
-                  const apiServiceOptions = [...new Set(apiReport.apis.map((a) => vendorSpendApiLabel(a)))].sort();
-                  const filteredApis = apiReport.apis.filter((a) =>
+                  // 'DEFAULT' = the internal placeholder vendor: calls recorded before a real vendor was
+                  // known (and internal products). No vendor was involved, so these are always ₹0 and
+                  // would only be noise in a table about what vendors charged.
+                  const apiRows = apiReport.apis.filter((a) => a.display_vendor !== 'DEFAULT');
+                  const apiVendorOptions = [...new Set(apiRows.map((a) => vendorSpendVendorLabel(a.display_vendor)))].sort();
+                  const apiServiceOptions = [...new Set(apiRows.map((a) => vendorSpendApiLabel(a)))].sort();
+                  const filteredApis = apiRows.filter((a) =>
                     (apiVendorSel.length === 0 || apiVendorSel.includes(vendorSpendVendorLabel(a.display_vendor))) &&
                     (apiServiceSel.length === 0 || apiServiceSel.includes(vendorSpendApiLabel(a)))
                   );
