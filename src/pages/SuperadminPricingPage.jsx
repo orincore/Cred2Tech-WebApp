@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
-import { Settings, Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronRight, ChevronDown, CheckCircle2, Search, Edit, ShieldAlert, CalendarClock } from 'lucide-react';
+import { Save, Smartphone, DollarSign, PieChart, Building2, Plus, Trash2, Info, ChevronDown, Search, Edit, ShieldAlert, CalendarClock } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import api from '../api/axiosInstance';
 import { useTheme } from '../context/ThemeContext';
@@ -44,12 +44,26 @@ const SERVICE_LABELS = {
 };
 const serviceLabel = (p) => SERVICE_LABELS[p.api_code] || p.api_name || p.api_code;
 
-// The Vendor Costs tab shows each row's own real api_name instead — e.g.
-// Signzy's "GST Analysis" vs ScoreMe's "GST Analysis — ScoreMe" for the
-// exact same service — since that's the whole point of that tab: showing
-// what each vendor's own product is actually called, not collapsing it
-// into one generic cross-vendor name the way serviceLabel does above.
-const vendorApiLabel = (p) => p.api_name || p.api_code;
+// Clean, consistent service names for the Vendor Costs tab — the rate-card
+// names, keyed by api_code. The tab already groups by vendor (a "Signzy" /
+// "BEFISC" / "ScoreMe" header per section), so the service name itself does
+// not need to carry the vendor too: "GST Analysis" under the ScoreMe header
+// is clearer than "GST Analysis — ScoreMe". This also fixes rows whose stored
+// api_name was null or stale ("GST Verification", "ITR Analytics V3",
+// "Bureau Score Pull — Signzy"). Falls back to the stored name, then the raw
+// code, for any api_code not mapped here.
+const VENDOR_SERVICE_LABELS = {
+  BUREAU_PULL: 'Cibil Report',
+  BANK_ANALYSIS: 'Bank Statement Analysis',
+  GST_FETCH: 'GST Analysis',
+  ITR_ANALYTICS: 'ITR Analysis',
+  PAN_FETCH: 'PAN All-in-One',
+  PROFILE_ADVANCE: 'Mobile Number Verification',
+  SALARY_OCR: 'Salary Slip Reading',
+  ESR_GENERATION_SALARIED: 'Eligibility Report — Salaried',
+  ESR_GENERATION_MSME: 'Eligibility Report — Self-Employed',
+};
+const vendorApiLabel = (p) => VENDOR_SERVICE_LABELS[p.api_code] || p.api_name || p.api_code;
 
 // Salary Slip Reading and both ESR Generation rows are Cred2Tech's own
 // product, not a real vendor call — SALARY_OCR is billed against a
@@ -66,6 +80,18 @@ const vendorCostDisplayVendor = (p) => CRED2TECH_INTERNAL_API_CODES.has(p.api_co
 // API — shown only on the Vendor Costs tab, never the customer-facing one.
 const VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', CRED2TECH: 'Cred2Tech' };
 const vendorLabel = (v) => VENDOR_LABELS[v] || v;
+
+// vendor_cost is stored GST-inclusive (vendor rate card = "base + 18% GST",
+// which is what the vendor actually invoices — see backend seed_core.js and
+// adminApiLogs.controller.js#splitGstInclusive, the single source for this
+// split). Shown on the Vendor Costs tab as "base + GST" so the breakdown is
+// visible, not just the blended figure.
+const VENDOR_GST_RATE = 0.18;
+const gstSplit = (inclusive) => {
+  const base = (inclusive || 0) / (1 + VENDOR_GST_RATE);
+  return { base, gst: (inclusive || 0) - base };
+};
+const inr2 = (n) => `₹${(n || 0).toFixed(2)}`;
 
 const formatScheduledDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -85,14 +111,14 @@ const PendingPriceBadge = ({ row, onCancel }) => {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8,
-      fontSize: 11, fontWeight: 600, color: '#D97706', background: 'var(--bg-elevated)',
-      border: '1px solid var(--outline)', borderRadius: 0, padding: '5px 8px',
+      fontSize: 11.5, fontWeight: 500, color: '#B45309',
+      borderRadius: 8, padding: '6px 10px', background: 'rgba(217,119,6,0.08)',
     }}>
       <CalendarClock size={12} style={{ flexShrink: 0 }} />
-      <span>New price takes effect {formatScheduledDate(row.pending_effective_from)}</span>
+      <span>New price starts {formatScheduledDate(row.pending_effective_from)}</span>
       <button
         onClick={() => onCancel(row.id)}
-        style={{ background: 'none', border: 'none', color: 'var(--on-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: 0, marginLeft: 'auto' }}
+        style={{ background: 'none', border: 'none', color: 'var(--on-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, fontWeight: 500, padding: 0, marginLeft: 'auto' }}
       >
         Cancel
       </button>
@@ -106,35 +132,35 @@ const PendingPriceBadge = ({ row, onCancel }) => {
 // (e.g. keep billing the current rate through this month, switch on the
 // 1st) without touching what's live until then.
 const PriceEditControls = ({ onSaveNow, onSchedule, onCancelEdit, saving, scheduleDate, setScheduleDate, isMobile }) => (
-  <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginTop: 10, alignItems: isMobile ? 'stretch' : 'center', flexWrap: 'wrap' }}>
+  <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, marginTop: 12, alignItems: isMobile ? 'stretch' : 'center', flexWrap: 'wrap' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontSize: 11, color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>If scheduling, apply from</span>
+      <span style={{ fontSize: 11.5, color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>If scheduling, apply from</span>
       <input
         type="date"
         value={scheduleDate}
         onChange={(e) => setScheduleDate(e.target.value)}
-        style={{ fontSize: 12, padding: '4px 6px', border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)', color: 'var(--on-surface)' }}
+        style={{ fontSize: 12, padding: '6px 8px', border: '1px solid var(--outline)', borderRadius: 8, background: 'var(--surface)', color: 'var(--on-surface)' }}
       />
     </div>
     <div style={{ display: 'flex', gap: 6, marginLeft: isMobile ? 0 : 'auto' }}>
-      <button onClick={onCancelEdit} style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer' }}>
+      <button onClick={onCancelEdit} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--outline)', borderRadius: 8, fontSize: 12, fontWeight: 600, color: 'var(--on-surface)', cursor: 'pointer' }}>
         Cancel
       </button>
       <button
         onClick={onSchedule}
         disabled={saving || !scheduleDate}
         title="Keeps today's price unchanged until the date above, then switches automatically — no need to come back and flip it yourself"
-        style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--primary)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: 'var(--primary)', cursor: saving ? 'not-allowed' : 'pointer' }}
+        style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--primary)', borderRadius: 8, fontSize: 12, fontWeight: 600, color: 'var(--primary)', cursor: saving ? 'not-allowed' : 'pointer' }}
       >
-        Schedule For Later
+        Schedule for later
       </button>
       <button
         onClick={onSaveNow}
         disabled={saving}
         title="Changes the live price immediately — use this to correct a mistake, not to line up a future rate"
-        style={{ padding: '7px 10px', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 0, fontSize: 11, fontWeight: 700, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}
+        style={{ padding: '8px 12px', background: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}
       >
-        {saving ? 'Saving…' : 'Correct Now'}
+        {saving ? 'Saving…' : 'Save now'}
       </button>
     </div>
   </div>
@@ -145,28 +171,18 @@ const PriceEditControls = ({ onSaveNow, onSchedule, onCancelEdit, saving, schedu
 // pricing table/cards below) has already moved to sharp borders (`radius: 0`)
 // this session. Inline styles keep this one consistent with that, and let the
 // icon swatch's own corner follow the same rule.
+// Minimalist stat: a soft hairline card, the accent carried only by the small
+// icon glyph, the figure in a medium weight and the label in sentence case.
 const StatCard = ({ icon: Icon, value, label, color, isMobile }) => (
   <div style={{
-    background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
-    padding: isMobile ? '10px' : '8px 12px',
-    display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
+    background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 12,
+    padding: isMobile ? '12px 14px' : '14px 16px',
+    display: 'flex', alignItems: 'center', gap: 12,
   }}>
-    {/* Swatch background used to be `${color}10` — a Tailwind-style alpha
-        suffix, invalid as a raw CSS color and silently ignored by the
-        browser (same bug class as the pincode spinner border on
-        CreateTenantPage). A neutral swatch + the real per-stat color on just
-        the icon glyph keeps each card visually distinct without relying on
-        that. */}
-    <div style={{
-      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: 0, flexShrink: 0,
-      background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', color,
-    }}>
-      <Icon size={isMobile ? 14 : 16} />
-    </div>
+    <Icon size={isMobile ? 16 : 18} style={{ color, flexShrink: 0, opacity: 0.9 }} />
     <div style={{ minWidth: 0 }}>
-      <p style={{ fontSize: isMobile ? 14 : 17, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>
-      <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, color: 'var(--text-tertiary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{label}</p>
+      <p style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: 'var(--on-surface)', margin: 0, lineHeight: 1.15, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>
+      <p style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--on-muted)', margin: '2px 0 0', whiteSpace: 'nowrap' }}>{label}</p>
     </div>
   </div>
 );
@@ -179,40 +195,34 @@ const MsmeStatCard = ({ msmePricing, isMobile, isEditing, draft, setDraft, onSta
   <div
     onClick={!isEditing ? onStartEdit : undefined}
     style={{
-      background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
-      padding: isMobile ? '10px' : '8px 12px',
-      display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12,
+      background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 12,
+      padding: isMobile ? '12px 14px' : '14px 16px',
+      display: 'flex', alignItems: 'center', gap: 12,
       cursor: isEditing ? 'default' : 'pointer',
     }}
   >
-    <div style={{
-      width: isMobile ? 28 : 32, height: isMobile ? 28 : 32, borderRadius: 0, flexShrink: 0,
-      background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', color: '#7C3AED',
-    }}>
-      <Building2 size={isMobile ? 14 : 16} />
-    </div>
+    <Building2 size={isMobile ? 16 : 18} style={{ color: '#7C3AED', flexShrink: 0, opacity: 0.9 }} />
     <div style={{ minWidth: 0, flex: 1 }}>
       {isEditing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-          <span style={{ fontSize: 12, color: 'var(--on-muted)' }}>₹</span>
+          <span style={{ fontSize: 13, color: 'var(--on-muted)' }}>₹</span>
           <input
             type="number"
             min="1"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             autoFocus
-            style={{ width: 56, fontSize: 13, fontWeight: 800, border: '1px solid var(--outline)', borderRadius: 0, background: 'var(--surface)', color: 'var(--on-surface)', padding: '2px 4px', outline: 'none' }}
+            style={{ width: 64, fontSize: 14, fontWeight: 700, border: '1px solid var(--outline)', borderRadius: 8, background: 'var(--surface)', color: 'var(--on-surface)', padding: '4px 6px', outline: 'none' }}
           />
-          <button onClick={onSave} disabled={saving} style={{ background: 'var(--primary)', border: 'none', color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 6px', cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '…' : 'Save'}</button>
-          <button onClick={onCancel} style={{ background: 'transparent', border: '1px solid var(--outline)', color: 'var(--on-surface)', fontSize: 10, fontWeight: 700, padding: '3px 6px', cursor: 'pointer' }}>✕</button>
+          <button onClick={onSave} disabled={saving} style={{ background: 'var(--primary)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 600, padding: '5px 8px', cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '…' : 'Save'}</button>
+          <button onClick={onCancel} style={{ background: 'transparent', border: '1px solid var(--outline)', borderRadius: 8, color: 'var(--on-surface)', fontSize: 11, fontWeight: 600, padding: '5px 8px', cursor: 'pointer' }}>✕</button>
         </div>
       ) : (
         <>
-          <p style={{ fontSize: isMobile ? 14 : 17, fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <p style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, color: 'var(--on-surface)', margin: 0, lineHeight: 1.15, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {msmePricing ? `₹${(msmePricing.default_credit_cost / 100).toFixed(0)}` : '—'}
           </p>
-          <p style={{ fontSize: isMobile ? 9 : 11, fontWeight: 600, color: 'var(--text-tertiary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+          <p style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--on-muted)', margin: '2px 0 0', whiteSpace: 'nowrap' }}>
             Direct MSME · tap to edit
           </p>
         </>
@@ -508,8 +518,15 @@ const SuperadminPricingPage = () => {
   // ESR_GENERATION_*) — Virtual Workspace's subscription fee is the one
   // 'DEFAULT' row left out entirely, since nothing (not even an internal
   // engine) is ever "called" to produce it.
+  // PAN_FETCH's old SIGNZY row is retired (the customer journey moved to
+  // BEFISC's PAN All-in-One — see seed_core.js). It lingers in the DB only
+  // until a later migration drops it, but it is no longer a vendor we call,
+  // so hide it here rather than show PAN twice (a live BEFISC row and a dead
+  // Signzy one). Display-only filter: the row stays in the DB for pricing/
+  // historical cost attribution.
   const vendorCostRows = useMemo(() => apiPricingRows.filter(p =>
-    CRED2TECH_INTERNAL_API_CODES.has(p.api_code) || (p.vendor && p.vendor !== 'DEFAULT')
+    !(p.api_code === 'PAN_FETCH' && p.vendor === 'SIGNZY') &&
+    (CRED2TECH_INTERNAL_API_CODES.has(p.api_code) || (p.vendor && p.vendor !== 'DEFAULT'))
   ), [apiPricingRows]);
   const filteredVendorRows = useMemo(() => {
     const q = search.toLowerCase();
@@ -542,16 +559,6 @@ const SuperadminPricingPage = () => {
       .map(([vendor, rows]) => ({ vendor, rows }));
   }, [filteredVendorRows]);
 
-  /* ---- label style shared across filters ---- */
-  const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
-  const underlineInput = (active) => ({
-    background: 'transparent', border: 'none',
-    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
-    outline: 'none', width: '100%', padding: '6px 0',
-    fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
-    transition: 'border-color 0.2s',
-  });
-
   if (loading) return <LoadingSpinner fullPage />;
 
   return (
@@ -561,13 +568,13 @@ const SuperadminPricingPage = () => {
           clearance (verified against AppLayout's actual 60px fixed topbar,
           not the old blanket 80px every page used), smaller title/subtitle,
           tighter padding. Desktop untouched. */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '68px 16px 8px' : '14px 20px 10px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
+      <div style={{ borderBottom: '1px solid var(--outline)', padding: isMobile ? '68px 16px 14px' : '20px 24px 16px 60px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, background: 'var(--bg)', flexShrink: 0 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: isMobile ? 17 : 19, fontWeight: 800, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
-            API Pricing & Credit Rules
+          <h1 style={{ margin: 0, fontSize: isMobile ? 19 : 22, fontWeight: 700, color: 'var(--on-surface)', letterSpacing: '-0.02em' }}>
+            Pricing
           </h1>
-          <p style={{ margin: isMobile ? '2px 0 0' : '2px 0 0', fontSize: isMobile ? 11 : 12, color: 'var(--on-muted)' }}>
-            Sourcing Partner charges & discount tiers
+          <p style={{ margin: '4px 0 0', fontSize: isMobile ? 12 : 13, color: 'var(--on-muted)' }}>
+            What partners pay, what vendors charge, and volume discounts.
           </p>
         </div>
       </div>
@@ -578,102 +585,100 @@ const SuperadminPricingPage = () => {
           default. Desktop shows both always-expanded, unchanged — no toggle
           rendered there at all. */}
       {isMobile ? (
-        <div style={{ borderBottom: '2px solid var(--outline)', background: 'var(--surface)', flexShrink: 0 }}>
+        <div style={{ borderBottom: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
           <button
             onClick={() => setShowInfo(v => !v)}
             style={{
-              width: '100%', padding: '6px 16px', background: 'transparent', border: 'none',
+              width: '100%', padding: '10px 16px', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left',
             }}
           >
-            <ShieldAlert size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 11, color: 'var(--on-surface)', fontWeight: 700 }}>Super Admin only</span>
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>Overview &amp; MSME fee</span>
             <ChevronDown
-              size={14}
+              size={15}
               color="var(--on-muted)"
               style={{ flexShrink: 0, transition: 'transform 0.15s', transform: showInfo ? 'rotate(180deg)' : 'none' }}
             />
           </button>
           {showInfo && (
-            <div style={{ padding: '0 16px 10px' }}>
-              <p style={{ margin: '0 0 10px 26px', fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-                <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" isMobile />
-                <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. Rate / Call" color="#059669" isMobile />
-                <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. Gross Margin" color="#D97706" isMobile />
+            <div style={{ padding: '0 16px 12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                <StatCard icon={Smartphone} value={stats.live} label="API types live" color="#4F46E5" isMobile />
+                <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. rate / call" color="#059669" isMobile />
+                <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. gross margin" color="#D97706" isMobile />
                 <MsmeStatCard
                   msmePricing={msmePricing} isMobile
                   isEditing={msmeEditing} draft={msmeDraft} setDraft={setMsmeDraft}
                   onStartEdit={startMsmeEdit} onCancel={() => setMsmeEditing(false)} onSave={handleSaveMsmePrice} saving={saving}
                 />
               </div>
+              <p style={{ margin: '10px 2px 0', fontSize: 11, color: 'var(--on-muted)' }}>
+                Super Admin only — changes apply to every partner wallet immediately.
+              </p>
             </div>
           )}
         </div>
       ) : (
         <>
-          <div style={{ borderBottom: '1px solid var(--outline)', padding: '5px 20px', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <ShieldAlert size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
-            <p style={{ margin: 0, fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>
-              <strong style={{ color: 'var(--on-surface)' }}>Super Admin only.</strong> Changes to pricing affect all Sourcing Partner wallets immediately. Volume discounts apply at top-up time.
-            </p>
-          </div>
-
-          {/* ─── Stats cards ─── */}
+          {/* ─── Stats row ─── */}
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 8, padding: '8px 20px', background: 'var(--bg)', flexShrink: 0,
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+            gap: 12, padding: '16px 20px 8px', background: 'var(--bg)', flexShrink: 0,
           }}>
-            <StatCard icon={Smartphone} value={stats.live} label="API Types Live" color="#4F46E5" />
-            <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. Rate / Call" color="#059669" />
-            <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. Gross Margin" color="#D97706" />
+            <StatCard icon={Smartphone} value={stats.live} label="API types live" color="#4F46E5" />
+            <StatCard icon={DollarSign} value={`₹${stats.avgRate.toFixed(1)}`} label="Avg. rate / call" color="#059669" />
+            <StatCard icon={PieChart} value={`${stats.avgMargin.toFixed(1)}%`} label="Avg. gross margin" color="#D97706" />
             <MsmeStatCard
               msmePricing={msmePricing}
               isEditing={msmeEditing} draft={msmeDraft} setDraft={setMsmeDraft}
               onStartEdit={startMsmeEdit} onCancel={() => setMsmeEditing(false)} onSave={handleSaveMsmePrice} saving={saving}
             />
           </div>
+          <div style={{ padding: '2px 20px 12px', background: 'var(--bg)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ShieldAlert size={12} color="var(--on-muted)" style={{ flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--on-muted)', fontWeight: 400 }}>
+              Super Admin only — pricing changes apply to every partner wallet immediately.
+            </p>
+          </div>
         </>
       )}
 
-      {/* ─── Filter row ─── */}
-      <div style={{ borderBottom: '2px solid var(--outline)', padding: isMobile ? '8px 16px' : '10px 20px', display: 'flex', gap: isMobile ? 12 : 32, flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--bg)', flexShrink: 0 }}>
-        {/* Search */}
-        <div style={{ flex: 2, minWidth: 200, maxWidth: 360 }}>
-          <span style={labelSm}>Search</span>
-          <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 0, bottom: 9, color: '#94a3b8' }} />
-            <input
-              type="text"
-              placeholder="API name, code or description…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ ...underlineInput(false), paddingLeft: 20 }}
-              onFocus={e => e.target.style.borderBottomColor = '#4f46e5'}
-              onBlur={e => e.target.style.borderBottomColor = '#e2e8f0'}
-            />
-          </div>
+      {/* ─── Search ─── */}
+      <div style={{ padding: isMobile ? '10px 16px' : '12px 20px', background: 'var(--bg)', flexShrink: 0 }}>
+        <div style={{ position: 'relative', maxWidth: isMobile ? '100%' : 380 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--on-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search a service, API or description…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: '100%', padding: '9px 12px 9px 34px', fontSize: 13, fontWeight: 500,
+              color: 'var(--on-surface)', background: 'var(--bg-surface)',
+              border: '1px solid var(--outline)', borderRadius: 10, outline: 'none',
+            }}
+            onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
+            onBlur={e => (e.target.style.borderColor = 'var(--outline)')}
+          />
         </div>
       </div>
 
       {/* ─── Section tabs — keeps the page short: only one of API Pricing /
           Volume Discounts / Virtual Workspace renders at a time instead of
           one long stacked scroll. ─── */}
-      <div style={{ padding: '0 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: 4, flexShrink: 0, overflowX: 'auto' }}>
+      <div style={{ padding: isMobile ? '0 16px' : '0 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', display: 'flex', gap: isMobile ? 2 : 6, flexShrink: 0, overflowX: 'auto' }}>
         {[
-          { id: 'customer', label: 'Customer Pricing' },
-          { id: 'vendor', label: 'Vendor Costs' },
-          { id: 'discounts', label: 'Volume Discounts' },
-          { id: 'workspace', label: 'Virtual Workspace' },
+          { id: 'customer', label: 'Customer' },
+          { id: 'vendor', label: 'Vendor costs' },
+          { id: 'discounts', label: 'Discounts' },
+          { id: 'workspace', label: 'Workspace' },
         ].map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
-              whiteSpace: 'nowrap', padding: '10px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-              background: 'transparent', border: 'none',
+              whiteSpace: 'nowrap', padding: '11px 12px', fontSize: 13, fontWeight: tab === t.id ? 600 : 500, cursor: 'pointer',
+              background: 'transparent', border: 'none', marginBottom: -1,
               borderBottom: tab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
               color: tab === t.id ? 'var(--primary)' : 'var(--on-muted)',
             }}
@@ -705,13 +710,13 @@ const SuperadminPricingPage = () => {
         {tab === 'customer' && (
         <>
         {/* Sub-header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>What Sourcing Partners Pay, per Service</span>
-            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filtered.length} services</span>
+        <div style={{ padding: isMobile ? '16px 16px 10px' : '18px 20px 12px', background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+            <h2 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, color: 'var(--on-surface)', margin: 0, letterSpacing: '-0.01em' }}>What partners pay</h2>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500, flexShrink: 0 }}>{filtered.length} services</span>
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--on-muted)' }}>
-            One row per service a Sourcing Partner is billed for, regardless of which vendor ends up handling the call.
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--on-muted)' }}>
+            One price per service, whichever vendor handles the call.
           </p>
         </div>
 
@@ -728,7 +733,7 @@ const SuperadminPricingPage = () => {
               return (
                 <div
                   key={group.api_code}
-                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 12, padding: 16 }}
                 >
                   {/* Identity row: clean service name on the left (never a raw
                       api_code), status pill anchored right */}
@@ -750,9 +755,9 @@ const SuperadminPricingPage = () => {
                             setEditingId(null);
                           }}
                           style={{
-                            fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
-                            background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
-                            borderRadius: 0, padding: '1px 4px', cursor: 'pointer', marginTop: 4,
+                            fontSize: 11, fontWeight: 500, color: 'var(--primary)',
+                            background: 'transparent', border: '1px solid var(--outline)',
+                            borderRadius: 8, padding: '3px 8px', cursor: 'pointer', marginTop: 6,
                           }}
                         >
                           {group.rows.map(r => <option key={r.vendor} value={r.vendor}>via {vendorLabel(r.vendor)}</option>)}
@@ -771,7 +776,7 @@ const SuperadminPricingPage = () => {
                   {isEditing ? (
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
                       <div style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Description</div>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 5 }}>Description</div>
                         <input
                           className="form-control form-control-sm"
                           value={editForm.description || ''}
@@ -781,7 +786,7 @@ const SuperadminPricingPage = () => {
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Price Charged (₹)</div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 5 }}>Price Charged (₹)</div>
                           <input
                             type="number"
                             className="form-control form-control-sm"
@@ -794,7 +799,7 @@ const SuperadminPricingPage = () => {
                           {/* Shown crossed out next to the real price on every pull
                               button in the app (PriceTag.jsx) whenever it's set
                               higher — blank means "no discount to advertise". */}
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Reference Price (₹)</div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 5 }}>Reference Price (₹)</div>
                           <input
                             type="number"
                             className="form-control form-control-sm"
@@ -825,13 +830,13 @@ const SuperadminPricingPage = () => {
                         marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
                       }}>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Price Charged</div>
-                          <div style={{ background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 0, fontWeight: 700, fontSize: 13, display: 'inline-block', color: 'var(--on-surface)' }}>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 3 }}>Price charged</div>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--on-surface)', letterSpacing: '-0.01em' }}>
                             ₹{(p.default_credit_cost ?? 0).toFixed(2)}
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Reference Price</div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 3 }}>Reference Price</div>
                           {p.actual_credit_cost != null && p.actual_credit_cost > p.default_credit_cost ? (
                             <div style={{ fontSize: 13, fontWeight: 600, textDecoration: 'line-through', color: 'var(--on-muted)' }}>₹{p.actual_credit_cost.toFixed(2)}</div>
                           ) : (
@@ -844,9 +849,9 @@ const SuperadminPricingPage = () => {
                         onClick={() => startEdit(p)}
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                          width: '100%', marginTop: 12, padding: '8px 0',
-                          background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
-                          fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                          width: '100%', marginTop: 14, padding: '10px 0',
+                          background: 'transparent', border: '1px solid var(--outline)', borderRadius: 8,
+                          fontSize: 12.5, fontWeight: 600, color: 'var(--on-surface)', cursor: 'pointer',
                         }}
                       >
                         <Edit size={12} /> Edit
@@ -881,9 +886,9 @@ const SuperadminPricingPage = () => {
                         setEditingId(null);
                       }}
                       style={{
-                        fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: '#4f46e5',
-                        background: 'var(--bg-elevated)', border: '1px solid var(--outline)',
-                        borderRadius: 0, padding: '2px 5px', cursor: 'pointer', width: 'fit-content',
+                        fontSize: 11, fontWeight: 500, color: 'var(--primary)',
+                        background: 'transparent', border: '1px solid var(--outline)',
+                        borderRadius: 8, padding: '3px 8px', cursor: 'pointer', width: 'fit-content',
                       }}
                     >
                       {group.rows.map(r => <option key={r.vendor} value={r.vendor}>via {vendorLabel(r.vendor)}</option>)}
@@ -922,9 +927,9 @@ const SuperadminPricingPage = () => {
               }
               return (
                 <>
-                  <div style={{ background: isDark ? '#1e293b' : '#F3F4F6', padding: '6px 12px', borderRadius: '6px', fontWeight: 700, display: 'inline-block' }}>
-                    {(p.default_credit_cost ?? 0).toFixed(2)}
-                  </div>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--on-surface)', letterSpacing: '-0.01em' }}>
+                    ₹{(p.default_credit_cost ?? 0).toFixed(2)}
+                  </span>
                   <PendingPriceBadge row={p} onCancel={handleCancelPending} />
                 </>
               );
@@ -997,13 +1002,13 @@ const SuperadminPricingPage = () => {
         {tab === 'vendor' && (
         <>
         {/* Sub-header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--outline)', background: 'var(--bg)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>What Vendors Charge Us, per API Call</span>
-            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500 }}>{filteredVendorRows.length} APIs</span>
+        <div style={{ padding: isMobile ? '16px 16px 10px' : '18px 20px 12px', background: 'var(--bg)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+            <h2 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, color: 'var(--on-surface)', margin: 0, letterSpacing: '-0.01em' }}>What vendors charge us</h2>
+            <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 500, flexShrink: 0 }}>{filteredVendorRows.length} APIs</span>
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--on-muted)' }}>
-            Grouped by vendor — every API Signzy serves, then every one ScoreMe or BEFISC serves, and so on. Fill in what each vendor actually charges so cost tracking on the Logs dashboard stays accurate. Still ₹0 wherever this hasn't been set yet.
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--on-muted)' }}>
+            Grouped by vendor. Set each rate so cost tracking stays accurate — ₹0 means it hasn't been set yet.
           </p>
         </div>
 
@@ -1014,18 +1019,15 @@ const SuperadminPricingPage = () => {
                 "everything ScoreMe costs" can each be scanned on their own
                 instead of hunting through one long mixed list. */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              padding: isMobile ? '10px 16px' : '10px 20px',
-              background: 'var(--bg-elevated)', borderBottom: '1px solid var(--outline)', borderTop: '1px solid var(--outline)',
+              display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+              padding: isMobile ? '14px 16px 6px' : '16px 20px 6px',
             }}>
-              <span style={{
-                fontSize: 12, fontWeight: 800, letterSpacing: '0.02em', color: '#4f46e5',
-              }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)', letterSpacing: '-0.01em' }}>
                 {vendorLabel(vendor)}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--on-muted)', fontWeight: 500 }}>{rows.length} {rows.length === 1 ? 'API' : 'APIs'}</span>
+              <span style={{ fontSize: 11.5, color: 'var(--on-muted)', fontWeight: 500 }}>{rows.length} {rows.length === 1 ? 'API' : 'APIs'}</span>
               {vendor === 'CRED2TECH' && (
-                <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>— our own product, not a third-party vendor call</span>
+                <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>· our own product, not a third-party call</span>
               )}
             </div>
 
@@ -1039,7 +1041,7 @@ const SuperadminPricingPage = () => {
                   return (
                     <div
                       key={p.id}
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 12, padding: 16 }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1057,7 +1059,7 @@ const SuperadminPricingPage = () => {
                       {isEditing ? (
                         <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)' }}>
                           <div style={{ marginBottom: 10 }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Description</div>
+                            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 5 }}>Description</div>
                             <input
                               className="form-control form-control-sm"
                               value={editForm.description || ''}
@@ -1066,7 +1068,7 @@ const SuperadminPricingPage = () => {
                             />
                           </div>
                           <div>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>What {vendorLabel(vendorCostDisplayVendor(p))} Charges Us (₹)</div>
+                            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 5 }}>What {vendorLabel(vendorCostDisplayVendor(p))} Charges Us (₹)</div>
                             <input
                               type="number"
                               className="form-control form-control-sm"
@@ -1096,17 +1098,19 @@ const SuperadminPricingPage = () => {
                             marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--outline)',
                           }}>
                             <div>
-                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vendor Charges Us</div>
-                              <div style={{ fontSize: 15, fontWeight: 800, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</div>
-                              {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 3 }}>Vendor Charges Us</div>
+                              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</div>
+                              {p.vendor_cost
+                                ? <div style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 1 }}>{inr2(gstSplit(p.vendor_cost).base)} base + {inr2(gstSplit(p.vendor_cost).gst)} GST 18%</div>
+                                : <div style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 1 }}>Not set yet</div>}
                             </div>
                             <div>
-                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>We Charge Customer</div>
+                              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 3 }}>We Charge Customer</div>
                               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>₹{(p.default_credit_cost ?? 0).toFixed(2)}</div>
                             </div>
                             <div style={{ gridColumn: 'span 2' }}>
-                              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Margin</div>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: 'var(--success-bg)', padding: '2px 8px', borderRadius: 0, display: 'inline-block' }}>
+                              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)', marginBottom: 3 }}>Margin</div>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#059669' }}>
                                 ₹{margin.toFixed(2)} · {marginPct.toFixed(1)}%
                               </span>
                             </div>
@@ -1116,9 +1120,9 @@ const SuperadminPricingPage = () => {
                             onClick={() => startEdit(p)}
                             style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                              width: '100%', marginTop: 12, padding: '8px 0',
-                              background: 'transparent', border: '1px solid var(--outline)', borderRadius: 0,
-                              fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', cursor: 'pointer',
+                              width: '100%', marginTop: 14, padding: '10px 0',
+                              background: 'transparent', border: '1px solid var(--outline)', borderRadius: 8,
+                              fontSize: 12.5, fontWeight: 600, color: 'var(--on-surface)', cursor: 'pointer',
                             }}
                           >
                             <Edit size={12} /> Edit
@@ -1164,8 +1168,10 @@ const SuperadminPricingPage = () => {
                   }
                   return (
                     <>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</span>
-                      {!p.vendor_cost && <div style={{ fontSize: 10, color: 'var(--on-muted)' }}>Not set yet</div>}
+                      <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '-0.01em', color: p.vendor_cost ? '#D97706' : 'var(--on-muted)' }}>₹{(p.vendor_cost ?? 0).toFixed(2)}</span>
+                      {p.vendor_cost
+                        ? <div style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 1 }}>{inr2(gstSplit(p.vendor_cost).base)} base + {inr2(gstSplit(p.vendor_cost).gst)} GST</div>
+                        : <div style={{ fontSize: 10.5, color: 'var(--on-muted)', marginTop: 1 }}>Not set yet</div>}
                       <PendingPriceBadge row={p} onCancel={handleCancelPending} />
                     </>
                   );
@@ -1179,10 +1185,7 @@ const SuperadminPricingPage = () => {
                   const margin = current.default_credit_cost - current.vendor_cost;
                   const marginPct = (margin / (current.default_credit_cost || 1)) * 100;
                   return (
-                    <span style={{
-                      fontSize: 11, fontWeight: 700, color: '#059669',
-                      background: isDark ? '#064e3b' : '#ECFDF5', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap',
-                    }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#059669', whiteSpace: 'nowrap' }}>
                       ₹{margin.toFixed(2)} · {marginPct.toFixed(1)}%
                     </span>
                   );
@@ -1245,27 +1248,27 @@ const SuperadminPricingPage = () => {
           the parent's `display: grid`; replaced with plain `<div>`s. */
       <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
         <div style={{
-          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
-          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+          padding: '0 2px 12px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10,
+          marginBottom: isMobile ? 12 : 18,
         }}>
           <div>
-            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Volume Package Discounts</h3>
+            <h3 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, margin: 0, color: 'var(--on-surface)', letterSpacing: '-0.01em' }}>Volume Package Discounts</h3>
             <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Bonus wallet credits when Sourcing Partner top-up crosses threshold</p>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               className="btn btn-ghost btn-sm"
-              style={{ border: '1px solid var(--outline)', borderRadius: 0, fontSize: 11, color: 'var(--on-surface)' }}
+              style={{ border: '1px solid var(--outline)', borderRadius: 8, fontSize: 12, color: 'var(--on-surface)' }}
               onClick={handleAddSlab}
             >
-              <Plus size={14} /> Add Slab
+              <Plus size={14} /> Add slab
             </button>
             <button
               className="btn btn-primary btn-sm"
               onClick={handleSaveDiscounts}
               disabled={saving}
-              style={{ borderRadius: 0, fontSize: 11 }}
+              style={{ borderRadius: 8, fontSize: 12 }}
             >
               <Save size={14} /> Save
             </button>
@@ -1276,8 +1279,8 @@ const SuperadminPricingPage = () => {
             {discounts.map(d => (
                 isMobile ? (
                   <div key={d.id} style={{
-                    display: 'flex', flexDirection: 'column', gap: 8,
-                    padding: 12, background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0,
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                    padding: 14, background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 10,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: 'var(--on-muted)', fontSize: 11 }}>₹</span>
@@ -1316,10 +1319,10 @@ const SuperadminPricingPage = () => {
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr 1fr auto',
                   gap: 12,
-                  padding: '12px 16px',
+                  padding: '14px 16px',
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--outline)',
-                  borderRadius: 0,
+                  borderRadius: 10,
                   alignItems: 'center'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1357,9 +1360,9 @@ const SuperadminPricingPage = () => {
                 )
             ))}
         </div>
-        <div style={{ padding: isMobile ? '10px 12px' : '12px 16px', background: 'var(--bg-elevated)', borderRadius: 0, marginTop: isMobile ? 10 : 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ padding: isMobile ? '12px 14px' : '12px 16px', background: 'var(--bg-elevated)', borderRadius: 10, marginTop: isMobile ? 12 : 18, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Info size={14} color="var(--info)" style={{ flexShrink: 0 }} />
-            <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: 0 }}>Discount applied as bonus credits at time of top-up. Discount slabs apply to wallet recharges — not individual API calls.</p>
+            <p style={{ fontSize: isMobile ? 11 : 11.5, color: 'var(--on-muted)', margin: 0 }}>Discounts are added as bonus credits at top-up — they apply to wallet recharges, not individual API calls.</p>
         </div>
       </div>
         )}
@@ -1374,24 +1377,24 @@ const SuperadminPricingPage = () => {
           is changed — see updateVirtualWorkspaceConfig's batch extend. */}
       <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
         <div style={{
-          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
-          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+          padding: '0 2px 12px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10,
+          marginBottom: isMobile ? 12 : 18,
         }}>
           <div>
-            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Until</h3>
+            <h3 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, margin: 0, color: 'var(--on-surface)', letterSpacing: '-0.01em' }}>Virtual Workspace — Free Until</h3>
             <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>
               No tenant is charged before this date — clear it to make billing apply immediately for new/renewing subscriptions
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="date" className="form-control" value={freeUntil} onChange={(e) => setFreeUntil(e.target.value)} style={{ maxWidth: 180 }} />
-          <button className="btn btn-primary btn-sm" onClick={handleSaveFreeUntil} disabled={savingFreeUntil} style={{ borderRadius: 0 }}>
+          <input type="date" className="form-control" value={freeUntil} onChange={(e) => setFreeUntil(e.target.value)} style={{ maxWidth: 180, borderRadius: 8 }} />
+          <button className="btn btn-primary btn-sm" onClick={handleSaveFreeUntil} disabled={savingFreeUntil} style={{ borderRadius: 8 }}>
             <Save size={14} /> {savingFreeUntil ? 'Saving…' : 'Save'}
           </button>
           {freeUntil && (
-            <button className="btn btn-ghost btn-sm" onClick={() => setFreeUntil('')} style={{ borderRadius: 0 }}>Clear</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setFreeUntil('')} style={{ borderRadius: 8 }}>Clear</button>
           )}
         </div>
       </div>
@@ -1404,19 +1407,19 @@ const SuperadminPricingPage = () => {
           Discounts above. */}
       <div style={{ padding: isMobile ? '10px 12px' : '16px 20px', background: 'var(--bg)', flexShrink: 0 }}>
         <div style={{
-          padding: isMobile ? '10px 12px' : '16px 20px', borderBottom: '1px solid var(--outline)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10,
-          background: 'var(--bg-elevated)', borderRadius: 0, marginBottom: isMobile ? 10 : 16,
+          padding: '0 2px 12px', borderBottom: '1px solid var(--outline)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10,
+          marginBottom: isMobile ? 12 : 18,
         }}>
           <div>
-            <h3 style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>Virtual Workspace — Free Tabs</h3>
+            <h3 style={{ fontSize: isMobile ? 15 : 16, fontWeight: 600, margin: 0, color: 'var(--on-surface)', letterSpacing: '-0.01em' }}>Virtual Workspace — Free Tabs</h3>
             <p style={{ fontSize: isMobile ? 10 : 11, color: 'var(--on-muted)', margin: '4px 0 0 0' }}>Sidebar tabs a Sourcing Partner still sees before subscribing — everything else here is unchecked = locked</p>
           </div>
           <button
             className="btn btn-primary btn-sm"
             onClick={handleSaveFreeTabs}
             disabled={savingFreeTabs}
-            style={{ borderRadius: 0, fontSize: 11 }}
+            style={{ borderRadius: 8, fontSize: 12 }}
           >
             <Save size={14} /> Save
           </button>
@@ -1429,9 +1432,9 @@ const SuperadminPricingPage = () => {
               <label
                 key={item.id}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '10px 12px', background: 'var(--bg-surface)', border: '1px solid var(--outline)',
-                  borderRadius: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--on-surface)',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', background: 'var(--bg-surface)', border: '1px solid var(--outline)',
+                  borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--on-surface)',
                 }}
               >
                 <input type="checkbox" checked={checked} onChange={() => toggleFreeNavItem(item.id)} />

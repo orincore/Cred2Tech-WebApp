@@ -11,6 +11,7 @@ import EmptyState from '../components/ui/EmptyState';
 import Badge from '../components/ui/Badge';
 import DataTable from '../components/DataTable';
 import PlanPaymentsTab from '../components/wallet/PlanPaymentsTab';
+import CustomerRefundLines from '../components/CustomerRefundLines';
 import { formatDateTime } from '../utils/helpers';
 import { getErrorMessage } from '../utils/helpers';
 import { walletService } from '../api/walletService';
@@ -90,6 +91,8 @@ const REFERENCE_TYPE_LABEL = {
   RAZORPAY_TOPUP: 'Credits Recharge',
   ADMIN_TOPUP: 'Admin Topup',
   REFUND: 'Refund',
+  // Credits taken back because one of the partner's recharges was refunded (or put back if that refund failed).
+  TOPUP_REFUND: 'Recharge Refund',
   MANUAL_ADJUSTMENT: 'Manual Adjustment',
   EMPLOYEE_ALLOCATION: 'Employee Allocation',
   EMPLOYEE_REVOCATION: 'Employee Revocation',
@@ -746,6 +749,18 @@ const MyWalletPage = () => {
     fetchEmployees();
   };
 
+  const [creditNoteBusy, setCreditNoteBusy] = useState(null);
+  const handleDownloadCreditNote = async (refund) => {
+    setCreditNoteBusy(refund.id);
+    try {
+      await walletService.downloadCreditNote(refund.id, refund.credit_note_number);
+    } catch (err) {
+      toast.error('Failed to download the credit note');
+    } finally {
+      setCreditNoteBusy(null);
+    }
+  };
+
   const handleDownloadInvoice = async (topup) => {
     setDownloadingId(topup.id);
     try {
@@ -827,17 +842,22 @@ const MyWalletPage = () => {
       render: (t) => <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{formatINR(t.amount_inr)}</span>,
     },
     {
-      key: 'invoice', label: 'Invoice', width: '18%', padding: '16px 12px',
-      render: (t) => t.status === 'CREDITED' ? (
-        <button
-          onClick={() => handleDownloadInvoice(t)}
-          disabled={downloadingId === t.id}
-          style={{ ...compactField, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: downloadingId === t.id ? 'not-allowed' : 'pointer' }}
-        >
-          {downloadingId === t.id ? <span className="skeleton-inline" style={{ width: 12, height: 12 }} /> : <Download size={12} />}
-          {t.invoice_number || 'Download'}
-        </button>
-      ) : <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>—</span>,
+      key: 'invoice', label: 'Invoice & refunds', width: '18%', padding: '16px 12px', whiteSpace: 'normal',
+      render: (t) => (
+        <div>
+          {t.status === 'CREDITED' ? (
+            <button
+              onClick={() => handleDownloadInvoice(t)}
+              disabled={downloadingId === t.id}
+              style={{ ...compactField, display: 'inline-flex', alignItems: 'center', gap: 5, cursor: downloadingId === t.id ? 'not-allowed' : 'pointer' }}
+            >
+              {downloadingId === t.id ? <span className="skeleton-inline" style={{ width: 12, height: 12 }} /> : <Download size={12} />}
+              {t.invoice_number || 'Download'}
+            </button>
+          ) : <span style={{ fontSize: 11, color: 'var(--on-muted)' }}>—</span>}
+          <CustomerRefundLines refunds={t.refunds} onDownload={handleDownloadCreditNote} busyId={creditNoteBusy} />
+        </div>
+      ),
     },
   ];
 
@@ -1094,6 +1114,7 @@ const MyWalletPage = () => {
                             </button>
                           )}
                         </div>
+                        <CustomerRefundLines refunds={t.refunds} onDownload={handleDownloadCreditNote} busyId={creditNoteBusy} />
                       </div>
                     );
                   })}

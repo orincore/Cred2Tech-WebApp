@@ -4,8 +4,10 @@ import { toast } from 'react-hot-toast';
 import {
   ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
   Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock, Trash2, Ban, MonitorSmartphone,
-  ChevronLeft, ChevronRight, Pencil, Save, HardDrive,
+  ChevronLeft, ChevronRight, Pencil, Save, HardDrive, RotateCcw, Download,
 } from 'lucide-react';
+import TransactionDetailsModal from '../components/TransactionDetailsModal';
+import { adminTransactionsService } from '../api/adminTransactionsService';
 import StorageMeter from '../components/storage/StorageMeter';
 import {
   getTenantSummary, updateTenant, updateTenantStatus, updateTenantVirtualWorkspace,
@@ -43,6 +45,8 @@ const REFERENCE_TYPE_META = {
   EMPLOYEE_REVOCATION: { label: 'Revoked from Employee', color: '#b45309', bg: 'rgba(180,83,9,0.12)' },
   VIRTUAL_WORKSPACE_RENEWAL: { label: 'Virtual Workspace Renewal', color: '#4338ca', bg: 'rgba(67,56,202,0.12)' },
   PROMO_FREEBIE: { label: 'Promotional Credit', color: '#be185d', bg: 'rgba(190,24,93,0.12)' },
+  // Credits taken back when one of this tenant's recharges was refunded (or put back if that refund failed).
+  TOPUP_REFUND: { label: 'Recharge Refund', color: '#0284c7', bg: 'rgba(2,132,199,0.12)' },
 };
 const referenceTypeMeta = (type) => REFERENCE_TYPE_META[type] || { label: type || '—', color: 'var(--on-muted)', bg: 'var(--bg-elevated)' };
 
@@ -126,6 +130,7 @@ const TABS = [
   { id: 'details', label: 'Details', icon: Pencil },
   { id: 'workspace', label: 'Virtual Workspace', icon: LayoutGrid },
   { id: 'wallet', label: 'Wallet & Credits', icon: Wallet },
+  { id: 'refunds', label: 'Refunds', icon: RotateCcw },
   { id: 'team', label: 'Team & Allocation', icon: Users },
   { id: 'sessions', label: 'Sessions & Devices', icon: MonitorSmartphone },
 ];
@@ -252,6 +257,15 @@ const AdminTenantManagePage = () => {
   const [deductAmount, setDeductAmount] = useState('');
   const [deductRemarks, setDeductRemarks] = useState('');
 
+  // Refunds tab: every refund issued on this tenant's payments (recharges, plan charges, MSME fees).
+  const [refunds, setRefunds] = useState([]);
+  const [refundsPage, setRefundsPage] = useState(1);
+  const [refundsTotalPages, setRefundsTotalPages] = useState(1);
+  const [refundsSummary, setRefundsSummary] = useState(null);
+  const [loadingRefunds, setLoadingRefunds] = useState(false);
+  const [detailsTarget, setDetailsTarget] = useState(null); // a refund's original payment, open in the details view
+  const [creditNoteBusy, setCreditNoteBusy] = useState(null);
+
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [allocations, setAllocations] = useState({}); // { [userId]: { amount, note } }
@@ -342,6 +356,27 @@ const AdminTenantManagePage = () => {
   useEffect(() => { if (tab === 'team' && employees.length === 0) fetchEmployees(); }, [tab, employees.length, fetchEmployees]);
   useEffect(() => { if (tab === 'sessions') fetchSessions(); }, [tab, fetchSessions]);
   useEffect(() => { if (tab === 'wallet') fetchLedger(1); }, [tab, fetchLedger]);
+
+  const fetchRefunds = useCallback(async (page) => {
+    setLoadingRefunds(true);
+    try {
+      const res = await adminTransactionsService.listTenantRefunds(id, { page, limit: 15 });
+      setRefunds(res?.refunds || []);
+      setRefundsTotalPages(res?.totalPages || 1);
+      setRefundsPage(res?.page || page);
+      setRefundsSummary(res?.summary || null);
+    } catch (err) {
+      toast.error('Failed to load refunds');
+    } finally {
+      setLoadingRefunds(false);
+    }
+  }, [id]);
+  useEffect(() => { if (tab === 'refunds') fetchRefunds(1); }, [tab, fetchRefunds]);
+
+  const downloadCreditNote = async (refundId) => {
+    setCreditNoteBusy(refundId);
+    try { await adminTransactionsService.downloadCreditNote(refundId); } catch { toast.error('Could not download the credit note'); } finally { setCreditNoteBusy(null); }
+  };
   useEffect(() => {
     if (data && !detailsForm) {
       setDetailsForm({
@@ -1115,6 +1150,95 @@ const AdminTenantManagePage = () => {
                   </>
                 )}
               </Card>
+            </>
+          )}
+
+          {tab === 'refunds' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 20 }}>
+                <StatCard label="Refunds issued" value={refundsSummary ? refundsSummary.count : '—'} />
+                <StatCard label="Total refunded" value={refundsSummary ? `₹${refundsSummary.refunded_inr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'} />
+                <StatCard label="Credits taken back" value={refundsSummary ? refundsSummary.credits_debited.toLocaleString('en-IN') : '—'} />
+              </div>
+
+              <Card icon={RotateCcw} title="Refunds" subtitle="Every refund issued on this tenant's payments. Tap a row for the full details of the payment it refunded.">
+                {loadingRefunds ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><LoadingSpinner size={24} /></div>
+                ) : refunds.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--on-muted)', fontSize: 12 }}>No refunds have been issued for this tenant.</div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse', fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--outline)' }}>
+                            {[['Date', 'left'], ['Refund of', 'left'], ['Amount', 'right'], ['Status', 'left'], ['Credits taken back', 'right'], ['Issued by', 'left'], ['Credit note', 'left']].map(([h, a]) => (
+                              <th key={h} style={{ padding: '8px 0', textAlign: a, fontSize: 10, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {refunds.map((r, i) => {
+                            const st = {
+                              PROCESSED: { label: 'Refunded', color: 'var(--success)', bg: 'var(--success-bg)' },
+                              SUBMITTED: { label: 'With Razorpay', color: 'var(--info)', bg: 'var(--info-bg)' },
+                              PENDING: { label: 'Sending', color: 'var(--warning)', bg: 'var(--warning-bg)' },
+                              NEEDS_REVIEW: { label: 'Needs review', color: 'var(--error)', bg: 'var(--error-bg)' },
+                              FAILED: { label: 'Failed', color: 'var(--error)', bg: 'var(--error-bg)' },
+                            }[r.status] || { label: r.status, color: 'var(--on-muted)', bg: 'var(--bg-elevated)' };
+                            const what = { WALLET_TOPUP: 'Wallet recharge', CASE_PAYMENT: 'MSME eligibility fee', SUBSCRIPTION_INVOICE: 'Plan charge' }[r.source] || r.source;
+                            const typeLabel = { WALLET_TOPUP: 'Sourcing Partner Wallet Top-up', CASE_PAYMENT: 'MSME Eligibility Fee', SUBSCRIPTION_INVOICE: 'Plan Charge' }[r.source] || r.source;
+                            return (
+                              <tr
+                                key={r.id}
+                                onClick={() => setDetailsTarget({ source: r.source, id: `X-${r.source_id}`, type_label: typeLabel, status: 'SUCCESS', razorpay_payment_id: r.razorpay_payment_id, refund: null })}
+                                style={{ borderTop: '1px solid var(--outline)', background: i % 2 === 1 ? 'var(--bg-surface)' : 'transparent', cursor: 'pointer' }}
+                              >
+                                <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)', whiteSpace: 'nowrap' }}>{formatDateTime(r.created_at)}</td>
+                                <td style={{ padding: '10px 12px 10px 0' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{what} #{r.source_id}</div>
+                                  <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{r.kind === 'FULL' ? 'Full refund' : 'Partial refund'} · {r.reason}</div>
+                                </td>
+                                <td style={{ padding: '10px 12px 10px 0', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: 'var(--on-surface)' }}>₹{Number(r.amount_inr).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '10px 12px 10px 0' }}>
+                                  <span style={{ background: st.bg, color: st.color, padding: '2px 8px', fontSize: 10, fontWeight: 800 }}>{st.label}</span>
+                                  {r.failure_reason && <div style={{ fontSize: 11, color: 'var(--error)', marginTop: 3, maxWidth: 220, lineHeight: 1.4 }}>{r.failure_reason}</div>}
+                                </td>
+                                <td style={{ padding: '10px 12px 10px 0', textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--on-surface)' }}>{r.credits_debited ? r.credits_debited.toLocaleString('en-IN') : '—'}</td>
+                                <td style={{ padding: '10px 12px 10px 0', color: 'var(--on-muted)' }}>{r.requested_by_name || '—'}</td>
+                                <td style={{ padding: '10px 0' }}>
+                                  {r.credit_note_number ? (
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ borderRadius: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                      disabled={creditNoteBusy === r.id}
+                                      onClick={(e) => { e.stopPropagation(); downloadCreditNote(r.id); }}
+                                    >
+                                      <Download size={11} /> {r.credit_note_number}
+                                    </button>
+                                  ) : <span style={{ color: 'var(--on-muted)' }}>—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {refundsTotalPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--outline)' }}>
+                        <button onClick={() => fetchRefunds(refundsPage - 1)} disabled={refundsPage <= 1 || loadingRefunds} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <ChevronLeft size={14} /> Prev
+                        </button>
+                        <span style={{ fontSize: 12, color: 'var(--on-muted)', fontWeight: 600 }}>Page {refundsPage} of {refundsTotalPages}</span>
+                        <button onClick={() => fetchRefunds(refundsPage + 1)} disabled={refundsPage >= refundsTotalPages || loadingRefunds} className="btn btn-ghost btn-sm" style={{ borderRadius: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          Next <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
+              {detailsTarget && <TransactionDetailsModal row={detailsTarget} onClose={() => setDetailsTarget(null)} onRefund={() => {}} />}
             </>
           )}
 

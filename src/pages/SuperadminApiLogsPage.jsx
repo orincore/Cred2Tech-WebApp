@@ -111,42 +111,10 @@ const RawJsonBlock = ({ label, value }) => {
   );
 };
 
-// Real vendor spend, derived server-side from the API Pricing page's
-// admin-edited vendor_cost (api_code + vendor) × how many calls actually
-// succeeded against that vendor — a different number from "Credits
-// Consumed" above, which is what Sourcing Partners are charged, not what
-// Cred2Tech pays out. Renders nothing while there's no cost data yet
-// (first load) or nothing has ever succeeded.
-const VendorCostBreakdown = ({ vendorCosts, totalCost, isMobile }) => {
-  if (!vendorCosts || vendorCosts.length === 0) return null;
-  return (
-    <div style={{ border: '1px solid var(--outline)', borderRadius: 0, padding: isMobile ? 10 : 14, background: 'var(--bg-surface)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
-        <span style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Cost Utilized per Vendor
-        </span>
-        <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 800, color: 'var(--on-surface)' }}>
-          Total ₹{totalCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {vendorCosts.map((v) => (
-          <div
-            key={v.vendor}
-            style={{
-              display: 'flex', flexDirection: 'column', gap: 2, minWidth: 110, flex: isMobile ? '1 1 45%' : '0 1 auto',
-              padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--outline)', borderRadius: 0,
-            }}
-          >
-            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{v.vendor}</span>
-            <span style={{ fontSize: isMobile ? 14 : 16, fontWeight: 800, color: '#D97706' }}>₹{v.cost_utilized.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-            <span style={{ fontSize: 10, color: 'var(--on-muted)' }}>{v.calls.toLocaleString()} calls</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+// Vendor spend (how much Cred2Tech pays each vendor) moved to the Wallet
+// Revenue & GST page's "Vendor Spend" tab, where it sits beside revenue for a
+// true cost-vs-revenue view and reuses that page's period selector. This page
+// stays focused on the call logs themselves.
 
 // Full raw record for one log — fetched on demand (not preloaded on every
 // row) since request/response payloads can be several KB of vendor JSON
@@ -543,7 +511,6 @@ const SuperadminApiLogsPage = () => {
                     {smsBalanceError ? '—' : smsBalance == null ? '…' : `₹${smsBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
                   </div>
                 </div>
-                <VendorCostBreakdown vendorCosts={summary.vendor_cost_summary} totalCost={summary.total_cost_utilized || 0} isMobile />
               </div>
             )}
           </div>
@@ -572,9 +539,6 @@ const SuperadminApiLogsPage = () => {
                 {smsBalanceError ? 'Unavailable' : smsBalance == null ? '…' : `₹${smsBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
               </div>
             </div>
-          </div>
-          <div style={{ padding: '0 60px 20px', background: 'var(--bg)', flexShrink: 0 }}>
-            <VendorCostBreakdown vendorCosts={summary.vendor_cost_summary} totalCost={summary.total_cost_utilized || 0} />
           </div>
           </>
         )

@@ -23,6 +23,8 @@ export const msmeApi = {
   getCases: () => api.get('/msme/cases'),
   getPayments: () => api.get('/msme/payments'),
   downloadPaymentInvoice: (paymentId) => api.get(`/msme/payments/${paymentId}/invoice`, { responseType: 'blob' }),
+  // Credit note for a refund of one of this customer's own payments.
+  downloadRefundCreditNote: (refundId) => api.get(`/msme/refunds/${refundId}/credit-note.pdf`, { responseType: 'blob' }),
   updateProfile: (data) => api.put('/msme/profile', data),
 
   initiateEligibility: () => api.post('/msme/eligibility/initiate'),

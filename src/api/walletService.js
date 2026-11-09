@@ -96,6 +96,12 @@ export const walletService = {
     downloadBlob(response, `${invoiceNumber || `invoice-${topupId}`}.pdf`);
   },
 
+  // Credit note for a refund on this partner's own recharge or plan charge.
+  downloadCreditNote: async (refundId, creditNoteNumber) => {
+    const response = await api.get(`/wallet/refunds/${refundId}/credit-note.pdf`, { responseType: 'blob' });
+    downloadBlob(response, `${String(creditNoteNumber || `credit-note-${refundId}`).replace(/\//g, '-')}.pdf`);
+  },
+
   // ── Employee credit allocation (DSA_ADMIN) ─────────────────────────────
   getEmployees: async () => {
     const response = await api.get('/wallet/employees');

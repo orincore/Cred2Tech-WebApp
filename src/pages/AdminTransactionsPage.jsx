@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import {
   Receipt, IndianRupee, CheckCircle2, Clock, XCircle, AlertTriangle,
-  Search, SlidersHorizontal, FileSpreadsheet, FileText,
+  Search, SlidersHorizontal, FileSpreadsheet, FileText, RotateCcw,
 } from 'lucide-react';
+import RefundModal from '../components/RefundModal';
+import TransactionDetailsModal from '../components/TransactionDetailsModal';
 import PageHeader from '../components/ui/PageHeader';
 import StatCard from '../components/ui/StatCard';
 import EmptyState from '../components/ui/EmptyState';
@@ -29,6 +31,9 @@ const TYPE_OPTIONS = [
   { value: 'CASE_PAYMENT', label: 'MSME Eligibility Fee' },
   { value: 'WALLET_TOPUP', label: 'Sourcing Partner Wallet Top-up' },
   { value: 'TENANT_SUBSCRIPTION', label: 'Virtual Workspace Subscription' },
+  // One row per Razorpay charge for a workspace / storage plan (the subscription row above shows
+  // the plan's current state). Only listed when chosen, so the default view and its totals are unchanged.
+  { value: 'PLAN_CHARGE', label: 'Plan Charges (Workspace / Storage)' },
 ];
 const STATUS_OPTIONS = [
   { value: 'SUCCESS', label: 'Success' },
@@ -87,6 +92,33 @@ const AmountBreakdown = ({ t, align = 'right' }) => {
   );
 };
 
+const REFUND_STATE = {
+  PARTIAL: { label: 'Part-refunded', color: 'var(--warning)', bg: 'var(--warning-bg)' },
+  FULL: { label: 'Refunded', color: 'var(--success)', bg: 'var(--success-bg)' },
+  IN_PROGRESS: { label: 'Refund in progress', color: 'var(--info)', bg: 'var(--info-bg)' },
+  NEEDS_REVIEW: { label: 'Refund needs review', color: 'var(--error)', bg: 'var(--error-bg)' },
+};
+
+// Refund state of one payment plus the action to refund it (or see its refunds). Rows that cannot
+// be refunded at all (failed, pending, no Razorpay payment) show a dash.
+const RefundCell = ({ t, onOpen }) => {
+  const r = t.refund;
+  if (!r || (!r.refundable && r.count === 0 && r.state === 'NONE')) return <span style={{ color: 'var(--on-muted)', fontSize: 11 }}>—</span>;
+  const s = REFUND_STATE[r.state];
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+      {s && (
+        <span style={{ background: s.bg, color: s.color, padding: '2px 7px', fontSize: 9.5, fontWeight: 800, lineHeight: 1.3, textAlign: 'center' }}>
+          {s.label}{r.refunded_inr > 0 ? ` ${formatINR(r.refunded_inr)}` : ''}
+        </span>
+      )}
+      <button className="btn btn-secondary btn-sm" style={{ borderRadius: 0, padding: '3px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => { e.stopPropagation(); onOpen(t); }}>
+        <RotateCcw size={11} /> {r.refundable ? 'Refund' : 'Details'}
+      </button>
+    </div>
+  );
+};
+
 const StatusPill = ({ status, flag, webhook }) => {
   const style = STATUS_STYLE[status] || { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
   return (
@@ -130,6 +162,8 @@ const AdminTransactionsPage = () => {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [refundTarget, setRefundTarget] = useState(null); // the row whose refund dialog is open
+  const [detailsTarget, setDetailsTarget] = useState(null); // the row whose full details are open (tap a row)
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -222,7 +256,7 @@ const AdminTransactionsPage = () => {
 
   const columns = [
     {
-      key: 'created_at', label: 'Date & Time', width: '15%', ...cell,
+      key: 'created_at', label: 'Date & Time', width: '13%', ...cell,
       render: (t) => (
         <div>
           <div style={primary}>{formatDateTime(t.created_at)}</div>
@@ -231,7 +265,7 @@ const AdminTransactionsPage = () => {
       ),
     },
     {
-      key: 'type', label: 'Type', width: '18%', ...cell,
+      key: 'type', label: 'Type', width: '15%', ...cell,
       render: (t) => (
         <div>
           <div style={primary}>{t.type_label}</div>
@@ -241,10 +275,10 @@ const AdminTransactionsPage = () => {
         </div>
       ),
     },
-    { key: 'status', label: 'Status', align: 'center', width: '12%', ...cell, render: (t) => <StatusPill status={t.status} flag={t.reconciliation_flag} webhook={t.webhook} /> },
-    { key: 'amount', label: 'Amount', align: 'right', width: '14%', ...cell, render: (t) => <AmountBreakdown t={t} /> },
+    { key: 'status', label: 'Status', align: 'center', width: '11%', ...cell, render: (t) => <StatusPill status={t.status} flag={t.reconciliation_flag} webhook={t.webhook} /> },
+    { key: 'amount', label: 'Amount', align: 'right', width: '13%', ...cell, render: (t) => <AmountBreakdown t={t} /> },
     {
-      key: 'party', label: 'User / Tenant', width: '22%', ...cell,
+      key: 'party', label: 'User / Tenant', width: '19%', ...cell,
       render: (t) => (
         <div style={{ minWidth: 0 }}>
           <div style={primary}>
@@ -260,9 +294,10 @@ const AdminTransactionsPage = () => {
       ),
     },
     {
-      key: 'order_id', label: 'Razorpay Order ID', width: '19%', ...cell,
+      key: 'order_id', label: 'Razorpay Order ID', width: '15%', ...cell,
       render: (t) => <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'var(--on-surface)', ...wrap }}>{t.razorpay_order_id || '—'}</span>,
     },
+    { key: 'refund', label: 'Refund', align: 'center', width: '14%', ...cell, render: (t) => <RefundCell t={t} onOpen={setRefundTarget} /> },
   ];
 
   return (
@@ -369,7 +404,7 @@ const AdminTransactionsPage = () => {
               {rows.map((t) => {
                 const style = STATUS_STYLE[t.status] || { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
                 return (
-                  <div key={t.id} style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14 }}>
+                  <div key={t.id} onClick={() => setDetailsTarget(t)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{t.type_label}</div>
@@ -407,12 +442,17 @@ const AdminTransactionsPage = () => {
                         </div>
                       </div>
                     </div>
+                    {t.refund && (t.refund.refundable || t.refund.count > 0) && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--outline)', display: 'flex', justifyContent: 'flex-end' }}>
+                        <RefundCell t={t} onOpen={setRefundTarget} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           ) : (
-            <DataTable columns={columns} data={rows} rowKey="id" />
+            <DataTable columns={columns} data={rows} rowKey="id" onRowClick={(t) => setDetailsTarget(t)} />
           )}
         </div>
 
@@ -424,6 +464,24 @@ const AdminTransactionsPage = () => {
           </div>
         )}
       </div>
+
+      {detailsTarget && (
+        <TransactionDetailsModal
+          row={detailsTarget}
+          onClose={() => setDetailsTarget(null)}
+          // Refunding from inside the details view: swap one dialog for the other.
+          onRefund={(row) => { setDetailsTarget(null); setRefundTarget(row); }}
+        />
+      )}
+
+      {refundTarget && (
+        <RefundModal
+          row={refundTarget}
+          onClose={() => setRefundTarget(null)}
+          // A refund changes the row's state (and the page totals' context): reload both.
+          onDone={() => { fetchList(); fetchSummary(); }}
+        />
+      )}
     </div>
   );
 };

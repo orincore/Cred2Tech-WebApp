@@ -49,6 +49,10 @@ const CustomSelect = ({
   style,
   placeholder,
   hideChevron,
+  // Opt-in dense mode for toolbars: smaller gap, chevron and option rows. `menuMinWidth` keeps the popup readable
+  // when the trigger itself is narrow. Neither changes anything for existing call sites.
+  compact = false,
+  menuMinWidth,
   children,
   ...rest
 }) => {
@@ -211,7 +215,7 @@ const CustomSelect = ({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: compact ? 4 : 8,
     boxSizing: 'border-box',
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.6 : 1,
@@ -266,7 +270,7 @@ const CustomSelect = ({
         </span>
         {!hideChevron && (
           <ChevronDown
-            size={16}
+            size={compact ? 12 : 16}
             style={{
               flexShrink: 0,
               transition: 'transform 0.15s ease',
@@ -284,10 +288,10 @@ const CustomSelect = ({
             role="listbox"
             style={{
               position: 'fixed',
-              left: menuRect.left,
+              left: menuMinWidth ? Math.max(8, Math.min(menuRect.left, window.innerWidth - Math.max(menuRect.width, menuMinWidth) - 8)) : menuRect.left,
               top: menuRect.top,
               bottom: menuRect.bottom,
-              width: menuRect.width,
+              width: menuMinWidth ? Math.max(menuRect.width, menuMinWidth) : menuRect.width,
               maxHeight: menuRect.maxHeight,
               overflowY: 'auto',
               background: 'var(--bg-surface)',
@@ -295,7 +299,7 @@ const CustomSelect = ({
               borderRadius: 0,
               boxShadow: 'var(--shadow-lg)',
               zIndex: 10000,
-              padding: 4,
+              padding: compact ? 2 : 4,
             }}
           >
             {options.length === 0 ? (
@@ -310,9 +314,10 @@ const CustomSelect = ({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => commitSelection(i)}
                   style={{
-                    padding: '8px 12px',
+                    padding: compact ? '3px 10px' : '8px 12px',
                     borderRadius: 0,
-                    fontSize: 14,
+                    fontSize: compact ? 12 : 14,
+                    ...(compact ? { lineHeight: '18px', whiteSpace: 'nowrap' } : {}),
                     cursor: opt.disabled ? 'not-allowed' : 'pointer',
                     opacity: opt.disabled ? 0.5 : 1,
                     background:

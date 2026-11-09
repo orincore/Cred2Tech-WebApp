@@ -8,6 +8,7 @@ import SectionCard from '../../components/ui/SectionCard';
 import EmptyState from '../../components/ui/EmptyState';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import Badge from '../../components/ui/Badge';
+import CustomerRefundLines from '../../components/CustomerRefundLines';
 
 const formatDateTime = (d) => d
   ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -43,6 +44,26 @@ const MsmeTransactionsPage = () => {
       toast.error('Could not download the invoice');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const [creditNoteBusy, setCreditNoteBusy] = useState(null);
+  const downloadCreditNote = async (refund) => {
+    setCreditNoteBusy(refund.id);
+    try {
+      const res = await msmeApi.downloadRefundCreditNote(refund.id);
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${String(refund.credit_note_number || `credit-note-${refund.id}`).replace(/\//g, '-')}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Could not download the credit note');
+    } finally {
+      setCreditNoteBusy(null);
     }
   };
 
@@ -133,6 +154,7 @@ const MsmeTransactionsPage = () => {
                           {p.status === 'FAILED' && p.failure_reason && (
                             <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{p.failure_reason}</span>
                           )}
+                          <CustomerRefundLines refunds={p.refunds} onDownload={downloadCreditNote} busyId={creditNoteBusy} />
                         </div>
                       </td>
                       <td data-label="Case">
