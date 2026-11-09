@@ -86,7 +86,11 @@ const VENDOR_SPEND_API_LABELS = {
   DIRECT_MSME_ELIGIBILITY: 'Direct MSME Eligibility',
   VIRTUAL_WORKSPACE_SUBSCRIPTION: 'Virtual Workspace',
 };
-const vendorSpendApiLabel = (a) => VENDOR_SPEND_API_LABELS[a?.api_code] || a?.api_name || a?.api_code || '—';
+// Where the same api_code is a different product per vendor. "PAN All-in-One" is BEFISC's
+// product only; Signzy's PAN call (used until PAN moved to BEFISC) is plain PAN Verification.
+const VENDOR_SPEND_API_LABELS_BY_VENDOR = { 'PAN_FETCH|SIGNZY': 'PAN Verification' };
+const vendorSpendApiLabel = (a) => VENDOR_SPEND_API_LABELS_BY_VENDOR[`${a?.api_code}|${a?.vendor || a?.display_vendor}`]
+  || VENDOR_SPEND_API_LABELS[a?.api_code] || a?.api_name || a?.api_code || '—';
 // Full "API · vendor" label for chart bars. The same API can be served by two vendors
 // (Cibil Report by Signzy and by BEFISC, PAN All-in-One likewise), so a name alone gives
 // identical bars. Shown in full: the chart wraps long labels (BarChart wrapLabels).
