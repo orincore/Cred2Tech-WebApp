@@ -262,6 +262,35 @@ const ReportReference = ({ l }) => {
   );
 };
 
+// Which environment a hit came from, so one log can hold production, the dev server and
+// developers' machines. A Localhost hit also says which machine (device name) and from
+// which address (the IP the vendor saw, plus the machine's LAN IP). One muted line inside
+// the existing text cell; rows from an older server without the field show nothing.
+const ENV_TAG = {
+  production: { label: 'Production', color: 'var(--success)' },
+  development: { label: 'Dev server', color: 'var(--warning)' },
+  local: { label: 'Localhost', color: 'var(--info, #7c5cff)' },
+};
+const EnvironmentTag = ({ l }) => {
+  const tag = ENV_TAG[l.environment];
+  if (!tag) return null;
+  const mono = { fontFamily: 'monospace', fontWeight: 600, color: 'var(--on-surface)' };
+  return (
+    <div style={{ color: 'var(--on-muted)', fontSize: 11, marginTop: 2, wordBreak: 'break-word' }}>
+      <span style={{ color: tag.color, fontWeight: 800, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.04em' }}>{tag.label}</span>
+      {l.environment === 'local' && (
+        <>
+          {l.source_host && <> · <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{l.source_host}</span></>}
+          {l.source_ip && <> · IP <span style={mono}>{l.source_ip}</span></>}
+          {l.source_lan_ip && <> (LAN <span style={mono}>{l.source_lan_ip}</span>)</>}
+          {!l.source_host && !l.source_ip && !l.source_lan_ip && <> · device unknown</>}
+        </>
+      )}
+      {l.historical && <> · earlier history</>}
+    </div>
+  );
+};
+
 const SuperadminApiLogsPage = () => {
   const { isMobile, isTablet } = useResponsive();
   const { theme } = useTheme();
@@ -774,6 +803,7 @@ const SuperadminApiLogsPage = () => {
                         <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-surface)', wordBreak: 'break-all' }}>
                           {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                         </div>
+                        <EnvironmentTag l={l} />
                         <ReportReference l={l} />
                         {hasError(l) && (
                           l.source !== 'API' ? (
@@ -829,6 +859,7 @@ const SuperadminApiLogsPage = () => {
                   <span style={{ fontSize: 12, fontWeight: 500 }}>
                     {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                   </span>
+                  <EnvironmentTag l={l} />
                   <ReportReference l={l} />
                   {hasError(l) && (
                     l.source !== 'API' ? (
