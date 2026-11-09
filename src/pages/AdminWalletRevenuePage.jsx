@@ -89,6 +89,12 @@ const VENDOR_SPEND_API_LABELS = {
 const vendorSpendApiLabel = (a) => VENDOR_SPEND_API_LABELS[a?.api_code] || a?.api_name || a?.api_code || '—';
 const VENDOR_SPEND_VENDOR_LABELS = { SIGNZY: 'Signzy', BEFISC: 'BEFISC', SCOREME: 'ScoreMe', Cred2Tech: 'Cred2Tech', DEFAULT: 'Internal / platform' };
 const vendorSpendVendorLabel = (v) => VENDOR_SPEND_VENDOR_LABELS[v] || v;
+// Where a vendor call was made from — production, the shared dev server, or a developer's machine.
+const VENDOR_SPEND_ENV_ORDER = ['production', 'development', 'local'];
+const VENDOR_SPEND_ENV_LABELS = { production: 'Production', development: 'Dev server', local: 'Localhost' };
+const vendorSpendEnvLabel = (e) => VENDOR_SPEND_ENV_LABELS[e] || e;
+const EMPTY_ENV_TOTALS = { calls: 0, success_calls: 0, failed_calls: 0, billable_events: 0, unpriced_billable_events: 0, cost_total: 0, cost_base: 0, cost_gst: 0, vendors: [] };
+const fmtIstDateTime = (iso) => (iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
 const SEVERITY_STYLE = {
   high: { color: 'var(--error)', bg: 'var(--error-bg)' },
   medium: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
@@ -1523,6 +1529,18 @@ const AdminWalletRevenuePage = () => {
                   }, { success_calls: 0, failed_calls: 0, total_calls: 0, cost_base: 0, cost_gst: 0, cost_total: 0 });
                   const apiFiltered = apiVendorSel.length > 0 || apiServiceSel.length > 0;
                   const chipLabel = { fontSize: 10, fontWeight: 800, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2 };
+                  // Spend per environment, from the vendor call ledger (the only place dev /
+                  // localhost calls reach production). Production, Dev server and Localhost
+                  // always get a row, even at zero, so a silent environment is visible.
+                  const envByName = new Map((vs.environments || []).map((e) => [e.environment, e]));
+                  const envSeen = new Map((vs.ledger_last_reported || []).map((l) => [l.environment, l]));
+                  const envNames = [...VENDOR_SPEND_ENV_ORDER, ...[...envByName.keys()].filter((k) => !VENDOR_SPEND_ENV_ORDER.includes(k))];
+                  const envRows = envNames.map((name) => ({ ...EMPTY_ENV_TOTALS, ...(envByName.get(name) || {}), environment: name, key: name, last_call_at: envSeen.get(name)?.last_call_at || null }));
+                  const envTot = envRows.reduce((t, e) => {
+                    t.calls += e.calls; t.failed_calls += e.failed_calls; t.billable_events += e.billable_events;
+                    t.unpriced_billable_events += e.unpriced_billable_events; t.cost_total += e.cost_total; return t;
+                  }, { calls: 0, failed_calls: 0, billable_events: 0, unpriced_billable_events: 0, cost_total: 0 });
+                  const envVendorRows = envRows.flatMap((e) => e.vendors.map((v) => ({ ...v, environment: e.environment, key: `${e.environment}|${v.vendor}` })));
                   return (
                     <>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 12 }}>
@@ -1562,6 +1580,46 @@ const AdminWalletRevenuePage = () => {
                           exportTitle="Vendor spend by vendor"
                           empty="No vendor calls in this period"
                         />
+                      </Section>
+
+                      <Section
+                        title="Spend by environment"
+                        hint="Where the vendor calls were made from — Production, the shared Dev server, and Localhost (developer machines). Every environment hits the same vendor accounts, so all of it is on the vendor's invoice. Counted from the vendor call ledger, which started recording on 9 Nov 2026; calls before that are not in it, so this can be lower than the vendor totals above for earlier periods. Cost is the GST-inclusive rate on each successful billable call; billable calls with no rate set yet are counted as 'No rate' and not costed."
+                      >
+                        <Grid
+                          filterable={false}
+                          cols={[
+                            { key: 'environment', label: 'Environment', sort: (r) => vendorSpendEnvLabel(r.environment), render: (r) => vendorSpendEnvLabel(r.environment) },
+                            { key: 'last_call_at', label: 'Last call (IST)', sort: (r) => r.last_call_at || '', render: (r) => fmtIstDateTime(r.last_call_at) },
+                            { key: 'billable_events', label: 'Billable calls', num: true, render: (r) => num(r.billable_events) },
+                            { key: 'calls', label: 'Total calls', num: true, render: (r) => num(r.calls) },
+                            { key: 'failed_calls', label: 'Failed', num: true, render: (r) => num(r.failed_calls) },
+                            { key: 'unpriced_billable_events', label: 'No rate', num: true, render: (r) => num(r.unpriced_billable_events) },
+                            { key: 'cost_total', label: 'Total spend', num: true, render: (r) => inr(r.cost_total) },
+                            { key: 'share', label: 'Share', num: true, sort: (r) => r.cost_total, render: (r) => pct(r.cost_total, envTot.cost_total) },
+                          ]}
+                          rows={envRows}
+                          foot={{ environment: 'TOTAL', last_call_at: '', billable_events: num(envTot.billable_events), calls: num(envTot.calls), failed_calls: num(envTot.failed_calls), unpriced_billable_events: num(envTot.unpriced_billable_events), cost_total: inr(envTot.cost_total), share: '' }}
+                          exportTitle="Vendor spend by environment"
+                          empty="No vendor calls recorded in this period"
+                        />
+                        {envVendorRows.length > 0 && (
+                          <Grid
+                            filterable={false}
+                            cols={[
+                              { key: 'environment', label: 'Environment', sort: (r) => vendorSpendEnvLabel(r.environment), render: (r) => vendorSpendEnvLabel(r.environment) },
+                              { key: 'vendor', label: 'Vendor', sort: (r) => vendorSpendVendorLabel(r.vendor), render: (r) => vendorSpendVendorLabel(r.vendor) },
+                              { key: 'billable_events', label: 'Billable calls', num: true, render: (r) => num(r.billable_events) },
+                              { key: 'calls', label: 'Total calls', num: true, render: (r) => num(r.calls) },
+                              { key: 'failed_calls', label: 'Failed', num: true, render: (r) => num(r.failed_calls) },
+                              { key: 'unpriced_billable_events', label: 'No rate', num: true, render: (r) => num(r.unpriced_billable_events) },
+                              { key: 'cost_total', label: 'Total spend', num: true, render: (r) => inr(r.cost_total) },
+                            ]}
+                            rows={envVendorRows}
+                            exportTitle="Vendor spend by environment and vendor"
+                            empty="No vendor calls recorded in this period"
+                          />
+                        )}
                       </Section>
 
                       <Section
