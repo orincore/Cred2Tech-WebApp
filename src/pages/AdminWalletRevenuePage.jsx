@@ -1515,8 +1515,16 @@ const AdminWalletRevenuePage = () => {
               ) : (
                 (() => {
                   const vs = vendorSpend;
-                  const tot = vs.totals;
-                  const realVendors = vs.vendors.filter((v) => v.cost_total > 0);
+                  // 'DEFAULT' ("Internal / platform") is the placeholder vendor for calls made before a real
+                  // vendor was known and for internal products: always ₹0 and not a vendor charge. It is left
+                  // out here, and the totals are summed from the vendors that remain so the TOTAL line and the
+                  // tiles always add up to the rows shown (cost is unchanged, only the call counts drop).
+                  const vendorRows = vs.vendors.filter((v) => v.vendor !== 'DEFAULT');
+                  const tot = vendorRows.reduce((t, v) => {
+                    t.success_calls += v.success_calls; t.failed_calls += v.failed_calls; t.total_calls += v.total_calls;
+                    t.cost_base += v.cost_base; t.cost_gst += v.cost_gst; t.cost_total += v.cost_total; return t;
+                  }, { success_calls: 0, failed_calls: 0, total_calls: 0, cost_base: 0, cost_gst: 0, cost_total: 0 });
+                  const realVendors = vendorRows.filter((v) => v.cost_total > 0);
                   const donutSlices = realVendors.map((v, i) => ({ name: vendorSpendVendorLabel(v.vendor), value: v.cost_total, color: PALETTE[i % PALETTE.length] }));
                   const topApis = vs.apis.filter((a) => a.cost_total > 0).slice(0, 8);
                   // "Spend by API" uses its own date range when one is set.
@@ -1587,7 +1595,7 @@ const AdminWalletRevenuePage = () => {
                             { key: 'cost_total', label: 'Total paid', num: true, render: (r) => inr(r.cost_total) },
                             { key: 'share', label: 'Share', num: true, sort: (r) => r.cost_total, render: (r) => pct(r.cost_total, tot.cost_total) },
                           ]}
-                          rows={vs.vendors.map((v) => ({ ...v, key: v.vendor }))}
+                          rows={vendorRows.map((v) => ({ ...v, key: v.vendor }))}
                           foot={{ vendor: 'TOTAL', success_calls: num(tot.success_calls), failed_calls: num(tot.failed_calls), total_calls: num(tot.total_calls), cost_base: inr(tot.cost_base), cost_gst: inr(tot.cost_gst), cost_total: inr(tot.cost_total), share: '' }}
                           exportTitle="Vendor spend by vendor"
                           empty="No vendor calls in this period"
