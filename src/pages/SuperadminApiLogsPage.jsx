@@ -280,10 +280,10 @@ const EnvironmentTag = ({ l }) => {
       <span style={{ color: tag.color, fontWeight: 800, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.04em' }}>{tag.label}</span>
       {l.environment === 'local' && (
         <>
-          {l.source_host && <> · <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{l.source_host}</span></>}
-          {l.source_ip && <> · IP <span style={mono}>{l.source_ip}</span></>}
+          {/* Always both, so a missing one is visible as "unknown" instead of silently absent. */}
+          {' · '}{l.source_host ? <span style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{l.source_host}</span> : 'device unknown'}
+          {' · IP '}{l.source_ip ? <span style={mono}>{l.source_ip}</span> : 'unknown'}
           {l.source_lan_ip && <> (LAN <span style={mono}>{l.source_lan_ip}</span>)</>}
-          {!l.source_host && !l.source_ip && !l.source_lan_ip && <> · device unknown</>}
         </>
       )}
       {l.historical && <> · earlier history</>}
