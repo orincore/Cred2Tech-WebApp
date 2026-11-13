@@ -1186,8 +1186,8 @@ const AdminTenantManagePage = () => {
                               NEEDS_REVIEW: { label: 'Needs review', color: 'var(--error)', bg: 'var(--error-bg)' },
                               FAILED: { label: 'Failed', color: 'var(--error)', bg: 'var(--error-bg)' },
                             }[r.status] || { label: r.status, color: 'var(--on-muted)', bg: 'var(--bg-elevated)' };
-                            const what = { WALLET_TOPUP: 'Wallet recharge', CASE_PAYMENT: 'MSME eligibility fee', SUBSCRIPTION_INVOICE: 'Plan charge' }[r.source] || r.source;
-                            const typeLabel = { WALLET_TOPUP: 'Sourcing Partner Wallet Top-up', CASE_PAYMENT: 'MSME Eligibility Fee', SUBSCRIPTION_INVOICE: 'Plan Charge' }[r.source] || r.source;
+                            const what = { WALLET_TOPUP: 'Wallet recharge', CASE_PAYMENT: 'MSME fee (eligibility / co-applicant)', SUBSCRIPTION_INVOICE: 'Plan charge' }[r.source] || r.source;
+                            const typeLabel = { WALLET_TOPUP: 'Sourcing Partner Wallet Top-up', CASE_PAYMENT: 'Direct MSME Fee', SUBSCRIPTION_INVOICE: 'Plan Charge' }[r.source] || r.source;
                             return (
                               <tr
                                 key={r.id}

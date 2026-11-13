@@ -16,6 +16,8 @@ const formatDateTime = (d) => d
 
 const PURPOSE_LABELS = {
   DIRECT_MSME_ELIGIBILITY: 'Eligibility Check',
+  // ₹400 + GST per co-applicant; its case link comes back as case_id like any other row.
+  DIRECT_MSME_CO_APPLICANT: 'Additional Co-Applicant',
 };
 
 const inr2 = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -105,7 +107,7 @@ const MsmeTransactionsPage = () => {
           </p>
           <h1 style={{ margin: 0, fontSize: isMobile ? 20 : 24, fontWeight: 800, letterSpacing: '-0.02em' }}>Transactions</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
-            {payments.length} payment{payments.length === 1 ? '' : 's'} across every eligibility check and case you've started with us.
+            {payments.length} payment{payments.length === 1 ? '' : 's'} across every eligibility check, co-applicant and case you've started with us.
           </p>
         </div>
 

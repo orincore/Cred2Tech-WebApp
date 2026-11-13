@@ -14,7 +14,7 @@ export const feeTotal = (config) => {
     : config.total_amount_inr;
 };
 
-const MsmeFeeBreakdown = ({ config, valueColor = 'var(--on-surface)', mutedColor = 'var(--on-muted)' }) => {
+const MsmeFeeBreakdown = ({ config, valueColor = 'var(--on-surface)', mutedColor = 'var(--on-muted)', feeLabel = 'Assessment fee' }) => {
   if (!config) return null;
   const promo = config.promo_valid && config.discounted_amount_inr != null;
   const fee = promo ? config.discounted_amount_inr : config.amount_inr;
@@ -25,7 +25,7 @@ const MsmeFeeBreakdown = ({ config, valueColor = 'var(--on-surface)', mutedColor
   return (
     <div style={{ textAlign: 'left' }}>
       <div style={row}>
-        <span>Assessment fee</span>
+        <span>{feeLabel}</span>
         <span style={{ color: valueColor, fontWeight: 600 }}>
           {promo && <span style={{ textDecoration: 'line-through', marginRight: 8, color: mutedColor, fontWeight: 400 }}>{inr(config.amount_inr)}</span>}
           {inr(fee)}

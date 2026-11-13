@@ -41,6 +41,14 @@ export const msmeApi = {
   }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
+  // Co-applicant add-on (₹400 + GST per co-applicant, Direct MSME only): price and
+  // paid-but-unused slots for one of the customer's cases, and the order for ONE slot.
+  // Confirmed through verifyPayment above, like the eligibility fee.
+  getCoApplicantFee: (caseId) => api.get('/msme/payment/co-applicant', { params: { case_id: caseId } }),
+  createCoApplicantOrder: (caseId, gstin = null, details = null) => api.post('/msme/payment/co-applicant/create-order', {
+    case_id: caseId, gstin: gstin || null, name: details?.name || null, email: details?.email || null,
+  }),
+
   runEligibility: () => api.post('/msme/eligibility/run'),
   getEligibilityResult: () => api.get('/msme/eligibility/result'),
 

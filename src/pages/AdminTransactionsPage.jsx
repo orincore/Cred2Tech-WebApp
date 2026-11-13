@@ -28,7 +28,9 @@ const useResponsive = () => {
 const PAGE_SIZE = 25;
 
 const TYPE_OPTIONS = [
-  { value: 'CASE_PAYMENT', label: 'MSME Eligibility Fee' },
+  // Every Direct-MSME fee: the eligibility fee and the per-co-applicant add-on
+  // (each row's own type_label from the server says which).
+  { value: 'CASE_PAYMENT', label: 'Direct MSME Fees (eligibility / co-applicant)' },
   { value: 'WALLET_TOPUP', label: 'Sourcing Partner Wallet Top-up' },
   { value: 'TENANT_SUBSCRIPTION', label: 'Virtual Workspace Subscription' },
   // One row per Razorpay charge for a workspace / storage plan (the subscription row above shows

@@ -37,6 +37,8 @@ import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
 
 import CustomSelect from '../components/CustomSelect';
+import CoApplicantPaymentModal from '../components/msme/CoApplicantPaymentModal';
+import { useCoApplicantFee } from '../hooks/useCoApplicantFee';
 // Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
 // rest) — reading it back always yields a real Date, which Express's JSON
 // serialization turns into a full ISO datetime string like
@@ -82,6 +84,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // the same way — currentStep stays 2 for all three.
   const [step2SubPage, setStep2SubPage] = useState('gst');
   const [caseId, setCaseId] = useState(null);
+  // Direct MSME co-applicant fee (see addCoApplicantRow); unused for sourcing partners.
+  const { requestCoApplicantSlot, coApplicantPayment } = useCoApplicantFee({ caseId });
   // Only exists once a proposal has actually been created from step 6 — step
   // 7 (ProposalStep) is unreachable until then, same as the old route-based
   // journey (/cases/:id/proposals/:pid required an id that only ever came
@@ -1309,11 +1313,24 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // "Continue as New Case" step. (A PAN has one customer record per tenant; its cases, applicants and
   // consent are all per case.)
 
-  const addCoApplicantRow = () => {
+  const appendCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
       applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
+  };
+
+  // Direct MSME pays ₹400 + GST per co-applicant (sourcing partners never do): the
+  // row is only added once a paid, unused slot exists, opening the payment pop-up
+  // first when needed. The server refuses to save a co-applicant without one anyway.
+  const addCoApplicantRow = () => {
+    if (!isMsme) {
+      appendCoApplicantRow();
+      return;
+    }
+    const unsavedCoApplicants = formData.applicants.filter(a => a.type === 'CO_APPLICANT' && !a.id).length;
+    // The business mobile of a direct-MSME case is the customer's own login mobile.
+    requestCoApplicantSlot(unsavedCoApplicants, appendCoApplicantRow, { mobile: formData.business_mobile });
   };
 
   const updateApplicantRow = (idx, field, val) => {
@@ -1622,6 +1639,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: (isMobile && !isMsme) ? '84px 16px 24px' : isMobile ? '24px 16px' : '24px 20px' }}>
+      {isMsme && <CoApplicantPaymentModal payment={coApplicantPayment} />}
       <style>{`
         .wizard-page .card,
         .wizard-page .btn,
