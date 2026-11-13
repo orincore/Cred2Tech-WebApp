@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import MsmeFeeBreakdown from './MsmeFeeBreakdown';
 import GstNumberField, { gstinError } from './GstNumberField';
-import InvoiceEmailField, { invoiceEmailError } from './InvoiceEmailField';
+import InvoiceDetailsFields, { invoiceDetailsError } from './InvoiceDetailsFields';
 
 /**
  * Presentational payment modal for the MSME "start a new case" flow —
@@ -13,8 +13,11 @@ import InvoiceEmailField, { invoiceEmailError } from './InvoiceEmailField';
  */
 const EligibilityPaymentModal = ({
   isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow,
-  emailRequired = false, invoiceEmail = '', onInvoiceEmailChange,
-}) => (
+  invoiceDetails = null, // { required, name, email, setName, setEmail } from useEligibilityPayment
+}) => {
+  const detailsRequired = !!invoiceDetails?.required;
+  const detailsError = detailsRequired ? invoiceDetailsError(invoiceDetails.name, invoiceDetails.email) : null;
+  return (
   <AnimatePresence>
     {isOpen && paymentConfig && (
       <div className="modal-overlay">
@@ -43,10 +46,17 @@ const EligibilityPaymentModal = ({
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>One-time payment · Inclusive of 18% GST · Valid for 90 days</div>
           </div>
 
-          {(emailRequired || onGstinChange) && (
+          {(detailsRequired || onGstinChange) && (
             <div style={{ marginBottom: 24, marginTop: -8 }}>
-              {emailRequired && (
-                <InvoiceEmailField value={invoiceEmail} onChange={onInvoiceEmailChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />
+              {detailsRequired && (
+                <InvoiceDetailsFields
+                  name={invoiceDetails.name}
+                  email={invoiceDetails.email}
+                  onNameChange={invoiceDetails.setName}
+                  onEmailChange={invoiceDetails.setEmail}
+                  disabled={actionLoading}
+                  labelColor="var(--text-tertiary)"
+                />
               )}
               {onGstinChange && <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />}
             </div>
@@ -65,7 +75,7 @@ const EligibilityPaymentModal = ({
               className="btn btn-primary"
               style={{ flex: 1, justifyContent: 'center', borderRadius: 0 }}
               onClick={onPayNow}
-              disabled={actionLoading || (emailRequired && !!invoiceEmailError(invoiceEmail)) || !!gstinError(gstin)}
+              disabled={actionLoading || !!detailsError || !!gstinError(gstin)}
             >
               {actionLoading ? 'Processing...' : 'Pay Now'}
             </button>
@@ -74,6 +84,7 @@ const EligibilityPaymentModal = ({
       </div>
     )}
   </AnimatePresence>
-);
+  );
+};
 
 export default EligibilityPaymentModal;

@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import { AlertTriangle, Wallet, CreditCard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
-import { loadRazorpay } from '../utils/razorpay';
+import { loadRazorpay, createRazorpayCheckout } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
 
 const GRACE_STATUSES = ['HALTED', 'GRACE_PERIOD', 'PENDING'];
@@ -54,8 +54,7 @@ const VirtualWorkspaceGraceBanner = () => {
       const options = {
         key: status.key_id,
         subscription_id: subscription.razorpay_subscription_id,
-        name: 'Cred2Tech Virtual Workspace',
-        description: 'Monthly subscription — retry payment',
+        description: 'Virtual Workspace — monthly subscription, retry payment',
         handler: async (response) => {
           try {
             await api.post('/virtual-workspace/subscription/confirm', {
@@ -70,9 +69,9 @@ const VirtualWorkspaceGraceBanner = () => {
           }
         },
         prefill: { name: user?.name, email: user?.email },
-        theme: { color: '#4F46E5' },
       };
-      const rzp = new Razorpay(options);
+      // Name, logo and colours come from the shared Cred2Tech branding.
+      const rzp = createRazorpayCheckout(Razorpay, options);
       rzp.open();
     } catch (err) {
       toast.error(getErrorMessage(err) || 'Failed to open payment retry');

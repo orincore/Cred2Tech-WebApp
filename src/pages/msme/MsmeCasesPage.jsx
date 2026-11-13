@@ -38,7 +38,7 @@ const MsmeCasesPage = () => {
 
   const {
     actionLoading, showPaymentModal, paymentConfig, gstin, setGstin,
-    emailRequired, invoiceEmail, setInvoiceEmail,
+    invoiceDetails,
     startNewCase, initiatePayment, closePaymentModal,
   } = useEligibilityPayment({ prefill: { name: user?.name, email: user?.email, mobile: user?.mobile } });
 
@@ -126,9 +126,7 @@ const MsmeCasesPage = () => {
         paymentConfig={paymentConfig}
         gstin={gstin}
         onGstinChange={setGstin}
-        emailRequired={emailRequired}
-        invoiceEmail={invoiceEmail}
-        onInvoiceEmailChange={setInvoiceEmail}
+        invoiceDetails={invoiceDetails}
         actionLoading={actionLoading}
         onCancel={closePaymentModal}
         onPayNow={initiatePayment}

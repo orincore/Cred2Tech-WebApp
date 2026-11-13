@@ -34,8 +34,11 @@ export const msmeApi = {
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
   getPaymentConfig: (promoCode = null) => api.get('/msme/payment/config', { params: promoCode ? { promo_code: promoCode } : {} }),
-  // email: only sent while the account has no real email yet (payment config's email_required).
-  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null, email = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode, gstin: gstin || null, email: email || null }),
+  // details: { name, email } — only sent while the account still has the signup
+  // placeholders (payment config's details_required); the server saves both to the profile.
+  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null, details = null) => api.post('/msme/payment/create-order', {
+    forceNew, promo_code: promoCode, gstin: gstin || null, name: details?.name || null, email: details?.email || null,
+  }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
   runEligibility: () => api.post('/msme/eligibility/run'),

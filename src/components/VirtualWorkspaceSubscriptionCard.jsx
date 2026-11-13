@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import { LayoutGrid, Tag, AlertCircle, Check, ShieldCheck, ArrowUpCircle, ArrowDownCircle, Lock, Gift, Calendar, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
-import { loadRazorpay } from '../utils/razorpay';
+import { loadRazorpay, createRazorpayCheckout } from '../utils/razorpay';
 import { getErrorMessage, formatDateTime } from '../utils/helpers';
 
 const STATUS_LABEL = {
@@ -333,11 +333,11 @@ const VirtualWorkspaceSubscriptionCard = () => {
   // itself requires.
   const openCheckout = async (razorpaySubscriptionId, successMessage = 'Subscribed to Virtual Workspace', confirmEndpoint = '/virtual-workspace/subscription/confirm') => {
     const Razorpay = await loadRazorpay();
-    const rzp = new Razorpay({
+    // Name, logo and colours come from the shared Cred2Tech branding.
+    const rzp = createRazorpayCheckout(Razorpay, {
       key: key_id,
       subscription_id: razorpaySubscriptionId,
-      name: 'Cred2Tech Virtual Workspace',
-      description: 'Monthly subscription',
+      description: 'Virtual Workspace — monthly subscription',
       handler: async (response) => {
         try {
           await api.post(confirmEndpoint, {
@@ -351,7 +351,6 @@ const VirtualWorkspaceSubscriptionCard = () => {
           toast.error(getErrorMessage(err) || 'Failed to confirm subscription');
         }
       },
-      theme: { color: '#4F46E5' },
     });
     rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
     rzp.open();
@@ -372,15 +371,15 @@ const VirtualWorkspaceSubscriptionCard = () => {
   // — see the backend's RAZORPAY_RECURRING section header for why.
   const openRecurringAuthCheckout = async ({ razorpay_order_id, razorpay_customer_id, amount, currency }, successMessage) => {
     const Razorpay = await loadRazorpay();
-    const rzp = new Razorpay({
+    // Name, logo and colours come from the shared Cred2Tech branding.
+    const rzp = createRazorpayCheckout(Razorpay, {
       key: key_id,
       order_id: razorpay_order_id,
       customer_id: razorpay_customer_id,
       recurring: true,
       amount,
       currency,
-      name: 'Cred2Tech Virtual Workspace',
-      description: 'Recurring payment authorization',
+      description: 'Virtual Workspace — recurring payment authorization',
       handler: async (response) => {
         try {
           await api.post('/virtual-workspace/subscription/confirm-recurring-mandate', {
@@ -394,7 +393,6 @@ const VirtualWorkspaceSubscriptionCard = () => {
           toast.error(getErrorMessage(err) || 'Failed to confirm the auto-pay mandate');
         }
       },
-      theme: { color: '#4F46E5' },
     });
     rzp.on('payment.failed', (response) => toast.error(`Payment failed: ${response.error.description}`));
     rzp.open();
