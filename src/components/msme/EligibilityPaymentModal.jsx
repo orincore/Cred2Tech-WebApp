@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import MsmeFeeBreakdown from './MsmeFeeBreakdown';
 import GstNumberField, { gstinError } from './GstNumberField';
+import InvoiceEmailField, { invoiceEmailError } from './InvoiceEmailField';
 
 /**
  * Presentational payment modal for the MSME "start a new case" flow —
@@ -10,7 +11,10 @@ import GstNumberField, { gstinError } from './GstNumberField';
  * that triggers useEligibilityPayment() (currently the dashboard and
  * /msme/cases). All state/logic lives in the hook; this just renders it.
  */
-const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow }) => (
+const EligibilityPaymentModal = ({
+  isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow,
+  emailRequired = false, invoiceEmail = '', onInvoiceEmailChange,
+}) => (
   <AnimatePresence>
     {isOpen && paymentConfig && (
       <div className="modal-overlay">
@@ -39,9 +43,12 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinCha
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>One-time payment · Inclusive of 18% GST · Valid for 90 days</div>
           </div>
 
-          {onGstinChange && (
+          {(emailRequired || onGstinChange) && (
             <div style={{ marginBottom: 24, marginTop: -8 }}>
-              <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />
+              {emailRequired && (
+                <InvoiceEmailField value={invoiceEmail} onChange={onInvoiceEmailChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />
+              )}
+              {onGstinChange && <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />}
             </div>
           )}
 
@@ -58,7 +65,7 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinCha
               className="btn btn-primary"
               style={{ flex: 1, justifyContent: 'center', borderRadius: 0 }}
               onClick={onPayNow}
-              disabled={actionLoading || !!gstinError(gstin)}
+              disabled={actionLoading || (emailRequired && !!invoiceEmailError(invoiceEmail)) || !!gstinError(gstin)}
             >
               {actionLoading ? 'Processing...' : 'Pay Now'}
             </button>

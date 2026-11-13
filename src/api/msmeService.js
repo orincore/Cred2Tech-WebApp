@@ -34,7 +34,8 @@ export const msmeApi = {
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
   getPaymentConfig: (promoCode = null) => api.get('/msme/payment/config', { params: promoCode ? { promo_code: promoCode } : {} }),
-  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode, gstin: gstin || null }),
+  // email: only sent while the account has no real email yet (payment config's email_required).
+  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null, email = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode, gstin: gstin || null, email: email || null }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
 
   runEligibility: () => api.post('/msme/eligibility/run'),

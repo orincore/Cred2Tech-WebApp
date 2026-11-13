@@ -1108,25 +1108,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  // MSME self-service only — the business email in this form IS the logged-
-  // in customer's own contact email (unlike DSA mode, where this same field
-  // belongs to a customer the DSA is entering on someone else's behalf).
-  // Synced on blur, not every keystroke, so /msme/profile stops showing the
-  // OTP-registration placeholder ({mobile}@direct.cred2tech.local) forever
-  // once the customer actually types a real one here — the endpoint that
-  // used to do this (updateBusinessDetails) is dead code the wizard never
-  // calls, so nothing was ever syncing it back to the User record.
-  const handleBusinessEmailBlur = async () => {
-    if (!isMsme) return;
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
-    try {
-      await msmeApi.updateProfile({ email });
-    } catch (err) {
-      // Direct MSME case applicants can use any email address — silent on background account email sync failure
-    }
-  };
-
   const handleFetchGst = async () => {
     if (!formData.business_pan || formData.business_pan.length < 10) return toast.error('Valid PAN required');
     if (!formData.customer_id || !caseId) return toast.error('Please verify PAN first to generate a case');
@@ -1927,7 +1908,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       <div className={isProfessional ? 'grid-3' : 'grid-2'} style={{ marginBottom: 24 }}>
                         <FormField label="Email Address" name="business_email" required>
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                            <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
+                            <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
                             {/* The actual Request Consent action (and its
                           sending/waiting/resend states) now lives in this
                           sub-page's footer, in the same slot the Save & Next

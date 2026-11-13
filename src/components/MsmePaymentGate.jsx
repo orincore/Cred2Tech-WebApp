@@ -10,6 +10,7 @@ import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from './ui/LoadingSpinner';
 import MsmeFeeBreakdown, { feeTotal } from './msme/MsmeFeeBreakdown';
 import GstNumberField, { gstinError } from './msme/GstNumberField';
+import InvoiceEmailField, { invoiceEmailError } from './msme/InvoiceEmailField';
 
 // Wraps the MSME self-service onboarding: children render only once the
 // one-time assessment fee is PAID. Payment order + signature verification
@@ -27,6 +28,11 @@ const MsmePaymentGate = ({ children }) => {
   const [promoError, setPromoError] = useState('');
   // Optional GST number for the tax invoice; pre-filled with the customer's last one.
   const [gstin, setGstin] = useState('');
+  // Required while the account has no real email yet (signup only collects
+  // the mobile): the invoice and Razorpay receipt are sent to it.
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const emailRequired = !!paymentConfig?.email_required;
+  const emailError = emailRequired ? invoiceEmailError(invoiceEmail) : null;
 
   useEffect(() => {
     loadGate();
@@ -102,13 +108,16 @@ const MsmePaymentGate = ({ children }) => {
   };
 
   const handlePayment = async () => {
+    if (emailError) return toast.error(emailError);
     if (gstinError(gstin)) return toast.error(gstinError(gstin));
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
       const appliedPromo = promoCode.trim() && !promoError ? promoCode.trim() : null;
-      const res = await msmeApi.createPaymentOrder(false, appliedPromo, gstin.trim());
-      const { order_id, amount_paise, currency, key_id } = res.data;
+      const res = await msmeApi.createPaymentOrder(false, appliedPromo, gstin.trim(), emailRequired ? invoiceEmail.trim() : null);
+      const { order_id, amount_paise, currency, key_id, customer_email } = res.data;
+      // The server saved the email to the account; later payments won't ask again.
+      if (emailRequired) setPaymentConfig((c) => (c ? { ...c, email_required: false, billing_email: customer_email } : c));
 
       const options = {
         key: key_id,
@@ -147,7 +156,9 @@ const MsmePaymentGate = ({ children }) => {
         },
         prefill: {
           name: user?.name,
-          email: user?.email,
+          // The account's real email from the server — never the generated
+          // signup placeholder, which would make Razorpay's receipt bounce.
+          email: customer_email || undefined,
           contact: user?.mobile,
         },
         theme: { color: '#4F46E5' },
@@ -225,6 +236,7 @@ const MsmePaymentGate = ({ children }) => {
               <MsmeFeeBreakdown config={paymentConfig} />
               <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8, textAlign: 'left' }}>Inclusive of 18% GST</div>
               <div style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 8 }}>One-time payment. Valid for 90 days.</div>
+              {emailRequired && <InvoiceEmailField value={invoiceEmail} onChange={setInvoiceEmail} disabled={actionLoading} />}
               <GstNumberField value={gstin} onChange={setGstin} disabled={actionLoading} />
             </motion.div>
           )}
@@ -260,7 +272,7 @@ const MsmePaymentGate = ({ children }) => {
 
           <button
             onClick={handlePayment}
-            disabled={actionLoading || !paymentConfig || !!gstinError(gstin)}
+            disabled={actionLoading || !paymentConfig || !!emailError || !!gstinError(gstin)}
             className="btn btn-primary btn-lg"
             style={{ width: '100%', justifyContent: 'center', borderRadius: 0 }}
           >

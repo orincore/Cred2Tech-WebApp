@@ -5,6 +5,7 @@ import { msmeApi } from '../api/msmeService';
 import { loadRazorpay } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
 import { gstinError } from '../components/msme/GstNumberField';
+import { invoiceEmailError } from '../components/msme/InvoiceEmailField';
 
 /**
  * Shared "start a NEW case" flow for the MSME portal — extracted from
@@ -27,6 +28,10 @@ export function useEligibilityPayment({ prefill } = {}) {
   const [paymentConfig, setPaymentConfig] = useState(null);
   // Optional GST number for the tax invoice; pre-filled with the customer's last one.
   const [gstin, setGstin] = useState('');
+  // Required while the account has no real email yet (payment config's
+  // email_required): the invoice and Razorpay receipt are sent to it.
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const emailRequired = !!paymentConfig?.email_required;
 
   const goToOnboarding = () => navigate('/msme/onboarding');
 
@@ -52,12 +57,16 @@ export function useEligibilityPayment({ prefill } = {}) {
   };
 
   const initiatePayment = async () => {
+    if (emailRequired && invoiceEmailError(invoiceEmail)) return toast.error(invoiceEmailError(invoiceEmail));
     if (gstinError(gstin)) return toast.error(gstinError(gstin));
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
-      const orderRes = await msmeApi.createPaymentOrder(true, null, gstin.trim()); // forceNew — never attach to the old resumable case
-      const { order_id, amount_paise, currency, key_id } = orderRes.data;
+      // forceNew — never attach to the old resumable case
+      const orderRes = await msmeApi.createPaymentOrder(true, null, gstin.trim(), emailRequired ? invoiceEmail.trim() : null);
+      const { order_id, amount_paise, currency, key_id, customer_email } = orderRes.data;
+      // The server saved the email to the account; don't ask again.
+      if (emailRequired) setPaymentConfig((c) => (c ? { ...c, email_required: false, billing_email: customer_email } : c));
 
       const options = {
         key: key_id,
@@ -100,7 +109,9 @@ export function useEligibilityPayment({ prefill } = {}) {
         },
         prefill: {
           name: prefill?.name,
-          email: prefill?.email,
+          // The account's real email from the server — never the generated
+          // signup placeholder, which would make Razorpay's receipt bounce.
+          email: customer_email || undefined,
           contact: prefill?.mobile,
         },
         theme: { color: '#4F46E5' },
@@ -124,6 +135,9 @@ export function useEligibilityPayment({ prefill } = {}) {
     paymentConfig,
     gstin,
     setGstin,
+    emailRequired,
+    invoiceEmail,
+    setInvoiceEmail,
     startNewCase,
     initiatePayment,
     closePaymentModal: () => setShowPaymentModal(false),
