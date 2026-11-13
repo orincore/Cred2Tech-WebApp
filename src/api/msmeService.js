@@ -34,8 +34,20 @@ export const msmeApi = {
   updateLoanDetails: (data) => api.put('/msme/case/loan-details', data),
 
   getPaymentConfig: (promoCode = null) => api.get('/msme/payment/config', { params: promoCode ? { promo_code: promoCode } : {} }),
-  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null) => api.post('/msme/payment/create-order', { forceNew, promo_code: promoCode, gstin: gstin || null }),
+  // details: { name, email } — only sent while the account still has the signup
+  // placeholders (payment config's details_required); the server saves both to the profile.
+  createPaymentOrder: (forceNew = false, promoCode = null, gstin = null, details = null) => api.post('/msme/payment/create-order', {
+    forceNew, promo_code: promoCode, gstin: gstin || null, name: details?.name || null, email: details?.email || null,
+  }),
   verifyPayment: (data) => api.post('/msme/payment/verify', data),
+
+  // Co-applicant add-on (₹400 + GST per co-applicant, Direct MSME only): price and
+  // paid-but-unused slots for one of the customer's cases, and the order for ONE slot.
+  // Confirmed through verifyPayment above, like the eligibility fee.
+  getCoApplicantFee: (caseId) => api.get('/msme/payment/co-applicant', { params: { case_id: caseId } }),
+  createCoApplicantOrder: (caseId, gstin = null, details = null) => api.post('/msme/payment/co-applicant/create-order', {
+    case_id: caseId, gstin: gstin || null, name: details?.name || null, email: details?.email || null,
+  }),
 
   runEligibility: () => api.post('/msme/eligibility/run'),
   getEligibilityResult: () => api.get('/msme/eligibility/result'),

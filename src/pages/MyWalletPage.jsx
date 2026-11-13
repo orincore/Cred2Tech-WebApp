@@ -15,7 +15,7 @@ import CustomerRefundLines from '../components/CustomerRefundLines';
 import { formatDateTime } from '../utils/helpers';
 import { getErrorMessage } from '../utils/helpers';
 import { walletService } from '../api/walletService';
-import { loadRazorpay } from '../utils/razorpay';
+import { loadRazorpay, createRazorpayCheckout } from '../utils/razorpay';
 import { useAuth } from '../context/AuthContext';
 import PageTour from '../components/tour/PageTour';
 
@@ -357,10 +357,10 @@ const RechargeModal = ({ onClose, onSuccess }) => {
           email: user?.email,
           contact: user?.mobile,
         },
-        theme: { color: '#4F46E5' },
       };
 
-      const rzp = new Razorpay(options);
+      // Name, logo and colours come from the shared Cred2Tech branding.
+      const rzp = createRazorpayCheckout(Razorpay, options);
       rzp.on('payment.failed', (response) => {
         toast.error(`Payment Failed: ${response.error.description}`);
         setSubmitting(false);

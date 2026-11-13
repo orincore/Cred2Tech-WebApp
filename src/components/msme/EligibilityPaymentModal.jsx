@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import MsmeFeeBreakdown from './MsmeFeeBreakdown';
 import GstNumberField, { gstinError } from './GstNumberField';
+import InvoiceDetailsFields, { invoiceDetailsError } from './InvoiceDetailsFields';
 
 /**
  * Presentational payment modal for the MSME "start a new case" flow —
@@ -10,7 +11,13 @@ import GstNumberField, { gstinError } from './GstNumberField';
  * that triggers useEligibilityPayment() (currently the dashboard and
  * /msme/cases). All state/logic lives in the hook; this just renders it.
  */
-const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow }) => (
+const EligibilityPaymentModal = ({
+  isOpen, paymentConfig, gstin = '', onGstinChange, actionLoading, onCancel, onPayNow,
+  invoiceDetails = null, // { required, name, email, setName, setEmail } from useEligibilityPayment
+}) => {
+  const detailsRequired = !!invoiceDetails?.required;
+  const detailsError = detailsRequired ? invoiceDetailsError(invoiceDetails.name, invoiceDetails.email) : null;
+  return (
   <AnimatePresence>
     {isOpen && paymentConfig && (
       <div className="modal-overlay">
@@ -20,28 +27,41 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinCha
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          style={{ borderRadius: 0, textAlign: 'center' }}
+          style={{ borderRadius: 0, textAlign: 'center', padding: '20px 22px', maxHeight: '92vh', overflowY: 'auto' }}
         >
-          <div style={{
-            width: 52, height: 52, margin: '0 auto 16px', background: 'var(--primary-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <ShieldCheck size={26} color="var(--primary)" />
+          {/* Compact header: icon beside the title instead of stacked above it. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{
+              width: 34, height: 34, flexShrink: 0, background: 'var(--primary-subtle)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <ShieldCheck size={18} color="var(--primary)" />
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>Eligibility Assessment</h3>
           </div>
-          <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 10, color: 'var(--text-primary)' }}>Eligibility Assessment</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
-            To check your eligibility across multiple lenders and receive a detailed report, a one-time assessment fee is required. This data is valid for 90 days.
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '0 0 14px', lineHeight: 1.45 }}>
+            To check your eligibility across multiple lenders and receive a detailed report, a one-time assessment fee is required.
           </p>
 
-          <div style={{ background: 'var(--bg-elevated)', padding: 20, marginBottom: 24, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px', marginBottom: 8 }}>Amount Due</div>
+          <div style={{ background: 'var(--bg-elevated)', padding: '12px 16px', marginBottom: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px', marginBottom: 2 }}>Amount Due</div>
             <MsmeFeeBreakdown config={paymentConfig} valueColor="var(--text-primary)" mutedColor="var(--text-tertiary)" />
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>One-time payment · Inclusive of 18% GST · Valid for 90 days</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>One-time payment · Inclusive of 18% GST</div>
           </div>
 
-          {onGstinChange && (
-            <div style={{ marginBottom: 24, marginTop: -8 }}>
-              <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />
+          {(detailsRequired || onGstinChange) && (
+            <div style={{ marginBottom: 16, marginTop: -14 }}>
+              {detailsRequired && (
+                <InvoiceDetailsFields
+                  name={invoiceDetails.name}
+                  email={invoiceDetails.email}
+                  onNameChange={invoiceDetails.setName}
+                  onEmailChange={invoiceDetails.setEmail}
+                  disabled={actionLoading}
+                  labelColor="var(--text-tertiary)"
+                />
+              )}
+              {onGstinChange && <GstNumberField value={gstin} onChange={onGstinChange} disabled={actionLoading} labelColor="var(--text-tertiary)" />}
             </div>
           )}
 
@@ -58,7 +78,7 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinCha
               className="btn btn-primary"
               style={{ flex: 1, justifyContent: 'center', borderRadius: 0 }}
               onClick={onPayNow}
-              disabled={actionLoading || !!gstinError(gstin)}
+              disabled={actionLoading || !!detailsError || !!gstinError(gstin)}
             >
               {actionLoading ? 'Processing...' : 'Pay Now'}
             </button>
@@ -67,6 +87,7 @@ const EligibilityPaymentModal = ({ isOpen, paymentConfig, gstin = '', onGstinCha
       </div>
     )}
   </AnimatePresence>
-);
+  );
+};
 
 export default EligibilityPaymentModal;

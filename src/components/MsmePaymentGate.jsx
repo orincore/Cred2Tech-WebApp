@@ -5,11 +5,12 @@ import toast from 'react-hot-toast';
 import { CreditCard } from 'lucide-react';
 import { msmeApi } from '../api/msmeService';
 import { useMsmeAuth } from '../context/MsmeAuthContext';
-import { loadRazorpay } from '../utils/razorpay';
+import { loadRazorpay, createRazorpayCheckout } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
 import LoadingSpinner from './ui/LoadingSpinner';
 import MsmeFeeBreakdown, { feeTotal } from './msme/MsmeFeeBreakdown';
 import GstNumberField, { gstinError } from './msme/GstNumberField';
+import InvoiceDetailsFields, { invoiceDetailsError } from './msme/InvoiceDetailsFields';
 
 // Wraps the MSME self-service onboarding: children render only once the
 // one-time assessment fee is PAID. Payment order + signature verification
@@ -27,6 +28,13 @@ const MsmePaymentGate = ({ children }) => {
   const [promoError, setPromoError] = useState('');
   // Optional GST number for the tax invoice; pre-filled with the customer's last one.
   const [gstin, setGstin] = useState('');
+  // Name + email, both required while the account still has the signup
+  // placeholders (signup only collects the mobile): the name is printed on
+  // the invoice, and the invoice and Razorpay receipt are emailed.
+  const [invoiceName, setInvoiceName] = useState('');
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const detailsRequired = !!paymentConfig?.details_required;
+  const detailsError = detailsRequired ? invoiceDetailsError(invoiceName, invoiceEmail) : null;
 
   useEffect(() => {
     loadGate();
@@ -62,6 +70,9 @@ const MsmePaymentGate = ({ children }) => {
         const configRes = await msmeApi.getPaymentConfig();
         setPaymentConfig(configRes.data);
         setGstin(configRes.data?.saved_gstin || '');
+        // Pre-fill whichever of the two the account already has for real.
+        setInvoiceName(configRes.data?.billing_name || '');
+        setInvoiceEmail(configRes.data?.billing_email || '');
       }
     } catch (err) {
       console.error(err);
@@ -102,20 +113,25 @@ const MsmePaymentGate = ({ children }) => {
   };
 
   const handlePayment = async () => {
+    if (detailsError) return toast.error(detailsError);
     if (gstinError(gstin)) return toast.error(gstinError(gstin));
     try {
       setActionLoading(true);
       const Razorpay = await loadRazorpay();
       const appliedPromo = promoCode.trim() && !promoError ? promoCode.trim() : null;
-      const res = await msmeApi.createPaymentOrder(false, appliedPromo, gstin.trim());
-      const { order_id, amount_paise, currency, key_id } = res.data;
+      const details = detailsRequired ? { name: invoiceName.trim(), email: invoiceEmail.trim() } : null;
+      const res = await msmeApi.createPaymentOrder(false, appliedPromo, gstin.trim(), details);
+      const { order_id, amount_paise, currency, key_id, customer_name, customer_email } = res.data;
+      // The server saved both to the profile; later payments won't ask again.
+      if (detailsRequired) {
+        setPaymentConfig((c) => (c ? { ...c, details_required: false, billing_name: customer_name, billing_email: customer_email } : c));
+      }
 
       const options = {
         key: key_id,
         amount: amount_paise,
         currency: currency,
-        name: 'Cred2Tech MSME Assessment',
-        description: 'Multi-Lender Eligibility Check',
+        description: 'MSME Assessment — Multi-Lender Eligibility Check',
         order_id: order_id,
         handler: async function (response) {
           const verifyData = {
@@ -146,13 +162,15 @@ const MsmePaymentGate = ({ children }) => {
           );
         },
         prefill: {
-          name: user?.name,
-          email: user?.email,
+          // The account's real name/email from the server — never the signup
+          // placeholders, which would make Razorpay's receipt bounce.
+          name: customer_name || undefined,
+          email: customer_email || undefined,
           contact: user?.mobile,
         },
-        theme: { color: '#4F46E5' },
       };
-      const rzp = new Razorpay(options);
+      // Name, logo and colours come from the shared Cred2Tech branding.
+      const rzp = createRazorpayCheckout(Razorpay, options);
       rzp.on('payment.failed', function (response) {
         toast.error(`Payment Failed: ${response.error.description}`);
         setActionLoading(false);
@@ -225,6 +243,15 @@ const MsmePaymentGate = ({ children }) => {
               <MsmeFeeBreakdown config={paymentConfig} />
               <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 8, textAlign: 'left' }}>Inclusive of 18% GST</div>
               <div style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 8 }}>One-time payment. Valid for 90 days.</div>
+              {detailsRequired && (
+                <InvoiceDetailsFields
+                  name={invoiceName}
+                  email={invoiceEmail}
+                  onNameChange={setInvoiceName}
+                  onEmailChange={setInvoiceEmail}
+                  disabled={actionLoading}
+                />
+              )}
               <GstNumberField value={gstin} onChange={setGstin} disabled={actionLoading} />
             </motion.div>
           )}
@@ -260,7 +287,7 @@ const MsmePaymentGate = ({ children }) => {
 
           <button
             onClick={handlePayment}
-            disabled={actionLoading || !paymentConfig || !!gstinError(gstin)}
+            disabled={actionLoading || !paymentConfig || !!detailsError || !!gstinError(gstin)}
             className="btn btn-primary btn-lg"
             style={{ width: '100%', justifyContent: 'center', borderRadius: 0 }}
           >

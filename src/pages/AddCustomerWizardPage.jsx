@@ -37,6 +37,8 @@ import MsmeLoanTermsStep from './MsmeLoanTermsStep';
 
 
 import CustomSelect from '../components/CustomSelect';
+import CoApplicantPaymentModal from '../components/msme/CoApplicantPaymentModal';
+import { useCoApplicantFee } from '../hooks/useCoApplicantFee';
 // Customer/Applicant.dob is stored as a Prisma DateTime column (encrypted at
 // rest) — reading it back always yields a real Date, which Express's JSON
 // serialization turns into a full ISO datetime string like
@@ -82,6 +84,8 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // the same way — currentStep stays 2 for all three.
   const [step2SubPage, setStep2SubPage] = useState('gst');
   const [caseId, setCaseId] = useState(null);
+  // Direct MSME co-applicant fee (see addCoApplicantRow); unused for sourcing partners.
+  const { requestCoApplicantSlot, coApplicantPayment } = useCoApplicantFee({ caseId });
   // Only exists once a proposal has actually been created from step 6 — step
   // 7 (ProposalStep) is unreachable until then, same as the old route-based
   // journey (/cases/:id/proposals/:pid required an id that only ever came
@@ -1108,25 +1112,6 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
     }
   };
 
-  // MSME self-service only — the business email in this form IS the logged-
-  // in customer's own contact email (unlike DSA mode, where this same field
-  // belongs to a customer the DSA is entering on someone else's behalf).
-  // Synced on blur, not every keystroke, so /msme/profile stops showing the
-  // OTP-registration placeholder ({mobile}@direct.cred2tech.local) forever
-  // once the customer actually types a real one here — the endpoint that
-  // used to do this (updateBusinessDetails) is dead code the wizard never
-  // calls, so nothing was ever syncing it back to the User record.
-  const handleBusinessEmailBlur = async () => {
-    if (!isMsme) return;
-    const email = formData.business_email?.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
-    try {
-      await msmeApi.updateProfile({ email });
-    } catch (err) {
-      // Direct MSME case applicants can use any email address — silent on background account email sync failure
-    }
-  };
-
   const handleFetchGst = async () => {
     if (!formData.business_pan || formData.business_pan.length < 10) return toast.error('Valid PAN required');
     if (!formData.customer_id || !caseId) return toast.error('Please verify PAN first to generate a case');
@@ -1328,11 +1313,24 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
   // "Continue as New Case" step. (A PAN has one customer record per tenant; its cases, applicants and
   // consent are all per case.)
 
-  const addCoApplicantRow = () => {
+  const appendCoApplicantRow = () => {
     setFormData(prev => ({
       ...prev,
       applicants: [...prev.applicants, { type: 'CO_APPLICANT', pan_number: '', name: '', mobile: '', email: '', pincode: '', gender: '', employment_type: 'SELF_EMPLOYED', otp_verified: false, pan_verified: false, is_professional: false, profession_type: '' }]
     }));
+  };
+
+  // Direct MSME pays ₹400 + GST per co-applicant (sourcing partners never do): the
+  // row is only added once a paid, unused slot exists, opening the payment pop-up
+  // first when needed. The server refuses to save a co-applicant without one anyway.
+  const addCoApplicantRow = () => {
+    if (!isMsme) {
+      appendCoApplicantRow();
+      return;
+    }
+    const unsavedCoApplicants = formData.applicants.filter(a => a.type === 'CO_APPLICANT' && !a.id).length;
+    // The business mobile of a direct-MSME case is the customer's own login mobile.
+    requestCoApplicantSlot(unsavedCoApplicants, appendCoApplicantRow, { mobile: formData.business_mobile });
   };
 
   const updateApplicantRow = (idx, field, val) => {
@@ -1641,6 +1639,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
 
   return (
     <div className="wizard-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: (isMobile && !isMsme) ? '84px 16px 24px' : isMobile ? '24px 16px' : '24px 20px' }}>
+      {isMsme && <CoApplicantPaymentModal payment={coApplicantPayment} />}
       <style>{`
         .wizard-page .card,
         .wizard-page .btn,
@@ -1927,7 +1926,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                       <div className={isProfessional ? 'grid-3' : 'grid-2'} style={{ marginBottom: 24 }}>
                         <FormField label="Email Address" name="business_email" required>
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                            <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} onBlur={handleBusinessEmailBlur} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
+                            <input type="email" value={formData.business_email} onChange={e => setFormData({ ...formData, business_email: e.target.value })} className="form-control" placeholder="admin@company.in" style={{ flex: 1, minWidth: 160 }} />
                             {/* The actual Request Consent action (and its
                           sending/waiting/resend states) now lives in this
                           sub-page's footer, in the same slot the Save & Next
@@ -2214,18 +2213,9 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                                       </CustomSelect>
                                     </FormField>
                                   )}
-                                  {app.employment_type !== 'SALARIED' && (
-                                    <FormField label="Industry Type" name={`coindustry_${realIdx}`}>
-                                      <CustomSelect className="form-control" value={app.industry || ''} onChange={e => updateApplicantRow(realIdx, 'industry', e.target.value)}>
-                                        <option value="">Auto (from GST report)</option>
-                                        <option value="Manufacturing">Manufacturing</option>
-                                        <option value="Wholesale">Wholesale</option>
-                                        <option value="Retail">Retail</option>
-                                        <option value="Specialised">Specialised</option>
-                                        <option value="Service">Service</option>
-                                      </CustomSelect>
-                                    </FormField>
-                                  )}
+                                  {/* No Industry Type input for a co-applicant: it is taken from the
+                                      co-applicant's own GST pull (backend coApplicantVendorIncome.js
+                                      fills it whenever applicants.industry is empty). */}
                                 </div>
                                 {/* Same pattern as the primary applicant's Full Name/DOB
                                 block above: never user-editable, so hidden entirely

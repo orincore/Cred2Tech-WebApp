@@ -1119,7 +1119,7 @@ const AdminWalletRevenuePage = () => {
                     rows={['B2B', 'B2C'].map((k) => ({ key: k, k, ...report.by_category[k] }))}
                   />
                 </Section>
-                <Section title="By supply" hint="Wallet recharges, Direct-MSME eligibility fees, Virtual Workspace subscriptions and storage plans are separate supplies. Subscriptions and storage plans share the SUB/ invoice series.">
+                <Section title="By supply" hint="Wallet recharges, Direct-MSME fees (eligibility and per-co-applicant, both MSM/ invoices), Virtual Workspace subscriptions and storage plans are separate supplies. Subscriptions and storage plans share the SUB/ invoice series.">
                   <Grid
                     cols={[{ key: 'k', label: 'Supply' }, { key: 'invoices', label: 'Invoices', num: true }, ...taxCols(showUnsplit)]}
                     rows={STREAMS.map((k) => ({ key: k, k: STREAM_LABEL[k], ...report.by_stream[k] }))}
@@ -1701,7 +1701,7 @@ const AdminWalletRevenuePage = () => {
 
             {tab !== 'vendor_spend' && (
               <div style={{ fontSize: 11, color: 'var(--on-muted)', lineHeight: 1.6, marginTop: 8 }}>
-                <b>Scope &amp; basis.</b> {report.basis} This page covers wallet recharge, Direct-MSME eligibility-fee and Virtual Workspace subscription invoices (subscriptions paid from wallet credits carry no new GST and are not listed). Input tax credit is not tracked. Figures are a working aid; confirm with your chartered accountant before filing.
+                <b>Scope &amp; basis.</b> {report.basis} This page covers wallet recharge, Direct-MSME fee (eligibility and per-co-applicant) and Virtual Workspace subscription invoices (subscriptions paid from wallet credits carry no new GST and are not listed). Input tax credit is not tracked. Figures are a working aid; confirm with your chartered accountant before filing.
               </div>
             )}
           </>

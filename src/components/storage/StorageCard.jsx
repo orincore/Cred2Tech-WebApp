@@ -5,7 +5,7 @@ import { Check, Lock, ArrowUpCircle, ArrowDownCircle, RefreshCw, FolderOpen } fr
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axiosInstance';
 import { storageService } from '../../api/storageService';
-import { loadRazorpay } from '../../utils/razorpay';
+import { loadRazorpay, createRazorpayCheckout } from '../../utils/razorpay';
 import { getErrorMessage, formatDateTime } from '../../utils/helpers';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import ConfirmModal from '../ui/ConfirmModal';
@@ -81,10 +81,10 @@ const StorageCard = () => {
   // ── Razorpay Checkout for a subscription (first payment, or an upgrade's prorated top-up) ──
   const openCheckout = async ({ subscriptionId, keyId, description, confirmFn, success }) => {
     const Razorpay = await loadRazorpay();
-    const rzp = new Razorpay({
+    // Name, logo and colours come from the shared Cred2Tech branding.
+    const rzp = createRazorpayCheckout(Razorpay, {
       key: keyId,
       subscription_id: subscriptionId,
-      name: 'Cred2Tech Storage',
       description,
       handler: async (response) => {
         try {
@@ -103,7 +103,6 @@ const StorageCard = () => {
         } finally { setBusy(false); }
       },
       modal: { ondismiss: () => { setBusy(false); setTimeout(refresh, 3000); } },
-      theme: { color: '#4F46E5' },
     });
     rzp.on('payment.failed', (r) => { setBusy(false); toast.error(`Payment failed: ${r.error.description}`); });
     rzp.open();
