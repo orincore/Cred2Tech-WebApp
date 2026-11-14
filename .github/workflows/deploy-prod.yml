@@ -1,0 +1,214 @@
+name: Deploy Production
+
+# Production frontend, served from our own servers (Vercel is discontinued).
+# EC2 (primary) and Hostinger (standby, BCP) always run the SAME build, so a failover
+# never changes what users see.  See Cred2Tech/docs/Whitelabel.md sections 7.1 and 7.2.
+#
+# MANUAL ONLY for now. No push trigger until the owner decides the branch and approval
+# policy (Whitelabel.md open question Q9). The Deploy Portal dispatches this workflow.
+#
+# Order is deliberate: build once, deploy to the STANDBY first, then the PRIMARY, then
+# prove both serve the same commit. If the standby fails, the primary is never touched.
+# Each server rolls its own symlink back if its smoke test fails (activate-release.sh).
+#
+# Repo secrets (environment "production"): SSH_PRIVATE_KEY, SSH_USER, SSH_HOST (Hostinger),
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (the cred2tech-server-automation user, same as
+# the backend workflow), VITE_API_BASE_URL, VITE_TURNSTILE_SITE_KEY, VITE_PUSH_VAPID_PUBLIC_KEY.
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Exact commit SHA to deploy (defaults to the tip of the ref this is run against)."
+        type: string
+        required: false
+      correlation_id:
+        description: "Opaque id set by the Deploy Portal; blank for manual runs."
+        type: string
+        required: false
+
+run-name: Deploy Frontend Prod ${{ github.event.inputs.correlation_id }}
+
+concurrency:
+  group: deploy-webapp-prod
+  cancel-in-progress: false
+
+env:
+  EC2_INSTANCE: i-098643eb9cd3c8c71
+  EC2_REGION: ap-south-2
+  S3_BUCKET: cred2tech-db-backups
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    outputs:
+      release_ts: ${{ steps.meta.outputs.release_ts }}
+      git_commit: ${{ steps.meta.outputs.git_commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.ref }}
+          fetch-depth: ${{ github.event.inputs.commit_sha && 0 || 1 }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20" # same as the dev workflow; change both together after a tested upgrade
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
+          VITE_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.VITE_PUSH_VAPID_PUBLIC_KEY }}
+          VITE_APP_ENV: production
+        run: npm run build
+
+      - name: Set release metadata
+        id: meta
+        run: |
+          echo "release_ts=$(date +%Y%m%d_%H%M%S)" >> "$GITHUB_OUTPUT"
+          # git rev-parse reads the commit actually checked out, not github.sha (see deploy-dev.yml)
+          echo "git_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Write version.json
+        run: |
+          printf '{"commit":"%s","release_ts":"%s","run":"%s"}\n' \
+            "${{ steps.meta.outputs.git_commit }}" "${{ steps.meta.outputs.release_ts }}" "${{ github.run_number }}" \
+            > dist/version.json
+
+      - name: Sanity check the build
+        run: |
+          test -s dist/index.html && test -d dist/assets && test -s dist/version.json
+          echo "dist size: $(du -sh dist | cut -f1), files: $(find dist -type f | wc -l)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webapp-dist
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy-hostinger:
+    # Standby first: it proves the build and the script before the primary changes.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    outputs:
+      active_commit: ${{ steps.activate.outputs.active_commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: webapp-dist
+          path: dist
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned host keys, identical to the backend workflows (live ssh-keyscan was flaky).
+          printf '%s\n' "187.127.150.119 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAgCzT99SI9ryEH9PuMh1tCkSDOGMaYjFKmVqgApHAbZ" >> ~/.ssh/known_hosts
+          printf '%s\n' "187.127.150.119 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXYdZ7LNWwSouKUAO7rWhT8YyAvU2a86Yt8o9fEvjkmt+8dvXoiIcHHgAWKteWQiiZ8XErhO8uOaDAfEFnWEv8=" >> ~/.ssh/known_hosts
+          cat > ~/retry.sh <<'RETRY'
+          retry() { local n=1; until "$@"; do [ $n -ge 3 ] && return 1; n=$((n+1)); sleep 10; done; }
+          RETRY
+
+      - name: Upload release
+        run: |
+          source ~/retry.sh
+          SSH="ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o StrictHostKeyChecking=yes"
+          R=/opt/cred2tech/webapp/releases/${{ needs.build.outputs.release_ts }}
+          retry $SSH "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "mkdir -p $R"
+          retry rsync -az --delete -e "$SSH" dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:$R/"
+
+      - name: Activate (swap, smoke test, rollback on failure)
+        id: activate
+        run: |
+          source ~/retry.sh
+          SSH="ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o StrictHostKeyChecking=yes"
+          retry rsync -az -e "$SSH" scripts/ci/activate-release.sh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/cred2tech/webapp/activate-release.sh"
+          OUT=$($SSH "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "bash /opt/cred2tech/webapp/activate-release.sh '${{ needs.build.outputs.release_ts }}' '${{ needs.build.outputs.git_commit }}'" 2>&1) || { echo "$OUT"; echo "::error::Hostinger activation failed (rolled back on the server)"; exit 1; }
+          echo "$OUT"
+          echo "active_commit=$(echo "$OUT" | sed -n 's/^ACTIVE_COMMIT=//p' | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up local key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+  deploy-ec2:
+    needs: [build, deploy-hostinger]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    outputs:
+      active_commit: ${{ steps.activate.outputs.active_commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: webapp-dist
+          path: dist
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.EC2_REGION }}
+
+      - name: Upload release to S3 (transfer channel only)
+        run: |
+          cp scripts/ci/activate-release.sh dist/.activate-release.sh   # travels with the release
+          (cd dist && zip -rq ../release.zip . -x '.DS_Store')
+          # Prefix app-releases/ec2/ is the only one cred2tech-server-automation may write.
+          aws s3 cp release.zip "s3://${S3_BUCKET}/app-releases/ec2/webapp/${{ needs.build.outputs.release_ts }}/release.zip" --region ap-south-1
+
+      - name: Deploy via SSM (download, unpack, activate, smoke test, rollback on failure)
+        id: activate
+        run: |
+          TS="${{ needs.build.outputs.release_ts }}"
+          SHA="${{ needs.build.outputs.git_commit }}"
+          B=/opt/cred2tech/webapp
+          CMD_ID=$(aws ssm send-command --region "$EC2_REGION" --instance-ids "$EC2_INSTANCE" \
+            --document-name AWS-RunShellScript --timeout-seconds 600 \
+            --parameters "commands=[\"set -e\",\"mkdir -p $B/releases/$TS\",\"cd $B/releases/$TS\",\"aws s3 cp s3://${S3_BUCKET}/app-releases/ec2/webapp/$TS/release.zip . --region ap-south-1\",\"unzip -q release.zip && rm release.zip\",\"cp .activate-release.sh $B/activate-release.sh && rm .activate-release.sh\",\"bash $B/activate-release.sh '$TS' '$SHA'\"]" \
+            --query Command.CommandId --output text)
+          echo "SSM CommandId: $CMD_ID"
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation --region "$EC2_REGION" --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE" --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in InProgress|Pending|Delayed) sleep 10;; *) break;; esac
+          done
+          OUT=$(aws ssm get-command-invocation --region "$EC2_REGION" --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE" --query StandardOutputContent --output text)
+          echo "$OUT"
+          [ "$STATUS" = "Success" ] || { aws ssm get-command-invocation --region "$EC2_REGION" --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE" --query StandardErrorContent --output text; echo "::error::EC2 activation failed (status $STATUS; rolled back on the server)"; exit 1; }
+          echo "active_commit=$(echo "$OUT" | sed -n 's/^ACTIVE_COMMIT=//p' | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Remove release artifact from S3
+        if: success()
+        run: aws s3 rm "s3://${S3_BUCKET}/app-releases/ec2/webapp/${{ needs.build.outputs.release_ts }}/release.zip" --region ap-south-1
+
+  verify-parity:
+    needs: [build, deploy-hostinger, deploy-ec2]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Both servers must serve the commit we built
+        run: |
+          EXPECT="${{ needs.build.outputs.git_commit }}"
+          H="${{ needs.deploy-hostinger.outputs.active_commit }}"
+          E="${{ needs.deploy-ec2.outputs.active_commit }}"
+          echo "built=$EXPECT  hostinger=$H  ec2=$E"
+          [ -n "$EXPECT" ] && [ "$H" = "$EXPECT" ] && [ "$E" = "$EXPECT" ] \
+            || { echo "::error::Frontend version skew between EC2 and Hostinger. Redeploy, or roll back the server that differs by re-pointing /opt/cred2tech/webapp/current."; exit 1; }
+          echo "Parity OK"

@@ -25,7 +25,12 @@ const BrandingPreview = ({ name, primary, logoLightUrl, logoDarkUrl, tagline, po
           <span style={{ height: 8, background: 'var(--bg-elevated)' }} /><span style={{ height: 8, background: 'var(--bg-elevated)' }} />
           <span style={{ alignSelf: 'flex-start', padding: '5px 14px', fontSize: 10, fontWeight: 700, color: '#fff', background: 'var(--text-primary, #0f172a)' }}>Sign In</span>
           <span style={{ fontSize: 9.5, fontWeight: 700, color: colour }}>Forgot password?</span>
-          {poweredBy && <span style={{ fontSize: 8.5, color: 'var(--text-tertiary)', marginTop: 4 }}>Powered by <u>Cred2Tech</u></span>}
+          {poweredBy && (
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 8.5, color: 'var(--text-tertiary)', marginTop: 4 }}>
+              Powered by
+              <img src="/logos/black-logo.png" alt="Cred2Tech" style={{ height: 11, width: 'auto', alignSelf: 'flex-start' }} />
+            </span>
+          )}
         </div>
       </div>
       <p style={{ margin: '14px 0 8px', fontSize: 11, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--on-muted)' }}>Email header</p>
