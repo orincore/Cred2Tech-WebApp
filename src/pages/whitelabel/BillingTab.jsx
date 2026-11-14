@@ -75,7 +75,7 @@ const BillingTab = ({ org, stepUp, onOrgChanged }) => {
   const td = { padding: '9px 10px', fontSize: 12.5, borderTop: '1px solid var(--outline)', color: 'var(--on-surface)' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 980 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {fee.unpaid_periods.length > 0 && (
         <p role="status" style={{ margin: 0, padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)' }}>
           Platform fee unpaid for {fee.unpaid_periods.map(periodLabel).join(', ')}: the wallet did not hold enough credits. It is retried every night; you can also add credits below or suspend the organisation.

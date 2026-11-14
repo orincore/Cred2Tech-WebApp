@@ -55,7 +55,7 @@ const AdminWhitelabelCreatePage = () => {
   return (
     <PageFrame icon={Palette} title="New white-label partner" subtitle="Step 1 of 3 · Details and address"
       back={<Link to="/admin/whitelabel" aria-label="Back to partners" style={{ display: 'flex', color: 'var(--on-muted)' }}><ArrowLeft size={18} /></Link>}>
-      <form onSubmit={submit} style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <Card title="Address" subtitle="Where their site lives. This cannot be changed once setup has started.">
           <SubdomainField value={slug} onChange={(v) => { slugTouched.current = true; setSlug(v); setSlugError(''); }} base={config.primary_base_domain} limits={config.slug} onAvailability={setAvailable} error={slugError} />
         </Card>

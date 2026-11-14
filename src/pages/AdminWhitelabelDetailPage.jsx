@@ -31,7 +31,8 @@ const Overview = ({ org, config, go }) => {
   const items = readiness(org);
   const ready = canProvision(org);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 820 }}>
+    // full width; the checklist and the summary sit side by side when there is room (and stack on a narrow screen)
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 18, alignItems: 'start' }}>
       <Card title="Before setup" subtitle="Required items must be done before the site can be built.">
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((r) => (
@@ -85,7 +86,7 @@ const Details = ({ org, stepUp, onSaved }) => {
   };
 
   return (
-    <form onSubmit={save} style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <Card title="Organisation and administrator" subtitle="The subdomain cannot be changed here.">
         <OrgDetailsForm values={values} onChange={setValues} errors={errors} disabled={locked} />
       </Card>
@@ -154,7 +155,7 @@ const AdminWhitelabelDetailPage = () => {
       actions={<><Pill tone={meta?.tone} title={meta?.hint}>{meta?.label || org.status}</Pill><SuspendControl org={org} stepUp={stepUp} onChanged={changed} /></>}
       tabs={tabs} tab={tab} onTab={go}>
       {org.status === 'SUSPENDED' && (
-        <p role="status" style={{ margin: '0 0 16px', padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)', maxWidth: 820 }}>
+        <p role="status" style={{ margin: '0 0 16px', padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)' }}>
           This organisation is suspended. Its site is offline for every user and its background work is paused. Nothing has been deleted. Use Resume to bring it back.
         </p>
       )}
@@ -163,7 +164,7 @@ const AdminWhitelabelDetailPage = () => {
       {tab === 'branding' && <BrandingEditor org={org} config={config} stepUp={stepUp} onChanged={changed} />}
       {tab === 'setup' && <ProvisioningTracker org={org} config={config} stepUp={stepUp} onOrgChanged={changed} />}
       {unpaid.length > 0 && tab !== 'billing' && (
-        <p role="status" style={{ margin: '0 0 16px', padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)', maxWidth: 820 }}>
+        <p role="status" style={{ margin: '0 0 16px', padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)' }}>
           The monthly platform fee is unpaid for {unpaid.length} month{unpaid.length === 1 ? '' : 's'} because the wallet is short of credits. <button type="button" onClick={() => go('billing')} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Open billing</button>
         </p>
       )}

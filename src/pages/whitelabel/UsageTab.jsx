@@ -48,7 +48,7 @@ const UsageTab = ({ org, onOrgChanged }) => {
   const flagged = u.limits.filter((l) => l.level !== 'ok');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 980 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {flagged.length > 0 && (
         <p role="status" style={{ margin: 0, padding: '10px 12px', fontSize: 13, background: 'var(--warning-bg)', color: 'var(--text-primary)', display: 'flex', gap: 8, alignItems: 'center' }}>
           <AlertTriangle size={15} /> {flagged.map((l) => `${l.label}: ${num(l.used)} of ${num(l.limit)} ${l.unit} (${l.percent}%)`).join(' · ')}
