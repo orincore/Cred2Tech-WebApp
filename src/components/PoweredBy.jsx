@@ -20,8 +20,8 @@ const PoweredBy = ({ className = '', align = 'center', style }) => {
         <img
           src={mounted && theme === 'dark' ? '/logos/white-logo.png' : '/logos/black-logo.png'}
           alt="Cred2Tech"
-          height={20}
-          style={{ height: 20, width: 'auto', display: 'block' }}
+          height={30}
+          style={{ height: 30, width: 'auto', display: 'block' }}
         />
       </a>
     </div>

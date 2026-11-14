@@ -19,6 +19,10 @@ const Logo = ({ size = 'medium', className = '', surface }) => {
   // and can switch the logo off on a surface (login page, sidebar, ...). The main app is untouched below.
   if (brand.isOrg) {
     if (!brand.showLogoOn(surface)) return null;
+    // The boxes above were drawn around Cred2Tech's own wide (about 4:1) wordmark. A partner's logo is often squarer, so at the same
+    // height it looked small next to ours. Partner logos get larger boxes (the image still scales to fit, never stretched or cropped).
+    const ORG_BOX = { small: { height: 28, maxWidth: 112 }, medium: { height: 44, maxWidth: 170 }, large: { height: 60, maxWidth: 230 }, xlarge: { height: 84, maxWidth: 300 } };
+    const { height, maxWidth } = ORG_BOX[size] || ORG_BOX.medium;
     const dark = mounted && theme === 'dark';
     // `brightness-0 invert` is how the login brand panel turns the Cred2Tech logo white; an org logo must keep its colours
     const onBrandPanel = /\bbrightness-0\b/.test(className);
