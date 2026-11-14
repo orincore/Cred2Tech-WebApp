@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { setOrgMode } from '../lib/apiBase';
+import { setOrgMode, getApiBaseUrl } from '../lib/apiBase';
 import {
   DEFAULT_NAME, isOrgCandidateHost, parseList, normalizeBranding, buildTheme, themeCss, brandTitle, brandTitleFrom,
 } from './brandingCore';
@@ -52,9 +52,37 @@ async function fetchBranding(timeoutMs = 4000) {
   } catch (e) { return { error: true }; } finally { clearTimeout(t); }
 }
 
+// A customer link (consent / ITR / GST) is always sent from the MAIN app host, never an org's subdomain
+// (TRAI/DLT only delivers SMS links on the registered domain). The token names the org instead:
+// /SUNBY/CONaBcD1234.k (or /c/...). Only such a link page takes the org's brand; everything else on the
+// main host stays the Cred2Tech app.
+const LINK_PAGE = /^\/(?:SUNBY|c)\/((?:CON|ITR|GST)[A-Za-z0-9_-]{8}\.[0-9a-z]{1,8})\/?$/;
+
+async function initLinkBranding(token) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 4000);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/whitelabel/link-branding?t=${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' }, cache: 'no-store', signal: ctl.signal });
+    if (!res.ok) return;
+    const json = await res.json();
+    const branding = normalizeBranding(json);
+    if (!branding) return;
+    // The logo files are served from the org's own host, not from this one.
+    const origin = typeof json.origin === 'string' && /^https?:\/\/[a-z0-9.:-]+$/i.test(json.origin) ? json.origin : null;
+    const abs = (u) => (u && origin ? `${origin}${u}` : null);
+    const withOrigin = { ...branding, logoLight: abs(branding.logoLight), logoDark: abs(branding.logoDark), favicon: abs(branding.favicon) };
+    const theme = buildTheme(withOrigin.primary);
+    // No setOrgMode(): the API stays where the main app's API is, which is where this link's requests go.
+    applyToDocument(withOrigin, theme);
+    set({ status: 'org', branding: withOrigin, theme });
+  } catch (e) { /* a branding failure never blocks the customer: the page stays on the default brand */ } finally { clearTimeout(t); }
+}
+
 /** Call once before rendering. Resolves with the final state. Never rejects. */
 export async function initBranding() {
   if (!isOrgCandidateHost(window.location.hostname, { baseDomains: BASE_DOMAINS, mainHosts: MAIN_HOSTS })) {
+    const link = LINK_PAGE.exec(window.location.pathname);
+    if (link) await initLinkBranding(link[1]);
     return state;                                                       // the main app, exactly as before
   }
   let r = await fetchBranding();
