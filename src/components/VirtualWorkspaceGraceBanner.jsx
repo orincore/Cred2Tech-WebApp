@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
 import { loadRazorpay, createRazorpayCheckout } from '../utils/razorpay';
 import { getErrorMessage } from '../utils/helpers';
+import { useBranding } from '../branding/brandingStore';
 
 const GRACE_STATUSES = ['HALTED', 'GRACE_PERIOD', 'PENDING'];
 // Re-checks periodically so the banner clears itself once the tenant fixes
@@ -19,7 +20,9 @@ const VirtualWorkspaceGraceBanner = () => {
   const { user, hasRole } = useAuth();
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
-  const isDsaAdmin = hasRole('DSA_ADMIN');
+  // White-label organisations are not charged for Virtual Workspace: no billing banner.
+  const { isOrg } = useBranding();
+  const isDsaAdmin = hasRole('DSA_ADMIN') && !isOrg;
 
   const fetchStatus = useCallback(async () => {
     if (!isDsaAdmin) return;

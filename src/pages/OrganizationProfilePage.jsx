@@ -10,6 +10,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 import PageHeader from '../components/ui/PageHeader';
 import VirtualWorkspaceSubscriptionCard from '../components/VirtualWorkspaceSubscriptionCard';
 import { VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED } from '../constants/features';
+import { useBranding } from '../branding/brandingStore';
 
 import CustomSelect from '../components/CustomSelect';
 // Same list CreateTenantPage offers — kept in sync there rather than shared,
@@ -166,6 +167,7 @@ const dash = (v) => (v === undefined || v === null || v === '' ? '—' : v);
 const OrganizationProfilePage = () => {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { isOrg: isWhiteLabelOrg } = useBranding();
   const [tenant, setTenant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -714,7 +716,7 @@ const OrganizationProfilePage = () => {
           </form>
         )}
 
-        {VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && <VirtualWorkspaceSubscriptionCard />}
+        {VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && !isWhiteLabelOrg && <VirtualWorkspaceSubscriptionCard />}
       </div>
     </div>
   );

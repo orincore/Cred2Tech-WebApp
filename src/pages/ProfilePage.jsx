@@ -12,6 +12,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatDateTime, formatHierarchyPath, getErrorMessage } from '../utils/helpers';
 import { roleLabel } from '../constants/roles';
 import { VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED } from '../constants/features';
+import { useBranding } from '../branding/brandingStore';
 import { useTheme } from '../context/ThemeContext';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
@@ -299,7 +300,9 @@ const ProfilePage = () => {
   // existing home on OrganizationProfilePage) — DSA_MEMBER/SUB_DSA staff
   // don't manage tenant billing, so the tab doesn't appear for them.
   // Also off while Virtual Workspace is free (constants/features.js).
-  const canManageSubscription = VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && hasRole('DSA_ADMIN');
+  // Never for white-label organisations: they are not charged for Virtual Workspace.
+  const { isOrg: isWhiteLabelOrg } = useBranding();
+  const canManageSubscription = VIRTUAL_WORKSPACE_SUBSCRIPTION_ENABLED && !isWhiteLabelOrg && hasRole('DSA_ADMIN');
 
   // ─── Push notification preferences ──────────────────────────────────────────
   const pushSupported = isPushSupported();

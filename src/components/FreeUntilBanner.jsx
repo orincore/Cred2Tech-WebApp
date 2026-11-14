@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
+import { useBranding } from '../branding/brandingStore';
 
 // Auto-dismissing "Virtual Workspace is free until X" banner for the
 // Dashboard page — same underlying free-window status
@@ -15,6 +16,9 @@ const MAX_HEIGHT_PX = 120; // comfortably larger than the rendered banner — se
 
 const FreeUntilBanner = () => {
   const { hasRole } = useAuth();
+  // White-label organisation sites never show this promo (it is Cred2Tech's own
+  // pricing message, not the org's). The main app is unaffected.
+  const { isOrg } = useBranding();
   // 'idle' (nothing to show / still loading) → 'closed' (mounted, collapsed
   // — one frame only, so the browser has a starting state to transition
   // FROM) → 'open' (expanded) → 'closed' again (collapsing) → unmount.
@@ -22,7 +26,7 @@ const FreeUntilBanner = () => {
   const [freeUntilLabel, setFreeUntilLabel] = useState('');
 
   useEffect(() => {
-    if (!hasRole('DSA_ADMIN')) return;
+    if (isOrg || !hasRole('DSA_ADMIN')) return;
     let cancelled = false;
     api.get('/virtual-workspace/subscription').then((res) => {
       if (cancelled) return;
