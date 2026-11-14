@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { SearchX, ArrowLeft } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
+import { titleFor } from '../branding/brandingStore';
 
 /** Expanding, fading sonar rings behind the icon — same "still active, not
     dead" treatment OfflineOverlay uses behind its WifiOff icon, reused here
@@ -30,7 +31,7 @@ const NotFoundPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Page Not Found';
+    document.title = titleFor('Page Not Found');
   }, []);
 
   return (
@@ -60,7 +61,7 @@ const NotFoundPage = () => {
         className="w-full max-w-md"
       >
         <div className="flex justify-center mb-8">
-          <Logo size="large" />
+          <Logo size="large" surface="error_pages" />
         </div>
 
         <div className="bg-white dark:bg-[#162048] shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">

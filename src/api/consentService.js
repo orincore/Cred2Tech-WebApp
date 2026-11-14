@@ -1,4 +1,5 @@
 import api from './axiosInstance';
+import { getApiBaseUrl } from '../lib/apiBase';
 import axios from 'axios';
 
 // The DSA-side calls below carry the normal auth token via the shared
@@ -7,7 +8,6 @@ import axios from 'axios';
 // emailed link, and axiosInstance's interceptor would attach/ react to a
 // stale or absent token. They go through plain axios with the API base URL
 // instead.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export const consentService = {
   // DSA-side (authenticated). Pass applicant_id when this is a specific
@@ -36,17 +36,17 @@ export const consentService = {
 
   // Public — the customer's own page, no auth.
   getPublicDetails: async (token) => {
-    const response = await axios.get(`${API_BASE_URL}/consent/${token}`);
+    const response = await axios.get(`${getApiBaseUrl()}/consent/${token}`);
     return response.data;
   },
 
   approve: async (token, otp) => {
-    const response = await axios.post(`${API_BASE_URL}/consent/${token}/approve`, { agreed: true, otp });
+    const response = await axios.post(`${getApiBaseUrl()}/consent/${token}/approve`, { agreed: true, otp });
     return response.data;
   },
 
   resendOtp: async (token) => {
-    const response = await axios.post(`${API_BASE_URL}/consent/${token}/resend-otp`);
+    const response = await axios.post(`${getApiBaseUrl()}/consent/${token}/resend-otp`);
     return response.data;
   },
 

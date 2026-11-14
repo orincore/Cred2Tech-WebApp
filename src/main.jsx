@@ -4,6 +4,8 @@ import App from './App.jsx'
 import './index.css'
 import { ThemeProvider } from './context/ThemeContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import OrgUnavailable from './components/OrgUnavailable'
+import { initBranding } from './branding/brandingStore'
 
 // A successful mount means this tab is running the current build — clear
 // ErrorBoundary's one-shot reload guard so a chunk-load failure from a
@@ -38,12 +40,20 @@ window.addEventListener('vite:preloadError', () => {
   }
 });
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+// Decide FIRST whether this is the main Cred2Tech app or a white-label organisation's site (and load its brand),
+// so nothing ever paints with the wrong name, logo or colours. On the main app this resolves immediately.
+initBranding().then((branding) => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    branding.status === 'unavailable' ? (
+      <OrgUnavailable />
+    ) : (
+      <React.StrictMode>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </ErrorBoundary>
+      </React.StrictMode>
+    ),
+  )
+})

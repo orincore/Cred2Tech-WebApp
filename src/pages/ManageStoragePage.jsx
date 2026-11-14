@@ -16,6 +16,7 @@ import { storageService } from '../api/storageService';
 import { notifyStorageChanged } from '../hooks/useStorageGate';
 import { downloadDocument } from '../api/documentHelper';
 import { getErrorMessage, formatDate, resolveEntityName, toTitleCase } from '../utils/helpers';
+import { titleFor, brandName } from '../branding/brandingStore';
 
 const MB = 1024 * 1024;
 const DAY = 24 * 60 * 60 * 1000;
@@ -25,8 +26,9 @@ const BULK_DELETE_FILES = 5; // this many files or more need the typed confirmat
 const ZIP_MAX_FILES = 100;
 const ZIP_MAX_BYTES = 250 * MB;
 
-const SOURCE_LABEL = { DIRECT_UPLOAD: 'Uploaded', VENDOR_DOWNLOAD: 'Pulled via Cred2Tech', SYSTEM_GENERATED: 'System' };
-const SOURCE_SHORT = { DIRECT_UPLOAD: 'Uploaded', VENDOR_DOWNLOAD: 'Cred2Tech pull', SYSTEM_GENERATED: 'System' };
+// getters: the brand name is read when the label is shown (white-label orgs see their own name)
+const SOURCE_LABEL = { DIRECT_UPLOAD: 'Uploaded', get VENDOR_DOWNLOAD() { return `Pulled via ${brandName()}`; }, SYSTEM_GENERATED: 'System' };
+const SOURCE_SHORT = { DIRECT_UPLOAD: 'Uploaded', get VENDOR_DOWNLOAD() { return `${brandName()} pull`; }, SYSTEM_GENERATED: 'System' };
 const SOURCE_COLOR = { DIRECT_UPLOAD: '#6366f1', VENDOR_DOWNLOAD: '#14b8a6', SYSTEM_GENERATED: '#a78bfa' };
 const SOURCE_HINT = { DIRECT_UPLOAD: 'Files you or your team uploaded', VENDOR_DOWNLOAD: 'GST, ITR, bank and bureau reports', SYSTEM_GENERATED: 'Reports built from pulled data' };
 const SIZE_OPTIONS = [
@@ -264,7 +266,7 @@ const ManageStoragePage = () => {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { document.title = 'Cred2Tech | Manage Storage'; }, []);
+  useEffect(() => { document.title = titleFor('Manage Storage'); }, []);
 
   // One flat row per file, carrying its case details so every filter and sort works on one list.
   const rows = useMemo(() => {
@@ -577,7 +579,7 @@ const ManageStoragePage = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ ...caps, marginRight: 4 }}>Source</span>
-              {[{ id: 'ALL', label: 'All sources' }, { id: 'DIRECT_UPLOAD', label: 'Uploaded' }, { id: 'VENDOR_DOWNLOAD', label: 'Pulled via Cred2Tech' }, { id: 'SYSTEM_GENERATED', label: 'System' }].map((s) => {
+              {[{ id: 'ALL', label: 'All sources' }, { id: 'DIRECT_UPLOAD', label: 'Uploaded' }, { id: 'VENDOR_DOWNLOAD', label: `Pulled via ${brandName()}` }, { id: 'SYSTEM_GENERATED', label: 'System' }].map((s) => {
                 const on = f.source === s.id;
                 return (
                   <button key={s.id} type="button" onClick={() => set({ source: s.id })}

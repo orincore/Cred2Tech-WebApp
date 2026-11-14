@@ -6,6 +6,7 @@ import NotificationPanel from '../components/notifications/NotificationPanel';
 import AppLayout from '../layouts/AppLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
+import MainAppOnly from './MainAppOnly';
 import SessionRevokedModal from '../components/SessionRevokedModal';
 import { DASHBOARD_ROLES } from '../constants/roles';
 
@@ -38,6 +39,9 @@ const AddCustomerWizardPage = lazy(() => import('../pages/AddCustomerWizardPage'
 const AddSalariedCustomerWizardPage = lazy(() => import('../pages/AddSalariedCustomerWizardPage'));
 const SuperadminPricingPage = lazy(() => import('../pages/SuperadminPricingPage'));
 const AdminPromoCodesPage = lazy(() => import('../pages/AdminPromoCodesPage'));
+const AdminWhitelabelListPage = lazy(() => import('../pages/AdminWhitelabelListPage'));
+const AdminWhitelabelCreatePage = lazy(() => import('../pages/AdminWhitelabelCreatePage'));
+const AdminWhitelabelDetailPage = lazy(() => import('../pages/AdminWhitelabelDetailPage'));
 const AdminTenantManagePage = lazy(() => import('../pages/AdminTenantManagePage'));
 const AdminSubscriptionPlansPage = lazy(() => import('../pages/AdminSubscriptionPlansPage'));
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
@@ -155,11 +159,11 @@ const AppRouter = () => (
           <Route path="/customer-consent" element={<ConsentPage />} />
           <Route path="/itr-auth" element={<ItrAuthPage />} />
           <Route path="/gst-auth" element={<GstAuthPage />} />
-          <Route path="/register-dsa" element={<DSARegisterPage />} />
+          <Route path="/register-dsa" element={<MainAppOnly><DSARegisterPage /></MainAppOnly>} />
           <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
           {/* MSME Direct Portal */}
-          <Route path="/msme" element={<MsmeLayout />}>
+          <Route path="/msme" element={<MainAppOnly><MsmeLayout /></MainAppOnly>}>
             <Route path="login" element={<MsmeLoginPage />} />
             <Route element={<MsmeProtectedRoute />}>
               <Route path="dashboard" element={<MsmeDashboardPage />} />
@@ -276,6 +280,15 @@ const AppRouter = () => (
             } />
             <Route path="/admin/promo-codes" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminPromoCodesPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/whitelabel" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminWhitelabelListPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/whitelabel/new" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminWhitelabelCreatePage /></ProtectedRoute>
+            } />
+            <Route path="/admin/whitelabel/:id" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminWhitelabelDetailPage /></ProtectedRoute>
             } />
             <Route path="/admin/wallets" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SuperadminWalletManager /></ProtectedRoute>

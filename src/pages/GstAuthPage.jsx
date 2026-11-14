@@ -5,6 +5,7 @@ import { getErrorMessage } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { PageShell, StatusScreen, LoadingBlock, RequestedByBanner, ErrorNotice } from '../components/PublicLinkShell';
 import { useLang, requesterLabel } from '../lib/publicLang';
+import { titleFrom } from '../branding/brandingStore';
 
 const GstAuthPage = () => {
   const [searchParams] = useSearchParams();
@@ -35,7 +36,7 @@ const GstAuthPage = () => {
   const [otpError, setOtpError] = useState('');
 
   useEffect(() => {
-    document.title = t('gstPageTitle');
+    document.title = titleFrom(t('gstPageTitle'));
   }, [t]);
 
   useEffect(() => {

@@ -6,6 +6,8 @@ import { useTheme } from '../context/ThemeContext';
 import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
+import PoweredBy from '../components/PoweredBy';
+import { useBranding, titleFor } from '../branding/brandingStore';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import LoginScanApproval from '../components/LoginScanApproval';
 import { viewTransitionNavigate } from '../lib/viewTransitionNavigate';
@@ -17,6 +19,7 @@ const LoginPage = () => {
   const { theme, mounted } = useTheme();
 
   const [email, setEmail] = useState('');
+  const { isOrg, name: brandName, supportEmail } = useBranding();
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [loginState, setLoginState] = useState('idle');
@@ -24,7 +27,7 @@ const LoginPage = () => {
   const [deviceBlocked, setDeviceBlocked] = useState(false);
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Login';
+    document.title = titleFor('Login');
   }, []);
 
   // ProtectedRoute redirects unauthenticated visits to a deep link here with
@@ -105,7 +108,7 @@ const LoginPage = () => {
           Colour is Cred2Tech's own brand indigo (var(--primary) across the
           app), kept intentionally rather than swapped for a neutral.
           taste-skill-ignore: brand indigo, not a generated-page default. */}
-      <aside className="hidden lg:flex lg:w-[42%] lg:max-w-[520px] relative flex-col shrink-0 overflow-hidden bg-[#4F46E5] dark:bg-[#1e1b4b]">{/* taste-skill-ignore: brand indigo, kept per --keep palette */}
+      <aside className="hidden lg:flex lg:w-[42%] lg:max-w-[520px] relative flex-col shrink-0 overflow-hidden bg-[var(--brand-panel,#4F46E5)] dark:bg-[var(--brand-panel-dark,#1e1b4b)]">{/* taste-skill-ignore: brand indigo, kept per --keep palette */}
         <svg className="absolute inset-0 w-full h-full opacity-[0.1]" aria-hidden="true">
           <pattern id="loginDotGrid" width="26" height="26" patternUnits="userSpaceOnUse">
             <circle cx="2" cy="2" r="1.6" fill="#ffffff" />
@@ -119,7 +122,7 @@ const LoginPage = () => {
         </svg>
 
         <div className="relative z-10 flex flex-col h-full p-10 xl:p-14">
-          <Logo size="xlarge" className="brightness-0 invert" />
+          <Logo size="xlarge" className="brightness-0 invert" surface="login_page" />
 
           <div className="mt-14 xl:mt-20">
             <h2 className="text-[38px] xl:text-[44px] font-bold leading-[1.08] mb-4 text-white">
@@ -141,13 +144,13 @@ const LoginPage = () => {
         {/* Large flat seal, echoing the brand panel's mark, anchoring the
             otherwise-empty lower corner with depth instead of a gradient. */}
         <svg className="hidden lg:block absolute -bottom-28 -right-24 w-[420px] h-[420px] opacity-[0.035] pointer-events-none" viewBox="0 0 480 480" aria-hidden="true">
-          <circle cx="240" cy="240" r="238" fill="none" stroke="#4F46E5" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
-          <circle cx="240" cy="240" r="190" fill="none" stroke="#4F46E5" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
+          <circle cx="240" cy="240" r="238" fill="none" stroke="var(--brand-panel,#4F46E5)" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
+          <circle cx="240" cy="240" r="190" fill="none" stroke="var(--brand-panel,#4F46E5)" strokeWidth="1.5" /> {/* taste-skill-ignore: brand indigo watermark */}
         </svg>
 
         {/* Mobile / tablet top bar */}
         <div className="flex lg:hidden items-center justify-between px-5 sm:px-8 h-16 shrink-0">
-          <Logo size="medium" />
+          <Logo size="medium" surface="login_page" />
           <ThemeToggle />
         </div>
 
@@ -160,6 +163,7 @@ const LoginPage = () => {
           <div className="w-full max-w-[400px] mx-auto">
             {/* Login / Register: a DSA partner who landed here by mistake
                 switches without a back-and-forth through two separate pages. */}
+            {!isOrg && (
             <div className="flex justify-center mb-7">
               <div className="inline-flex p-1 rounded-[12px]" style={{ background: 'var(--bg-elevated)' }}>
                 <button
@@ -180,13 +184,14 @@ const LoginPage = () => {
                 </button>
               </div>
             </div>
+            )}
 
             <div className="mb-8 lg:mb-10 relative">
               <h1 className="text-[28px] sm:text-[30px] lg:text-[34px] font-bold tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>
                 Sign In
               </h1>
               <p className="text-[14px] sm:text-[15px]" style={{ color: 'var(--text-secondary)' }}>
-                Access your secure Cred2Tech portal
+                {`Access your secure ${brandName} portal`}
               </p>
             </div>
 
@@ -286,6 +291,7 @@ const LoginPage = () => {
             </TravelingBorderButton>
 
             <div className="mt-8 text-center">
+              {isOrg ? null : (<>
               {/* "New to the platform? Register as Partner" is now covered by
                   the Login / Register tab above, so it isn't repeated here. */}
               <button
@@ -296,6 +302,8 @@ const LoginPage = () => {
                 <span className="material-symbols-outlined text-[17px]">storefront</span>
                 MSME Borrower? Login with OTP
               </button>
+              </>)}
+              <PoweredBy className="mt-6" />
             </div>
           </div>
         </div>
@@ -319,10 +327,16 @@ const LoginPage = () => {
             <p className="text-sm mb-6 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               This device has been blocked by the account owner.
               If you feel your account has been taken over by somebody else,
-              contact us at{' '}
-              <a href="mailto:support@cred2tech.com" className="font-semibold hover:underline" style={{ color: 'var(--primary)' }}>
-                support@cred2tech.com
-              </a>.
+              {isOrg && !supportEmail ? (
+                <>contact your administrator.</>
+              ) : (
+                <>
+                  contact us at{' '}
+                  <a href={`mailto:${isOrg ? supportEmail : 'support@cred2tech.com'}`} className="font-semibold hover:underline" style={{ color: 'var(--primary)' }}>
+                    {isOrg ? supportEmail : 'support@cred2tech.com'}
+                  </a>.
+                </>
+              )}
             </p>
             <TravelingBorderButton onClick={() => setDeviceBlocked(false)} size="sm" className="w-full">
               OK

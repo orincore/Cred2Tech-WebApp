@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getSocketOrigin } from './apiBase';
 import api from '../api/axiosInstance';
 
 /**
@@ -25,8 +26,8 @@ import api from '../api/axiosInstance';
 // is the only thing the production nginx proxies to Node — anything outside it
 // is swallowed by the static SPA's try_files fallback and comes back as
 // index.html instead of an engine.io handshake.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, '');
+// The socket origin is read when the socket is created (after initBranding), not at import: on a white-label org's
+// site it is the org's own origin.
 const SOCKET_PATH = '/api/socket.io';
 
 let socket = null;
@@ -51,7 +52,7 @@ function emitConnectionStatus(status) {
 function getSocket() {
   if (socket) return socket;
 
-  socket = io(SOCKET_URL, {
+  socket = io(getSocketOrigin(), {
     // Read lazily on every (re)connect rather than captured once, so a token
     // refreshed mid-session is picked up without a page reload.
     auth: (cb) => cb({ token: localStorage.getItem('token') }),

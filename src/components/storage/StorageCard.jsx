@@ -11,6 +11,7 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 import ConfirmModal from '../ui/ConfirmModal';
 import StorageMeter from './StorageMeter';
 import { notifyStorageChanged } from '../../hooks/useStorageGate';
+import { brandName } from '../../branding/brandingStore';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const LIVE = ['ACTIVE', 'PENDING', 'HALTED'];
@@ -191,7 +192,7 @@ const StorageCard = () => {
         <div style={eyebrow}>Storage used</div>
         <StorageMeter storage={data} />
         <p style={{ fontSize: 11.5, color: 'var(--on-muted)', margin: '14px 0 0', lineHeight: 1.6 }}>
-          This counts every file in your account: files you upload and reports pulled through Cred2Tech (GST, ITR, bank and bureau). A file shared by several cases is counted once.
+          {`This counts every file in your account: files you upload and reports pulled through ${brandName()} (GST, ITR, bank and bureau). A file shared by several cases is counted once.`}
         </p>
         {isAdmin && (
           <button

@@ -1,4 +1,5 @@
 import api from './axiosInstance';
+import { getApiBaseUrl } from '../lib/apiBase';
 import axios from 'axios';
 
 // Same split as consentService.js: DSA-side calls carry the normal auth
@@ -6,7 +7,6 @@ import axios from 'axios';
 // (getPublicDetails/submit) go through plain axios with the API base URL,
 // since there is no logged-in session for a customer following an emailed
 // link.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export const itrAuthLinkService = {
   // DSA-side (authenticated) — sends the customer an emailed link to
@@ -26,12 +26,12 @@ export const itrAuthLinkService = {
 
   // Public — the customer's own page, no auth.
   getPublicDetails: async (token) => {
-    const response = await axios.get(`${API_BASE_URL}/itr-auth-link/${token}`);
+    const response = await axios.get(`${getApiBaseUrl()}/itr-auth-link/${token}`);
     return response.data;
   },
 
   submit: async (token, { pan, password }) => {
-    const response = await axios.post(`${API_BASE_URL}/itr-auth-link/${token}/submit`, { pan, password });
+    const response = await axios.post(`${getApiBaseUrl()}/itr-auth-link/${token}/submit`, { pan, password });
     return response.data;
   },
 };

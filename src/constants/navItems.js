@@ -24,6 +24,7 @@ import {
   Trash2,
   ServerCog,
   Tag,
+  Palette,
   Bell,
   ShieldCheck,
   FileSpreadsheet,
@@ -81,6 +82,13 @@ export const NAV_ITEMS = [
     label: 'API Pricing',
     path: '/admin/pricing',
     icon: Settings,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-whitelabel',
+    label: 'White-label Partners',
+    path: '/admin/whitelabel',
+    icon: Palette,
     roles: ['SUPER_ADMIN'],
   },
   {

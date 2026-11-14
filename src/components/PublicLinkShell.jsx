@@ -1,6 +1,7 @@
 import React from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import Logo from './Logo';
+import PoweredBy from './PoweredBy';
 import { LanguageSelect } from '../lib/publicLang';
 
 // Shared by the three customer-facing link pages (ConsentPage, GstAuthPage,
@@ -14,11 +15,12 @@ export const PageShell = ({ children, langCtx }) => (
     </div>
     <div className="w-full max-w-lg mt-8 sm:mt-0">
       <div className="flex justify-center mb-8">
-        <Logo size="large" />
+        <Logo size="large" surface="consent_pages" />
       </div>
       <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
         {children}
       </div>
+      <PoweredBy className="mt-5" />
     </div>
   </div>
 );

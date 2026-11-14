@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useBranding } from '../branding/brandingStore';
 
 const DevBanner = () => {
+  const { isOrg } = useBranding();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -15,7 +17,8 @@ const DevBanner = () => {
     localStorage.setItem('dev_banner_closed', 'true');
   };
 
-  if (!isVisible) return null;
+  // a white-label org's site never shows Cred2Tech's internal dev banner
+  if (!isVisible || isOrg) return null;
 
   return (
     <>

@@ -65,6 +65,9 @@ jobs:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
           VITE_PUSH_VAPID_PUBLIC_KEY: ${{ secrets.VITE_PUSH_VAPID_PUBLIC_KEY }}
+          # White-label partner sites live at <slug>.dev.cred2tech.com. On those hosts the app calls its own origin (/api) and
+          # loads that partner's branding; on dev.app.cred2tech.com (not under this domain) nothing changes.
+          VITE_WL_BASE_DOMAINS: dev.cred2tech.com
         run: npm run build
 
       - name: Set release metadata

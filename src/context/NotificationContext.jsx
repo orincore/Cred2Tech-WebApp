@@ -8,6 +8,7 @@ import { DSA_TOUR_ROLES } from '../constants/roles';
 import { subscribeTours, toursInProgress } from '../lib/tourCoordinator';
 import { enablePush, getLocalPushPreference, getNotificationPermission, isPushSupported } from '../lib/pushNotifications';
 import { notificationMessage } from '../utils/notificationText';
+import { brandName } from '../branding/brandingStore';
 
 /**
  * NotificationContext — mounted inside AuthProvider so it has access to auth.user.
@@ -344,7 +345,7 @@ export function NotificationProvider({ children }) {
               </div>
             ) : (
               <div style={{ padding: '18px 22px 22px' }}>
-                <p style={{ margin: '0 0 12px', fontSize: 12, lineHeight: 1.6, color: 'var(--on-muted)' }}>To enable notifications later from Cred2Tech:</p>
+                <p style={{ margin: '0 0 12px', fontSize: 12, lineHeight: 1.6, color: 'var(--on-muted)' }}>{`To enable notifications later from ${brandName()}:`}</p>
                 <div style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
                   {['Open Profile from the account menu', 'Select the Notifications tab', 'Turn on Browser Push Notifications and choose Allow'].map((item, index) => (
                     <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--on-muted)' }}>

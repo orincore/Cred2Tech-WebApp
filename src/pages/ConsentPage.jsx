@@ -5,6 +5,7 @@ import { getErrorMessage } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { PageShell, StatusScreen, LoadingBlock, RequestedByBanner, ErrorNotice } from '../components/PublicLinkShell';
 import { useLang, translateDataPoint, requesterLabel } from '../lib/publicLang';
+import { titleFrom } from '../branding/brandingStore';
 
 const ConsentPage = () => {
   const [searchParams] = useSearchParams();
@@ -27,7 +28,7 @@ const ConsentPage = () => {
   const [resendNotice, setResendNotice] = useState('');
 
   useEffect(() => {
-    document.title = t('consentPageTitle');
+    document.title = titleFrom(t('consentPageTitle'));
   }, [t]);
 
   useEffect(() => {

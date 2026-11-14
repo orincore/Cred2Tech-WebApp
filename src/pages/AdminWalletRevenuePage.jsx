@@ -753,6 +753,10 @@ const AdminWalletRevenuePage = () => {
   const monthLabels = report ? report.monthly.map((m) => monthShort(m.month)) : [];
   const refundSeries = (key) => (report ? report.monthly.map((m) => rfByMonth.get(m.month)?.[key] ?? null) : []);
   const mval = (m, side, field) => m?.[side]?.[field] ?? 0;
+  // White-label: shown only when the report holds records from partner organisations (a main-app-only report is unchanged).
+  const orgCol = report?.organisations?.length
+    ? [{ key: 'org_name', label: 'Organisation', filterBy: true, text: (r) => r.org_name || 'Main app', render: (r) => r.org_name || 'Main app' }]
+    : [];
 
   return (
     <ExportContext.Provider value={exportCtx}>
@@ -1032,7 +1036,7 @@ const AdminWalletRevenuePage = () => {
                 <Section title={`Top customers${report.buyer_count > report.by_buyer.length ? ` (top ${report.by_buyer.length} of ${num(report.buyer_count)})` : ''}`} hint="Who paid us the most in this period, by net revenue.">
                   <Grid
                     cols={[
-                      { key: 'name', label: 'Customer', render: (r) => <div><div>{r.name}</div><div style={{ fontSize: 10, color: 'var(--on-muted)' }}>{r.gstin || 'Unregistered'}</div></div> },
+                      { key: 'name', label: 'Customer', render: (r) => <div><div>{r.name}</div><div style={{ fontSize: 10, color: 'var(--on-muted)' }}>{r.gstin || 'Unregistered'}{r.org_name ? ` · ${r.org_name}` : ''}</div></div> },
                       { key: 'streams', label: 'Bought', render: (r) => r.streams.map((s) => STREAM_LABEL[s]).join(', ') },
                       { key: 'invoices', label: 'Invoices', num: true },
                       { key: 'taxable', label: 'Net revenue', num: true, render: (r) => inr(r.taxable) },
@@ -1189,14 +1193,14 @@ const AdminWalletRevenuePage = () => {
                     cols={[
                       { key: 'invoice_number', label: 'Invoice no.', render: (r) => r.invoice_number || '—' },
                       { key: 'invoice_date', label: 'Date', render: (r) => formatDateTime(r.invoice_date) },
-                      { key: 'buyer_gstin', label: 'GSTIN' }, { key: 'buyer_name', label: 'Buyer' },
+                      ...orgCol, { key: 'buyer_gstin', label: 'GSTIN' }, { key: 'buyer_name', label: 'Buyer' },
                       { key: 'pos', label: 'Place of supply', render: (r) => `${r.pos_code || '—'} ${r.pos_name || ''}` },
                       { key: 'gst_rate', label: 'Rate', num: true, render: (r) => `${(r.gst_rate * 100).toFixed(0)}%` },
                       { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
                       ...gstHeadCols(showUnsplit),
                       { key: 'total', label: 'Invoice value', num: true, render: (r) => inr(r.total) },
                     ]}
-                    rows={report.b2b.map((r) => ({ ...r, key: `${r.stream}-${r.topup_id}` }))}
+                    rows={report.b2b.map((r) => ({ ...r, key: `${r.org_id ?? 0}-${r.stream}-${r.topup_id}` }))}
                     empty="No B2B invoices"
                   />
                 </Section>
@@ -1219,13 +1223,13 @@ const AdminWalletRevenuePage = () => {
                       { key: 'invoice_number', label: 'Credit note no.' },
                       { key: 'invoice_date', label: 'Date', render: (r) => formatDateTime(r.invoice_date) },
                       { key: 'original_invoice_number', label: 'Against invoice', render: (r) => r.original_invoice_number || '—' },
-                      { key: 'buyer_gstin', label: 'GSTIN', render: (r) => r.buyer_gstin || 'Unregistered' }, { key: 'buyer_name', label: 'Buyer' },
+                      ...orgCol, { key: 'buyer_gstin', label: 'GSTIN', render: (r) => r.buyer_gstin || 'Unregistered' }, { key: 'buyer_name', label: 'Buyer' },
                       { key: 'pos', label: 'Place of supply', render: (r) => `${r.pos_code || '—'} ${r.pos_name || ''}` },
                       { key: 'taxable', label: 'Taxable', num: true, render: (r) => inr(r.taxable) },
                       ...gstHeadCols(false),
                       { key: 'total', label: 'Refunded', num: true, render: (r) => inr(r.total) },
                     ]}
-                    rows={(report.credit_notes || []).map((r) => ({ ...r, key: `${r.stream}-${r.topup_id}` }))}
+                    rows={(report.credit_notes || []).map((r) => ({ ...r, key: `${r.org_id ?? 0}-${r.stream}-${r.topup_id}` }))}
                     empty="No credit notes in this period"
                   />
                 </Section>
@@ -1315,6 +1319,7 @@ const AdminWalletRevenuePage = () => {
                         { key: 'requested_at', label: 'Requested', render: (r) => formatDateTime(r.requested_at) },
                         { key: 'processed_at', label: 'Processed', render: (r) => (r.processed_at ? formatDateTime(r.processed_at) : '—') },
                         { key: 'source_label', label: 'Refund of', filterBy: true, text: (r) => r.source_label, sort: (r) => `${r.source_label} ${String(r.source_id).padStart(9, '0')}`, render: (r) => `${r.source_label} #${r.source_id}` },
+                        ...orgCol,
                         { key: 'buyer', label: 'Buyer', render: (r) => r.buyer || '—' },
                         { key: 'amount', label: 'Refunded', num: true, render: (r) => inr(r.amount) },
                         { key: 'gst', label: 'GST', num: true, render: (r) => inr(r.gst) },
@@ -1369,6 +1374,7 @@ const AdminWalletRevenuePage = () => {
                         { key: 'stream', label: 'Source', render: (r) => STREAM_LABEL[r.stream] || r.stream },
                         { key: 'invoice_number', label: 'Invoice no.', render: (r) => r.invoice_number || <Pill style={SEVERITY_STYLE.high}>NOT ISSUED</Pill> },
                         { key: 'invoice_date', label: 'Date', render: (r) => formatDateTime(r.invoice_date) },
+                        ...orgCol,
                         { key: 'buyer_name', label: 'Buyer', render: (r) => <div><div>{r.buyer_name || '—'}</div><div style={{ fontSize: 10, color: 'var(--on-muted)' }}>{r.buyer_gstin || 'Unregistered'}</div></div> },
                         { key: 'category', label: 'Type', render: (r) => (r.doc_type === 'CREDIT_NOTE' ? `${r.category} · Credit note` : r.category) },
                         { key: 'pos', label: 'Place of supply', render: (r) => `${r.pos_code || '—'} ${r.pos_name || ''}` },
@@ -1377,7 +1383,7 @@ const AdminWalletRevenuePage = () => {
                         { key: 'total', label: 'Invoice value', num: true, render: (r) => inr(r.total) },
                         { key: 'flags', label: 'Flags', render: (r) => (r.flags.length === 0 ? '—' : r.flags.map((f) => <Pill key={f} style={{ ...SEVERITY_STYLE.low, marginRight: 4 }}>{FLAG_LABEL[f] || f}</Pill>)) },
                       ]}
-                      rows={regRows.map((r) => ({ ...r, key: `${r.stream}-${r.topup_id}` }))}
+                      rows={regRows.map((r) => ({ ...r, key: `${r.org_id ?? 0}-${r.stream}-${r.topup_id}` }))}
                       empty="No invoices match"
                     />
                   </div>
@@ -1401,6 +1407,7 @@ const AdminWalletRevenuePage = () => {
                     { key: 'stream', label: 'Source', filterBy: true, text: (r) => STREAM_LABEL[r.stream] || r.stream, render: (r) => STREAM_LABEL[r.stream] || r.stream },
                     { key: 'topup_id', label: 'Record ID', num: true },
                     { key: 'invoice_number', label: 'Invoice no.', render: (r) => r.invoice_number || '—' },
+                    ...orgCol,
                     { key: 'buyer_name', label: 'Buyer', render: (r) => r.buyer_name || '—' },
                     { key: 'total', label: 'Gross', num: true, render: (r) => inr(r.total) },
                     { key: 'taxable', label: 'Taxable (paid − GST)', num: true, render: (r) => inr(r.taxable) },

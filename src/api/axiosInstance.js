@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getApiBaseUrl } from '../lib/apiBase';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
@@ -21,6 +22,8 @@ const api = axios.create({
 // Request interceptor: attach Bearer token automatically
 api.interceptors.request.use(
   (config) => {
+    // Same-origin /api on a white-label org's site, the build-time API address on the main app (lib/apiBase.js)
+    config.baseURL = getApiBaseUrl();
     // Don't clobber an Authorization header a caller already set explicitly —
     // the MFA setup/challenge flow (src/api/mfaService.js) authenticates with
     // its own short-lived, non-session token instead of the stored one, since

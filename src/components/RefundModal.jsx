@@ -39,6 +39,7 @@ const Row = ({ k, v, sub, strong }) => (
 
 const RefundModal = ({ row, onClose, onDone }) => {
   const source = row.source;
+  const orgId = row.org_id; // set when the page is showing a white-label partner's payments
   const id = Number(String(row.id).replace(/^[A-Z]+-/, ''));
 
   const [facts, setFacts] = useState(null);          // preview without a plan: paid / refunded / history
@@ -65,12 +66,12 @@ const RefundModal = ({ row, onClose, onDone }) => {
 
   const loadFacts = useCallback(async () => {
     try {
-      const data = await adminTransactionsService.refundPreview({ source, id });
+      const data = await adminTransactionsService.refundPreview({ source, id, orgId });
       setFacts(data); setFactsError(null);
     } catch (err) {
       setFactsError(err.response?.data?.error || 'Could not load this payment');
     }
-  }, [source, id]);
+  }, [source, id, orgId]);
   useEffect(() => { loadFacts(); }, [loadFacts]);
 
   // Live preview as the admin types (debounced); stale answers are ignored.
@@ -83,7 +84,7 @@ const RefundModal = ({ row, onClose, onDone }) => {
     setPreviewLoading(true);
     const t = setTimeout(async () => {
       try {
-        const data = await adminTransactionsService.refundPreview({ source, id, full: mode === 'FULL', amountInr: mode === 'PARTIAL' ? partialAmount : undefined });
+        const data = await adminTransactionsService.refundPreview({ source, id, orgId, full: mode === 'FULL', amountInr: mode === 'PARTIAL' ? partialAmount : undefined });
         if (mine === seq.current) setPreview(data);
       } catch (err) {
         if (mine === seq.current) setPreview({ blocked_reason: 'ERROR', blocked_message: err.response?.data?.error || 'Could not work out this refund', plan: null, warnings: [] });
@@ -92,7 +93,7 @@ const RefundModal = ({ row, onClose, onDone }) => {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [mode, amount, facts, source, id]);
+  }, [mode, amount, facts, source, id, orgId]);
 
   const plan = preview?.plan;
   const blocked = preview?.blocked_reason;
@@ -107,7 +108,7 @@ const RefundModal = ({ row, onClose, onDone }) => {
     setSubmitting(true); setSubmitError(null);
     try {
       const out = await adminTransactionsService.issueRefund({
-        source, id, mode, amountInr: mode === 'PARTIAL' ? Number(amount) : undefined,
+        source, id, orgId, mode, amountInr: mode === 'PARTIAL' ? Number(amount) : undefined,
         reason: reason.trim(), idempotencyKey: keyRef.current, speed, allowLowBalance: fundingShort && allowLowBalance,
       });
       setResult(out.refund); setStage('done'); onDone?.();
@@ -124,13 +125,13 @@ const RefundModal = ({ row, onClose, onDone }) => {
 
   const recheck = async (refundId) => {
     setBusyId(refundId);
-    try { await adminTransactionsService.recheckRefund(refundId); await loadFacts(); onDone?.(); toast.success('Checked with Razorpay'); }
+    try { await adminTransactionsService.recheckRefund(refundId, orgId); await loadFacts(); onDone?.(); toast.success('Checked with Razorpay'); }
     catch (err) { toast.error(err.response?.data?.error || 'Could not check with Razorpay'); }
     finally { setBusyId(null); }
   };
   const downloadNote = async (refundId) => {
     setBusyId(refundId);
-    try { await adminTransactionsService.downloadCreditNote(refundId); }
+    try { await adminTransactionsService.downloadCreditNote(refundId, orgId); }
     catch { toast.error('Could not download the credit note'); }
     finally { setBusyId(null); }
   };

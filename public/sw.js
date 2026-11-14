@@ -87,11 +87,13 @@ self.addEventListener('push', (event) => {
   const title = String(data.title || 'New Notification').trim();
   const body = String(data.body || '').trim();
   const { action_url: actionUrl, notification_type: notificationType = 'ALERT' } = data;
+  // A white-label org's pushes carry its own icon (same-site image URL); the main app sends none and keeps ours.
+  const icon = typeof data.icon === 'string' && /^https?:\/\//.test(data.icon) ? data.icon : '/logos/favicon.png';
 
   const options = {
     body,
-    icon: '/logos/favicon.png',
-    badge: '/logos/favicon.png',
+    icon,
+    badge: icon,
     data: { action_url: actionUrl, notification_type: notificationType },
     dir: 'auto',
     lang: 'en-IN',

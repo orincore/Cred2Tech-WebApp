@@ -8,11 +8,13 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AttachmentGallery from '../components/ticket/AttachmentGallery';
 import { formatDateTime } from '../utils/helpers';
 import { ticketService } from '../api/ticketService';
+import { getBranding } from '../branding/brandingStore';
 
 const TIMELINE_LABEL = {
   CREATED: 'Submitted',
   STATUS_CHANGED: 'Status updated',
-  REPLIED_TO_SUBMITTER: 'Reply from Cred2Tech',
+  // support replies come from the platform's support team; an org's users see a neutral name, not ours
+  get REPLIED_TO_SUBMITTER() { return getBranding().isOrg ? 'Reply from Support' : 'Reply from Cred2Tech'; },
   SUBMITTER_REPLIED: 'Your reply',
   MARKED_READ: 'Marked as read',
 };

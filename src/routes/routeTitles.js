@@ -48,6 +48,9 @@ export const ROUTE_TITLES = [
 
   // Superadmin
   { path: '/admin/vendors', title: 'Vendor Management' },
+  { path: '/admin/whitelabel/new', title: 'New White-label Partner' },
+  { path: '/admin/whitelabel/:id', title: 'White-label Partner' },
+  { path: '/admin/whitelabel', title: 'White-label Partners' },
   { path: '/admin/pricing', title: 'Pricing' },
   { path: '/admin/wallets/:dsaId', title: 'Wallet Details' },
   { path: '/admin/wallets', title: 'Wallets' },

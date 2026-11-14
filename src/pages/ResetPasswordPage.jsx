@@ -6,6 +6,7 @@ import { getErrorMessage } from '../utils/helpers';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import { titleFor } from '../branding/brandingStore';
 
 const PageShell = ({ children }) => (
   <div className="min-h-screen flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] font-sans px-6 py-10 relative">
@@ -14,7 +15,7 @@ const PageShell = ({ children }) => (
     </div>
     <div className="w-full max-w-md">
       <div className="flex justify-center mb-8">
-        <Logo size="large" />
+        <Logo size="large" surface="login_page" />
       </div>
       <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
         {children}
@@ -46,7 +47,7 @@ const ResetPasswordPage = () => {
   const [apiError, setApiError] = useState('');
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Reset Password';
+    document.title = titleFor('Reset Password');
   }, []);
 
   const ruleStatus = PASSWORD_RULES.map(rule => ({ ...rule, met: rule.test(password) }));

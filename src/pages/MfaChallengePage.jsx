@@ -9,6 +9,7 @@ import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
 import * as mfaApi from '../api/mfaService';
+import { titleFor } from '../branding/brandingStore';
 
 const METHOD_LABEL = { TOTP: 'Authenticator App', EMAIL_OTP: 'Email Code', MOBILE_OTP: 'Text Message' };
 const RESEND_COOLDOWN_S = 30;
@@ -47,7 +48,7 @@ const MfaChallengePage = () => {
   const [otpSent, setOtpSent] = useState(false);
   const inputRef = useRef(null);
 
-  useEffect(() => { document.title = 'Cred2Tech | Verify it\'s you'; }, []);
+  useEffect(() => { document.title = titleFor('Verify it\'s you'); }, []);
   useEffect(() => { inputRef.current?.focus(); }, [mode]);
 
   useEffect(() => {
@@ -130,7 +131,7 @@ const MfaChallengePage = () => {
       <div className="hidden md:flex absolute top-6 right-6 z-50"><ThemeToggle /></div>
 
       <div className="w-full max-w-md">
-        <div className="mb-8 flex justify-center"><Logo size="large" /></div>
+        <div className="mb-8 flex justify-center"><Logo size="large" surface="login_page" /></div>
 
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">

@@ -5,6 +5,7 @@ import { getErrorMessage } from '../utils/helpers';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import { PageShell, StatusScreen, LoadingBlock, RequestedByBanner, ErrorNotice } from '../components/PublicLinkShell';
 import { useLang, requesterLabel } from '../lib/publicLang';
+import { titleFrom } from '../branding/brandingStore';
 
 const ItrAuthPage = () => {
   const [searchParams] = useSearchParams();
@@ -26,7 +27,7 @@ const ItrAuthPage = () => {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    document.title = t('itrPageTitle');
+    document.title = titleFrom(t('itrPageTitle'));
   }, [t]);
 
   useEffect(() => {

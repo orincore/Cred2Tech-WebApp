@@ -9,6 +9,7 @@ import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
 import OtpInput from '../components/OtpInput';
 import * as mfaApi from '../api/mfaService';
+import { titleFor } from '../branding/brandingStore';
 
 /**
  * Mandatory MFA setup — reached two ways:
@@ -58,7 +59,7 @@ const MfaSetupPage = () => {
   const [error, setError] = useState('');
   const [pendingCompletion, setPendingCompletion] = useState(null); // holds data.setupComplete payload until backup codes are acked
 
-  useEffect(() => { document.title = 'Cred2Tech | Set up two-factor authentication'; }, []);
+  useEffect(() => { document.title = titleFor('Set up two-factor authentication'); }, []);
 
   const redirectTarget = useMemo(
     () => (from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/'),
@@ -179,7 +180,7 @@ const MfaSetupPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#ffffff] dark:bg-[#0a1628] font-sans px-6 py-10">
       <div className="hidden md:flex absolute top-6 right-6 z-50"><ThemeToggle /></div>
       <div className="w-full max-w-md">
-        <div className="mb-8 flex justify-center"><Logo size="large" /></div>
+        <div className="mb-8 flex justify-center"><Logo size="large" surface="login_page" /></div>
         {children}
         {devBypassAvailable && (
           <button

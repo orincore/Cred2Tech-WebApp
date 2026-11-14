@@ -9,7 +9,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:5001',
-        changeOrigin: true,
+        // Keep the browser's Host header when testing a white-label org locally (acme.localhost:3003): the API picks
+        // the organisation from it. Off by default so existing local development is unchanged.
+        changeOrigin: process.env.VITE_KEEP_HOST !== '1',
       },
     },
   },

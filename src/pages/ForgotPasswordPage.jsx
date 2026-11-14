@@ -4,6 +4,7 @@ import api from '../api/axiosInstance';
 import { ThemeToggle } from '../components/ThemeToggle';
 import Logo from '../components/Logo';
 import TravelingBorderButton from '../components/TravelingBorderButton';
+import { titleFor } from '../branding/brandingStore';
 
 const ForgotPasswordPage = () => {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ const ForgotPasswordPage = () => {
   const [apiError, setApiError] = useState('');
 
   useEffect(() => {
-    document.title = 'Cred2Tech | Forgot Password';
+    document.title = titleFor('Forgot Password');
   }, []);
 
   const handleSubmit = async (e) => {

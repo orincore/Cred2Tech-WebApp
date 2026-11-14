@@ -56,8 +56,8 @@ export const adminTransactionsService = {
   },
 
   // Everything about one transaction (the "tap a row" view).
-  details: async ({ source, id }) => {
-    const response = await axiosInstance.get('/admin/transactions/details', { params: { source, id } });
+  details: async ({ source, id, orgId }) => {
+    const response = await axiosInstance.get('/admin/transactions/details', { params: buildParams({ source, id, org_id: orgId }) });
     return response.data;
   },
 
@@ -69,36 +69,37 @@ export const adminTransactionsService = {
 
   // ── Refunds (Razorpay refund + wallet credits + GST credit note) ──────────────
   // What a refund would do. No side effects — safe to call as the admin types.
-  refundPreview: async ({ source, id, amountInr, full }) => {
+  refundPreview: async ({ source, id, amountInr, full, orgId }) => {
     const response = await axiosInstance.get('/admin/transactions/refunds/preview', {
-      params: buildParams({ source, id, amount_inr: amountInr, full: full ? 'true' : undefined }),
+      params: buildParams({ source, id, amount_inr: amountInr, full: full ? 'true' : undefined, org_id: orgId }),
     });
     return response.data;
   },
 
   // Issues the refund. `idempotencyKey` is generated once per open modal, so a double click
   // or a retry after a dropped connection returns the same refund instead of a second one.
-  issueRefund: async ({ source, id, mode, amountInr, reason, idempotencyKey, speed, allowLowBalance }) => {
+  issueRefund: async ({ source, id, mode, amountInr, reason, idempotencyKey, speed, allowLowBalance, orgId }) => {
     const response = await axiosInstance.post('/admin/transactions/refunds', {
       source, id, mode, amount_inr: amountInr, reason, idempotency_key: idempotencyKey, speed,
       allow_low_balance: allowLowBalance === true,
+      ...(orgId ? { org_id: orgId } : {}),
     });
     return response.data;
   },
 
-  listRefunds: async ({ source, id }) => {
-    const response = await axiosInstance.get('/admin/transactions/refunds', { params: { source, id } });
+  listRefunds: async ({ source, id, orgId }) => {
+    const response = await axiosInstance.get('/admin/transactions/refunds', { params: buildParams({ source, id, org_id: orgId }) });
     return response.data.refunds;
   },
 
   // Asks Razorpay now for the real state of one refund (for a refund still pending on our side).
-  recheckRefund: async (refundId) => {
-    const response = await axiosInstance.post(`/admin/transactions/refunds/${refundId}/recheck`);
+  recheckRefund: async (refundId, orgId) => {
+    const response = await axiosInstance.post(`/admin/transactions/refunds/${refundId}/recheck`, null, { params: buildParams({ org_id: orgId }) });
     return response.data.refund;
   },
 
-  downloadCreditNote: async (refundId) => {
-    const response = await axiosInstance.get(`/admin/transactions/refunds/${refundId}/credit-note.pdf`, { responseType: 'blob' });
+  downloadCreditNote: async (refundId, orgId) => {
+    const response = await axiosInstance.get(`/admin/transactions/refunds/${refundId}/credit-note.pdf`, { responseType: 'blob', params: buildParams({ org_id: orgId }) });
     downloadBlob(response, 'Credit_Note.pdf');
   },
 };

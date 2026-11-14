@@ -1,4 +1,5 @@
 import api from './axiosInstance';
+import { getApiBaseUrl } from '../lib/apiBase';
 import axios from 'axios';
 
 // Same split as itrAuthLinkService.js: DSA-side calls carry the normal auth
@@ -6,7 +7,6 @@ import axios from 'axios';
 // (getPublicDetails/submit) go through plain axios with the API base URL,
 // since there is no logged-in session for a customer following an emailed
 // link.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 export const gstAuthLinkService = {
   // DSA-side (authenticated) — sends the customer an emailed link to
@@ -29,19 +29,19 @@ export const gstAuthLinkService = {
 
   // Public — the customer's own page, no auth.
   getPublicDetails: async (token) => {
-    const response = await axios.get(`${API_BASE_URL}/gst-auth-link/${token}`);
+    const response = await axios.get(`${getApiBaseUrl()}/gst-auth-link/${token}`);
     return response.data;
   },
 
   submit: async (token, { username, password, authType }) => {
-    const response = await axios.post(`${API_BASE_URL}/gst-auth-link/${token}/submit`, { username, password, auth_type: authType });
+    const response = await axios.post(`${getApiBaseUrl()}/gst-auth-link/${token}/submit`, { username, password, auth_type: authType });
     return response.data;
   },
 
   // Public — the OTP step for an OTP-mode request already in OTP_PENDING
   // (see getPublicDetails' 'OTP_PENDING' status), entered on the same page.
   submitOtp: async (token, otp) => {
-    const response = await axios.post(`${API_BASE_URL}/gst-auth-link/${token}/submit-otp`, { otp });
+    const response = await axios.post(`${getApiBaseUrl()}/gst-auth-link/${token}/submit-otp`, { otp });
     return response.data;
   },
 };

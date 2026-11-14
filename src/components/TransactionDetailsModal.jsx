@@ -56,20 +56,21 @@ const when = (d) => (d ? formatDateTime(d) : null);
 
 const TransactionDetailsModal = ({ row, onClose, onRefund }) => {
   const source = row.source;
+  const orgId = row.org_id; // set when the page is showing a white-label partner's payments
   const id = Number(String(row.id).replace(/^[A-Z]+-/, ''));
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
-    try { setD(await adminTransactionsService.details({ source, id })); setError(null); }
+    try { setD(await adminTransactionsService.details({ source, id, orgId })); setError(null); }
     catch (err) { setError(err.response?.data?.error || 'Could not load this transaction'); }
-  }, [source, id]);
+  }, [source, id, orgId]);
   useEffect(() => { load(); }, [load]);
 
   const downloadNote = async (refundId) => {
     setBusyId(refundId);
-    try { await adminTransactionsService.downloadCreditNote(refundId); } catch { toast.error('Could not download the credit note'); } finally { setBusyId(null); }
+    try { await adminTransactionsService.downloadCreditNote(refundId, orgId); } catch { toast.error('Could not download the credit note'); } finally { setBusyId(null); }
   };
 
   const st = STATUS_STYLE[d?.status || row.status] || STATUS_STYLE.CANCELLED;

@@ -13,6 +13,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import DataTable from '../components/DataTable';
 import { formatDateTime } from '../utils/helpers';
 import { adminTransactionsService } from '../api/adminTransactionsService';
+import { whitelabelService } from '../api/whitelabelService';
 
 import CustomSelect from '../components/CustomSelect';
 const useResponsive = () => {
@@ -174,6 +175,18 @@ const AdminTransactionsPage = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // White-label partners keep their payments in their own database. "" = the main app (as before); otherwise the id of the
+  // partner organisation whose payments, details and refunds this page then shows. The selector only appears when partners exist.
+  const [orgId, setOrgId] = useState('');
+  const [orgs, setOrgs] = useState([]);
+  useEffect(() => {
+    let live = true;
+    whitelabelService.list({ pageSize: 100 })
+      .then((d) => { if (live) setOrgs((d.items || []).filter((o) => o.status === 'ACTIVE' || o.status === 'SUSPENDED')); })
+      .catch(() => {}); // not enabled / not allowed: the page simply stays main-app only
+    return () => { live = false; };
+  }, []);
+
   // Debounce the free-text search — every keystroke would otherwise fire a
   // fresh cross-model query (CasePayment + WalletTopupRequest, each with an
   // OR across razorpay ids / user name / email / mobile / tenant name).
@@ -185,7 +198,8 @@ const AdminTransactionsPage = () => {
   const filters = useMemo(() => ({
     search, type, status,
     date_from: dateFrom, date_to: dateTo,
-  }), [search, type, status, dateFrom, dateTo]);
+    org_id: orgId,
+  }), [search, type, status, dateFrom, dateTo, orgId]);
 
   // Any filter change invalidates the current page — jumping back to page 1
   // avoids landing on a now out-of-range page (e.g. filtered results have
@@ -217,10 +231,10 @@ const AdminTransactionsPage = () => {
   useEffect(() => { fetchList(); }, [fetchList]);
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  const activeFilterCount = [type, status, dateFrom, dateTo].filter(Boolean).length;
+  const activeFilterCount = [type, status, dateFrom, dateTo, orgId].filter(Boolean).length;
   const clearFilters = () => {
     setSearchInput(''); setSearch(''); setType(''); setStatus('');
-    setDateFrom(''); setDateTo('');
+    setDateFrom(''); setDateTo(''); setOrgId('');
   };
 
   const handleExportExcel = async () => {
@@ -360,6 +374,12 @@ const AdminTransactionsPage = () => {
 
             {(!isMobile || showFilters) && (
               <>
+                {orgs.length > 0 && (
+                  <CustomSelect style={{ ...compactField, maxWidth: 190 }} value={orgId} onChange={(e) => setOrgId(e.target.value)} title="Whose payments">
+                    <option value="">Main app</option>
+                    {orgs.map((o) => <option key={o.id} value={o.id}>{o.display_name}{o.status === 'SUSPENDED' ? ' (suspended)' : ''}</option>)}
+                  </CustomSelect>
+                )}
                 <CustomSelect style={{ ...compactField, maxWidth: 170 }} value={type} onChange={(e) => setType(e.target.value)}>
                   <option value="">All types</option>
                   {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -469,7 +489,7 @@ const AdminTransactionsPage = () => {
 
       {detailsTarget && (
         <TransactionDetailsModal
-          row={detailsTarget}
+          row={{ ...detailsTarget, org_id: orgId || undefined }}
           onClose={() => setDetailsTarget(null)}
           // Refunding from inside the details view: swap one dialog for the other.
           onRefund={(row) => { setDetailsTarget(null); setRefundTarget(row); }}
@@ -478,7 +498,7 @@ const AdminTransactionsPage = () => {
 
       {refundTarget && (
         <RefundModal
-          row={refundTarget}
+          row={{ ...refundTarget, org_id: orgId || undefined }}
           onClose={() => setRefundTarget(null)}
           // A refund changes the row's state (and the page totals' context): reload both.
           onDone={() => { fetchList(); fetchSummary(); }}

@@ -8,6 +8,7 @@ import { FEEDBACK_SUBMITTER_ROLES } from '../../constants/roles';
 import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
+import PoweredBy from '../PoweredBy';
 import FeedbackModal from '../feedback/FeedbackModal';
 import { ticketService } from '../../api/ticketService';
 import { contactSubmissionService } from '../../api/contactSubmissionService';
@@ -156,7 +157,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         justifyContent: 'space-between',
         gap: 8,
       }}>
-        <Logo size="medium" />
+        <Logo size="medium" surface="sidebar" />
         {canSubmitFeedback && (
           <button
             data-tour="sidebar-feedback"
@@ -369,6 +370,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         </div>
         <MoreHorizontal size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
       </div>
+      <PoweredBy align="left" style={{ padding: '0 20px 14px', color: 'var(--on-muted)' }} />
       {canSubmitFeedback && (
         <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
       )}

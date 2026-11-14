@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, matchPath } from 'react-router-dom';
 import { ROUTE_TITLES } from './routeTitles';
+import { titleFor, brandName } from '../branding/brandingStore';
 
 /**
  * Keeps the browser tab title in sync with client-side navigation.
@@ -22,7 +23,7 @@ function RouteTitle() {
 
   useEffect(() => {
     const match = ROUTE_TITLES.find((entry) => matchPath({ path: entry.path, end: true }, location.pathname));
-    document.title = match ? `Cred2Tech | ${match.title}` : 'Cred2Tech';
+    document.title = match ? titleFor(match.title) : brandName();
   }, [location.pathname]);
 
   return null;

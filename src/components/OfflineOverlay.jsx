@@ -147,7 +147,7 @@ const OfflineOverlay = () => {
 
         <div className="w-full max-w-md">
           <div className="flex justify-center mb-8">
-            <Logo size="large" />
+            <Logo size="large" surface="error_pages" />
           </div>
 
           <div className="bg-white dark:bg-[#162048] shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">

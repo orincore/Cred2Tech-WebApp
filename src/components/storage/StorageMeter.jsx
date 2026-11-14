@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, HardDrive } from 'lucide-react';
+import { brandName } from '../../branding/brandingStore';
 
 // 1 GB = 1024^3 bytes — the unit S3 meters in, and the unit the server uses.
 const KB = 1024;
@@ -25,7 +26,7 @@ const LEVEL = {
 
 const SOURCES = [
   { key: 'uploaded', label: 'Uploaded documents', hint: 'Files you or your team uploaded', color: '#6366f1' },
-  { key: 'api_pulled', label: 'Pulled via Cred2Tech', hint: 'GST, ITR, bank and bureau reports', color: '#14b8a6' },
+  { key: 'api_pulled', get label() { return `Pulled via ${brandName()}`; }, hint: 'GST, ITR, bank and bureau reports', color: '#14b8a6' },
   { key: 'system_generated', label: 'System-generated', hint: 'Reports built from pulled data', color: '#a78bfa' },
 ];
 
