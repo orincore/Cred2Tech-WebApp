@@ -133,7 +133,7 @@ const BillingTab = ({ org, stepUp, onOrgChanged }) => {
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{when(t.created_at)}</td>
                       <td style={td}>
                         <div style={{ fontWeight: 600 }}>{t.is_api_refund ? `Refund · ${t.service_name || t.api_code}` : (t.service_name && t.reference_type === 'API_CALL' ? t.service_name : t.kind)}</div>
-                        {t.service_name && t.reference_type === 'API_CALL' && <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{t.kind}</div>}
+                        {t.service_name && (t.reference_type === 'API_CALL' || t.vendor) && <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{[t.is_api_refund ? null : t.kind, t.vendor].filter(Boolean).join(' · ')}</div>}
                       </td>
                       <td style={{ ...td, maxWidth: 380 }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
