@@ -285,7 +285,8 @@ export const AuthProvider = ({ children }) => {
 
     const checkLiveness = async () => {
       try {
-        await api.get('/auth/me', { skipAuthRedirect: true });
+        // a liveness probe, not a profile fetch: same 401-on-revoked contract, no user lookup behind it
+        await api.get('/auth/session-status', { skipAuthRedirect: true });
       } catch (err) {
         if (cancelled || err?.response?.status !== 401) return;
         // Suppress the shared interceptor for any other in-flight/future
