@@ -129,7 +129,7 @@ const OfflineOverlay = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="fixed inset-0 z-[100000] flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] px-6"
+        className="fixed inset-0 z-[100000] flex items-center justify-center bg-indigo-50 dark:bg-[#0a1628] px-6"
       >
         <style>{`
           @keyframes offline-radar-ping {

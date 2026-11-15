@@ -9,7 +9,7 @@ import TravelingBorderButton from '../components/TravelingBorderButton';
 import { titleFor } from '../branding/brandingStore';
 
 const PageShell = ({ children }) => (
-  <div className="min-h-screen flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] font-sans px-6 py-10 relative">
+  <div className="min-h-screen flex items-center justify-center bg-indigo-50 dark:bg-[#0a1628] font-sans px-6 py-10 relative">
     <div className="absolute top-6 right-6 z-50">
       <ThemeToggle />
     </div>

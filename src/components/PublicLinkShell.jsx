@@ -8,7 +8,7 @@ import { LanguageSelect } from '../lib/publicLang';
 // ItrAuthPage): same brand palette, sharp-edged card and dark mode support,
 // plus the language dropdown.
 export const PageShell = ({ children, langCtx }) => (
-  <div className="min-h-screen flex items-center justify-center bg-[#eef4ff] dark:bg-[#0a1628] font-sans px-6 py-10 relative">
+  <div className="min-h-screen flex items-center justify-center bg-indigo-50 dark:bg-[#0a1628] font-sans px-6 py-10 relative">
     <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
       <LanguageSelect lang={langCtx.lang} setLang={langCtx.setLang} t={langCtx.t} />
       <ThemeToggle />
