@@ -5,6 +5,14 @@ import { Field, Grid } from './atoms';
 // invite link (no password is ever emailed or shown), so it is required.
 export const DETAIL_KEYS = ['display_name', 'legal_name', 'contact_name', 'contact_email', 'contact_mobile', 'pan_number', 'gst_number', 'state', 'city', 'pincode', 'address_line'];
 
+// Same list the sourcing-partner sign-up uses (components/LocationStateDropdown.jsx), so the stored value matches elsewhere.
+const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
+  'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 const Input = ({ id, value, onChange, ...rest }) => (
   <input id={id} className="form-control" value={value ?? ''} onChange={(e) => onChange(e.target.value)} autoComplete="off" {...rest} />
 );
@@ -35,7 +43,14 @@ const OrgDetailsForm = ({ values, onChange, errors = {}, disabled = false }) => 
       <Grid>
         {f('address_line', 'Address', { input: { maxLength: 200 } })}
         {f('city', 'City', { input: { maxLength: 60 } })}
-        {f('state', 'State', { input: { maxLength: 60 } })}
+        <Field label="State" htmlFor="wl-state" error={errors.state}>
+          <select id="wl-state" className="form-control" value={values.state ?? ''} onChange={(e) => set('state')(e.target.value)} disabled={disabled}>
+            <option value="">Select a state</option>
+            {/* keep a value saved before this was a dropdown selectable, so editing never silently drops it */}
+            {values.state && !INDIAN_STATES.includes(values.state) && <option value={values.state}>{values.state}</option>}
+            {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
         {f('pincode', 'Pincode', { input: { inputMode: 'numeric', maxLength: 6 } })}
       </Grid>
     </div>
