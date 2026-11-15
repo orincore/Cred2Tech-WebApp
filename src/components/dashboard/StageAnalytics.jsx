@@ -12,6 +12,10 @@ const STAGES = [
   'Under Process', 'Sanctioned Undisbursed', 'Partly Disbursed', 'Closed',
 ];
 const LOST = 'Closed Leads';
+// shorter axis labels so nine columns stay readable; the full stage name is in each bar's tooltip text
+const STAGE_SHORT = {
+  'Eligibility Report Generated': 'Eligibility Report', 'Sanctioned Undisbursed': 'Sanctioned', 'Lead Sent to Lender': 'Sent to Lender',
+};
 
 const fmt = (n) => (Number(n) || 0).toLocaleString('en-IN');
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
@@ -59,6 +63,64 @@ const Donut = ({ groups, total, active, onActive }) => {
   );
 };
 
+// The top of the value axis: four gridlines at whole numbers (cases are counted in ones), the last at or above the tallest bar.
+function niceMax(v) {
+  return 4 * Math.max(1, Math.ceil(v / 4));
+}
+
+// Vertical bars: one column per stage, rising from a shared baseline, value on top, gridlines and a value axis behind.
+const ColumnChart = ({ items, leads }) => {
+  const [hover, setHover] = useState(null);
+  const H = 220;
+  const max = niceMax(Math.max(1, ...items.map((i) => i.count)));
+  const ticks = [0, 1, 2, 3, 4].map((i) => (max / 4) * i);
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: items.length * 64 + 44, display: 'flex' }}>
+        <div style={{ width: 40, height: H, marginTop: 34, position: 'relative', flexShrink: 0 }} aria-hidden>
+          {ticks.map((t) => (
+            <span key={t} style={{ position: 'absolute', right: 8, bottom: `${(t / max) * 100}%`, transform: 'translateY(50%)', fontSize: 11, color: 'var(--on-muted)' }}>{fmt(t)}</span>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ position: 'relative', height: H, marginTop: 34, display: 'flex', alignItems: 'flex-end', gap: 10, borderBottom: '1px solid var(--outline)' }}>
+            {ticks.slice(1).map((t) => (
+              <div key={t} aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: `${(t / max) * 100}%`, borderTop: '1px dashed var(--outline)', opacity: 0.6 }} />
+            ))}
+            {items.map((it, i) => {
+              const h = (it.count / max) * 100;
+              return (
+                <div
+                  key={it.label} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+                  title={`${it.label}: ${fmt(it.count)} cases${leads > 0 ? ` (${pct(it.count, leads)}% of leads created)` : ''}`}
+                  style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', opacity: hover != null && hover !== i ? 0.5 : 1, transition: 'opacity .15s' }}
+                >
+                  <motion.div
+                    initial={{ height: 0 }} animate={{ height: `${Math.max(it.count > 0 ? 1.5 : 0, h)}%` }}
+                    transition={{ duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ width: '70%', maxWidth: 44, background: it.color, position: 'relative' }}
+                  >
+                    {/* the value sits just above its bar, so it moves with it */}
+                    <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', paddingBottom: 3, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--on-surface)', lineHeight: 1.1 }}>{fmt(it.count)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--on-muted)', minHeight: 12 }}>{leads > 0 && it.count > 0 ? `${pct(it.count, leads)}%` : ''}</div>
+                    </div>
+                  </motion.div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            {items.map((it) => (
+              <div key={it.label} style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 10.5, lineHeight: 1.25, color: 'var(--on-surface)', fontWeight: 600 }}>{it.label}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StageAnalytics = ({ counts, isMobile }) => {
   const [active, setActive] = useState(null);
 
@@ -77,14 +139,18 @@ const StageAnalytics = ({ counts, isMobile }) => {
       { key: 'sanctioned', label: 'Sanctioned or beyond', hint: 'Sanctioned, part or fully disbursed, closed', count: sanctionedOrBeyond, color: 'var(--success)' },
       { key: 'lost', label: 'Closed leads', hint: 'Did not go ahead', count: lost, color: 'var(--error)' },
     ];
-    return { entered, lost, leads, sanctionedOrBeyond, base, groups, any: entered.some((n) => n > 0) || lost > 0 };
+    // the bars: the eight stages in order (the brand colour, fading a little as the pipeline goes on), then Closed Leads in red
+    const columns = [
+      ...STAGES.map((label, i) => ({ label: STAGE_SHORT[label] || label, count: entered[i], color: 'var(--primary)', fade: 1 - i * 0.055 })),
+      { label: 'Closed Leads', count: lost, color: 'var(--error)', fade: 1 },
+    ].map((c) => ({ ...c, color: c.fade < 1 ? `color-mix(in srgb, ${c.color} ${Math.round(c.fade * 100)}%, var(--surface))` : c.color }));
+    return { entered, lost, leads, sanctionedOrBeyond, base, groups, columns, any: entered.some((n) => n > 0) || lost > 0 };
   }, [counts]);
 
   if (!m.any) {
     return <div style={{ padding: 32, textAlign: 'center', color: 'var(--on-muted)', fontSize: 14 }}>No cases in this period yet. Add a customer to see the pipeline here.</div>;
   }
 
-  const top = Math.max(1, ...m.entered);
   const toLender = m.entered[3];
 
   return (
@@ -97,37 +163,13 @@ const StageAnalytics = ({ counts, isMobile }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: isMobile ? 28 : 36, alignItems: 'start' }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Conversion funnel</div>
-          <div style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 12px' }}>Cases that reached each stage in this period, and the share that moved on from the stage before.</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {STAGES.map((label, i) => {
-              const n = m.entered[i]; const w = Math.max(n > 0 ? 3 : 0, (n / top) * 100);
-              const prev = i > 0 ? m.entered[i - 1] : null;
-              // a later stage can be larger than the one before (a case may skip a stage): show nothing rather than >100%
-              const step = prev != null && prev > 0 && n <= prev ? `↓ ${pct(n, prev)}% moved on` : (prev != null ? '↓' : null);
-              return (
-                <div key={label}>
-                  {step && <div style={{ fontSize: 11, color: 'var(--on-muted)', padding: '2px 0', textAlign: 'center' }}>{step}</div>}
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '190px minmax(0, 1fr) 92px', alignItems: 'center', gap: isMobile ? 4 : 12 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{label}</span>
-                    <div style={{ height: 26, background: 'var(--surface-low)', display: 'flex', justifyContent: 'center' }} title={`${label}: ${fmt(n)} cases reached this stage`}>
-                      <motion.div
-                        initial={{ width: 0 }} animate={{ width: `${w}%` }} transition={{ duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
-                        style={{ height: '100%', background: 'var(--primary)', opacity: 1 - i * 0.055 }}
-                      />
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)', textAlign: isMobile ? 'left' : 'right' }}>
-                      {fmt(n)} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--on-muted)' }}>{m.leads > 0 ? `${pct(n, m.leads)}%` : ''}</span>
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>Cases by stage</div>
+          <div style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 14px' }}>How many cases reached each stage in this period. The small figure is the share of leads created.</div>
+          <ColumnChart items={m.columns} leads={m.leads} />
         </div>
 
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>How this period's leads turned out</div>
           <div style={{ fontSize: 12, color: 'var(--on-muted)', margin: '2px 0 12px' }}>Based on the stages cases reached in this period.</div>
           <Donut groups={m.groups} total={Math.max(1, m.base)} active={active} onActive={setActive} />
