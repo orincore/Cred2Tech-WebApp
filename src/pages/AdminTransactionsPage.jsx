@@ -175,9 +175,12 @@ const AdminTransactionsPage = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // White-label partners keep their payments in their own database. "" = the main app (as before); otherwise the id of the
-  // partner organisation whose payments, details and refunds this page then shows. The selector only appears when partners exist.
-  const [orgId, setOrgId] = useState('');
+  // White-label partners keep their payments in their own database. 'all' (the default) = the main app AND every partner
+  // organisation together, each row saying which; 'main' = the main app only; otherwise the id of one partner organisation.
+  // The selector only appears when partners exist.
+  const [orgId, setOrgId] = useState('all');
+  // The organisation a row belongs to, for its details and refund calls: its own tag in the combined view, else the one selected.
+  const orgOfRow = (t) => t.org_id ?? (orgId && orgId !== 'all' && orgId !== 'main' ? orgId : undefined);
   const [orgs, setOrgs] = useState([]);
   useEffect(() => {
     let live = true;
@@ -210,7 +213,8 @@ const AdminTransactionsPage = () => {
     setLoading(true);
     try {
       const result = await adminTransactionsService.list({ ...filters, page, limit: PAGE_SIZE });
-      setRows(result.transactions);
+      // ids repeat between the main app and each partner organisation's own database: the key must carry the organisation
+      setRows(result.transactions.map((t) => ({ ...t, _key: `${t.org_id ?? 0}:${t.source}:${t.id}` })));
       setTotal(result.total);
     } catch (err) {
       toast.error('Failed to load transactions');
@@ -231,10 +235,10 @@ const AdminTransactionsPage = () => {
   useEffect(() => { fetchList(); }, [fetchList]);
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  const activeFilterCount = [type, status, dateFrom, dateTo, orgId].filter(Boolean).length;
+  const activeFilterCount = [type, status, dateFrom, dateTo, orgId !== 'all' ? orgId : ''].filter(Boolean).length;
   const clearFilters = () => {
     setSearchInput(''); setSearch(''); setType(''); setStatus('');
-    setDateFrom(''); setDateTo(''); setOrgId('');
+    setDateFrom(''); setDateTo(''); setOrgId('all');
   };
 
   const handleExportExcel = async () => {
@@ -303,6 +307,9 @@ const AdminTransactionsPage = () => {
           <div style={secondary}>
             {t.user?.email || (t.tenant ? `Tenant · ${t.tenant.name}` : '—')}
           </div>
+          {t.org_name && (
+            <div style={{ ...secondary, color: 'var(--primary)', fontWeight: 600 }}>Partner org · {t.org_name}</div>
+          )}
           {t.buyer_gstin && (
             <div style={{ ...secondary, fontFamily: 'monospace', color: 'var(--on-surface)' }}>GSTIN {t.buyer_gstin}</div>
           )}
@@ -376,7 +383,8 @@ const AdminTransactionsPage = () => {
               <>
                 {orgs.length > 0 && (
                   <CustomSelect style={{ ...compactField, maxWidth: 190 }} value={orgId} onChange={(e) => setOrgId(e.target.value)} title="Whose payments">
-                    <option value="">Main app</option>
+                    <option value="all">All (main app + partners)</option>
+                    <option value="main">Main app only</option>
                     {orgs.map((o) => <option key={o.id} value={o.id}>{o.display_name}{o.status === 'SUSPENDED' ? ' (suspended)' : ''}</option>)}
                   </CustomSelect>
                 )}
@@ -426,11 +434,11 @@ const AdminTransactionsPage = () => {
               {rows.map((t) => {
                 const style = STATUS_STYLE[t.status] || { color: 'var(--text-tertiary)', bg: 'var(--bg-elevated)' };
                 return (
-                  <div key={t.id} onClick={() => setDetailsTarget(t)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14, cursor: 'pointer' }}>
+                  <div key={t._key} onClick={() => setDetailsTarget(t)} style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{t.type_label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{formatDateTime(t.created_at)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{formatDateTime(t.created_at)}{t.org_name ? ` · ${t.org_name}` : ''}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <AmountBreakdown t={t} />
@@ -474,7 +482,7 @@ const AdminTransactionsPage = () => {
               })}
             </div>
           ) : (
-            <DataTable columns={columns} data={rows} rowKey="id" onRowClick={(t) => setDetailsTarget(t)} />
+            <DataTable columns={columns} data={rows} rowKey="_key"onRowClick={(t) => setDetailsTarget(t)} />
           )}
         </div>
 
@@ -489,7 +497,7 @@ const AdminTransactionsPage = () => {
 
       {detailsTarget && (
         <TransactionDetailsModal
-          row={{ ...detailsTarget, org_id: orgId || undefined }}
+          row={{ ...detailsTarget, org_id: orgOfRow(detailsTarget) }}
           onClose={() => setDetailsTarget(null)}
           // Refunding from inside the details view: swap one dialog for the other.
           onRefund={(row) => { setDetailsTarget(null); setRefundTarget(row); }}
@@ -498,7 +506,7 @@ const AdminTransactionsPage = () => {
 
       {refundTarget && (
         <RefundModal
-          row={{ ...refundTarget, org_id: orgId || undefined }}
+          row={{ ...refundTarget, org_id: orgOfRow(refundTarget) }}
           onClose={() => setRefundTarget(null)}
           // A refund changes the row's state (and the page totals' context): reload both.
           onDone={() => { fetchList(); fetchSummary(); }}

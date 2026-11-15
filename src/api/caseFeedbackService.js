@@ -9,7 +9,7 @@ export const caseFeedbackService = {
 
   // Admin-facing — filters + sort + pagination, mirrors ticketService.listForAdmin's shape.
   listForAdmin: async (params) => {
-    const res = await api.get('/case-feedback', { params });
+    const res = await api.get('/case-feedback', { params: { org_id: 'all', ...params } }); // 'all': the main app and every white-label organisation
     return res.data;
   },
 };

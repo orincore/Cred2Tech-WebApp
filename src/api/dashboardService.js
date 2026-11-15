@@ -24,27 +24,31 @@ export const getDsaStageSummary = async (params) => {
 
 // ─── Platform Dashboard (SUPER_ADMIN) ──────────────────────────────────────
 
+// The platform dashboard covers the main app AND every white-label organisation ('all'), added up. A caller may
+// still pass its own org_id (one organisation, or 'main' for the main app only).
+const platformParams = (params = {}) => ({ org_id: 'all', ...params });
+
 export const getPlatformSummary = async (params) => {
-  const response = await api.get('/dashboard/platform/summary', { params });
+  const response = await api.get('/dashboard/platform/summary', { params: platformParams(params) });
   return response.data;
 };
 
 export const getPlatformApiUsage = async (params) => {
-  const response = await api.get('/dashboard/platform/api-usage', { params });
+  const response = await api.get('/dashboard/platform/api-usage', { params: platformParams(params) });
   return response.data;
 };
 
 export const getPlatformFunnel = async (params) => {
-  const response = await api.get('/dashboard/platform/funnel', { params });
+  const response = await api.get('/dashboard/platform/funnel', { params: platformParams(params) });
   return response.data;
 };
 
 export const getTopDsas = async (params) => {
-  const response = await api.get('/dashboard/platform/top-dsas', { params });
+  const response = await api.get('/dashboard/platform/top-dsas', { params: platformParams(params) });
   return response.data;
 };
 
 export const getTopLenders = async (params) => {
-  const response = await api.get('/dashboard/platform/top-lenders', { params });
+  const response = await api.get('/dashboard/platform/top-lenders', { params: platformParams(params) });
   return response.data;
 };

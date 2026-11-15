@@ -48,6 +48,9 @@ const useResponsive = () => {
 const AdminCaseFeedbackTab = () => {
   const { isMobile } = useResponsive();
   const navigate = useNavigate();
+  // A white-label organisation's case lives in that organisation's own database; its id means a DIFFERENT case in the main app,
+  // so only main-app feedback opens a case from here.
+  const openCase = (f) => { if (!f.org_id && f.case?.id) navigate(`/cases/${f.case.id}`); };
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [averageRating, setAverageRating] = useState(null);
@@ -64,7 +67,8 @@ const AdminCaseFeedbackTab = () => {
     setLoading(true);
     try {
       const result = await caseFeedbackService.listForAdmin({ type, rating, search, sortBy, sortDir, page, pageSize: PAGE_SIZE });
-      setRows(result.data);
+      // ids repeat between the main app and each white-label organisation's own database: the key must carry the organisation
+      setRows(result.data.map((f) => ({ ...f, _key: `${f.org_id ?? 0}:${f.id}` })));
       setTotal(result.total);
       setAverageRating(result.averageRating);
     } catch (err) {
@@ -100,7 +104,7 @@ const AdminCaseFeedbackTab = () => {
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{caseLabel(f.case)}</div>
           <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-            CASE-{f.case?.id} · {f.submitted_by?.name || 'Unknown'} · {formatDateTime(f.created_at)}
+            CASE-{f.case?.id}{f.org_name ? ` · ${f.org_name}` : ''} · {f.submitted_by?.name || 'Unknown'} · {formatDateTime(f.created_at)}
           </div>
         </div>
       ),
@@ -169,8 +173,8 @@ const AdminCaseFeedbackTab = () => {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {rows.map((f, idx) => (
               <div
-                key={f.id}
-                onClick={() => navigate(`/cases/${f.case?.id}`)}
+                key={`${f.org_id ?? 0}:${f.id}`}
+                onClick={() => openCase(f)}
                 style={{ padding: 12, borderBottom: idx === rows.length - 1 ? 'none' : '1px solid var(--outline)', cursor: 'pointer' }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
@@ -179,7 +183,7 @@ const AdminCaseFeedbackTab = () => {
                       {caseLabel(f.case)}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-                      CASE-{f.case?.id} · {f.submitted_by?.name || 'Unknown'}
+                      CASE-{f.case?.id}{f.org_name ? ` · ${f.org_name}` : ''} · {f.submitted_by?.name || 'Unknown'}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 1 }}>{formatDateTime(f.created_at)}</div>
                   </div>
@@ -190,7 +194,7 @@ const AdminCaseFeedbackTab = () => {
             ))}
           </div>
         ) : (
-          <DataTable columns={columns} data={rows} onRowClick={(f) => navigate(`/cases/${f.case?.id}`)} />
+          <DataTable columns={columns} data={rows} rowKey="_key" onRowClick={openCase} />
         )}
       </div>
 

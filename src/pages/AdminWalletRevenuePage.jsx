@@ -1509,6 +1509,24 @@ const AdminWalletRevenuePage = () => {
                         foot={{ code: 'TOTAL', calls: num(us.api_calls), consumed: num(us.credits_consumed_gross), returned: num(us.credits_returned), credits: num(us.net_credits_consumed), avg: '', share: '' }}
                       />
                     </Section>
+
+                    {us.by_org && us.by_org.length > 1 && (
+                      <Section title="Credits consumed by organisation" hint="The main app and each white-label organisation side by side; the totals above are all of them.">
+                        <Grid
+                          cols={[
+                            { key: 'org_name', label: 'Organisation' },
+                            { key: 'api_calls', label: 'Calls', num: true, render: (r) => num(r.api_calls) },
+                            { key: 'credits_consumed_gross', label: 'Consumed', num: true, render: (r) => num(r.credits_consumed_gross) },
+                            { key: 'credits_returned', label: 'Given back', num: true, render: (r) => num(r.credits_returned) },
+                            { key: 'net_credits_consumed', label: 'Net credits', num: true, render: (r) => num(r.net_credits_consumed) },
+                            { key: 'free_credits_granted', label: 'Free credits granted', num: true, render: (r) => num(r.free_credits_granted) },
+                            { key: 'wallet_float_credits', label: 'Wallet balance now', num: true, render: (r) => num(r.wallet_float_credits) },
+                            { key: 'share', label: 'Share', num: true, render: (r) => pct(r.net_credits_consumed, us.net_credits_consumed) },
+                          ]}
+                          rows={us.by_org.map((o) => ({ ...o, key: o.org_id ?? 'main' }))}
+                        />
+                      </Section>
+                    )}
                   </>
                 );
               })()

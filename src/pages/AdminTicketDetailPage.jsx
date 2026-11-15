@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { Check, Lock, Send } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -37,6 +37,9 @@ const AdminTicketDetailPage = () => {
   const { isMobile } = useResponsive();
   const { id } = useParams();
   const navigate = useNavigate();
+  // A white-label organisation's ticket lives in that organisation's own database: the list links here with ?org_id=
+  const [searchParams] = useSearchParams();
+  const orgId = searchParams.get('org_id') || undefined;
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [statusDraft, setStatusDraft] = useState('');
@@ -49,13 +52,13 @@ const AdminTicketDetailPage = () => {
   const [markingRead, setMarkingRead] = useState(false);
 
   const load = useCallback(() => {
-    return ticketService.getById(id)
+    return ticketService.getById(id, orgId)
       .then((t) => { setTicket(t); setStatusDraft(t.status); })
       .catch((err) => {
         toast.error(err.response?.data?.error || 'Failed to load ticket');
         navigate('/admin/tickets');
       });
-  }, [id, navigate]);
+  }, [id, orgId, navigate]);
 
   useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
 
@@ -63,7 +66,7 @@ const AdminTicketDetailPage = () => {
     if (statusDraft === ticket.status && !statusNote.trim()) return;
     setSavingStatus(true);
     try {
-      await ticketService.changeStatus(ticket.id, statusDraft, statusNote.trim() || undefined);
+      await ticketService.changeStatus(ticket.id, statusDraft, statusNote.trim() || undefined, orgId);
       setStatusNote('');
       toast.success('Status updated — submitter has been notified.');
       await load();
@@ -78,7 +81,7 @@ const AdminTicketDetailPage = () => {
     if (!noteText.trim()) return;
     setSendingNote(true);
     try {
-      await ticketService.addNote(ticket.id, noteText.trim());
+      await ticketService.addNote(ticket.id, noteText.trim(), orgId);
       setNoteText('');
       await load();
     } catch (err) {
@@ -92,7 +95,7 @@ const AdminTicketDetailPage = () => {
     if (!replyText.trim()) return;
     setSendingReply(true);
     try {
-      await ticketService.reply(ticket.id, replyText.trim());
+      await ticketService.reply(ticket.id, replyText.trim(), orgId);
       setReplyText('');
       toast.success('Reply sent to the submitter.');
       await load();
@@ -106,7 +109,7 @@ const AdminTicketDetailPage = () => {
   const handleMarkAsRead = async () => {
     setMarkingRead(true);
     try {
-      await ticketService.markAsRead(ticket.id);
+      await ticketService.markAsRead(ticket.id, orgId);
       await load();
     } catch {
       toast.error('Failed to mark as read');
@@ -123,7 +126,7 @@ const AdminTicketDetailPage = () => {
       <div style={{ padding: isMobile ? '68px 16px 0' : '24px 24px 0', background: 'var(--bg)', flexShrink: 0 }}>
         <PageHeader
           title={ticket.subject}
-          subtitle={`${ticket.ticket_number} · ${ticket.created_by?.name || 'Unknown'} (${toTitleCase(ticket.created_by_role)}) · ${formatDateTime(ticket.created_at)}`}
+          subtitle={`${ticket.ticket_number}${ticket.org_name ? ` · ${ticket.org_name}` : ''} · ${ticket.created_by?.name || 'Unknown'} (${toTitleCase(ticket.created_by_role)}) · ${formatDateTime(ticket.created_at)}`}
           breadcrumbs={[{ label: 'Feedback & Tickets', path: '/admin/tickets' }, { label: ticket.ticket_number }]}
           compact={isMobile}
           actions={!ticket.read_at ? (
@@ -245,7 +248,7 @@ const AdminTicketDetailPage = () => {
             {ticket.attachments?.length > 0 && (
               <div className="card card-padded" style={sharpCard}>
                 <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Attachments</h3>
-                <AttachmentGallery ticketId={ticket.id} attachments={ticket.attachments} />
+                <AttachmentGallery ticketId={ticket.id} attachments={ticket.attachments} orgId={orgId} />
               </div>
             )}
           </div>

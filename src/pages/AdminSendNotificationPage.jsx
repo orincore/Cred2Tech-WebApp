@@ -5,6 +5,7 @@ import { showTestBrowserNotification } from '../lib/pushNotifications';
 import PageHeader from '../components/ui/PageHeader';
 
 import CustomSelect from '../components/CustomSelect';
+import { whitelabelService } from '../api/whitelabelService';
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   React.useEffect(() => {
@@ -45,6 +46,27 @@ const AdminSendNotificationPage = () => {
   const [sending, setSending] = useState(false);
   const [testingBrowserNotification, setTestingBrowserNotification] = useState(false);
   const [result, setResult] = useState(null); // { delivered, failed }
+
+  // White-label partner organisations (their users live in their own databases). 'MAIN' = the main app only (as before),
+  // 'ORGS' = partner organisations only, 'EVERYONE' = both. orgIds empty = every live organisation.
+  // The selector appears only when partner organisations exist.
+  const [orgScope, setOrgScope] = useState('MAIN');
+  const [orgs, setOrgs] = useState([]);
+  const [orgIds, setOrgIds] = useState([]);
+  useEffect(() => {
+    let live = true;
+    whitelabelService.list({ pageSize: 100 })
+      .then((d) => { if (live) setOrgs((d.items || []).filter((o) => o.status === 'ACTIVE')); })
+      .catch(() => {}); // not enabled / not allowed: the page simply stays main-app only
+    return () => { live = false; };
+  }, []);
+  const toOrgs = orgScope !== 'MAIN';
+  // A single user or tenant only exists inside one database, so those targets are for the main app; MSME customers are not in partner organisations.
+  const targetChoices = toOrgs ? TARGET_OPTIONS.filter((o) => o.value !== 'USER' && o.value !== 'MSME_CUSTOMER') : TARGET_OPTIONS;
+  const changeOrgScope = (value) => {
+    setOrgScope(value);
+    if (value !== 'MAIN' && (targetOption.value === 'USER' || targetOption.value === 'MSME_CUSTOMER')) setTargetOption(TARGET_OPTIONS[0]);
+  };
 
   const handleTestBrowserNotification = async () => {
     setTestingBrowserNotification(true);
@@ -100,6 +122,7 @@ const AdminSendNotificationPage = () => {
     if (!title.trim()) return toast.error('Please enter a notification title.');
     if (!message.trim()) return toast.error('Please enter a notification message.');
     if (targetOption.value === 'USER' && recipients.length === 0) return toast.error('Please select at least one user from the email suggestions.');
+    if (toOrgs && orgs.length === 0) return toast.error('There are no live partner organisations to send to.');
 
     setSending(true);
     setResult(null);
@@ -115,6 +138,8 @@ const AdminSendNotificationPage = () => {
         couponCode: couponCode.trim() || null,
         notificationType,
         sendEmail: sendEmailNotification,
+        orgScope,
+        targetOrgIds: toOrgs ? orgIds : [],
       });
       setResult(data.data || data);
       setTitle('');
@@ -234,10 +259,44 @@ const AdminSendNotificationPage = () => {
               onChange={(e) => setTargetOption(TARGET_OPTIONS.find((o) => o.value === e.target.value))}
               style={{ maxWidth: 280 }}
             >
-              {TARGET_OPTIONS.map((opt) => (
+              {targetChoices.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </CustomSelect>
+
+            {/* Which sites: the main app, partner organisations, or both */}
+            {orgs.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Where</label>
+                <CustomSelect className="form-control" value={orgScope} onChange={(e) => changeOrgScope(e.target.value)} style={{ maxWidth: 280 }}>
+                  <option value="MAIN">Main app only</option>
+                  <option value="ORGS">White-label partner organisations only</option>
+                  <option value="EVERYONE">Main app and partner organisations</option>
+                </CustomSelect>
+                {toOrgs && (
+                  <div style={{ marginTop: 10 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-muted)' }}>
+                      {orgIds.length === 0 ? 'Going to every live partner organisation. Tick some to narrow it down.' : `Going to ${orgIds.length} partner organisation${orgIds.length === 1 ? '' : 's'}.`}
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {orgs.map((o) => (
+                        <label key={o.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={orgIds.includes(o.id)}
+                            onChange={(e) => setOrgIds((prev) => (e.target.checked ? [...prev, o.id] : prev.filter((x) => x !== o.id)))}
+                          />
+                          {o.display_name}
+                        </label>
+                      ))}
+                    </div>
+                    <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                      Reaches each organisation's users through its own site, push and email, under its own name. Single users and MSME customers can only be targeted on the main app.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             {targetOption.value === 'USER' && (
               <div style={{ position: 'relative', maxWidth: 420, marginTop: 10 }}>
                 <input
@@ -383,6 +442,15 @@ const AdminSendNotificationPage = () => {
               Sent to {result.recipient_count ?? result.delivered ?? 0} user(s).
               {result.send_email ? ` Emailed ${result.email_sent_count ?? 0} of them.` : ''}
             </p>
+            {Array.isArray(result.org_results) && result.org_results.length > 0 && (
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--text-secondary)' }}>
+                {result.org_results.map((r) => (
+                  <li key={r.org_id} style={{ color: r.error ? 'var(--error)' : undefined }}>
+                    {r.org_name}: {r.error ? `could not be reached (${r.error})` : `${r.recipients} user(s)${result.send_email ? `, ${r.emails} emailed` : ''}`}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

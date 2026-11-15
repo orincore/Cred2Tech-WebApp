@@ -11,6 +11,7 @@ import { formatDateTime } from '../utils/helpers';
 import { useTheme } from '../context/ThemeContext';
 
 import CustomSelect from '../components/CustomSelect';
+import { whitelabelService } from '../api/whitelabelService';
 // Responsive hook
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -119,7 +120,7 @@ const RawJsonBlock = ({ label, value }) => {
 // Full raw record for one log — fetched on demand (not preloaded on every
 // row) since request/response payloads can be several KB of vendor JSON
 // each. Opened from the error-flagged rows in the table/card list below.
-const LogDetailModal = ({ logId, onClose }) => {
+const LogDetailModal = ({ logId, orgId, onClose }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -129,12 +130,13 @@ const LogDetailModal = ({ logId, onClose }) => {
     setLoading(true);
     setDetail(null);
     setError(null);
-    api.get(`/admin/api-logs/${logId}/detail`)
+    // A partner organisation's log lives in its own database (ids repeat across databases): say which one.
+    api.get(`/admin/api-logs/${logId}/detail`, { params: orgId ? { org_id: orgId } : undefined })
       .then((res) => { if (!cancelled) setDetail(res.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Failed to load log detail'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [logId]);
+  }, [logId, orgId]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -305,10 +307,23 @@ const SuperadminApiLogsPage = () => {
   const [exporting, setExporting] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
   const [detailLogId, setDetailLogId] = useState(null);
+  const [detailOrgId, setDetailOrgId] = useState(null);
+  const openDetail = (l) => { setDetailLogId(l.id); setDetailOrgId(l.org_id || null); };
+
+  // White-label partners keep their logs in their own database. 'all' (default) = the main app AND every partner
+  // organisation together, each row naming its organisation; 'main' = main app only; or one organisation's id.
+  const [orgs, setOrgs] = useState([]);
+  useEffect(() => {
+    let live = true;
+    whitelabelService.list({ pageSize: 100 })
+      .then((d) => { if (live) setOrgs((d.items || []).filter((o) => o.status === 'ACTIVE' || o.status === 'SUSPENDED')); })
+      .catch(() => {}); // not enabled / not allowed: the page simply stays main-app only
+    return () => { live = false; };
+  }, []);
 
   // Filters
   const [filters, setFilters] = useState({
-    page: 1, limit: 50, status: '', api_code: '', vendor: '', environment: '',
+    page: 1, limit: 50, org_id: 'all', status: '', api_code: '', vendor: '', environment: '',
     date_from: '', date_to: '', search: '', sort_by: 'timestamp', sort_dir: 'desc',
   });
   const [totalPages, setTotalPages] = useState(1);
@@ -316,10 +331,14 @@ const SuperadminApiLogsPage = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    fetchSummary();
     fetchSmsBalance();
-    fetchVendors();
   }, []);
+
+  // The totals and the vendor list follow the organisation selector, like the table.
+  useEffect(() => {
+    fetchSummary();
+    fetchVendors();
+  }, [filters.org_id]);
 
   useEffect(() => {
     fetchLogs();
@@ -338,7 +357,7 @@ const SuperadminApiLogsPage = () => {
 
   const fetchSummary = async () => {
     try {
-      const res = await api.get(`/admin/api-logs/summary`);
+      const res = await api.get(`/admin/api-logs/summary`, { params: { org_id: filters.org_id } });
       setSummary(res.data);
     } catch (e) {
       console.error("Summary load fail");
@@ -364,7 +383,7 @@ const SuperadminApiLogsPage = () => {
   // vendors are really wired up (admin-configurable, see Bureau API Settings).
   const fetchVendors = async () => {
     try {
-      const res = await api.get(`/admin/api-logs/vendors`);
+      const res = await api.get(`/admin/api-logs/vendors`, { params: { org_id: filters.org_id } });
       setVendors(res.data.vendors || []);
     } catch (e) {
       console.error("Vendor list load fail");
@@ -467,11 +486,11 @@ const SuperadminApiLogsPage = () => {
 
   const hasError = (l) => !!l.error_message || l.status === 'FAILED' || l.status === 'REFUNDED' || String(l.status || '').startsWith('BLOCKED');
 
-  const hasActiveFilters = search || filters.api_code || filters.status || filters.vendor || filters.environment || filters.date_from || filters.date_to;
+  const hasActiveFilters = search || filters.api_code || filters.status || filters.vendor || filters.environment || filters.date_from || filters.date_to || filters.org_id !== 'all';
 
   const clearAllFilters = () => {
     setSearch('');
-    setFilters((f) => ({ ...f, api_code: '', status: '', vendor: '', environment: '', date_from: '', date_to: '', search: '', page: 1 }));
+    setFilters((f) => ({ ...f, org_id: 'all', api_code: '', status: '', vendor: '', environment: '', date_from: '', date_to: '', search: '', page: 1 }));
   };
 
   return (
@@ -647,6 +666,22 @@ const SuperadminApiLogsPage = () => {
               </CustomSelect>
             </div>
 
+            {/* Organisation: the main app and/or a white-label partner organisation (only when partners exist) */}
+            {orgs.length > 0 && (
+              <div style={{ flex: isMobile ? '1 1 45%' : 1, minWidth: isMobile ? 120 : 130 }}>
+                <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Organisation</span>
+                <CustomSelect
+                  value={filters.org_id}
+                  onChange={e => setFilters({ ...filters, org_id: e.target.value, page: 1 })}
+                  style={{ ...underlineInput(filters.org_id !== 'all'), appearance: 'none', cursor: 'pointer', borderBottomColor: filters.org_id !== 'all' ? '#4f46e5' : 'var(--outline)', color: filters.org_id !== 'all' ? '#4f46e5' : 'var(--on-surface)', fontSize: 13 }}
+                >
+                  <option value="all">All (main app + partners)</option>
+                  <option value="main">Main app only</option>
+                  {orgs.map((o) => <option key={o.id} value={o.id}>{o.display_name}{o.status === 'SUSPENDED' ? ' (suspended)' : ''}</option>)}
+                </CustomSelect>
+              </div>
+            )}
+
             {/* Environment: where the hit came from */}
             <div style={{ flex: isMobile ? '1 1 45%' : 1, minWidth: isMobile ? 120 : 130 }}>
               <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Environment</span>
@@ -775,14 +810,14 @@ const SuperadminApiLogsPage = () => {
                 const respBadge = getResponseBadge(l.response_status);
                 return (
                   <div
-                    key={l.id || idx}
+                    key={`${l.org_id ?? 0}:${l.source}:${l.id ?? idx}`}
                     style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 10 }}
                   >
                     {/* Identity row: timestamp + DSA on the left, status badge anchored right */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)' }}>{formatDateTime(l.timestamp)}</div>
-                        <div style={{ fontSize: 10, color: 'var(--on-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.tenant_name || '—'}</div>
+                        <div style={{ fontSize: 10, color: 'var(--on-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.tenant_name || '—'}{l.org_name ? ` · ${l.org_name}` : ''}</div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <span style={{ background: respBadge.bg, color: respBadge.color, padding: '3px 8px', borderRadius: 0, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -826,7 +861,7 @@ const SuperadminApiLogsPage = () => {
                               <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} /> {l.error_message || 'Failed'}
                             </div>
                           ) : (
-                            <FailureNote l={l} onOpen={() => setDetailLogId(l.id)} />
+                            <FailureNote l={l} onOpen={() => openDetail(l)} />
                           )
                         )}
                       </div>
@@ -843,7 +878,12 @@ const SuperadminApiLogsPage = () => {
               // padding are smaller, so every column and the full failure reason are
               // visible without horizontal scrolling.
               { key: 'timestamp', label: 'Timestamp', width: '11%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{formatDateTime(l.timestamp)}</span> },
-              { key: 'tenant_name', label: 'SP', width: '11%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12, wordBreak: 'break-word' }}>{l.tenant_name || '—'}</span> },
+              { key: 'tenant_name', label: 'SP', width: '11%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
+                <span style={{ fontSize: 12, wordBreak: 'break-word' }}>
+                  {l.tenant_name || '—'}
+                  {l.org_name && <span style={{ display: 'block', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>{l.org_name}</span>}
+                </span>
+              ) },
               { key: 'vendor', label: 'Vendor', width: '8%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{l.vendor || '—'}</span> },
               { key: 'api_code', label: 'API Triggered', width: '12%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
                 <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, wordBreak: 'break-word' }}>{l.api_code}</span>
@@ -882,7 +922,7 @@ const SuperadminApiLogsPage = () => {
                         <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} /> {l.error_message || 'Failed'}
                       </div>
                     ) : (
-                      <FailureNote l={l} onOpen={() => setDetailLogId(l.id)} />
+                      <FailureNote l={l} onOpen={() => openDetail(l)} />
                     )
                   )}
                 </div>
@@ -934,7 +974,7 @@ const SuperadminApiLogsPage = () => {
         </>
       )}
 
-      {detailLogId && <LogDetailModal logId={detailLogId} onClose={() => setDetailLogId(null)} />}
+      {detailLogId && <LogDetailModal logId={detailLogId} orgId={detailOrgId} onClose={() => setDetailLogId(null)} />}
     </div>
   );
 };

@@ -37,11 +37,16 @@ const SuperadminWalletManager = () => {
 
    useEffect(() => { fetchWallets(); }, [page]);
 
+   // A white-label organisation's partner has its wallet managed in that organisation's own page (its tenant id means
+   // nothing on the main app); a main-app partner opens its wallet as before.
+   const openWallet = (t) => navigate(t.org_id ? `/admin/whitelabel/${t.org_id}` : `/admin/wallets/${t.tenant_id}`);
+
    const fetchWallets = async () => {
       try {
          setLoading(true);
-         const res = await api.get(`/admin/wallet/tenants/wallets?page=${page}&limit=50`);
-         setWallets(res.data.tenants || []);
+         // org_id=all: the main app's sourcing partners AND every white-label organisation's, each row naming its organisation
+         const res = await api.get(`/admin/wallet/tenants/wallets?page=${page}&limit=50&org_id=all`);
+         setWallets((res.data.tenants || []).map((w) => (w.org_name ? { ...w, tenant_name: `${w.tenant_name} (${w.org_name})` } : w)));
          setTotalPages(res.data.totalPages || 1);
       } catch (err) { toast.error("Failed to load wallets"); }
       finally { setLoading(false); }
@@ -139,8 +144,8 @@ const SuperadminWalletManager = () => {
                         const statusColor = isLow ? 'var(--error)' : (isActive ? 'var(--success)' : 'var(--error)');
                         return (
                            <div
-                              key={t.tenant_id}
-                              onClick={() => navigate(`/admin/wallets/${t.tenant_id}`)}
+                              key={`${t.org_id ?? 0}:${t.tenant_id}`}
+                              onClick={() => openWallet(t)}
                               style={{ background: 'var(--bg-surface)', border: '1px solid var(--outline)', borderRadius: 0, padding: 14, cursor: 'pointer' }}
                            >
                               {/* Identity row: DSA name + code on the left, status pill anchored right */}
@@ -222,7 +227,7 @@ const SuperadminWalletManager = () => {
                      }},
                      { key: 'action', label: 'Action', align: 'center', render: (t) => (
                         <button
-                           onClick={(e) => { e.stopPropagation(); navigate(`/admin/wallets/${t.tenant_id}`); }}
+                           onClick={(e) => { e.stopPropagation(); openWallet(t); }}
                            style={{
                               display: 'inline-flex', alignItems: 'center', gap: 5,
                               background: 'transparent', border: 'none',
@@ -241,7 +246,7 @@ const SuperadminWalletManager = () => {
                   data={filtered}
                   isMobile={isMobile}
                   hoverRows={true}
-                  onRowClick={(t) => navigate(`/admin/wallets/${t.tenant_id}`)}
+                  onRowClick={(t) => openWallet(t)}
                />
                )}
 

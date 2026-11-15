@@ -65,7 +65,7 @@ const AdminTicketsListPage = () => {
     setLoading(true);
     try {
       const result = await ticketService.listForAdmin({ type, status, role, unreadOnly, search, sortBy, sortDir, page, pageSize: PAGE_SIZE });
-      setRows(result.data);
+      setRows(result.data.map((t) => ({ ...t, _key: `${t.org_id ?? 0}:${t.id}` })));
       setTotal(result.total);
     } catch (err) {
       toast.error('Failed to load tickets');
@@ -85,8 +85,8 @@ const AdminTicketsListPage = () => {
   const handleMarkAsRead = async (e, ticket) => {
     e.stopPropagation();
     try {
-      await ticketService.markAsRead(ticket.id);
-      setRows((prev) => prev.map((r) => (r.id === ticket.id ? { ...r, read_at: new Date().toISOString() } : r)));
+      await ticketService.markAsRead(ticket.id, ticket.org_id || undefined);
+      setRows((prev) => prev.map((r) => (r.id === ticket.id && (r.org_id ?? null) === (ticket.org_id ?? null) ? { ...r, read_at: new Date().toISOString() } : r)));
       setUnreadCount((c) => Math.max(0, c - 1));
     } catch {
       toast.error('Failed to mark as read');
@@ -117,7 +117,7 @@ const AdminTicketsListPage = () => {
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{t.subject}</div>
             <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-              {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)}) · {formatDateTime(t.created_at)}
+              {t.ticket_number}{t.org_name ? ` · ${t.org_name}` : ''} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)}) · {formatDateTime(t.created_at)}
             </div>
           </div>
         </div>
@@ -243,8 +243,8 @@ const AdminTicketsListPage = () => {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {rows.map((t, idx) => (
                 <div
-                  key={t.id}
-                  onClick={() => navigate(`/admin/tickets/${t.id}`)}
+                  key={`${t.org_id ?? 0}:${t.id}`}
+                  onClick={() => navigate(`/admin/tickets/${t.id}${t.org_id ? `?org_id=${t.org_id}` : ''}`)}
                   style={{ padding: 12, borderBottom: idx === rows.length - 1 ? 'none' : '1px solid var(--outline)', cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
@@ -255,7 +255,7 @@ const AdminTicketsListPage = () => {
                           {t.subject}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>
-                          {t.ticket_number} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)})
+                          {t.ticket_number}{t.org_name ? ` · ${t.org_name}` : ''} · {t.created_by?.name || 'Unknown'} ({roleLabel(t.created_by_role)})
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 1 }}>{formatDateTime(t.created_at)}</div>
                       </div>
@@ -285,7 +285,7 @@ const AdminTicketsListPage = () => {
               ))}
             </div>
           ) : (
-            <DataTable columns={columns} data={rows} onRowClick={(t) => navigate(`/admin/tickets/${t.id}`)} />
+            <DataTable columns={columns} data={rows} rowKey="_key" onRowClick={(t) => navigate(`/admin/tickets/${t.id}${t.org_id ? `?org_id=${t.org_id}` : ''}`)} />
           )}
         </div>
 

@@ -73,7 +73,7 @@ export const adminNotificationsService = {
   },
 
   /** Send a broadcast notification to all users or a filtered set. */
-  send: async ({ title, message, audience = 'ALL', targetRole = null, targetUserId = null, targetUserIds = null, actionUrl = null, couponCode = null, notificationType = 'ALERT', sendEmail = false }) => {
+  send: async ({ title, message, audience = 'ALL', targetRole = null, targetUserId = null, targetUserIds = null, actionUrl = null, couponCode = null, notificationType = 'ALERT', sendEmail = false, orgScope = 'MAIN', targetOrgIds = [] }) => {
     const res = await api.post('/admin/notifications/send', {
       title,
       message,
@@ -85,6 +85,8 @@ export const adminNotificationsService = {
       couponCode,
       notificationType,
       sendEmail,
+      orgScope,
+      targetOrgIds,
     });
     return res.data;
   },

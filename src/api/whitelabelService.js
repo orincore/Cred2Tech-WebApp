@@ -27,6 +27,7 @@ export const whitelabelService = {
   cancel: (id, headers = {}) => api.post(`/admin/whitelabel/${id}/provisioning/cancel`, {}, { headers }).then(data),
   health: () => api.get('/admin/whitelabel/health').then(data),
   usage: (id) => api.get(`/admin/whitelabel/${id}/usage`).then((r) => r.data.usage),
+  analytics: (id) => api.get(`/admin/whitelabel/${id}/analytics`).then((r) => r.data.analytics),
   wallet: (id, tenantId) => api.get(`/admin/whitelabel/${id}/wallet`, { params: tenantId ? { tenant_id: tenantId } : {} }).then(data),
   adjustWallet: (id, body, headers = {}) => api.post(`/admin/whitelabel/${id}/wallet/adjust`, body, { headers }).then(data),
   platformFee: (id) => api.get(`/admin/whitelabel/${id}/platform-fee`).then(data),

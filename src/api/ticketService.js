@@ -1,5 +1,7 @@
 import api from './axiosInstance';
 
+const orgParams = (orgId) => (orgId ? { params: { org_id: orgId } } : undefined);
+
 export const ticketService = {
   // Submitter (MSME + DSA/staff)
   create: async (formData) => {
@@ -12,8 +14,10 @@ export const ticketService = {
     const res = await api.get('/tickets/mine');
     return res.data.data;
   },
-  getById: async (id) => {
-    const res = await api.get(`/tickets/${id}`);
+  // `orgId`: a white-label organisation's ticket lives in that organisation's own database (admin screens pass it; the
+  // submitter screens never do, so they only ever see their own database).
+  getById: async (id, orgId) => {
+    const res = await api.get(`/tickets/${id}`, orgParams(orgId));
     return res.data.data;
   },
   addMessage: async (id, note) => {
@@ -26,8 +30,8 @@ export const ticketService = {
     // go through downloadAttachment() below instead of this URL directly.
     return `${api.defaults.baseURL}/tickets/${ticketId}/attachments/${attachmentId}`;
   },
-  downloadAttachment: async (ticketId, attachmentId, fileName) => {
-    const res = await api.get(`/tickets/${ticketId}/attachments/${attachmentId}`, { responseType: 'blob' });
+  downloadAttachment: async (ticketId, attachmentId, fileName, orgId) => {
+    const res = await api.get(`/tickets/${ticketId}/attachments/${attachmentId}`, { responseType: 'blob', ...(orgId ? { params: { org_id: orgId } } : {}) });
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -41,34 +45,35 @@ export const ticketService = {
   // used directly in an <img src> since the download route needs the Bearer
   // token, which only the axios interceptor attaches. Caller owns the
   // returned object URL and must revoke it on unmount (see AttachmentGallery).
-  fetchAttachmentPreview: async (ticketId, attachmentId) => {
-    const res = await api.get(`/tickets/${ticketId}/attachments/${attachmentId}`, { responseType: 'blob' });
+  fetchAttachmentPreview: async (ticketId, attachmentId, orgId) => {
+    const res = await api.get(`/tickets/${ticketId}/attachments/${attachmentId}`, { responseType: 'blob', ...(orgId ? { params: { org_id: orgId } } : {}) });
     return window.URL.createObjectURL(res.data);
   },
 
   // Admin
+  // `org_id: 'all'`: the main app AND every white-label organisation together (each row names its organisation).
   listForAdmin: async (params) => {
-    const res = await api.get('/tickets', { params });
+    const res = await api.get('/tickets', { params: { org_id: 'all', ...params } });
     return res.data;
   },
   unreadCount: async () => {
-    const res = await api.get('/tickets/unread-count');
+    const res = await api.get('/tickets/unread-count', { params: { org_id: 'all' } });
     return res.data.count;
   },
-  changeStatus: async (id, status, note) => {
-    const res = await api.patch(`/tickets/${id}/status`, { status, note });
+  changeStatus: async (id, status, note, orgId) => {
+    const res = await api.patch(`/tickets/${id}/status`, { status, note }, orgParams(orgId));
     return res.data.data;
   },
-  addNote: async (id, note) => {
-    const res = await api.post(`/tickets/${id}/notes`, { note });
+  addNote: async (id, note, orgId) => {
+    const res = await api.post(`/tickets/${id}/notes`, { note }, orgParams(orgId));
     return res.data.data;
   },
-  reply: async (id, note) => {
-    const res = await api.post(`/tickets/${id}/reply`, { note });
+  reply: async (id, note, orgId) => {
+    const res = await api.post(`/tickets/${id}/reply`, { note }, orgParams(orgId));
     return res.data.data;
   },
-  markAsRead: async (id) => {
-    const res = await api.post(`/tickets/${id}/read`);
+  markAsRead: async (id, orgId) => {
+    const res = await api.post(`/tickets/${id}/read`, undefined, orgParams(orgId));
     return res.data.data;
   },
 

@@ -12,7 +12,7 @@ import { ticketService } from '../../api/ticketService';
  * Thumbnails are fetched as authenticated blobs (the download route needs
  * the Bearer token an <img src> can't send) and revoked on unmount.
  */
-const AttachmentGallery = ({ ticketId, attachments }) => {
+const AttachmentGallery = ({ ticketId, attachments, orgId }) => {
   const [previews, setPreviews] = useState({}); // { [attachmentId]: objectUrl }
   const [lightbox, setLightbox] = useState(null); // { url, name }
 
@@ -25,7 +25,7 @@ const AttachmentGallery = ({ ticketId, attachments }) => {
       for (const a of attachments) {
         if (!a.mime_type?.startsWith('image/')) continue;
         try {
-          const url = await ticketService.fetchAttachmentPreview(ticketId, a.id);
+          const url = await ticketService.fetchAttachmentPreview(ticketId, a.id, orgId);
           if (cancelled) { URL.revokeObjectURL(url); continue; }
           urls.push(url);
           setPreviews((prev) => ({ ...prev, [a.id]: url }));
@@ -78,7 +78,7 @@ const AttachmentGallery = ({ ticketId, attachments }) => {
             <button
               key={a.id}
               type="button"
-              onClick={() => ticketService.downloadAttachment(ticketId, a.id, a.file_name)}
+              onClick={() => ticketService.downloadAttachment(ticketId, a.id, a.file_name, orgId)}
               title={`Download ${a.file_name}`}
               style={{
                 width: 92, height: 92, padding: 8, border: '1px solid var(--outline)', borderRadius: 0, flexShrink: 0,

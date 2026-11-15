@@ -11,6 +11,7 @@ import BrandingEditor from './whitelabel/BrandingEditor';
 import ProvisioningTracker from './whitelabel/ProvisioningTracker';
 import SuspendControl from './whitelabel/SuspendControl';
 import UsageTab from './whitelabel/UsageTab';
+import OverviewAnalytics from './whitelabel/OverviewAnalytics';
 import BillingTab from './whitelabel/BillingTab';
 import { useStepUp } from './whitelabel/StepUp';
 import { STATUS_META, hostFor, readiness, canProvision, validateDetails, detailsPayload, changedFields } from './whitelabel/whitelabelUi';
@@ -30,8 +31,11 @@ const pick = (o) => Object.fromEntries(DETAIL_KEYS.map((k) => [k, o[k] ?? '']));
 const Overview = ({ org, config, go }) => {
   const items = readiness(org);
   const ready = canProvision(org);
+  // Consumption charts need the organisation's own database, which exists only once it is live (or suspended).
+  const hasData = ['ACTIVE', 'SUSPENDED'].includes(org.status);
   return (
-    // full width; the checklist and the summary sit side by side when there is room (and stack on a narrow screen)
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    {/* full width; the checklist and the summary sit side by side when there is room (and stack on a narrow screen) */}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 18, alignItems: 'start' }}>
       <Card title="Before setup" subtitle="Required items must be done before the site can be built.">
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -58,6 +62,8 @@ const Overview = ({ org, config, go }) => {
           ))}
         </dl>
       </Card>
+    </div>
+    {hasData && <OverviewAnalytics org={org} />}
     </div>
   );
 };
