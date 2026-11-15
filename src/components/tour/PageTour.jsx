@@ -47,9 +47,9 @@ function releaseTour(pageKey) {
 // glow look like it never actually animated at all.
 const RING_GLOW_ANIMATE = {
   boxShadow: [
-    '0 0 0 4px rgba(79,70,229,0.18), 0 0 24px 4px rgba(79,70,229,0.35)',
-    '0 0 0 7px rgba(79,70,229,0.10), 0 0 34px 10px rgba(79,70,229,0.22)',
-    '0 0 0 4px rgba(79,70,229,0.18), 0 0 24px 4px rgba(79,70,229,0.35)',
+    '0 0 0 4px rgb(var(--indigo-600, 79 70 229) / 0.18), 0 0 24px 4px rgb(var(--indigo-600, 79 70 229) / 0.35)',
+    '0 0 0 7px rgb(var(--indigo-600, 79 70 229) / 0.10), 0 0 34px 10px rgb(var(--indigo-600, 79 70 229) / 0.22)',
+    '0 0 0 4px rgb(var(--indigo-600, 79 70 229) / 0.18), 0 0 24px 4px rgb(var(--indigo-600, 79 70 229) / 0.35)',
   ],
 };
 const RING_GLOW_TRANSITION = { duration: 2.1, repeat: Infinity, ease: 'easeInOut' };
@@ -337,7 +337,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
             ...cardStyle,
             zIndex: 10000,
             background: isDark ? 'rgba(22,32,72,0.97)' : 'rgba(255,255,255,0.98)',
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.09)' : 'rgba(79,70,229,0.1)'}`,
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.09)' : 'rgb(var(--indigo-600, 79 70 229) / 0.1)'}`,
             boxShadow: isDark
               ? '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)'
               : '0 30px 80px rgba(30,41,90,0.22), inset 0 1px 0 rgba(255,255,255,0.7)',
@@ -351,7 +351,7 @@ const TourOverlay = ({ rect, step, stepIndex, totalSteps, isMobile, isDark, onNe
                   key={i}
                   style={{
                     width: i === stepIndex ? 16 : 6, height: 6, borderRadius: 0,
-                    background: i === stepIndex ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(79,70,229,0.18)'),
+                    background: i === stepIndex ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.18)' : 'rgb(var(--indigo-600, 79 70 229) / 0.18)'),
                     transition: 'width 0.25s ease, background 0.25s ease',
                     display: 'inline-block',
                   }}

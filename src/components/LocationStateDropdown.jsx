@@ -67,7 +67,7 @@ const LocationStateDropdown = ({
         <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           State <span className="text-indigo-600">*</span>
         </label>
-        <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${stateError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
+        <div className={`input-wrapper flex items-center gap-3 bg-indigo-100 dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${stateError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgb(var(--indigo-600,79_70_229)_/_.08)]'}`}>
           <svg>
             <rect />
           </svg>
@@ -96,7 +96,7 @@ const LocationStateDropdown = ({
         <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           City <span className="text-indigo-600">*</span>
         </label>
-        <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${cityError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
+        <div className={`input-wrapper flex items-center gap-3 bg-indigo-100 dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${cityError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgb(var(--indigo-600,79_70_229)_/_.08)]'}`}>
           <svg>
             <rect />
           </svg>
@@ -122,7 +122,7 @@ const LocationStateDropdown = ({
         <label className="block text-xs font-semibold text-[#0a1628] dark:text-[#e6edf7] uppercase tracking-wider mb-2">
           Pincode <span className="text-indigo-600">*</span>
         </label>
-        <div className={`input-wrapper flex items-center gap-3 bg-[#e0eaff] dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${pincodeError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgba(78,84,200,.08)]'}`}>
+        <div className={`input-wrapper flex items-center gap-3 bg-indigo-100 dark:bg-[#1e2a5c] border-[1.5px] rounded-[10px] px-4 h-[50px] transition-all duration-200 ${pincodeError ? 'border-red-300' : 'border-[#0a1628] dark:border-[#2d3a6c] focus-within:border-indigo-500 focus-within:bg-[#ffffff] dark:focus-within:bg-[#162048] focus-within:shadow-[0_0_0_3px_rgb(var(--indigo-600,79_70_229)_/_.08)]'}`}>
           <svg>
             <rect />
           </svg>

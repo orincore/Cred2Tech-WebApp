@@ -56,8 +56,8 @@ const initials = (name) => {
 const Shell = ({ isDark, children, style, ...rest }) => (
   <div
     style={{
-      background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(79,70,229,0.03)',
-      border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(79,70,229,0.08)'}`,
+      background: isDark ? 'rgba(255,255,255,0.03)' : 'rgb(var(--indigo-600, 79 70 229) / 0.03)',
+      border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgb(var(--indigo-600, 79 70 229) / 0.08)'}`,
       borderRadius: 0,
       padding: 6,
       ...style,
@@ -107,7 +107,7 @@ const InfoCard = ({ icon: Icon, title, isDark, children }) => (
         borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'var(--outline)'}`,
       }}>
         <div style={{
-          width: 26, height: 26, borderRadius: 0, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(79,70,229,0.08)',
+          width: 26, height: 26, borderRadius: 0, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgb(var(--indigo-600, 79 70 229) / 0.08)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
           <Icon size={13} strokeWidth={1.75} color="var(--primary)" />
@@ -151,11 +151,11 @@ const ModalShell = ({ isDark, onDismiss, children, maxWidth = 420 }) => (
       transition={{ duration: 0.45, ease: EASE }}
       style={{
         background: isDark ? 'rgba(22,32,72,0.94)' : 'rgba(255,255,255,0.96)',
-        border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(79,70,229,0.08)'}`,
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgb(var(--indigo-600, 79 70 229) / 0.08)'}`,
         borderRadius: 0,
         boxShadow: isDark
           ? '0 40px 100px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)'
-          : '0 40px 100px rgba(79,70,229,0.16), inset 0 1px 0 rgba(255,255,255,0.7)',
+          : '0 40px 100px rgb(var(--indigo-600, 79 70 229) / 0.16), inset 0 1px 0 rgba(255,255,255,0.7)',
         padding: 34, maxWidth, width: '100%',
       }}
     >
@@ -207,14 +207,14 @@ const ConfirmModal = ({ isDark, icon, iconColor, title, message, onCancel, onCon
 const DeviceRow = ({ isDark, icon, title, badge, subtitle, actions }) => (
   <div style={{
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-    padding: '13px 16px', background: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(79,70,229,0.025)',
+    padding: '13px 16px', background: isDark ? 'rgba(255,255,255,0.025)' : 'rgb(var(--indigo-600, 79 70 229) / 0.025)',
     border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'var(--outline)'}`, borderRadius: 0,
     transition: 'background 0.25s ' + 'cubic-bezier(0.32,0.72,0,1)',
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
       <div style={{
         width: 34, height: 34, borderRadius: 0, flexShrink: 0,
-        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(79,70,229,0.08)',
+        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgb(var(--indigo-600, 79 70 229) / 0.08)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {icon}
@@ -726,9 +726,9 @@ const ProfilePage = () => {
   // existing focus/disabled affordances (edit pencil / lock icon) exactly.
   const fieldWrap = (focused, disabled = false) => ({
     display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px',
-    borderRadius: 0, background: isDark ? 'rgba(255,255,255,0.035)' : 'rgba(79,70,229,0.035)',
+    borderRadius: 0, background: isDark ? 'rgba(255,255,255,0.035)' : 'rgb(var(--indigo-600, 79 70 229) / 0.035)',
     border: `1px solid ${focused ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.07)' : 'var(--outline)')}`,
-    boxShadow: focused ? `0 0 0 4px ${isDark ? 'rgba(99,102,241,0.18)' : 'rgba(79,70,229,0.1)'}` : 'none',
+    boxShadow: focused ? `0 0 0 4px ${isDark ? 'rgba(99,102,241,0.18)' : 'rgb(var(--indigo-600, 79 70 229) / 0.1)'}` : 'none',
     transition: 'border-color 0.3s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s cubic-bezier(0.32,0.72,0,1)',
     opacity: disabled ? 0.65 : 1,
   });
@@ -747,7 +747,7 @@ const ProfilePage = () => {
       }}>
         <div style={{
           position: 'absolute', top: -180, right: -160, width: 520, height: 520, borderRadius: '50%',
-          background: isDark ? 'radial-gradient(circle, rgba(99,102,241,0.16), transparent 70%)' : 'radial-gradient(circle, rgba(79,70,229,0.10), transparent 70%)',
+          background: isDark ? 'radial-gradient(circle, rgba(99,102,241,0.16), transparent 70%)' : 'radial-gradient(circle, rgb(var(--indigo-600, 79 70 229) / 0.10), transparent 70%)',
         }} />
         <div style={{
           position: 'absolute', bottom: -220, left: -140, width: 480, height: 480, borderRadius: '50%',
@@ -771,7 +771,7 @@ const ProfilePage = () => {
                   width: isMobile ? 60 : 72, height: isMobile ? 60 : 72, borderRadius: 0,
                   background: `linear-gradient(145deg, var(--primary), ${isDark ? '#8b5cf6' : '#6366F1'})`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: isDark ? '0 12px 30px rgba(99,102,241,0.35)' : '0 12px 30px rgba(79,70,229,0.25)',
+                  boxShadow: isDark ? '0 12px 30px rgba(99,102,241,0.35)' : '0 12px 30px rgb(var(--indigo-600, 79 70 229) / 0.25)',
                 }}>
                   <span style={{ fontSize: isMobile ? 20 : 24, fontWeight: 700, color: '#fff' }}>{initials(u.name)}</span>
                 </div>
@@ -786,7 +786,7 @@ const ProfilePage = () => {
                   {roleName && (
                     <span style={{
                       fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--primary)',
-                      background: isDark ? 'rgba(99,102,241,0.18)' : 'rgba(79,70,229,0.1)', padding: '4px 10px', borderRadius: 0,
+                      background: isDark ? 'rgba(99,102,241,0.18)' : 'rgb(var(--indigo-600, 79 70 229) / 0.1)', padding: '4px 10px', borderRadius: 0,
                     }}>{roleLabel(roleName)}</span>
                   )}
                 </div>
@@ -836,16 +836,16 @@ const ProfilePage = () => {
                             transition={{ duration: 0.45, ease: EASE }}
                             style={{
                               position: 'absolute', inset: 0, borderRadius: 0,
-                              background: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(79,70,229,0.08)',
-                              border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgba(79,70,229,0.14)'}`,
+                              background: isDark ? 'rgba(99,102,241,0.16)' : 'rgb(var(--indigo-600, 79 70 229) / 0.08)',
+                              border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgb(var(--indigo-600, 79 70 229) / 0.14)'}`,
                             }}
                           />
                         )}
                         <div style={{
                           position: 'relative', width: 36, height: 36, borderRadius: 0, flexShrink: 0,
-                          background: isItemActive ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(79,70,229,0.06)'),
+                          background: isItemActive ? 'var(--primary)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgb(var(--indigo-600, 79 70 229) / 0.06)'),
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          boxShadow: isItemActive ? (isDark ? '0 6px 16px rgba(99,102,241,0.4)' : '0 6px 16px rgba(79,70,229,0.28)') : 'none',
+                          boxShadow: isItemActive ? (isDark ? '0 6px 16px rgba(99,102,241,0.4)' : '0 6px 16px rgb(var(--indigo-600, 79 70 229) / 0.28)') : 'none',
                           transition: 'background 0.3s cubic-bezier(0.32,0.72,0,1)',
                         }}>
                           <Icon size={17} strokeWidth={1.75} color={isItemActive ? '#fff' : 'var(--on-muted)'} />
@@ -1103,7 +1103,7 @@ const ProfilePage = () => {
                         <p style={{ fontSize: 12, color: 'var(--on-muted)', opacity: 0.75, margin: '0 0 14px' }}>Each code works once. Your old codes no longer work.</p>
                         <div style={{
                           display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 16, borderRadius: 0,
-                          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(79,70,229,0.04)', marginBottom: 14,
+                          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgb(var(--indigo-600, 79 70 229) / 0.04)', marginBottom: 14,
                         }}>
                           {pendingBackupCodes.map((c) => (
                             <span key={c} style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, textAlign: 'center', color: 'var(--on-surface)' }}>{c}</span>

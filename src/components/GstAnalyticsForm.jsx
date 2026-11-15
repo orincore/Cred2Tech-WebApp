@@ -435,7 +435,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 }}>
                     <div style={{
                         width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'rgb(var(--indigo-600) / 0.12)', color: 'var(--primary)', flexShrink: 0,
+                        background: 'rgb(var(--indigo-600, 79 70 229) / 0.12)', color: 'var(--primary)', flexShrink: 0,
                     }}>
                         <Building2 size={16} />
                     </div>

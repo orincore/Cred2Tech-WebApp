@@ -552,7 +552,7 @@ const HierarchyPage = () => {
                   y={Math.max(0, (-pan.y / zoom) * mmScaleY)}
                   width={Math.min(MM_W, (canvasRef.current?.clientWidth || 600) / zoom * mmScaleX)}
                   height={Math.min(MM_H, (canvasRef.current?.clientHeight || 400) / zoom * mmScaleY)}
-                  fill="rgba(79,70,229,0.08)" stroke="#4f46e5" strokeWidth="1" rx="2"
+                  fill="rgb(var(--indigo-600, 79 70 229) / 0.08)" stroke="var(--primary)" strokeWidth="1" rx="2"
                 />
               </svg>
             </div>

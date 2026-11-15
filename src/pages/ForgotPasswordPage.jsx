@@ -47,7 +47,7 @@ const ForgotPasswordPage = () => {
           <Logo size="large" />
         </div>
 
-        <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
+        <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-indigo-200/60 dark:border-[#2d3a6c] p-8 md:p-10">
           {sent ? (
             <div className="text-center">
               <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">

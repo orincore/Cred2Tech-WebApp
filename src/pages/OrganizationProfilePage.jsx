@@ -116,7 +116,7 @@ const InfoCard = ({ icon: Icon, title, children }) => (
     }}>
       <div style={{
         width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--primary-bg, rgba(79,70,229,0.08))',
+        background: 'var(--primary-bg, rgb(var(--indigo-600, 79 70 229) / 0.08))',
       }}>
         <Icon size={14} strokeWidth={1.75} color="var(--primary)" />
       </div>

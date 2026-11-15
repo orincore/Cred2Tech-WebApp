@@ -17,7 +17,7 @@ export const PageShell = ({ children, langCtx }) => (
       <div className="flex justify-center mb-8">
         <Logo size="large" surface="consent_pages" />
       </div>
-      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
+      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-indigo-200/60 dark:border-[#2d3a6c] p-8 md:p-10">
         {children}
       </div>
       <PoweredBy className="mt-5" />
@@ -51,7 +51,7 @@ export const RequestedByBanner = ({ details, langCtx }) => {
   const { lang, t } = langCtx;
   if (!details?.requested_by_name && !details?.requesting_org) return null;
   return (
-    <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
+    <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-indigo-50 dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c]">
       <span className="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">badge</span>
       <p className="text-[12px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
         {t('requestedBy')}{' '}

@@ -150,7 +150,7 @@ const OfflineOverlay = () => {
             <Logo size="large" surface="error_pages" />
           </div>
 
-          <div className="bg-white dark:bg-[#162048] shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">
+          <div className="bg-white dark:bg-[#162048] shadow-xl border border-indigo-200/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">
             <AnimatePresence mode="wait">
               {justRestored ? (
                 <motion.div

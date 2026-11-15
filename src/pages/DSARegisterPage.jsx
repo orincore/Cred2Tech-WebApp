@@ -480,7 +480,7 @@ const DsaAgreementPreviewModal = ({ dsaName, adminName, address, mobile, email, 
           <h3 className="text-[15px] font-bold text-[#0a1628] dark:text-[#e6edf7]">Sourcing Partner Agreement preview</h3>
           <button onClick={onClose} className="material-symbols-outlined text-[20px] text-[#0a1628]/60 dark:text-[#e6edf7]/60 cursor-pointer hover:text-[#0a1628] dark:hover:text-[#e6edf7]">close</button>
         </div>
-        <div className="px-5 py-2 bg-[#f6f8ff] dark:bg-[#0f1b3d] border-b border-[#c7d2fe]/60 dark:border-[#2d3a6c] shrink-0">
+        <div className="px-5 py-2 bg-indigo-50 dark:bg-[#0f1b3d] border-b border-indigo-200/60 dark:border-[#2d3a6c] shrink-0">
           <p className="text-[11px] font-medium text-[#0a1628]/70 dark:text-[#e6edf7]/70">
             This preview fills in your organization name as typed so far. The final PDF (with your registration date) is emailed to you once registration completes.
           </p>
@@ -1433,7 +1433,7 @@ const DSARegisterPage = () => {
                       <input name="admin_name" placeholder="e.g. Rahul Sharma" value={form.admin_name} onChange={handleChange} onBlur={() => handleFieldBlur('admin_name')} className={`w-full bg-transparent border-0 outline-none text-[#0a1628] dark:text-[#e6edf7] text-[15px] font-semibold pb-3 border-b ${errors.admin_name ? 'border-red-500' : 'border-gray-200 dark:border-gray-700 focus:border-indigo-600 dark:focus:border-indigo-400'} focus:ring-0 transition-colors p-0`} />
                       {errors.admin_name && <span className="text-[11px] text-red-500 mt-1.5 block">{errors.admin_name}</span>}
                     </div>
-                    <div className="md:col-span-2 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
+                    <div className="md:col-span-2 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-indigo-50 dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c]">
                       <span className="material-symbols-outlined text-[16px] text-indigo-600 dark:text-indigo-400">info</span>
                       <p className="text-[12px] font-medium text-[#0a1628] dark:text-[#e6edf7]">
                         You'll log in with <span className="font-bold">{form.email || 'your business email'}</span>.

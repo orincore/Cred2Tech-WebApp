@@ -49,11 +49,11 @@ const CountryCodeSelector = ({ value, onChange, error }) => {
       </div>
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-[#ffffff] dark:bg-[#162048] border border-[#c7d2fe] dark:border-[#2d3a6c] rounded-[8px] shadow-lg z-50 max-h-60 overflow-y-auto min-w-[200px]">
+        <div className="absolute top-full left-0 mt-1 bg-[#ffffff] dark:bg-[#162048] border border-indigo-200 dark:border-[#2d3a6c] rounded-[8px] shadow-lg z-50 max-h-60 overflow-y-auto min-w-[200px]">
           {countries.map((country) => (
             <div
               key={country.code}
-              className="flex items-center gap-3 px-3 py-2 hover:bg-[#e0eaff] dark:hover:bg-[#1e2a5c] cursor-pointer transition-colors duration-150"
+              className="flex items-center gap-3 px-3 py-2 hover:bg-indigo-100 dark:hover:bg-[#1e2a5c] cursor-pointer transition-colors duration-150"
               onClick={() => handleSelect(country)}
             >
               <span className="text-lg">{country.flag}</span>

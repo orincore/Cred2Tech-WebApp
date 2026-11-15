@@ -143,7 +143,7 @@ const ConsentPage = () => {
         {details?.customer_name ? t('consentFor', { name: details.customer_name }) : ''}.
       </p>
 
-      <div className="bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-4 mb-6">
+      <div className="bg-indigo-50 dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] p-4 mb-6">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[#0a1628]/50 dark:text-[#e6edf7]/50 mb-2.5">
           {t('dataRequested')}
         </p>
@@ -202,13 +202,13 @@ const ConsentPage = () => {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder={t('sixDigitCode')}
-            className="flex-1 min-w-0 px-3 py-2.5 text-[14px] font-medium tracking-[0.3em] bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500"
+            className="flex-1 min-w-0 px-3 py-2.5 text-[14px] font-medium tracking-[0.3em] bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500"
           />
           <button
             type="button"
             onClick={handleResendOtp}
             disabled={resending || resendCooldown > 0}
-            className="shrink-0 px-3 text-[12px] font-bold text-indigo-600 dark:text-indigo-400 border border-[#c7d2fe]/60 dark:border-[#2d3a6c] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 px-3 text-[12px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-[#2d3a6c] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {resendCooldown > 0 ? t('resendIn', { s: resendCooldown }) : resending ? t('sending') : t('resendOtp')}
           </button>

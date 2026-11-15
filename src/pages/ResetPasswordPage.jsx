@@ -17,7 +17,7 @@ const PageShell = ({ children }) => (
       <div className="flex justify-center mb-8">
         <Logo size="large" surface="login_page" />
       </div>
-      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10">
+      <div className="bg-white dark:bg-[#162048] rounded-none shadow-xl border border-indigo-200/60 dark:border-[#2d3a6c] p-8 md:p-10">
         {children}
       </div>
     </div>

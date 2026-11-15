@@ -343,7 +343,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-dark);
   border-color: var(--primary-dark);
-  box-shadow: 0 4px 12px rgba(79,70,229,0.3);
+  box-shadow: 0 4px 12px rgb(var(--indigo-600, 79 70 229) / 0.3);
   transform: translateY(-1px);
 }
 

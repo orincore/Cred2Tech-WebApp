@@ -171,7 +171,7 @@ const GstAuthPage = () => {
             maxLength={8}
             autoComplete="one-time-code"
             disabled={submittingOtp}
-            className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+            className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
           />
         </div>
 
@@ -252,7 +252,7 @@ const GstAuthPage = () => {
       {/* Not every GSTIN's GST-portal login has OTP enabled — the only way to
           find out is to try (see the OTP error guidance in handleSubmit), so
           this is a choice up front rather than a capability we can detect. */}
-      <div className="mb-5 inline-flex p-0.5 bg-[#f6f8ff] dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c]">
+      <div className="mb-5 inline-flex p-0.5 bg-indigo-50 dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c]">
         {[
           { value: 'PASSWORD', label: t('optPassword') },
           { value: 'OTP', label: t('optOtp') },
@@ -290,7 +290,7 @@ const GstAuthPage = () => {
           autoCorrect="off"
           spellCheck="false"
           disabled={submitting}
-          className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+          className="w-full px-3 py-2.5 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
         />
       </div>
 
@@ -315,7 +315,7 @@ const GstAuthPage = () => {
               autoCorrect="off"
               spellCheck="false"
               disabled={submitting}
-              className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+              className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
             />
             <button
               type="button"

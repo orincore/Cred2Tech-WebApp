@@ -179,7 +179,7 @@ const ItrAuthPage = () => {
           autoCorrect="off"
           spellCheck="false"
           disabled={submitting}
-          className="w-full px-3 py-2.5 text-[14px] font-medium tracking-[0.08em] bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+          className="w-full px-3 py-2.5 text-[14px] font-medium tracking-[0.08em] bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
         />
       </div>
 
@@ -208,7 +208,7 @@ const ItrAuthPage = () => {
             autoCorrect="off"
             autoComplete="off"
             spellCheck="false"
-            className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+            className="w-full px-3 py-2.5 pr-10 text-[14px] font-medium bg-white dark:bg-[#0f1b3d] border border-indigo-200/60 dark:border-[#2d3a6c] text-[#0a1628] dark:text-[#e6edf7] focus:outline-none focus:border-indigo-500 disabled:opacity-60"
           />
           <button
             type="button"

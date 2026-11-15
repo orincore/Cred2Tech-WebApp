@@ -64,7 +64,7 @@ const NotFoundPage = () => {
           <Logo size="large" surface="error_pages" />
         </div>
 
-        <div className="bg-white dark:bg-[#162048] shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">
+        <div className="bg-white dark:bg-[#162048] shadow-xl border border-indigo-200/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">
           <div className="relative mx-auto mb-6 w-20 h-20 flex items-center justify-center">
             <RadarRings color="var(--primary)" />
             <div className="relative w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -84,7 +84,7 @@ const NotFoundPage = () => {
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 text-[13px] font-bold text-[#0a1628] dark:text-[#e6edf7] border border-[#c7d2fe]/60 dark:border-[#2d3a6c] hover:bg-black/[0.03] dark:hover:bg-white/5 transition-colors"
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 text-[13px] font-bold text-[#0a1628] dark:text-[#e6edf7] border border-indigo-200/60 dark:border-[#2d3a6c] hover:bg-black/[0.03] dark:hover:bg-white/5 transition-colors"
             >
               <ArrowLeft size={14} />
               Go Back
