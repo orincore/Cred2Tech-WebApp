@@ -8,6 +8,8 @@ const num = (n) => Number(n || 0).toLocaleString('en-IN');
 const when = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 const periodLabel = (p) => { const [y, m] = p.split('-'); return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }); };
 const btn = { borderRadius: 0 };
+// How an API call ended, as the main-app admin ledger shows it.
+const USAGE_PILL = { SUCCESS: { tone: 'success', label: 'Succeeded' }, FAILED: { tone: 'error', label: 'Failed' }, REFUNDED: { tone: 'warning', label: 'Refunded' } };
 
 /**
  * The organisation's wallet and its optional monthly platform fee. Credits are added or deducted inside ITS OWN database (the
@@ -21,15 +23,17 @@ const BillingTab = ({ org, stepUp, onOrgChanged }) => {
   const [form, setForm] = useState({ direction: 'CREDIT', credits: '', reason: '' });
   const [errs, setErrs] = useState({}); const [busy, setBusy] = useState(false);
   const [feeInput, setFeeInput] = useState('');
+  const [rows, setRows] = useState(25); // how many wallet entries to show; "Show more" raises it
 
-  const load = useCallback(async (tid) => {
+  const load = useCallback(async (tid, count = rows) => {
     try {
-      const [wallet, f] = await Promise.all([whitelabelService.wallet(org.id, tid), whitelabelService.platformFee(org.id)]);
+      const [wallet, f] = await Promise.all([whitelabelService.wallet(org.id, tid, count), whitelabelService.platformFee(org.id)]);
       setW(wallet); setFee(f); setTenantId(wallet.focus_tenant_id); setError(null);
       setFeeInput((cur) => (cur === '' && f.fee_credits ? String(f.fee_credits) : cur));
     } catch (e) { setError(apiError(e, 'Could not load billing')); }
-  }, [org.id]);
+  }, [org.id, rows]);
   useEffect(() => { load(null); }, [load]);
+  const showMore = () => setRows((n) => Math.min(n + 25, 100));
 
   const adjust = async (e) => {
     e.preventDefault(); setErrs({});
@@ -116,22 +120,40 @@ const BillingTab = ({ org, stepUp, onOrgChanged }) => {
         </form>
       </Card>
 
-      <Card title="Recent wallet activity" subtitle={focus ? focus.name : undefined}>
+      <Card title="Wallet activity" subtitle={focus ? `${focus.name} · every charge, refund and top-up, newest first` : undefined}>
         {w.transactions.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: 'var(--on-muted)' }}>No wallet activity yet.</p> : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={th}>When</th><th style={th}>What</th><th style={{ ...th, textAlign: 'right' }}>Credits</th><th style={{ ...th, textAlign: 'right' }}>Balance after</th></tr></thead>
+              <thead><tr><th style={th}>When</th><th style={th}>What</th><th style={th}>Detail</th><th style={{ ...th, textAlign: 'right' }}>Credits</th><th style={{ ...th, textAlign: 'right' }}>Balance after</th></tr></thead>
               <tbody>
-                {w.transactions.map((t) => (
-                  <tr key={t.id}>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{when(t.created_at)}</td>
-                    <td style={td}>{t.api_code === 'WL_PLATFORM_FEE' ? 'Platform fee' : String(t.reference_type).replace(/_/g, ' ').toLowerCase()}{t.remarks ? <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{t.remarks}</div> : null}</td>
-                    <td style={{ ...td, textAlign: 'right', color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--on-surface)' }}>{t.transaction_type === 'CREDIT' ? '+' : '−'}{num(t.amount)}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>{num(t.balance_after)}</td>
-                  </tr>
-                ))}
+                {w.transactions.map((t) => {
+                  const used = t.usage_status ? USAGE_PILL[t.usage_status] : null;
+                  return (
+                    <tr key={t.id}>
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}>{when(t.created_at)}</td>
+                      <td style={td}>
+                        <div style={{ fontWeight: 600 }}>{t.is_api_refund ? `Refund · ${t.service_name || t.api_code}` : (t.service_name && t.reference_type === 'API_CALL' ? t.service_name : t.kind)}</div>
+                        {t.service_name && t.reference_type === 'API_CALL' && <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{t.kind}</div>}
+                      </td>
+                      <td style={{ ...td, maxWidth: 380 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                          {used && <Pill tone={used.tone}>{used.label}</Pill>}
+                          {t.case_id ? <span style={{ fontSize: 11.5, color: 'var(--on-muted)' }}>Case #{t.case_id}</span> : null}
+                          {t.api_code && t.api_code !== t.service_name && <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--on-muted)' }}>{t.api_code}</span>}
+                        </div>
+                        {t.failure_reason && <div style={{ fontSize: 11.5, color: 'var(--error)', marginTop: 3 }}>{t.failure_reason}</div>}
+                        {t.call_time && <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>Call made {when(t.call_time)}</div>}
+                        {t.refunded_at && <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>Refunded {when(t.refunded_at)}{t.refunded_amount ? ` · ${num(t.refunded_amount)} credits back` : ''}</div>}
+                        {t.remarks ? <div style={{ fontSize: 11.5, color: 'var(--on-muted)', marginTop: 3 }}>{t.remarks}</div> : null}
+                      </td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: t.transaction_type === 'CREDIT' ? 'var(--success)' : 'var(--on-surface)' }}>{t.transaction_type === 'CREDIT' ? '+' : '−'}{num(t.amount)}</td>
+                      <td style={{ ...td, textAlign: 'right' }}>{num(t.balance_after)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            {w.has_more && rows < 100 && <div style={{ textAlign: 'center', marginTop: 12 }}><button type="button" className="btn btn-secondary btn-sm" style={btn} onClick={showMore}>Show more</button></div>}
           </div>
         )}
       </Card>
