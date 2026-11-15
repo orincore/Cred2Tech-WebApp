@@ -8,7 +8,7 @@ import {
 import { motion } from 'framer-motion';
 import StatCard from '../../components/ui/StatCard';
 import SectionCard from '../../components/ui/SectionCard';
-import StageBar from '../../components/ui/StageBar';
+import StageAnalytics from '../../components/dashboard/StageAnalytics';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
@@ -17,19 +17,6 @@ import TrendBadge, { AnimatedNumber } from '../../components/ui/TrendBadge';
 import CustomerTypeModal from '../../components/customers/CustomerTypeModal';
 import { getDsaSummary, getDsaCases, getDsaStageSummary } from '../../api/dashboardService';
 import { formatCompactINR, getErrorMessage, formatStatusLabel, CASE_STAGE_LABELS } from '../../utils/helpers';
-
-// Fixed pipeline order — matches the product's actual case lifecycle stages.
-const STAGE_ORDER = [
-  'Lead Created',
-  'Data Pulled',
-  'Eligibility Report Generated',
-  'Lead Sent to Lender',
-  'Under Process',
-  'Sanctioned Undisbursed',
-  'Partly Disbursed',
-  'Closed',
-  'Closed Leads',
-];
 
 const QuickAction = ({ icon: Icon, label, desc, color, onClick, delay }) => (
   <motion.button
@@ -104,11 +91,6 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
     { key: 'sanctions', title: 'Sanctions', icon: CheckCircle2, color: 'var(--success)' },
     { key: 'disbursements', title: 'Disbursements', icon: Banknote, color: 'var(--warning)' },
   ];
-
-  const stageEntries = stageSummary
-    ? STAGE_ORDER.map((label) => ({ label, count: stageSummary[label] || 0 }))
-    : [];
-  const stageMax = Math.max(1, ...stageEntries.map((s) => s.count));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -215,11 +197,7 @@ const DsaDashboardView = ({ period, refreshKey, isMobile, isTablet }) => {
         {loadingSummary ? (
           <TableSkeleton rows={4} columns={1} />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '18px 28px', padding: 20 }}>
-            {stageEntries.map((s, i) => (
-              <StageBar key={s.label} label={s.label} count={s.count} pct={(s.count / stageMax) * 100} color="var(--primary)" delay={i * 0.04} />
-            ))}
-          </div>
+          <StageAnalytics counts={stageSummary} isMobile={isMobile} />
         )}
       </SectionCard>
       </div>
