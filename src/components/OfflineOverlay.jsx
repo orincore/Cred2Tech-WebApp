@@ -182,8 +182,8 @@ const OfflineOverlay = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <div className="relative mx-auto mb-6 w-20 h-20 flex items-center justify-center">
-                    <RadarRings color="#4f46e5" />
-                    <div className="relative w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-[#4f46e5] dark:text-[#818CF8] flex items-center justify-center">
+                    <RadarRings color="var(--primary)" />
+                    <div className="relative w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                       <WifiOff size={28} />
                     </div>
                   </div>
@@ -196,7 +196,7 @@ const OfflineOverlay = () => {
                     right back the moment it's restored, no manual refresh needed.
                   </p>
 
-                  <div className="flex items-center justify-center gap-2 text-[#4f46e5] dark:text-[#818CF8] mb-6">
+                  <div className="flex items-center justify-center gap-2 text-indigo-600 dark:text-indigo-400 mb-6">
                     <SearchingDots />
                     <span className="text-[12px] font-bold uppercase tracking-wide">
                       Searching for connection
@@ -207,7 +207,7 @@ const OfflineOverlay = () => {
                     type="button"
                     onClick={handleManualRetry}
                     disabled={checking}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white bg-[#4f46e5] hover:bg-[#4338ca] disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 transition-colors"
                   >
                     <motion.span
                       animate={{ rotate: spinCount * 360 }}

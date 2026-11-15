@@ -61,7 +61,7 @@ const OrgCard = ({
   const expandBtnBorder = isDark ? '#475569' : '#e2e8f0';
   const expandBtnColor = 'var(--on-muted)';
   const dividerColor = isDark ? '#334155' : '#f1f5f9';
-  const viewProfileColor = '#4f46e5';
+  const viewProfileColor = 'var(--primary)';
   const viewProfileBg = isDark ? '#1e1b4b' : '#f8f7ff';
   const viewProfileBorder = isDark ? '#4338ca' : '#e0e0fa';
 

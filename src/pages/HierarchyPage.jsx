@@ -436,7 +436,7 @@ const HierarchyPage = () => {
                   onClick={() => setViewMode('tree')}
                   style={{
                     padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
-                    background: viewMode === 'tree' ? '#4f46e5' : 'transparent',
+                    background: viewMode === 'tree' ? 'var(--primary)' : 'transparent',
                     color: viewMode === 'tree' ? '#fff' : 'var(--on-muted)',
                   }}
                 >
@@ -446,7 +446,7 @@ const HierarchyPage = () => {
                   onClick={() => setViewMode('list')}
                   style={{
                     padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
-                    background: viewMode === 'list' ? '#4f46e5' : 'transparent',
+                    background: viewMode === 'list' ? 'var(--primary)' : 'transparent',
                     color: viewMode === 'list' ? '#fff' : 'var(--on-muted)',
                   }}
                 >

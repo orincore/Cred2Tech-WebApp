@@ -125,7 +125,7 @@ const UsersListPage = () => {
   const labelSm = { fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 };
   const underlineInput = (active) => ({
     background: 'transparent', border: 'none',
-    borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+    borderBottom: `2px solid ${active ? 'var(--primary)' : 'var(--outline)'}`,
     outline: 'none', width: '100%', padding: '6px 0',
     fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
     transition: 'border-color 0.2s',
@@ -571,7 +571,7 @@ const UsersListPage = () => {
                       color: 'var(--on-surface)', cursor: 'pointer', transition: 'all 0.15s',
                       borderRadius: 4, whiteSpace: 'nowrap',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#4f46e5'; e.currentTarget.style.background = 'var(--surface-low)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--primary)'; e.currentTarget.style.background = 'var(--surface-low)'; }}
                     onMouseLeave={e => { e.currentTarget.style.color = 'var(--on-surface)'; e.currentTarget.style.background = 'transparent'; }}
                   >
                     <Edit size={11} />

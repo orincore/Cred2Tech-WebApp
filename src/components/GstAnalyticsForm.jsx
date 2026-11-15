@@ -435,7 +435,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                 }}>
                     <div style={{
                         width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'rgba(79,70,229,0.12)', color: '#4f46e5', flexShrink: 0,
+                        background: 'rgb(var(--indigo-600) / 0.12)', color: 'var(--primary)', flexShrink: 0,
                     }}>
                         <Building2 size={16} />
                     </div>
@@ -466,7 +466,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                     padding: '7px 16px',
                                     fontSize: 12.5, fontWeight: 700,
                                     border: 'none', cursor: 'pointer',
-                                    background: mode === opt.value ? '#4f46e5' : 'transparent',
+                                    background: mode === opt.value ? 'var(--primary)' : 'transparent',
                                     color: mode === opt.value ? '#fff' : 'var(--text-secondary)',
                                     transition: 'background 0.15s, color 0.15s',
                                 }}
@@ -518,10 +518,10 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                         rows. Left accent bar + lock icon mark it as the
                         sensitive-input block. */}
                     {mode === 'IN_SYSTEM' && (
-                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid var(--primary)', marginBottom: 20 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <Lock size={13} color="#4f46e5" />
+                                    <Lock size={13} color="var(--primary)" />
                                     <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Portal Credentials</span>
                                 </div>
                                 {/* Not every GSTIN's GST-portal login has OTP enabled — Signzy
@@ -540,7 +540,7 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                                             style={{
                                                 padding: '4px 10px', fontSize: 11, fontWeight: 700,
                                                 border: 'none', cursor: 'pointer',
-                                                background: authType === opt.value ? '#4f46e5' : 'transparent',
+                                                background: authType === opt.value ? 'var(--primary)' : 'transparent',
                                                 color: authType === opt.value ? '#fff' : 'var(--text-secondary)',
                                                 transition: 'background 0.15s, color 0.15s',
                                             }}
@@ -617,10 +617,10 @@ const GstAnalyticsForm = ({ caseId, customerId, applicantId = null, applicantTyp
                     )}
 
                     {mode === 'AUTH_LINK' && (
-                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid #4f46e5', marginBottom: 20 }}>
+                        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderLeft: '3px solid var(--primary)', marginBottom: 20 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <Mail size={13} color="#4f46e5" />
+                                    <Mail size={13} color="var(--primary)" />
                                     <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Send Auth Link Via</span>
                                 </div>
                                 <CustomSelect

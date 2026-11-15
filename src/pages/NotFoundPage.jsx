@@ -66,8 +66,8 @@ const NotFoundPage = () => {
 
         <div className="bg-white dark:bg-[#162048] shadow-xl border border-[#c7d2fe]/60 dark:border-[#2d3a6c] p-8 md:p-10 text-center">
           <div className="relative mx-auto mb-6 w-20 h-20 flex items-center justify-center">
-            <RadarRings color="#4f46e5" />
-            <div className="relative w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-[#4f46e5] dark:text-[#818CF8] flex items-center justify-center">
+            <RadarRings color="var(--primary)" />
+            <div className="relative w-16 h-16 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <SearchX size={28} />
             </div>
           </div>
@@ -92,7 +92,7 @@ const NotFoundPage = () => {
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="w-full sm:w-auto px-5 py-2.5 text-[13px] font-bold text-white bg-[#4f46e5] hover:bg-[#4338ca] transition-colors"
+              className="w-full sm:w-auto px-5 py-2.5 text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
             >
               Go to Dashboard
             </button>

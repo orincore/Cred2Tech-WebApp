@@ -1,5 +1,6 @@
 import React from 'react';
 import { Field, Grid } from './atoms';
+import CustomSelect from '../../components/CustomSelect';
 
 // The organisation's own details: who they are and who administers the account. The administrator email receives the
 // invite link (no password is ever emailed or shown), so it is required.
@@ -44,12 +45,13 @@ const OrgDetailsForm = ({ values, onChange, errors = {}, disabled = false }) => 
         {f('address_line', 'Address', { input: { maxLength: 200 } })}
         {f('city', 'City', { input: { maxLength: 60 } })}
         <Field label="State" htmlFor="wl-state" error={errors.state}>
-          <select id="wl-state" className="form-control" value={values.state ?? ''} onChange={(e) => set('state')(e.target.value)} disabled={disabled}>
+          <CustomSelect id="wl-state" name="state" className="form-control" searchable searchPlaceholder="Search state" placeholder="Select a state" style={{ width: '100%' }}
+            value={values.state ?? ''} onChange={(e) => set('state')(e.target.value)} disabled={disabled}>
             <option value="">Select a state</option>
             {/* keep a value saved before this was a dropdown selectable, so editing never silently drops it */}
             {values.state && !INDIAN_STATES.includes(values.state) && <option value={values.state}>{values.state}</option>}
             {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          </CustomSelect>
         </Field>
         {f('pincode', 'Pincode', { input: { inputMode: 'numeric', maxLength: 6 } })}
       </Grid>

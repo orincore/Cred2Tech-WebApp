@@ -53,10 +53,15 @@ const CustomSelect = ({
   // when the trigger itself is narrow. Neither changes anything for existing call sites.
   compact = false,
   menuMinWidth,
+  // Opt-in: a search box at the top of the popup that filters the options as you type (long lists, e.g. states).
+  searchable = false,
+  searchPlaceholder = 'Search',
   children,
   ...rest
 }) => {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef(null);
   const [highlighted, setHighlighted] = useState(-1);
   const [menuRect, setMenuRect] = useState(null);
   const triggerRef = useRef(null);
@@ -70,6 +75,14 @@ const CustomSelect = ({
     [options, value]
   );
   const selectedLabel = selectedIndex >= 0 ? options[selectedIndex].label : '';
+
+  // indexes (into `options`) that match the search text; every option when not searching
+  const visible = useMemo(() => {
+    const q = searchable ? query.trim().toLowerCase() : '';
+    const idx = [];
+    options.forEach((o, i) => { if (!q || o.label.toLowerCase().includes(q)) idx.push(i); });
+    return idx;
+  }, [options, query, searchable]);
 
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
@@ -90,6 +103,7 @@ const CustomSelect = ({
   const closeMenu = useCallback((refocus) => {
     setOpen(false);
     setHighlighted(-1);
+    setQuery('');
     if (refocus && triggerRef.current) triggerRef.current.focus();
   }, []);
 
@@ -99,6 +113,16 @@ const CustomSelect = ({
     setOpen(true);
     setHighlighted(selectedIndex >= 0 ? selectedIndex : 0);
   }, [disabled, updatePosition, selectedIndex]);
+
+  useEffect(() => {
+    if (open && searchable && menuRect) searchRef.current?.focus();
+  }, [open, searchable, !!menuRect]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // typing narrows the list: keep the highlight on a row that is still shown
+  useEffect(() => {
+    if (!searchable || !open) return;
+    if (!visible.includes(highlighted)) setHighlighted(visible.length ? visible[0] : -1);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reposition while open instead of closing on scroll — the trigger can sit
   // inside a scrollable card/table/modal, and snapping shut on every scroll
@@ -145,17 +169,25 @@ const CustomSelect = ({
   const moveHighlight = useCallback(
     (dir) => {
       setHighlighted((prev) => {
-        if (options.length === 0) return prev;
-        let next = prev;
-        for (let i = 0; i < options.length; i++) {
-          next = (next + dir + options.length) % options.length;
-          if (!options[next].disabled) break;
+        if (visible.length === 0) return prev;
+        let pos = visible.indexOf(prev);
+        for (let i = 0; i < visible.length; i++) {
+          pos = (pos + dir + visible.length) % visible.length;
+          if (!options[visible[pos]].disabled) break;
         }
-        return next;
+        return visible[pos];
       });
     },
-    [options]
+    [options, visible]
   );
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveHighlight(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveHighlight(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); commitSelection(highlighted); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); }
+    else if (e.key === 'Tab') closeMenu(false);
+  };
 
   const handleTypeahead = useCallback(
     (char) => {
@@ -302,10 +334,28 @@ const CustomSelect = ({
               padding: compact ? 2 : 4,
             }}
           >
-            {options.length === 0 ? (
-              <div style={{ padding: '8px 12px', color: 'var(--text-tertiary)', fontSize: 13 }}>No options</div>
+            {searchable && (
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                autoComplete="off"
+                style={{
+                  position: 'sticky', top: 0, zIndex: 1, display: 'block', width: '100%', boxSizing: 'border-box',
+                  padding: '8px 12px', marginBottom: 4, fontSize: 14, font: 'inherit',
+                  border: '1px solid var(--border)', borderRadius: 0, outline: 'none',
+                  background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                }}
+              />
+            )}
+            {visible.length === 0 ? (
+              <div style={{ padding: '8px 12px', color: 'var(--text-tertiary)', fontSize: 13 }}>{options.length === 0 ? 'No options' : 'No matches'}</div>
             ) : (
-              options.map((opt, i) => (
+              visible.map((i) => [i, options[i]]).map(([i, opt]) => (
                 <div
                   key={`${opt.value}-${i}`}
                   role="option"

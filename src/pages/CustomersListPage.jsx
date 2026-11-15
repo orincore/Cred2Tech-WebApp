@@ -173,7 +173,7 @@ const getCibilColor = (score, isDark) => {
 const labelSm = (isDark) => ({ fontSize: 11, fontWeight: 700, color: 'var(--on-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', display: 'block', marginBottom: 4 });
 const underlineInput = (active) => ({
   background: 'transparent', border: 'none',
-  borderBottom: `2px solid ${active ? '#4f46e5' : 'var(--outline)'}`,
+  borderBottom: `2px solid ${active ? 'var(--primary)' : 'var(--outline)'}`,
   outline: 'none', width: '100%', padding: '6px 0',
   fontSize: 13, fontWeight: 600, color: 'var(--on-surface)',
   transition: 'border-color 0.2s',
@@ -561,7 +561,7 @@ const CustomersListPage = () => {
                 aria-pressed={active}
                 onClick={() => handleSourceChange(opt.value)}
                 style={{
-                  background: active ? '#4f46e5' : 'transparent',
+                  background: active ? 'var(--primary)' : 'transparent',
                   color: active ? '#fff' : mutedColor,
                   border: 'none', borderRadius: 0, padding: '5px 14px',
                   fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
@@ -623,7 +623,7 @@ const CustomersListPage = () => {
                 </div>
 
                 <div
-                  style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', marginBottom: 2, wordBreak: 'break-word' }}
+                  style={{ fontWeight: 700, color: isDark ? '#fff' : 'var(--primary)', marginBottom: 2, wordBreak: 'break-word' }}
                   onClick={() => navigate(`/cases/${c.id}`)}
                 >
                   {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
@@ -669,7 +669,7 @@ const CustomersListPage = () => {
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                     background: 'transparent', border: '1px solid var(--outline)', borderRadius: 8,
-                    padding: '8px 10px', fontSize: 12, fontWeight: 700, color: '#4f46e5', cursor: 'pointer',
+                    padding: '8px 10px', fontSize: 12, fontWeight: 700, color: 'var(--primary)', cursor: 'pointer',
                   }}
                 >
                   {c.stage === 'DRAFT' ? 'Resume Wizard' : c.stage === 'DATA_COLLECTION' ? 'Continue to ESR' : 'View Case'}
@@ -733,7 +733,7 @@ const CustomersListPage = () => {
                       {c.parent_case_id && !childCaseSuffix(c) && <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>↳ CASE-{c.parent_case_id}</div>}
                     </td>
                     <td style={cellStyle}>
-                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : '#4f46e5', cursor: 'pointer' }} onClick={() => navigate(`/cases/${c.id}`)}>
+                      <div style={{ fontWeight: 700, color: isDark ? '#fff' : 'var(--primary)', cursor: 'pointer' }} onClick={() => navigate(`/cases/${c.id}`)}>
                         {toTitleCase(isUsableEntityName(c.customer_name) ? c.customer_name : resolveEntityName(c.customer)) || '—'}
                       </div>
                       <div style={{ fontSize: 10, color: mutedColor, marginTop: 2 }}>
@@ -786,7 +786,7 @@ const CustomersListPage = () => {
                     <td style={cellStyle}>
                       <button
                         onClick={() => goToCase(c)}
-                        style={{ background: 'transparent', border: 'none', padding: '4px 6px', fontSize: 11, fontWeight: 700, color: '#4f46e5', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ background: 'transparent', border: 'none', padding: '4px 6px', fontSize: 11, fontWeight: 700, color: 'var(--primary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
                         {c.stage === 'DRAFT' ? 'Resume' : c.stage === 'DATA_COLLECTION' ? 'ESR' : 'View'}
                       </button>
