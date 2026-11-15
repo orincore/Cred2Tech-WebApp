@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Wallet, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axiosInstance';
+import { onWalletChanged } from '../lib/walletEvents';
 
 const LOW_BALANCE_THRESHOLD = 100;
 // Same cadence as VirtualWorkspaceGraceBanner's own poll — cheap enough to
@@ -42,6 +43,24 @@ const LowWalletBalanceBanner = () => {
     const interval = setInterval(fetchBalance, POLL_MS);
     return () => clearInterval(interval);
   }, [fetchBalance]);
+
+  // A recharge (or free-credit code, or credits from the owner) must clear the banner AT ONCE, not at the next 5-minute poll.
+  // Re-read right away, then twice more shortly after: when the payment gateway's confirmation reaches us a moment after the
+  // checkout closes, the credits land a few seconds later and the first read can still show the old balance.
+  // Coming back to the tab (e.g. after paying elsewhere) re-reads too.
+  useEffect(() => {
+    if (!isDsa) return undefined;
+    let timers = [];
+    const refresh = () => {
+      fetchBalance();
+      timers.forEach(clearTimeout);
+      timers = [setTimeout(fetchBalance, 2000), setTimeout(fetchBalance, 6000)];
+    };
+    const off = onWalletChanged(refresh);
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchBalance(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { off(); document.removeEventListener('visibilitychange', onVisible); timers.forEach(clearTimeout); };
+  }, [isDsa, fetchBalance]);
 
   if (!isDsa || balance === null || balance >= LOW_BALANCE_THRESHOLD) {
     return null;

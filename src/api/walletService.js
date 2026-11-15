@@ -1,4 +1,5 @@
 import api from './axiosInstance';
+import { notifyWalletChanged } from '../lib/walletEvents';
 
 // Only real filter keys are ever sent — undefined/empty values are dropped so
 // the backend's default (no filter on that field) applies instead of an
@@ -78,11 +79,13 @@ export const walletService = {
   // there is nothing to pass here beyond the code itself.
   redeemFreebiePromo: async (promoCode) => {
     const response = await api.post('/wallet/topups/redeem-freebie', { promo_code: promoCode });
+    notifyWalletChanged(); // the balance just went up: let the low-balance banner re-check at once
     return response.data;
   },
 
   verifyTopupCheckout: async (payload) => {
     const response = await api.post('/wallet/topups/verify-checkout', payload);
+    notifyWalletChanged(); // a recharge was just confirmed: let the low-balance banner re-check at once
     return response.data;
   },
 
@@ -110,11 +113,13 @@ export const walletService = {
 
   allocateEmployeeCredits: async (userId, credits, note) => {
     const response = await api.post(`/wallet/employees/${userId}/allocate`, { credits, note });
+    notifyWalletChanged();
     return response.data;
   },
 
   revokeEmployeeCredits: async (userId, credits, note) => {
     const response = await api.post(`/wallet/employees/${userId}/revoke`, { credits, note });
+    notifyWalletChanged();
     return response.data;
   },
 };
