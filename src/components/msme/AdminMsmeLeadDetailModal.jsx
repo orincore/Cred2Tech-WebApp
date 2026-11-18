@@ -62,7 +62,9 @@ const AdminMsmeLeadDetailModal = ({ caseId, onClose, onAllocate }) => {
 
   const customer = data?.customer;
   const user = data?.msme_customer_user;
-  const allocated = !!data?.assigned_dsa_tenant_id;
+  // With a normal sourcing partner, or with a white-labelled organisation (which works on its own copy of the case).
+  const orgAllocation = data?.whitelabel_allocation || null;
+  const allocated = !!(data?.assigned_dsa_tenant_id || orgAllocation);
   // The terms the customer asked for, one line per lender, written at submit time.
   const requestedTerms = (data?.dsa_notes || '')
     .split('\n')
@@ -177,9 +179,11 @@ const AdminMsmeLeadDetailModal = ({ caseId, onClose, onAllocate }) => {
                 <Field label="Payment" value={data.case_payment?.status === 'PAID' ? 'Paid' : 'Pending'} />
                 <Field
                   label="Allocation"
-                  value={allocated
-                    ? `${toTitleCase(data.assigned_dsa_user?.name || '')}${data.assigned_dsa_user?.tenant?.name ? ` (${data.assigned_dsa_user.tenant.name})` : ''}`
-                    : 'Unallocated'}
+                  value={orgAllocation
+                    ? `${toTitleCase(orgAllocation.org_user_name || '')}${orgAllocation.org_tenant_name ? ` (${orgAllocation.org_tenant_name})` : ''} · White-labelled organisation: ${orgAllocation.org?.display_name || ''}`
+                    : allocated
+                      ? `${toTitleCase(data.assigned_dsa_user?.name || '')}${data.assigned_dsa_user?.tenant?.name ? ` (${data.assigned_dsa_user.tenant.name})` : ''}`
+                      : 'Unallocated'}
                 />
                 {allocated && <Field label="Allocated" value={data.allocated_at ? formatDate(data.allocated_at) : ''} />}
               </div>

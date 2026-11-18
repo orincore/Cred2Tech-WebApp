@@ -59,24 +59,30 @@ const AdminMsmeCasesPage = () => {
 
   useEffect(() => { fetchCases(); }, []);
 
+  // A lead can be with a normal sourcing partner (assigned_dsa_tenant_id) or with a white-labelled organisation
+  // (whitelabel_allocation: the organisation works on its own copy, so the main case carries no partner id).
+  const isAllocated = (c) => !!(c.assigned_dsa_tenant_id || c.whitelabel_allocation);
+  const allocatedName = (c) => c.whitelabel_allocation?.org_user_name || c.assigned_dsa_user?.name;
+  const allocatedLine = (c) => `${c.whitelabel_allocation ? `White-labelled · ${c.whitelabel_allocation.org?.display_name || 'organisation'} · ` : ''}Allocated ${c.allocated_at ? formatDate(c.allocated_at) : ''}`;
+
   const stats = useMemo(() => ({
     total: cases.length,
-    unallocated: cases.filter(c => !c.assigned_dsa_tenant_id).length,
-    allocated: cases.filter(c => c.assigned_dsa_tenant_id).length,
+    unallocated: cases.filter(c => !isAllocated(c)).length,
+    allocated: cases.filter(c => isAllocated(c)).length,
   }), [cases]);
 
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
       // 1. Allocation filter
-      if (filterMode === 'ALLOCATED' && !c.assigned_dsa_tenant_id) return false;
-      if (filterMode === 'UNALLOCATED' && c.assigned_dsa_tenant_id) return false;
+      if (filterMode === 'ALLOCATED' && !isAllocated(c)) return false;
+      if (filterMode === 'UNALLOCATED' && isAllocated(c)) return false;
       
       // 2. Search text
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const businessName = toTitleCase(resolveEntityName(c.customer)) || '';
         const pan = c.customer?.business_pan || '';
-        const dsaName = c.assigned_dsa_user?.name || '';
+        const dsaName = `${allocatedName(c) || ''} ${c.whitelabel_allocation?.org?.display_name || ''}`;
         
         // "7828053", "case-7828053" and "CASE 7828053" all find the case.
         const caseRef = `case-${c.id}`;
@@ -144,10 +150,10 @@ const AdminMsmeCasesPage = () => {
     },
     {
       key: 'allocation', label: 'Allocation', width: '14%',
-      render: (c) => c.assigned_dsa_tenant_id ? (
+      render: (c) => isAllocated(c) ? (
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(c.assigned_dsa_user?.name)}</div>
-          <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>Allocated {c.allocated_at ? formatDate(c.allocated_at) : ''}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(allocatedName(c))}</div>
+          <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{allocatedLine(c)}</div>
         </div>
       ) : (
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-bg)', padding: '3px 8px', border: '1px solid var(--warning)' }}>
@@ -170,7 +176,7 @@ const AdminMsmeCasesPage = () => {
             View
           </button>
           <button className="btn btn-primary btn-sm" style={{ borderRadius: 0 }} onClick={() => goToAllocate(c)}>
-            {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'}
+            {isAllocated(c) ? 'Reallocate' : 'Allocate'}
           </button>
         </div>
       )
@@ -341,10 +347,10 @@ const AdminMsmeCasesPage = () => {
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Allocation</div>
-                    {c.assigned_dsa_tenant_id ? (
+                    {isAllocated(c) ? (
                       <>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(c.assigned_dsa_user?.name)}</div>
-                        <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>Allocated {c.allocated_at ? formatDate(c.allocated_at) : ''}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-surface)' }}>{toTitleCase(allocatedName(c))}</div>
+                        <div style={{ fontSize: 11, color: 'var(--on-muted)' }}>{allocatedLine(c)}</div>
                       </>
                     ) : (
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning)', background: 'var(--warning-bg)', padding: '3px 8px', border: '1px solid var(--warning)', display: 'inline-block' }}>Unallocated</span>
@@ -373,7 +379,7 @@ const AdminMsmeCasesPage = () => {
                       fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer',
                     }}
                   >
-                    {c.assigned_dsa_tenant_id ? 'Reallocate' : 'Allocate'} <ArrowRight size={12} />
+                    {isAllocated(c) ? 'Reallocate' : 'Allocate'} <ArrowRight size={12} />
                   </button>
                 </div>
               </div>

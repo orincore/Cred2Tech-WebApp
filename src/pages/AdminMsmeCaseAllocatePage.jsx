@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Search, User, Building2, CheckCircle2, Sparkles, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, User, Building2, CheckCircle2, Sparkles, MapPin, Globe } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Badge from '../components/ui/Badge';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -40,6 +40,25 @@ function InfoRow({ label, value }) {
   );
 }
 
+// Marks a sourcing partner that belongs to a white-labelled organisation (its own brand, its own database). The same
+// ids can exist in the main app and in every organisation, so a target is always identified by organisation + tenant + user.
+function WhitelabelBadge({ name }) {
+  return (
+    <span
+      title={name ? `White-labelled organisation: ${name}` : 'White-labelled organisation'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+        padding: '2px 7px', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+        color: 'var(--info)', background: 'var(--info-bg)', border: '1px solid var(--info)', borderRadius: 0,
+      }}
+    >
+      <Globe size={10} /> White-labelled{name ? ` · ${name}` : ''}
+    </span>
+  );
+}
+
+const targetKey = (u) => `${u.whitelabel_org?.id || 'main'}-${u.tenant_id}-${u.user_id}`;
+
 const useResponsive = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -57,6 +76,7 @@ const AdminMsmeCaseAllocatePage = () => {
 
   const [caseData, setCaseData] = useState(null);
   const [targets, setTargets] = useState([]);
+  const [unavailableOrgs, setUnavailableOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState('');
@@ -74,7 +94,8 @@ const AdminMsmeCaseAllocatePage = () => {
           getAllocationTargets(),
         ]);
         setCaseData(caseRes);
-        setTargets(Array.isArray(targetsRes) ? targetsRes : []);
+        setTargets(Array.isArray(targetsRes?.targets) ? targetsRes.targets : []);
+        setUnavailableOrgs(targetsRes?.unavailable_organisations || []);
       } catch (err) {
         toast.error('Failed to load case for allocation');
         navigate('/admin/msme-cases');
@@ -92,8 +113,13 @@ const AdminMsmeCaseAllocatePage = () => {
         tenant: t,
         user_id: u.id,
         user: u,
+        whitelabel_org: t.whitelabel_org || null,
       }))
   ), [targets]);
+
+  // A lead that already sits with a white-labelled organisation stays there (the organisation has its own copy of the
+  // case): only that organisation's agents can be chosen.
+  const heldByOrgId = caseData?.whitelabel_allocation?.org_id || null;
 
   // Where the customer is - worked out by the server (stage 1 pincode, else the
   // GST / synced profile state), since the customer record has no state of its
@@ -110,16 +136,17 @@ const AdminMsmeCaseAllocatePage = () => {
   const query = search.trim().toLowerCase();
   const filteredUsers = useMemo(() => {
     return allDsaUsers
-      .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query))
+      .filter(u => !query || u.tenant.name?.toLowerCase().includes(query) || u.user.name?.toLowerCase().includes(query) || u.whitelabel_org?.name?.toLowerCase().includes(query))
       // Exact match on the states the partner selected as served (normState
       // forgives case/spacing only - "Tamilnadu" = "Tamil Nadu" - never a
       // different state). The state a partner is merely based in does not count.
-      .filter(u => !effectiveState || (u.tenant.operational_states || []).some(s => normState(s) === normState(effectiveState)))
+      // A white-labelled organisation is always offered: it is chosen deliberately, and its states are not what decides it.
+      .filter(u => u.whitelabel_org || !effectiveState || (u.tenant.operational_states || []).some(s => normState(s) === normState(effectiveState)))
       .map(u => ({
         ...u,
         // With a known customer state every row left is, by the filter above, a match.
-        isSuggested: !!caseState,
-        suggestionReason: caseState ? `Serves ${caseState}` : '',
+        isSuggested: !!caseState && !u.whitelabel_org,
+        suggestionReason: u.whitelabel_org ? '' : (caseState ? `Serves ${caseState}` : ''),
       }))
       .sort((a, b) => (a.tenant.name || '').localeCompare(b.tenant.name || ''));
   }, [allDsaUsers, query, effectiveState, caseState]);
@@ -130,7 +157,8 @@ const AdminMsmeCaseAllocatePage = () => {
     setTenantSummary(null);
     setLoadingSummary(true);
     try {
-      const summary = await getTenantSummary(u.tenant_id);
+      // an organisation's tenant id means something else in the main database, so its summary is read from ITS database
+      const summary = await getTenantSummary(u.tenant_id, u.whitelabel_org?.id);
       setTenantSummary(summary);
     } catch (err) {
       // Non-fatal — the compliance/contact fields already came from
@@ -148,8 +176,12 @@ const AdminMsmeCaseAllocatePage = () => {
     }
     setAllocating(true);
     try {
-      await allocateDirectMsmeCase(caseId, { dsa_tenant_id: selectedUser.tenant_id, dsa_user_id: selectedUser.user_id });
-      toast.success(`Case successfully ${caseData.assigned_dsa_tenant_id ? 're-allocated' : 'allocated'} to Sourcing Partner`);
+      await allocateDirectMsmeCase(caseId, {
+        dsa_tenant_id: selectedUser.tenant_id,
+        dsa_user_id: selectedUser.user_id,
+        whitelabel_org_id: selectedUser.whitelabel_org?.id,
+      });
+      toast.success(`Case successfully ${isReallocation ? 're-allocated' : 'allocated'} to ${selectedUser.whitelabel_org ? `${selectedUser.whitelabel_org.name} (white-labelled organisation)` : 'Sourcing Partner'}`);
       // Tells the sidebar's "Direct MSME Leads" badge to recount right away.
       window.dispatchEvent(new Event('admin-msme-leads-changed'));
       navigate('/admin/msme-cases');
@@ -173,7 +205,8 @@ const AdminMsmeCaseAllocatePage = () => {
   const businessName = toTitleCase(resolveEntityName(caseData.customer)) || 'N/A';
   const tenant = selectedUser?.tenant;
   const agent = selectedUser?.user;
-  const isReallocation = !!caseData.assigned_dsa_tenant_id;
+  const orgAllocation = caseData.whitelabel_allocation || null;
+  const isReallocation = !!(caseData.assigned_dsa_tenant_id || orgAllocation);
   document.title = `Cred2Tech | ${isReallocation ? 'Reallocate' : 'Allocate'} MSME Case`;
 
   return (
@@ -221,9 +254,13 @@ const AdminMsmeCaseAllocatePage = () => {
             <div style={{ padding: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
               <CheckCircle2 size={18} color="var(--success)" />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{caseData.assigned_dsa_user?.tenant?.name || 'Unknown Sourcing Partner'}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {orgAllocation ? (orgAllocation.org_tenant_name || 'Unknown Sourcing Partner') : (caseData.assigned_dsa_user?.tenant?.name || 'Unknown Sourcing Partner')}
+                  {orgAllocation && <WhitelabelBadge name={orgAllocation.org?.display_name} />}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>
-                  Agent: {caseData.assigned_dsa_user?.name || 'Unknown'} · Allocated {caseData.allocated_at ? formatDate(caseData.allocated_at) : '—'}
+                  Agent: {(orgAllocation ? orgAllocation.org_user_name : caseData.assigned_dsa_user?.name) || 'Unknown'} · Allocated {caseData.allocated_at ? formatDate(caseData.allocated_at) : '—'}
+                  {orgAllocation?.org_stage ? ` · Stage in the organisation: ${orgAllocation.org_stage.replace(/_/g, ' ').toLowerCase()}` : ''}
                 </div>
               </div>
             </div>
@@ -236,9 +273,17 @@ const AdminMsmeCaseAllocatePage = () => {
               {isReallocation ? 'Search & Select New Sourcing Partner' : 'Search & Select Sourcing Partner'}
             </h3>
             {caseState
-              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Customer is in {caseState}. Only Sourcing Partners that serve {caseState} are listed — narrow further by name below.</p>
+              ? <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Customer is in {caseState}. Only Sourcing Partners that serve {caseState} are listed, plus any white-labelled organisation — narrow further by name below.</p>
               : <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>Type a Sourcing Partner company or agent name, or filter by state — narrows as you type.</p>
             }
+            {heldByOrgId && (
+              <p style={{ fontSize: 12, color: 'var(--on-muted)', marginTop: 4, marginBottom: 0 }}>This case is with a white-labelled organisation, which works on its own copy of it. Another agent of that organisation can take it at any time. It can be taken back and given to anyone else only while the organisation has not started on it (no stage change, proposal, data pull or document of its own); after that the move is refused.</p>
+            )}
+            {unavailableOrgs.length > 0 && (
+              <p style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4, marginBottom: 0 }}>
+                Could not load {unavailableOrgs.map((o) => o.name).join(', ')} right now, so {unavailableOrgs.length === 1 ? 'its' : 'their'} partners are not listed. Reload to try again.
+              </p>
+            )}
           </div>
           <div style={{ padding: 20 }}>
             {selectedUser ? (
@@ -249,7 +294,10 @@ const AdminMsmeCaseAllocatePage = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <CheckCircle2 size={18} color="var(--success)" />
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{tenant?.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {tenant?.name}
+                      {selectedUser.whitelabel_org && <WhitelabelBadge name={selectedUser.whitelabel_org.name} />}
+                    </div>
                     <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {agent?.name} ({roleLabel(agent?.role?.name)})</div>
                   </div>
                 </div>
@@ -302,14 +350,17 @@ const AdminMsmeCaseAllocatePage = () => {
                 }}>
                   {filteredUsers.map(u => (
                     <div
-                      key={`${u.tenant_id}-${u.user_id}`}
+                      key={targetKey(u)}
                       onClick={() => selectUser(u)}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--outline)', cursor: 'pointer' }}
                       onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)' }}>{u.tenant.name}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-surface)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          {u.tenant.name}
+                          {u.whitelabel_org && <WhitelabelBadge name={u.whitelabel_org.name} />}
+                        </div>
                         <div style={{ fontSize: 12, color: 'var(--on-muted)' }}>Agent: {u.user.name} ({roleLabel(u.user.role?.name)})</div>
                         {u.suggestionReason && (
                           <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: 2 }}>{u.suggestionReason}</div>
@@ -360,6 +411,7 @@ const AdminMsmeCaseAllocatePage = () => {
                 <Building2 size={16} color="var(--on-muted)" />
               </div>
               <div style={{ padding: 20 }}>
+                {selectedUser?.whitelabel_org && <InfoRow label="White-labelled Organisation" value={selectedUser.whitelabel_org.name} />}
                 <InfoRow label="Company Name" value={tenant?.name} />
                 <InfoRow label="Company Type" value={tenant?.company_type} />
                 <InfoRow label="Status" value={<Badge type="status" value={tenant?.status} />} />

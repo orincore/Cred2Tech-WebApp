@@ -61,8 +61,9 @@ export const listAllVirtualWorkspaceSubscriptions = async () => {
   return response.data;
 };
 
-export const getTenantSummary = async (tenantId) => {
-  const response = await api.get(`/admin/tenants/${tenantId}/summary`);
+// orgId: the white-labelled organisation the tenant belongs to (its ids are that organisation's own); omit for the main app.
+export const getTenantSummary = async (tenantId, orgId) => {
+  const response = await api.get(`/admin/tenants/${tenantId}/summary`, orgId ? { params: { org_id: orgId } } : undefined);
   return response.data;
 };
 
