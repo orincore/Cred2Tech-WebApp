@@ -20,7 +20,6 @@ import { formatCaseReference, childCaseSuffix } from '../utils/caseReference';
 import { HDFC_DEPARTMENTS } from '../constants/lenderPolicies';
 
 import CustomSelect from '../components/CustomSelect';
-import { getBranding } from '../branding/brandingStore';
 
 // This page's own display-only trim — strip the "CASE-" prefix so the
 // Case ID column shows the bare id ("3317", or "3317.1" for a split case)
@@ -551,7 +550,7 @@ const CustomersListPage = () => {
         </div>
 
         <div role="group" aria-label="Show cases from" style={{ display: 'inline-flex', gap: 2, padding: 2, border: '1px solid var(--outline)', borderRadius: 0, flexShrink: 0, marginLeft: isMobile ? 'auto' : undefined }}>
-          {SOURCE_TOGGLE.filter((opt) => !(getBranding().isOrg && opt.value === 'CRED2TECH')).map((opt) => {
+          {SOURCE_TOGGLE.map((opt) => {
             const active = source === opt.value;
             const count = sourceCounts[opt.countKey] || 0;
             return (
