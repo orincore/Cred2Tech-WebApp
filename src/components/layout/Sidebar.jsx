@@ -314,12 +314,12 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         })}
       </nav>
 
-      {/* User section */}
+      {/* Footer: profile, plus the "Powered by" strip on a white-label organisation's site */}
+      <div style={{ borderTop: '1px solid var(--sidebar-border)', flexShrink: 0 }}>
       <div
         data-tour="sidebar-profile"
         style={{
         padding: '16px 20px',
-        borderTop: '1px solid var(--sidebar-border)',
         display: 'flex',
         alignItems: 'center',
         gap: 12,
@@ -370,7 +370,8 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
         </div>
         <MoreHorizontal size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
       </div>
-      <PoweredBy align="left" style={{ padding: '0 20px 14px', color: 'var(--on-muted)' }} />
+      <PoweredBy inline align="left" style={{ padding: '10px 20px 14px', borderTop: '1px solid var(--sidebar-border)', color: 'var(--on-muted)' }} />
+      </div>
       {canSubmitFeedback && (
         <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
       )}
