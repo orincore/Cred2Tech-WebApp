@@ -1,0 +1,14 @@
+/* The ESR API screens use the app's sharp-cornered look (same as the white-label screens): the shared .btn / .form-control / table / modal classes
+   carry rounded corners, so they are squared off here, inside the .esr-sharp wrapper only. Nothing outside these pages is affected. */
+.esr-sharp .btn,
+.esr-sharp .btn-sm,
+.esr-sharp .form-control,
+.esr-sharp select,
+.esr-sharp input,
+.esr-sharp .table-wrapper,
+.esr-sharp .modal-box,
+.esr-sharp .modal-box .btn,
+.esr-sharp pre {
+  border-radius: 0 !important;
+}
+.esr-sharp .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }

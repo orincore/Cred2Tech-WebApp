@@ -28,6 +28,7 @@ import {
   Bell,
   ShieldCheck,
   FileSpreadsheet,
+  Plug,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -138,6 +139,13 @@ export const NAV_ITEMS = [
     label: 'API Observability',
     path: '/admin/logs',
     icon: Activity,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-esr-api',
+    label: 'ESR API Clients',
+    path: '/admin/esr-api',
+    icon: Plug,
     roles: ['SUPER_ADMIN'],
   },
   {
@@ -308,6 +316,15 @@ export const NAV_ITEMS = [
     roles: ['DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA'],
   },
 
+
+  // ESR Public API clients: one entry, the dashboard's own tabs are driven by the server's feature flags
+  {
+    id: 'esr-api',
+    label: 'ESR API',
+    path: '/esr-api',
+    icon: Plug,
+    roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'],
+  },
 
   // DSA_MEMBER / Shared Views
   {

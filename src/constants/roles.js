@@ -27,6 +27,18 @@ export const ROLES = {
     bg: 'var(--role-dsa-member-bg)',
     description: 'Field employee within a Sourcing Partner hierarchy',
   },
+  API_CLIENT_ADMIN: {
+    name: 'API Client Admin',
+    color: 'var(--role-partner)',
+    bg: 'var(--role-partner-bg)',
+    description: 'Administrator of an organisation using the ESR API',
+  },
+  API_CLIENT_MEMBER: {
+    name: 'API Client Member',
+    color: 'var(--role-dsa-member)',
+    bg: 'var(--role-dsa-member-bg)',
+    description: 'Read-only member of an organisation using the ESR API',
+  },
   SUB_DSA: {
     name: 'Sub-Sourcing Partner',
     color: 'var(--role-partner)',
@@ -46,7 +58,10 @@ export const ROLE_OPTIONS = [
 
 // Roles allowed on the main dashboard ("/"). Kept in sync with the "/" route's
 // allowedRoles in AppRouter so UnauthorizedPage's auto-redirect never loops.
-export const DASHBOARD_ROLES = ['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER'];
+// ESR Public API clients (external organisations that call the eligibility API). Their own dashboard lives under /esr-api.
+export const API_CLIENT_ROLES = ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'];
+
+export const DASHBOARD_ROLES =['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER'];
 
 export const TENANT_TYPES = ['CRED2TECH', 'DSA'];
 

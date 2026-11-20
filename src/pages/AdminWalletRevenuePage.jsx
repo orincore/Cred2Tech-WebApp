@@ -23,9 +23,9 @@ const useResponsive = () => {
 };
 
 const PAGE_SIZE = 25;
-const STREAM_LABEL = { WALLET: 'Wallet recharge', MSME_FEE: 'MSME fee', SUBSCRIPTION: 'Virtual Workspace', STORAGE: 'Storage plan' };
-const STREAM_COLOR = { WALLET: 'var(--primary)', MSME_FEE: 'var(--success)', SUBSCRIPTION: 'var(--warning)', STORAGE: 'var(--info, #7c5cff)' };
-const STREAMS = ['WALLET', 'MSME_FEE', 'SUBSCRIPTION', 'STORAGE'];
+const STREAM_LABEL = { WALLET: 'Wallet recharge', MSME_FEE: 'MSME fee', SUBSCRIPTION: 'Virtual Workspace', STORAGE: 'Storage plan', API: 'API access' };
+const STREAM_COLOR = { WALLET: 'var(--primary)', MSME_FEE: 'var(--success)', SUBSCRIPTION: 'var(--warning)', STORAGE: 'var(--info, #7c5cff)', API: '#14b8a6' };
+const STREAMS = ['WALLET', 'MSME_FEE', 'SUBSCRIPTION', 'STORAGE', 'API'];
 // Bytes -> a readable size (1 GB = 1024³ B, the same unit the storage limit uses).
 const fmtBytes = (b) => {
   const n = Number(b || 0);

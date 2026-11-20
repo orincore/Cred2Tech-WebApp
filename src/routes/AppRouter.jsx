@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import NotificationPanel from '../components/notifications/NotificationPanel';
 import AppLayout from '../layouts/AppLayout';
@@ -8,7 +8,7 @@ import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
 import MainAppOnly from './MainAppOnly';
 import SessionRevokedModal from '../components/SessionRevokedModal';
-import { DASHBOARD_ROLES } from '../constants/roles';
+import { DASHBOARD_ROLES, API_CLIENT_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
 const LoginPage = lazy(() => import('../pages/LoginPage'));
@@ -47,6 +47,10 @@ const AdminSubscriptionPlansPage = lazy(() => import('../pages/AdminSubscription
 const SuperadminWalletManager = lazy(() => import('../pages/SuperadminWalletManager'));
 const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetail'));
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
+// ESR Public API: the client's own dashboard and the Super Admin console
+const EsrApiPortalPage = lazy(() => import('../pages/esrapi/EsrApiPortalPage'));
+const AdminEsrApiPage = lazy(() => import('../pages/esrapi/AdminEsrApiPage'));
+const AdminEsrApiClientPage = lazy(() => import('../pages/esrapi/AdminEsrApiClientPage'));
 const SystemStatusPage = lazy(() => import('../pages/SystemStatusPage'));
 const AdminIntegrationProviderSettingsPage = lazy(() => import('../pages/AdminIntegrationProviderSettingsPage'));
 const VendorManagementPage = lazy(() => import('../pages/VendorManagementPage'));
@@ -92,6 +96,12 @@ const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 // flashing in sequence (this one, ProtectedRoute's, then the real page's)
 // read as broken, not as "loading" — this is the one of those three that
 // carries no useful shape of its own to preserve, so it's the one dropped.
+// ESR API clients land on their own dashboard; everyone else gets the existing home page, unchanged.
+const HomeForRole = () => {
+  const { hasRole } = useAuth();
+  return hasRole(API_CLIENT_ROLES) ? <Navigate to="/esr-api" replace /> : <DashboardPage />;
+};
+
 const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
 
 // Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
@@ -183,8 +193,8 @@ const AppRouter = () => (
           {/* Protected */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/" element={
-              <ProtectedRoute allowedRoles={DASHBOARD_ROLES}>
-                <DashboardPage />
+              <ProtectedRoute allowedRoles={[...DASHBOARD_ROLES, ...API_CLIENT_ROLES]}>
+                <HomeForRole />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={
@@ -298,6 +308,18 @@ const AppRouter = () => (
             } />
             <Route path="/admin/logs" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SuperadminApiLogsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/esr-api" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminEsrApiPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/esr-api/:clientId" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminEsrApiClientPage /></ProtectedRoute>
+            } />
+            <Route path="/esr-api" element={
+               <ProtectedRoute allowedRoles={API_CLIENT_ROLES}><EsrApiPortalPage /></ProtectedRoute>
+            } />
+            <Route path="/esr-api/:tab" element={
+               <ProtectedRoute allowedRoles={API_CLIENT_ROLES}><EsrApiPortalPage /></ProtectedRoute>
             } />
             <Route path="/admin/system-status" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SystemStatusPage /></ProtectedRoute>
