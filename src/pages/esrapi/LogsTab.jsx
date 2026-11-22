@@ -9,10 +9,12 @@ import { Modal, Notice, Pager, Table, dt, inr, td, useAsync, ENV_TONE } from './
 
 const LIMIT = 25;
 const STATUS_TONE_LOG = { SUCCESS: 'success', FAILED: 'error', PENDING: 'neutral' };
+// The endpoints of the API, exactly as the server records them (used by the Endpoint filter).
+const ENDPOINTS = ['POST /v1/eligibility', 'POST /v1/eligibility/validate', 'GET /v1/lenders', 'GET /v1/schema', 'GET /v1/requests/:id', 'GET /v1/usage', 'GET /v1/health'];
 
 // The client's own calls. Personal data in a body is masked by the server before it gets here; the engine's internal working is never sent.
 export default function LogsTab({ flag }) {
-  const [f, setF] = useState({ status: '', environment: '', search: '', date_from: '', date_to: '' });
+  const [f, setF] = useState({ status: '', environment: '', endpoint: '', search: '', date_from: '', date_to: '' });
   const [applied, setApplied] = useState(f);
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(null);
@@ -35,6 +37,7 @@ export default function LogsTab({ flag }) {
       <form onSubmit={apply} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
         <label style={{ fontSize: 11.5 }}>Outcome<select className="form-control" value={f.status} onChange={set('status')}><option value="">All</option><option value="SUCCESS">Successful</option><option value="FAILED">Failed</option></select></label>
         {flag('uat.enabled') && flag('production.enabled') && <label style={{ fontSize: 11.5 }}>Environment<select className="form-control" value={f.environment} onChange={set('environment')}><option value="">Both</option><option value="UAT">Test (UAT)</option><option value="PRODUCTION">Production</option></select></label>}
+        <label style={{ fontSize: 11.5 }}>Endpoint<select className="form-control" value={f.endpoint} onChange={set('endpoint')}><option value="">All</option>{ENDPOINTS.map((e) => <option key={e} value={e}>{e}</option>)}</select></label>
         <label style={{ fontSize: 11.5 }}>From<input type="date" className="form-control" value={f.date_from} onChange={set('date_from')} /></label>
         <label style={{ fontSize: 11.5 }}>To<input type="date" className="form-control" value={f.date_to} onChange={set('date_to')} /></label>
         <label style={{ fontSize: 11.5, flex: '1 1 180px' }}>Request id<input className="form-control" placeholder="req_…" value={f.search} onChange={set('search')} /></label>
@@ -45,10 +48,11 @@ export default function LogsTab({ flag }) {
         <EmptyState icon={FileSearch} title="No calls found" description="Calls you make with your keys will appear here." />
       ) : (
         <>
-          <Table head={['Time', 'Outcome', 'Environment', 'Key', 'Latency', 'Charged', 'Request id']}>
+          <Table head={['Time', 'Endpoint', 'Outcome', 'Environment', 'Key', 'Latency', 'Charged', 'Request id']}>
             {logs.data.logs.map((l) => (
               <tr key={l.request_id} onClick={() => setOpen(l.request_id)} style={{ cursor: 'pointer' }} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(l.request_id); }}>
                 <td style={td}>{dt(l.received_at)}</td>
+                <td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5, whiteSpace: 'nowrap' }}>{l.endpoint && l.endpoint !== 'UNKNOWN' ? l.endpoint : '—'}</td>
                 <td style={td}><Pill tone={STATUS_TONE_LOG[l.status]}>{l.status === 'SUCCESS' ? 'Success' : l.status === 'PENDING' ? 'Running' : `Failed ${l.status_code}`}</Pill>{l.error_message && <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', maxWidth: 320 }}>{l.error_message}</div>}</td>
                 <td style={td}><Pill tone={ENV_TONE[l.environment]}>{l.environment || '—'}</Pill></td>
                 <td style={td}>{l.key_name || '—'}</td>
@@ -83,6 +87,7 @@ function LogDetail({ requestId, onClose }) {
       {d.loading ? <LoadingSpinner /> : d.error ? <Notice tone="error">{apiError(d.error, 'Could not load this call')}</Notice> : (
         <>
           <p style={{ margin: '0 0 6px', fontSize: 12.5, fontFamily: 'ui-monospace, Menlo, monospace' }}>{d.data.request_id}</p>
+          {d.data.endpoint && d.data.endpoint !== 'UNKNOWN' && <p style={{ margin: '0 0 6px', fontSize: 12.5 }}>Endpoint: <strong style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{d.data.endpoint}</strong></p>}
           {d.data.error_message && <Notice tone="warning">{d.data.error_message}</Notice>}
           <Notice tone="info">Personal details (names, PAN, phone numbers, account numbers) are partly hidden here for your protection.</Notice>
           {part(d.data.request, 'Request')}

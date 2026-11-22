@@ -120,7 +120,7 @@ const RawJsonBlock = ({ label, value }) => {
 // Full raw record for one log — fetched on demand (not preloaded on every
 // row) since request/response payloads can be several KB of vendor JSON
 // each. Opened from the error-flagged rows in the table/card list below.
-const LogDetailModal = ({ logId, orgId, onClose }) => {
+const LogDetailModal = ({ logId, orgId, esrRequestId, onClose }) => {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -131,12 +131,16 @@ const LogDetailModal = ({ logId, orgId, onClose }) => {
     setDetail(null);
     setError(null);
     // A partner organisation's log lives in its own database (ids repeat across databases): say which one.
-    api.get(`/admin/api-logs/${logId}/detail`, { params: orgId ? { org_id: orgId } : undefined })
+    // A call an API client made to the ESR API has its own detail (its number means nothing among the vendor logs).
+    const request = esrRequestId
+      ? api.get(`/admin/api-logs/esr/${esrRequestId}/detail`)
+      : api.get(`/admin/api-logs/${logId}/detail`, { params: orgId ? { org_id: orgId } : undefined });
+    request
       .then((res) => { if (!cancelled) setDetail(res.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Failed to load log detail'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [logId, orgId]);
+  }, [logId, orgId, esrRequestId]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -179,6 +183,8 @@ const LogDetailModal = ({ logId, orgId, onClose }) => {
             {row('Timestamp', formatDateTime(detail.timestamp))}
             {row('Vendor', detail.vendor)}
             {row('API Code', detail.api_code)}
+            {detail.esr && row('Endpoint', detail.esr.endpoint && detail.esr.endpoint !== 'UNKNOWN' ? detail.esr.endpoint : '—')}
+            {detail.esr && row('Environment', detail.esr.api_environment)}
             {row('Status', detail.status)}
             {row('Response', detail.response_status)}
             {row('Credits Used', detail.credits_used)}
@@ -308,7 +314,8 @@ const SuperadminApiLogsPage = () => {
   const [fullScreen, setFullScreen] = useState(false);
   const [detailLogId, setDetailLogId] = useState(null);
   const [detailOrgId, setDetailOrgId] = useState(null);
-  const openDetail = (l) => { setDetailLogId(l.id); setDetailOrgId(l.org_id || null); };
+  const [detailEsrId, setDetailEsrId] = useState(null);
+  const openDetail = (l) => { setDetailLogId(l.id); setDetailOrgId(l.org_id || null); setDetailEsrId(l.source === 'ESR_API' ? l.reference_id : null); };
 
   // White-label partners keep their logs in their own database. 'all' (default) = the main app AND every partner
   // organisation together, each row naming its organisation; 'main' = main app only; or one organisation's id.
@@ -837,6 +844,7 @@ const SuperadminApiLogsPage = () => {
                       <div>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>API Triggered</div>
                         <div style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: 'var(--on-surface)' }}>{l.api_code}</div>
+                        {l.esr?.endpoint && l.esr.endpoint !== 'UNKNOWN' && <div style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 600, color: 'var(--primary)', wordBreak: 'break-word' }}>{l.esr.endpoint}</div>}
                       </div>
                       <div>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Vendor</div>
@@ -886,7 +894,10 @@ const SuperadminApiLogsPage = () => {
               ) },
               { key: 'vendor', label: 'Vendor', width: '8%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{l.vendor || '—'}</span> },
               { key: 'api_code', label: 'API Triggered', width: '12%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
-                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, wordBreak: 'break-word' }}>{l.api_code}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, wordBreak: 'break-word' }}>
+                  {l.api_code}
+                  {l.esr?.endpoint && l.esr.endpoint !== 'UNKNOWN' && <span style={{ display: 'block', fontSize: 10, color: 'var(--primary)' }}>{l.esr.endpoint}</span>}
+                </span>
               )},
               { key: 'response_status', label: 'Response', width: '7%', padding: '9px 8px', render: (l) => {
                 const badge = getResponseBadge(l.response_status);
@@ -974,7 +985,7 @@ const SuperadminApiLogsPage = () => {
         </>
       )}
 
-      {detailLogId && <LogDetailModal logId={detailLogId} orgId={detailOrgId} onClose={() => setDetailLogId(null)} />}
+      {detailLogId && <LogDetailModal logId={detailLogId} orgId={detailOrgId} esrRequestId={detailEsrId} onClose={() => { setDetailLogId(null); setDetailEsrId(null); }} />}
     </div>
   );
 };
