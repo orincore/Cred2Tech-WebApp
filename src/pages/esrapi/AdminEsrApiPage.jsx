@@ -6,6 +6,8 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
+import { INDIAN_STATES } from '../whitelabel/OrgDetailsForm';
+import CustomSelect from '../../components/CustomSelect';
 import { Modal, Notice, Pager, Sharp, Stat, StatRow, Table, dt, inr, num, td, useAsync, STATUS_TONE } from './common';
 import { PricingPanel } from './AdminEsrApiClientPage';
 
@@ -103,7 +105,13 @@ function NewClientModal({ onClose, onCreated }) {
         <Field label="Organisation e-mail" required htmlFor="nc-email"><input id="nc-email" type="email" className="form-control" value={f.email} onChange={set('email')} required /></Field>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 14 }}>
           <Field label="GSTIN" hint="Blank = invoiced as unregistered (B2C)" htmlFor="nc-gst"><input id="nc-gst" className="form-control" value={f.gst_number} onChange={set('gst_number')} maxLength={15} style={{ textTransform: 'uppercase' }} /></Field>
-          <Field label="State" hint="Decides CGST+SGST or IGST" htmlFor="nc-state"><input id="nc-state" className="form-control" value={f.state} onChange={set('state')} /></Field>
+          <Field label="State" hint="Decides CGST+SGST or IGST" htmlFor="nc-state">
+            <CustomSelect id="nc-state" name="state" className="form-control" searchable searchPlaceholder="Search state" placeholder="Select a state" style={{ width: '100%' }}
+              value={f.state} onChange={(e) => setF((s) => ({ ...s, state: e.target.value }))}>
+              <option value="">Select a state</option>
+              {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </CustomSelect>
+          </Field>
           <Field label="First administrator" required htmlFor="nc-an"><input id="nc-an" className="form-control" value={f.admin_name} onChange={set('admin_name')} required /></Field>
           <Field label="Administrator e-mail" required htmlFor="nc-ae"><input id="nc-ae" type="email" className="form-control" value={f.admin_email} onChange={set('admin_email')} required /></Field>
           <Field label="Billing plan" htmlFor="nc-mode"><select id="nc-mode" className="form-control" value={f.billing_mode} onChange={set('billing_mode')}><option value="PREPAID">Prepaid (balance)</option><option value="POSTPAID">Postpaid (monthly invoice)</option></select></Field>

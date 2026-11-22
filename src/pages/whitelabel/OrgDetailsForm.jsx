@@ -7,7 +7,7 @@ import CustomSelect from '../../components/CustomSelect';
 export const DETAIL_KEYS = ['display_name', 'legal_name', 'contact_name', 'contact_email', 'contact_mobile', 'pan_number', 'gst_number', 'state', 'city', 'pincode', 'address_line'];
 
 // Same list the sourcing-partner sign-up uses (components/LocationStateDropdown.jsx), so the stored value matches elsewhere.
-const INDIAN_STATES = [
+export const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
   'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
   'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
