@@ -380,7 +380,7 @@ function AdjustModal({ id, onClose, onDone }) {
   );
 }
 
-// "Generate bill": invoice every unpaid production call so far. The server bills calls older than two minutes; a call still settling goes on the next bill.
+// "Generate bill": invoice every unpaid production call so far. It can be done at any moment; a call that is still running has no charge yet and goes on the next bill.
 function GenerateBillModal({ d, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const u = d.unbilled_usage;
@@ -390,7 +390,7 @@ function GenerateBillModal({ d, onClose, onDone }) {
     try {
       const r = await esrApiAdmin.generateUnbilledInvoice(d.client.id);
       if (r.status === 'CREATED') { toast.success(`Bill ${r.invoice.invoice_number} created for ${inr(Number(r.invoice.total_paise) / 100)}. The client was e-mailed and can pay it from their dashboard.`, { duration: 7000 }); onDone(); }
-      else { toast('Nothing to bill yet. Calls from the last couple of minutes are billed next time.'); onClose(); }
+      else { toast('Nothing to bill: every charged production call so far is already on a bill.'); onClose(); }
     } catch (err) { toast.error(apiError(err)); setBusy(false); }
   };
   return (

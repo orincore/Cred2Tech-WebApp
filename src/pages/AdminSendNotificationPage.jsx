@@ -27,6 +27,7 @@ const TARGET_OPTIONS = [
   { value: 'DSA_MEMBER', label: 'Sourcing Partner Members only', audience: 'ROLE', targetRole: 'DSA_MEMBER' },
   { value: 'SUB_DSA', label: 'Sub-Sourcing Partners only', audience: 'ROLE', targetRole: 'SUB_DSA' },
   { value: 'MSME_CUSTOMER', label: 'MSME Customers only', audience: 'ROLE', targetRole: 'MSME_CUSTOMER' },
+  { value: 'API_CLIENTS', label: 'API clients only', audience: 'API_CLIENTS', targetRole: null },
   { value: 'USER', label: 'Specific user(s)', audience: 'USER', targetRole: null },
 ];
 
@@ -62,10 +63,12 @@ const AdminSendNotificationPage = () => {
   }, []);
   const toOrgs = orgScope !== 'MAIN';
   // A single user or tenant only exists inside one database, so those targets are for the main app; MSME customers are not in partner organisations.
-  const targetChoices = toOrgs ? TARGET_OPTIONS.filter((o) => o.value !== 'USER' && o.value !== 'MSME_CUSTOMER') : TARGET_OPTIONS;
+  // API clients are accounts of the main app too.
+  const MAIN_ONLY = ['USER', 'MSME_CUSTOMER', 'API_CLIENTS'];
+  const targetChoices = toOrgs ? TARGET_OPTIONS.filter((o) => !MAIN_ONLY.includes(o.value)) : TARGET_OPTIONS;
   const changeOrgScope = (value) => {
     setOrgScope(value);
-    if (value !== 'MAIN' && (targetOption.value === 'USER' || targetOption.value === 'MSME_CUSTOMER')) setTargetOption(TARGET_OPTIONS[0]);
+    if (value !== 'MAIN' && MAIN_ONLY.includes(targetOption.value)) setTargetOption(TARGET_OPTIONS[0]);
   };
 
   const handleTestBrowserNotification = async () => {
@@ -291,7 +294,7 @@ const AdminSendNotificationPage = () => {
                       ))}
                     </div>
                     <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-                      Reaches each organisation's users through its own site, push and email, under its own name. Single users and MSME customers can only be targeted on the main app.
+                      Reaches each organisation's users through its own site, push and email, under its own name. Single users, MSME customers and API clients can only be targeted on the main app.
                     </p>
                   </div>
                 )}
