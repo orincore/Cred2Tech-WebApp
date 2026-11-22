@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Download } from 'lucide-react';
+import { Bot, Download } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import CopyButton from '../../components/ui/CopyButton';
 import { esrApiPortal, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Pill } from '../whitelabel/atoms';
 import { Notice, Table, td, useAsync } from './common';
+import { buildAgentPrompt, copyText } from './agentPrompt';
 
 // The API reference. Everything here comes from ONE server document (OpenAPI generated from the validation schemas, sample requests, error catalogue),
 // so it cannot disagree with the API. Code samples are built from the real base URL and a real sample request.
@@ -41,13 +42,26 @@ export default function DocsTab() {
   if (docs.error) return <Notice tone="error">{apiError(docs.error, 'Could not load the documentation')}</Notice>;
   const code = codeSamples(d.api_base, sample);
   const download = async () => { try { saveBlob(await esrApiPortal.postman(), 'cred2tech-esr-api.postman_collection.json'); } catch (err) { toast.error(apiError(err)); } };
+  const downloadSpec = () => saveBlob(new Blob([JSON.stringify(d.openapi, null, 2)], { type: 'application/json' }), 'cred2tech-esr-api.openapi.json');
+  const copyPrompt = async () => {
+    if (await copyText(buildAgentPrompt(d))) toast.success('Prompt copied. Paste it into your AI coding agent (Claude Code, Cursor, Copilot…).', { duration: 6000 });
+    else toast.error('Could not copy. Your browser blocked clipboard access.');
+  };
   const reqSchema = d.openapi.components.schemas.EligibilityRequest;
 
   return (
     <>
+      <Notice tone="info" title="Set this up with an AI coding agent">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 320px' }}>Copy a ready-made prompt that tells your AI agent (Claude Code, Cursor, Copilot, ChatGPT…) exactly how to integrate this API into your project: authentication, retries, idempotency, error handling and tests. It never contains your key.</span>
+          <button type="button" className="btn btn-primary btn-sm" onClick={copyPrompt} data-testid="copy-agent-prompt"><Bot size={14} /> Copy AI setup prompt</button>
+        </div>
+      </Notice>
       <Card title="Cred2Tech ESR API" subtitle={`Version ${d.openapi.info.version}`}
-        actions={<button type="button" className="btn btn-secondary btn-sm" onClick={download}><Download size={14} /> Postman collection</button>}>
-        {d.openapi.info.description.split('\n').filter(Boolean).map((p) => <p key={p} style={{ margin: '0 0 8px', fontSize: 13 }}>{p}</p>)}
+        actions={<><button type="button" className="btn btn-secondary btn-sm" onClick={downloadSpec}><Download size={14} /> OpenAPI JSON</button><button type="button" className="btn btn-secondary btn-sm" onClick={download}><Download size={14} /> Postman collection</button></>}>
+        {d.openapi.info.description.split('\n').filter(Boolean).map((p) => (
+          <p key={p} style={{ margin: '0 0 8px', fontSize: 13 }}>{p.split('`').map((part, i) => (i % 2 ? <code key={i} style={{ background: 'var(--bg-elevated)', padding: '1px 5px', fontSize: 12 }}>{part}</code> : part))}</p>
+        ))}
         <p style={{ margin: '10px 0 4px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Base URL</p>
         <Code text={d.api_base} />
       </Card>
@@ -83,10 +97,10 @@ export default function DocsTab() {
       </Card>
 
       <div style={{ height: 16 }} />
-      <Card title="Request fields" subtitle="Generated from the same schema the API validates against.">
+      <Card title="Request fields" subtitle="Generated from the same schema the API validates against. We assess two products only: Home Loan (HL) and Loan Against Property (LAP).">
         <Table head={['Field', 'Type', 'Required']}>
           {Object.entries(reqSchema.properties || {}).map(([k, v]) => (
-            <tr key={k}><td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace' }}>{k}</td><td style={td}>{Array.isArray(v.type) ? v.type.join(' | ') : v.type || (v.enum ? 'enum' : 'object')}{v.description ? <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{v.description}</div> : null}</td><td style={td}>{(reqSchema.required || []).includes(k) ? 'Yes' : 'No'}</td></tr>
+            <tr key={k}><td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace' }}>{k}</td><td style={td}>{v.enum ? v.enum.map((x) => `"${x}"`).join(' | ') : Array.isArray(v.type) ? v.type.join(' | ') : v.type || 'object'}{v.description ? <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{v.description}</div> : null}</td><td style={td}>{(reqSchema.required || []).includes(k) ? 'Yes' : 'No'}</td></tr>
           ))}
         </Table>
         <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>The full schema, including every nested field, is in the Postman collection and at <code>GET /v1/schema</code>.</p>

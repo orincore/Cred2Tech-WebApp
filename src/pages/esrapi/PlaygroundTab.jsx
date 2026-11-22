@@ -6,6 +6,8 @@ import { esrApiPortal, apiError } from '../../api/esrApiService';
 import { Card, Field, Pill } from '../whitelabel/atoms';
 import { Notice, Table, inr, td, useAsync } from './common';
 
+// The only two products the API assesses (the request schema's `product` enum).
+const PRODUCTS = [{ id: 'HL', label: 'Home Loan (HL)' }, { id: 'LAP', label: 'Loan Against Property (LAP)' }];
 const newKey = () => `playground-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const STATUS_TONE = { eligible: 'success', not_eligible: 'error', ineligible: 'error', partial: 'warning' };
 
@@ -58,6 +60,13 @@ export default function PlaygroundTab({ flag }) {
             <select id="pg-env" className="form-control" value={environment} onChange={(e) => { setEnvironment(e.target.value); setConfirm(false); setOut(null); }}>
               {canUat && <option value="UAT">Test (UAT): free test credit</option>}
               {canProd && <option value="PRODUCTION">Production: billed</option>}
+            </select>
+          </Field>
+          <Field label="Product" hint="We assess Home Loan and Loan Against Property only" htmlFor="pg-product">
+            <select id="pg-product" className="form-control" value={parsed.ok && PRODUCTS.some((p) => p.id === parsed.value.product) ? parsed.value.product : ''} disabled={!parsed.ok}
+              onChange={(e) => { setText(JSON.stringify({ ...parsed.value, product: e.target.value }, null, 2)); setIdemKey(newKey()); setOut(null); }}>
+              {!(parsed.ok && PRODUCTS.some((p) => p.id === parsed.value.product)) && <option value="">Select a product</option>}
+              {PRODUCTS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </Field>
           <Field label="Sample" htmlFor="pg-sample">
