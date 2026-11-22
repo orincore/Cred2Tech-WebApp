@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BarChart3, BookOpen, CreditCard, FileSearch, KeyRound, LayoutDashboard, Plug, Users } from 'lucide-react';
+import { BarChart3, BookOpen, CreditCard, FileSearch, KeyRound, LayoutDashboard, Play, Plug, Users } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import useEsrApiFeatures from '../../hooks/useEsrApiFeatures';
 import { PageFrame } from '../whitelabel/atoms';
@@ -11,6 +11,8 @@ import LogsTab from './LogsTab';
 import UsageTab from './UsageTab';
 import BillingTab from './BillingTab';
 import TeamTab from './TeamTab';
+import DocsTab from './DocsTab';
+import PlaygroundTab from './PlaygroundTab';
 
 // The ESR API client dashboard. The set of tabs, and everything inside them, is decided by the server's feature flags (useEsrApiFeatures):
 // this page never looks at the billing plan, the user's role or the account status itself.
@@ -21,6 +23,8 @@ const TABS = [
   { id: 'usage', label: 'Usage', icon: BarChart3, show: (f) => f('usage.view'), Component: UsageTab },
   { id: 'billing', label: 'Billing', icon: CreditCard, show: (f) => f('billing.balance') || f('billing.credit_limit') || f('billing.invoices') || f('billing.ledger'), Component: BillingTab },
   { id: 'team', label: 'Team', icon: Users, show: (f) => f('team.view'), Component: TeamTab },
+  { id: 'docs', label: 'API docs', icon: BookOpen, show: () => true, Component: DocsTab },
+  { id: 'playground', label: 'Playground', icon: Play, show: () => true, Component: PlaygroundTab },
 ];
 
 export default function EsrApiPortalPage() {

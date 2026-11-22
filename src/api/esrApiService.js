@@ -13,6 +13,11 @@ export const esrApiPortal = {
   me: () => api.get(`${P}/me`).then(data),
   features: () => api.get(`${P}/features`).then(data),
 
+  docs: () => api.get(`${P}/docs`).then(data),
+  postman: () => api.get(`${P}/docs/postman.json`, { responseType: 'blob' }).then(data),
+  // The Playground answers in the API's own shape; the full response is returned so the page can read the billing headers.
+  runPlayground: (body) => api.post(`${P}/playground/run`, body, { timeout: 180000 }),
+
   keys: () => api.get(`${P}/keys`).then(data),
   createKey: (body) => api.post(`${P}/keys`, body).then(data),
   rotateKey: (id, body = {}) => api.post(`${P}/keys/${id}/rotate`, body).then(data),
