@@ -4,12 +4,13 @@ import { toast } from 'react-hot-toast';
 import { ArrowLeft, Download, Plug, Receipt } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import CustomSelect from '../../components/CustomSelect';
+import ClientCallLog from './ClientCallLog';
 import { INDIAN_STATES } from '../whitelabel/OrgDetailsForm';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
 import { ActionsCell, Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
 
-const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Access' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }];
+const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Access' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }, { id: 'calls', label: 'Call log' }];
 const rupeesToPaise = (v) => Math.round(Number(v) * 100);
 
 export default function AdminEsrApiClientPage() {
@@ -30,6 +31,7 @@ export default function AdminEsrApiClientPage() {
         {tab === 'access' && <Access d={d} reload={c.reload} />}
         {tab === 'pricing' && <PricingPanel clientId={cl.id} />}
         {tab === 'money' && <Money d={d} reload={c.reload} />}
+        {tab === 'calls' && <ClientCallLog clientId={cl.id} />}
       </Sharp>
     </PageFrame>
   );

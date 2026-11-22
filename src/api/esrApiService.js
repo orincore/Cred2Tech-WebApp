@@ -61,6 +61,10 @@ export const esrApiAdmin = {
   clients: (params) => api.get(`${A}/clients`, { params }).then(data),
   client: (id) => api.get(`${A}/clients/${id}`).then(data),
   createClient: (body) => api.post(`${A}/clients`, body).then(data),
+  // one client's calls (endpoint, outcome, error code) and the diagnosis of one call; the payloads come from the audited api-logs detail
+  clientLogs: (id, params) => api.get(`${A}/clients/${id}/logs`, { params }).then(data),
+  logDiagnosis: (id, requestId) => api.get(`${A}/clients/${id}/logs/${requestId}/diagnosis`).then(data),
+  logPayloads: (requestId, { diagnostic = false } = {}) => api.get(`/admin/api-logs/esr/${requestId}/detail`, { params: diagnostic ? { include: 'diagnostic' } : undefined }).then(data),
   updateContact: (id, body) => api.patch(`${A}/clients/${id}/contact`, body).then(data),
   updateSettings: (id, settings, reason) => api.patch(`${A}/clients/${id}/settings`, { settings, reason }).then(data),
   changeBillingMode: (id, body) => api.post(`${A}/clients/${id}/billing-mode`, body).then(data),
