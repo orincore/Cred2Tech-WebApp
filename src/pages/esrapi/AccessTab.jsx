@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { KeyRound, Plus, RefreshCw, Ban, Trash2 } from 'lucide-react';
+import { KeyRound, Plus, RefreshCw, Ban, Trash2, Eye, EyeOff } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import { esrApiPortal, apiError } from '../../api/esrApiService';
 import { Card, Field, Pill } from '../whitelabel/atoms';
 import { Modal, Notice, SecretModal, Table, dt, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
+
+/** "c2t_uat_pb7x0m4u" -> "c2t_uat_••••••••": the environment part stays so keys can still be told apart, the identifier is hidden. */
+const maskKey = (prefix) => `${String(prefix).replace(/^(c2t_(?:uat|live)_).*$/, '$1')}••••••••…`;
 
 // API keys and the IP allow-list. What each user can do (view / manage / UAT / production) comes from the server's feature flags.
 export default function AccessTab({ flag }) {
@@ -20,6 +23,11 @@ export default function AccessTab({ flag }) {
   const [rotating, setRotating] = useState(null);
   const [addingIp, setAddingIp] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Keys are hidden by default (dots instead of the identifier). One button shows/hides all of them, and each row has its own.
+  const [showAll, setShowAll] = useState(false);
+  const [revealed, setRevealed] = useState(() => new Set());
+  const isShown = (id) => showAll || revealed.has(id);
+  const toggleKey = (id) => setRevealed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const act = async (fn, ok) => {
     setBusy(true);
@@ -31,7 +39,12 @@ export default function AccessTab({ flag }) {
   return (
     <>
       <Card title="API keys" subtitle="Send a key in the X-API-Key header. Test keys use free test credits; production keys are billed."
-        actions={flag('keys.manage') && <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Plus size={14} /> New key</button>}>
+        actions={(
+          <>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowAll((s) => !s); setRevealed(new Set()); }} aria-pressed={showAll} data-testid="toggle-keys-all">{showAll ? <><EyeOff size={14} /> Hide keys</> : <><Eye size={14} /> Show keys</>}</button>
+            {flag('keys.manage') && <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreating(true)} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Plus size={14} /> New key</button>}
+          </>
+        )}>
         {keys.loading ? <LoadingSpinner /> : keys.error ? <Notice tone="error">{apiError(keys.error)}</Notice> : !keys.data.keys.length ? (
           <EmptyState icon={KeyRound} title="No keys yet" description={flag('keys.manage') ? 'Create a test key to start.' : 'An administrator of your account can create keys.'} />
         ) : (
@@ -39,7 +52,12 @@ export default function AccessTab({ flag }) {
             {keys.data.keys.map((k) => (
               <tr key={k.id}>
                 <td style={td}>{k.name}</td>
-                <td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace' }}>{k.prefix}…</td>
+                <td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace', whiteSpace: 'nowrap' }}>
+                  <span data-testid="key-id">{isShown(k.id) ? `${k.prefix}…` : maskKey(k.prefix)}</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleKey(k.id)} aria-pressed={isShown(k.id)} aria-label={isShown(k.id) ? `Hide key ${k.name}` : `Show key ${k.name}`} data-testid="toggle-key-row" style={{ marginLeft: 4 }}>
+                    {isShown(k.id) ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </td>
                 <td style={td}><Pill tone={ENV_TONE[k.environment]}>{k.environment}</Pill></td>
                 <td style={td}><Pill tone={STATUS_TONE[k.status] || 'neutral'}>{k.status}</Pill>{k.grace_until && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>old key works until {dt(k.grace_until)}</div>}</td>
                 <td style={td}>{k.last_used_at ? `${dt(k.last_used_at)}${k.last_used_ip ? ` from ${k.last_used_ip}` : ''}` : 'Never'}</td>
