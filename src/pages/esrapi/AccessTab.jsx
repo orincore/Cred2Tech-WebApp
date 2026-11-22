@@ -80,7 +80,7 @@ export default function AccessTab({ flag }) {
         actions={flag('ip.manage') && <button type="button" className="btn btn-primary btn-sm" onClick={() => setAddingIp(true)} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Plus size={14} /> Add address</button>}>
         {ips.loading ? <LoadingSpinner /> : ips.error ? <Notice tone="error">{apiError(ips.error)}</Notice> : (
           <>
-            {flag('production.enabled') && <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--text-tertiary)' }}>A new production address starts working after {ips.data.production_activation_delay_minutes} minutes. Test addresses work at once. Up to {ips.data.max_per_environment} per environment.</p>}
+            {flag('production.enabled') && <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--text-tertiary)' }}>{ips.data.production_activation_delay_minutes > 0 ? `A new production address starts working after ${ips.data.production_activation_delay_minutes} minutes. Test addresses work at once.` : 'A new address starts working as soon as you add it.'} Up to {ips.data.max_per_environment} per environment.</p>}
             {!ips.data.ips.length ? <EmptyState icon={KeyRound} title="No addresses yet" description="Add the public IP address (or range) your servers call from." /> : (
               <Table head={['Address', 'Environment', 'Label', 'Active', '']}>
                 {ips.data.ips.map((i) => (
@@ -115,7 +115,7 @@ export default function AccessTab({ flag }) {
                   <td style={td}>
                     {flag('ip.manage')
                       ? <button type="button" className="btn btn-primary btn-sm" disabled={busy} data-testid="allow-blocked-ip"
-                        onClick={async () => { if (await act(() => esrApiPortal.addIp({ environment: b.environment, cidr: b.ip, label: 'Added from a blocked attempt' }), b.environment === 'PRODUCTION' ? `${b.ip} added. A production address starts working in ${ips.data?.production_activation_delay_minutes ?? 15} minutes.` : `${b.ip} added`)) refreshIps(); }}>Allow this address</button>
+                        onClick={async () => { if (await act(() => esrApiPortal.addIp({ environment: b.environment, cidr: b.ip, label: 'Added from a blocked attempt' }), b.environment === 'PRODUCTION' && (ips.data?.production_activation_delay_minutes ?? 0) > 0 ? `${b.ip} added. A production address starts working in ${ips.data.production_activation_delay_minutes} minutes.` : `${b.ip} added. It works now: retry your call.`)) refreshIps(); }}>Allow this address</button>
                       : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>An administrator can allow it</span>}
                   </td>
                 </tr>

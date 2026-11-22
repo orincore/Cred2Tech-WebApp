@@ -163,7 +163,7 @@ function Access({ d, reload }) {
         <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>To stop all of this client's access immediately, suspend the account (Summary, Access and limits).</p>
       </Card>
       <div style={{ height: 16 }} />
-      <Card title="Allowed IP addresses" subtitle="Admin additions to production are active at once (the 15-minute delay applies to the client's own).">
+      <Card title="Allowed IP addresses" subtitle="A new address is active as soon as it is added.">
         <Table head={['Address', 'Environment', 'Label', '']}>
           {d.ips.map((i) => <tr key={i.id}><td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>{i.cidr}</td><td style={td}><Pill tone={ENV_TONE[i.environment]}>{i.environment}</Pill></td><td style={td}>{i.label || '—'}</td><td style={td}><button type="button" className="btn btn-ghost btn-sm" onClick={() => run(() => esrApiAdmin.removeIp(id, i.id), 'Removed')}>Remove</button></td></tr>)}
         </Table>
