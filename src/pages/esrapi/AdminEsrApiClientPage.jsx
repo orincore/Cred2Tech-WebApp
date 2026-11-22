@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Download, Plug } from 'lucide-react';
+import { ArrowLeft, Download, Plug, Receipt } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
-import { Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
+import { Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
 
 const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Access' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }];
 const rupeesToPaise = (v) => Math.round(Number(v) * 100);
@@ -248,6 +248,8 @@ function Money({ d, reload }) {
   const ledger = useAsync(() => esrApiAdmin.ledger(id, { limit: 25, offset }), [id, offset]);
   const [adjusting, setAdjusting] = useState(false);
   const [payInv, setPayInv] = useState(null);
+  const [billing, setBilling] = useState(false);          // the "Generate bill" confirmation
+  const [adjustInv, setAdjustInv] = useState(null);       // the invoice being adjusted
   const [refund, setRefund] = useState(null);
   const [month, setMonth] = useState('');
   const refreshAll = () => { ledger.reload(); reload(); };
@@ -271,12 +273,23 @@ function Money({ d, reload }) {
       </Card>
       <div style={{ height: 16 }} />
       {d.client.billing_mode === 'POSTPAID' && (
-        <Card title="Invoices" actions={<form style={{ display: 'flex', gap: 6 }} onSubmit={async (e) => { e.preventDefault(); try { await esrApiAdmin.generateInvoice(id, month); toast.success('Invoice generated'); setMonth(''); reload(); } catch (err) { toast.error(apiError(err)); } }}><input type="month" className="form-control" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Invoice month" /><button type="submit" className="btn btn-secondary btn-sm" disabled={!month}>Generate</button></form>}>
-          <Table head={['Invoice', 'Period', 'Total', 'Status', '']}>
+        <Card title="Invoices" subtitle="Bill the unpaid calls whenever you like. The client is e-mailed the invoice and can pay it from their dashboard straight away."
+          actions={(
+            <>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setBilling(true)} data-testid="generate-bill"><Receipt size={14} /> Generate bill</button>
+              <form style={{ display: 'flex', gap: 6 }} onSubmit={async (e) => { e.preventDefault(); try { await esrApiAdmin.generateInvoice(id, month); toast.success('Invoice generated'); setMonth(''); reload(); } catch (err) { toast.error(apiError(err)); } }}><input type="month" className="form-control" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Invoice month" /><button type="submit" className="btn btn-secondary btn-sm" disabled={!month}>Generate month</button></form>
+            </>
+          )}>
+          <Table head={['Invoice', 'Period', 'Total (incl. GST)', 'Status', '']}>
             {d.invoices.map((i) => (
-              <tr key={i.id}><td style={td}>{i.invoice_number}</td><td style={td}>{i.period || day(i.period_start)}</td><td style={td}>{inr(i.total_paise / 100)}</td><td style={td}><Pill tone={STATUS_TONE[i.status] || 'neutral'}>{i.status === 'ISSUED' ? 'Unpaid' : i.status}</Pill></td>
+              <tr key={i.id}>
+                <td style={td}>{i.invoice_number}{i.bill_kind === 'ON_DEMAND' && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bill on request</div>}</td>
+                <td style={td}>{i.period || day(i.period_start)}</td>
+                <td style={td}>{inr(i.total_paise / 100)}{i.revision > 0 && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Revised {i.revision}×, adjustment {inrSigned(i.adjustment_paise / 100)} before GST</div>}</td>
+                <td style={td}><Pill tone={STATUS_TONE[i.status] || 'neutral'}>{i.status === 'ISSUED' ? 'Unpaid' : i.status}</Pill></td>
                 <td style={{ ...td, whiteSpace: 'nowrap' }}><button type="button" className="btn btn-ghost btn-sm" onClick={() => pdf(() => esrApiAdmin.invoicePdf(i.id), i.invoice_number)}><Download size={13} /> PDF</button>
-                  {i.status === 'ISSUED' && <><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPayInv(i)}>Record payment</button><button type="button" className="btn btn-ghost btn-sm" onClick={async () => { try { await esrApiAdmin.resendInvoice(i.id); toast.success('Invoice e-mailed again'); } catch (err) { toast.error(apiError(err)); } }}>Resend</button></>}</td></tr>
+                  {i.status === 'ISSUED' && <><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdjustInv(i)} data-testid="adjust-bill">Adjust bill</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPayInv(i)}>Record payment</button><button type="button" className="btn btn-ghost btn-sm" onClick={async () => { try { await esrApiAdmin.resendInvoice(i.id); toast.success('Invoice e-mailed again'); } catch (err) { toast.error(apiError(err)); } }}>Resend</button></>}</td>
+              </tr>
             ))}
           </Table>
         </Card>
@@ -294,6 +307,8 @@ function Money({ d, reload }) {
       )}
       {adjusting && <AdjustModal id={id} onClose={() => setAdjusting(false)} onDone={() => { setAdjusting(false); refreshAll(); }} />}
       {payInv && <RecordPaymentModal invoice={payInv} onClose={() => setPayInv(null)} onDone={() => { setPayInv(null); reload(); }} />}
+      {billing && <GenerateBillModal d={d} onClose={() => setBilling(false)} onDone={() => { setBilling(false); refreshAll(); }} />}
+      {adjustInv && <AdjustBillModal invoice={adjustInv} onClose={() => setAdjustInv(null)} onDone={() => { setAdjustInv(null); refreshAll(); }} />}
       {refund && <RefundModal topup={refund} onClose={() => setRefund(null)} onDone={() => { setRefund(null); refreshAll(); }} />}
     </>
   );
@@ -315,6 +330,84 @@ function AdjustModal({ id, onClose, onDone }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !Number(amount) || reason.trim().length < 5}>Apply</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// "Generate bill": invoice every unpaid production call so far. The server bills calls older than two minutes; a call still settling goes on the next bill.
+function GenerateBillModal({ d, onClose, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const u = d.unbilled_usage;
+  const gst = Math.round(u.taxable_inr * 100 * 0.18) / 100;
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const r = await esrApiAdmin.generateUnbilledInvoice(d.client.id);
+      if (r.status === 'CREATED') { toast.success(`Bill ${r.invoice.invoice_number} created for ${inr(Number(r.invoice.total_paise) / 100)}. The client was e-mailed and can pay it from their dashboard.`, { duration: 7000 }); onDone(); }
+      else { toast('Nothing to bill yet. Calls from the last couple of minutes are billed next time.'); onClose(); }
+    } catch (err) { toast.error(apiError(err)); setBusy(false); }
+  };
+  return (
+    <Modal title="Generate bill" onClose={onClose}>
+      <p style={{ marginTop: 0, fontSize: 13 }}>This creates one GST invoice for every production call that has not been billed yet, <strong>up to now</strong>.</p>
+      {u.calls > 0 ? (
+        <dl style={{ margin: '0 0 12px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', fontSize: 13 }}>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Unbilled calls</dt><dd style={{ margin: 0 }}>{num(u.calls)}</dd>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Amount before GST</dt><dd style={{ margin: 0 }}>{inr(u.taxable_inr)}</dd>
+          <dt style={{ color: 'var(--text-tertiary)' }}>GST (18%)</dt><dd style={{ margin: 0 }}>{inr(gst)}</dd>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Client will pay</dt><dd style={{ margin: 0 }}><strong>{inr(u.taxable_inr + gst)}</strong></dd>
+        </dl>
+      ) : <Notice tone="info">There are no unbilled calls right now.</Notice>}
+      <Notice tone="info">The invoice is e-mailed to the client and appears on their Billing page with a Pay button. Its due date follows this client's payment terms. You can adjust the amount afterwards, while it is unpaid.</Notice>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={submit} disabled={busy || u.calls === 0} data-testid="confirm-generate-bill">{busy ? 'Creating…' : 'Create and send bill'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+// "Adjust bill": change what the client pays on an UNPAID invoice. The amount is before GST (negative reduces, positive adds); GST is worked out again on the server.
+function AdjustBillModal({ invoice, onClose, onDone }) {
+  const [amount, setAmount] = useState(''); const [reason, setReason] = useState(''); const [busy, setBusy] = useState(false);
+  const calls = Number(invoice.calls_taxable_paise); const already = Number(invoice.adjustment_paise);
+  const delta = Math.round(Number(amount) * 100);
+  const valid = Number.isFinite(delta) && delta !== 0 && Math.abs(delta) <= 100000000;
+  const newTaxable = calls + already + (valid ? delta : 0);
+  const newGst = Math.round(newTaxable * 0.18);
+  const tooLow = valid && newTaxable < 100;
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true);
+    try {
+      await esrApiAdmin.adjustInvoice(invoice.id, { amount_paise: delta, reason });
+      toast.success(`Invoice ${invoice.invoice_number} revised. The client was e-mailed the new amount.`, { duration: 6000 }); onDone();
+    } catch (err) { toast.error(apiError(err)); setBusy(false); }
+  };
+  return (
+    <Modal title={`Adjust bill ${invoice.invoice_number}`} onClose={onClose} width={560}>
+      <form onSubmit={submit}>
+        <dl style={{ margin: '0 0 12px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', fontSize: 13 }}>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Calls come to</dt><dd style={{ margin: 0 }}>{inr(calls / 100)} before GST</dd>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Adjusted so far</dt><dd style={{ margin: 0 }}>{inr(already / 100)}</dd>
+          <dt style={{ color: 'var(--text-tertiary)' }}>Client currently pays</dt><dd style={{ margin: 0 }}>{inr(Number(invoice.total_paise) / 100)} incl. GST</dd>
+        </dl>
+        <Field label="Adjustment before GST (₹)" required hint="Negative reduces the bill (e.g. -250 for a discount); positive adds to it." htmlFor="ab-amt">
+          <input id="ab-amt" className="form-control" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus placeholder="-250" />
+        </Field>
+        {valid && (
+          <Notice tone={tooLow ? 'error' : 'info'} title={tooLow ? 'Too much to take off' : 'New bill'}>
+            {tooLow ? 'The invoice must stay at least ₹1.00 before GST.' : <>Before GST <strong>{inr(newTaxable / 100)}</strong> + GST {inr(newGst / 100)} = client pays <strong>{inr((newTaxable + newGst) / 100)}</strong>.</>}
+          </Notice>
+        )}
+        <Field label="Reason" required hint="The client is e-mailed this reason with the revised invoice." htmlFor="ab-reason">
+          <input id="ab-reason" className="form-control" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} />
+        </Field>
+        <Notice tone="warning">The client's revised invoice replaces the earlier one and is e-mailed to them. If they have already started a payment, this is refused. Only unpaid invoices can be adjusted.</Notice>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !valid || tooLow || reason.trim().length < 5} data-testid="confirm-adjust-bill">Revise and send</button>
         </div>
       </form>
     </Modal>

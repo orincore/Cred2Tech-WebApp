@@ -10,7 +10,9 @@ import './esrApi.css';
 export const Sharp = ({ children }) => <div className="esr-sharp">{children}</div>;
 
 export const inr = (v, digits = 2) => (v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`);
-export const dt = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+/** A signed amount for adjustments: "−₹5.00" or "+₹5.00" (the minus sign belongs in front of the rupee symbol). */
+export const inrSigned = (v) => (v === null || v === undefined ? '—' : `${Number(v) < 0 ? '−' : '+'}${inr(Math.abs(Number(v)))}`);
+export const dt =(d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 export const day = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 export const num = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('en-IN'));
 

@@ -6,7 +6,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import { esrApiPortal, apiError, saveBlob } from '../../api/esrApiService';
 import { loadRazorpay, createRazorpayCheckout } from '../../utils/razorpay';
 import { Card, Field, Pill } from '../whitelabel/atoms';
-import { Notice, Pager, Stat, StatRow, Table, day, dt, inr, num, td, useAsync, STATUS_TONE } from './common';
+import { Notice, Pager, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, STATUS_TONE } from './common';
 
 // Billing. Which sections exist is decided ONLY by the server's feature flags: the prepaid sections carry `billing.balance` / `billing.top_up*`,
 // the postpaid ones `billing.credit_limit` / `billing.invoices` / `billing.pay_invoice`. This file never looks at the plan itself.
@@ -131,7 +131,8 @@ function InvoicesCard({ flag, onPaid }) {
             <Table head={['Invoice', 'Period', 'Due', 'Total (incl. GST)', 'Status', '']}>
               {inv.data.invoices.map((i) => (
                 <tr key={i.id}>
-                  <td style={td}>{i.invoice_number}</td><td style={td}>{i.period}</td><td style={td}>{day(i.due_date)}</td><td style={td}>{inr(i.total_inr)}</td>
+                  <td style={td}>{i.invoice_number}</td><td style={td}>{i.period}</td><td style={td}>{day(i.due_date)}</td>
+                  <td style={td}>{inr(i.total_inr)}{i.revision > 0 && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }} title={(i.adjustments || []).map((a) => a.reason).join(' · ')}>Revised: includes an adjustment of {inrSigned(i.adjustment_inr)} before GST</div>}</td>
                   <td style={td}><Pill tone={STATUS_TONE[i.status] || 'neutral'}>{i.status === 'ISSUED' ? 'Unpaid' : i.status === 'PAID' ? 'Paid' : i.status}</Pill></td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => download(i)}><Download size={13} /> PDF</button>

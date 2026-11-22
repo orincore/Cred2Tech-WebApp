@@ -77,6 +77,10 @@ export const esrApiAdmin = {
   reverseAdjustment: (id, ledgerId, reason) => api.post(`${A}/clients/${id}/adjustments/${ledgerId}/reverse`, { reason }).then(data),
 
   generateInvoice: (id, month) => api.post(`${A}/clients/${id}/invoices`, { month }).then(data),
+  // "Generate bill": invoice every unbilled production call up to now, e-mail the client, show it on their dashboard with Pay.
+  generateUnbilledInvoice: (id) => api.post(`${A}/clients/${id}/invoices/unbilled`).then(data),
+  // "Adjust bill": body { amount_paise (signed, before GST), reason } on an UNPAID invoice.
+  adjustInvoice: (invoiceId, body) => api.post(`${A}/invoices/${invoiceId}/adjust`, body).then(data),
   invoices: (params) => api.get(`${A}/invoices`, { params }).then(data),
   invoice: (id) => api.get(`${A}/invoices/${id}`).then(data),
   invoicePdf: (id) => api.get(`${A}/invoices/${id}/pdf`, { responseType: 'blob' }).then(data),
