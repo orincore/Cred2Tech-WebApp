@@ -4,7 +4,7 @@ import { Mail, UserPlus } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { esrApiPortal, apiError } from '../../api/esrApiService';
 import { Card, Field, Pill } from '../whitelabel/atoms';
-import { Modal, Notice, Table, dt, td, useAsync } from './common';
+import { ActionsCell, Modal, Notice, Table, dt, td, useAsync } from './common';
 
 const ROLE_LABEL = { API_CLIENT_ADMIN: 'Administrator', API_CLIENT_MEMBER: 'Member (read-only)' };
 
@@ -40,11 +40,11 @@ export default function TeamTab({ flag }) {
             </td>
             <td style={td}><Pill tone={m.status === 'ACTIVE' ? (m.invitation_pending ? 'info' : 'success') : 'neutral'}>{m.status === 'ACTIVE' ? (m.invitation_pending ? 'Invited' : 'Active') : m.status === 'INACTIVE' ? 'Deactivated' : m.status}</Pill></td>
             <td style={td}>{dt(m.last_login_at)}</td>
-            <td style={{ ...td, whiteSpace: 'nowrap' }}>
+            <ActionsCell>
               {flag('team.manage') && !m.is_you && m.status === 'ACTIVE' && m.invitation_pending && <button type="button" className="btn btn-ghost btn-sm" disabled={busy === m.id} onClick={() => act(m.id, () => esrApiPortal.resendInvite(m.id), 'Invitation sent again')}><Mail size={13} /> Resend invite</button>}
               {flag('team.manage') && !m.is_you && m.status === 'ACTIVE' && <button type="button" className="btn btn-ghost btn-sm" disabled={busy === m.id} onClick={() => act(m.id, () => esrApiPortal.updateMember(m.id, { status: 'INACTIVE' }), 'Person deactivated and signed out')}>Deactivate</button>}
               {flag('team.manage') && !m.is_you && m.status === 'INACTIVE' && <button type="button" className="btn btn-ghost btn-sm" disabled={busy === m.id} onClick={() => act(m.id, () => esrApiPortal.updateMember(m.id, { status: 'ACTIVE' }), 'Person reactivated')}>Reactivate</button>}
-            </td>
+            </ActionsCell>
           </tr>
         ))}
       </Table>

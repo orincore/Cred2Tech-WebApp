@@ -9,15 +9,26 @@ import './esrApi.css';
 /** Wraps a page's content so the sharp-cornered look in esrApi.css applies to it (and to the modals it opens). */
 export const Sharp = ({ children }) => <div className="esr-sharp">{children}</div>;
 
-export const inr = (v, digits = 2) => (v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`);
+// A negative amount reads "−₹20.00" (the minus in front of the rupee sign), never "₹-20.00".
+export const inr = (v, digits = 2) => (v === null || v === undefined ? '—' : `${Number(v) < 0 ? '−' : ''}₹${Math.abs(Number(v)).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`);
 /** A signed amount for adjustments: "−₹5.00" or "+₹5.00" (the minus sign belongs in front of the rupee symbol). */
 export const inrSigned = (v) => (v === null || v === undefined ? '—' : `${Number(v) < 0 ? '−' : '+'}${inr(Math.abs(Number(v)))}`);
-export const dt =(d) => (d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
-export const day = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+// Dates use non-breaking spaces so "22 Nov 2026, 01:40 pm" stays on one line instead of wrapping inside a table cell.
+const noBreak = (s) => s.replace(/ /g, ' ');
+export const dt = (d) => (d ? noBreak(new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })) : '—');
+export const day = (d) => (d ? noBreak(new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })) : '—');
 export const num = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('en-IN'));
 
 export const th = { padding: '10px 12px', fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '0.04em', textAlign: 'left', whiteSpace: 'nowrap' };
-export const td = { padding: '10px 12px', fontSize: 12.5, color: 'var(--text-primary)', borderTop: '1px solid var(--border)', verticalAlign: 'top' };
+// Cells are centred vertically so text, tags and buttons in one row line up (top alignment left a button sitting lower than the words beside it).
+export const td = { padding: '10px 12px', fontSize: 12.5, color: 'var(--text-primary)', borderTop: '1px solid var(--border)', verticalAlign: 'middle' };
+
+/** The last cell of a row: its buttons grouped, evenly spaced and pushed to the right edge. */
+export const ActionsCell = ({ children }) => (
+  <td style={{ ...td, textAlign: 'right' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>{children}</div>
+  </td>
+);
 
 export const Notice = ({ tone = 'info', title, children }) => {
   const bg = { info: 'var(--info-bg)', warning: 'var(--warning-bg)', error: 'var(--error-bg)', success: 'var(--success-bg)' }[tone];

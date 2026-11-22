@@ -6,7 +6,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import { esrApiPortal, apiError } from '../../api/esrApiService';
 import { Card, Field, Pill } from '../whitelabel/atoms';
-import { Modal, Notice, SecretModal, Table, dt, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
+import { ActionsCell, Modal, Notice, SecretModal, Table, dt, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
 
 /** "c2t_uat_pb7x0m4u" -> "c2t_uat_••••••••": the environment part stays so keys can still be told apart, the identifier is hidden. */
 const maskKey = (prefix) => `${String(prefix).replace(/^(c2t_(?:uat|live)_).*$/, '$1')}••••••••…`;
@@ -61,14 +61,14 @@ export default function AccessTab({ flag }) {
                 <td style={td}><Pill tone={ENV_TONE[k.environment]}>{k.environment}</Pill></td>
                 <td style={td}><Pill tone={STATUS_TONE[k.status] || 'neutral'}>{k.status}</Pill>{k.grace_until && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>old key works until {dt(k.grace_until)}</div>}</td>
                 <td style={td}>{k.last_used_at ? `${dt(k.last_used_at)}${k.last_used_ip ? ` from ${k.last_used_ip}` : ''}` : 'Never'}</td>
-                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                <ActionsCell>
                   {flag('keys.manage') && k.status === 'ACTIVE' && (
                     <>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRotating(k)} title="Replace with a new key"><RefreshCw size={13} /> Rotate</button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRevoking(k)} title="Stop this key working now"><Ban size={13} /> Revoke</button>
                     </>
                   )}
-                </td>
+                </ActionsCell>
               </tr>
             ))}
           </Table>

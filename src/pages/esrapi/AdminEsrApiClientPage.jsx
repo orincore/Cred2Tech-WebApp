@@ -5,7 +5,7 @@ import { ArrowLeft, Download, Plug, Receipt } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
-import { Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
+import { ActionsCell, Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
 
 const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Access' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }];
 const rupeesToPaise = (v) => Math.round(Number(v) * 100);
@@ -287,8 +287,8 @@ function Money({ d, reload }) {
                 <td style={td}>{i.period || day(i.period_start)}</td>
                 <td style={td}>{inr(i.total_paise / 100)}{i.revision > 0 && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Revised {i.revision}×, adjustment {inrSigned(i.adjustment_paise / 100)} before GST</div>}</td>
                 <td style={td}><Pill tone={STATUS_TONE[i.status] || 'neutral'}>{i.status === 'ISSUED' ? 'Unpaid' : i.status}</Pill></td>
-                <td style={{ ...td, whiteSpace: 'nowrap' }}><button type="button" className="btn btn-ghost btn-sm" onClick={() => pdf(() => esrApiAdmin.invoicePdf(i.id), i.invoice_number)}><Download size={13} /> PDF</button>
-                  {i.status === 'ISSUED' && <><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdjustInv(i)} data-testid="adjust-bill">Adjust bill</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPayInv(i)}>Record payment</button><button type="button" className="btn btn-ghost btn-sm" onClick={async () => { try { await esrApiAdmin.resendInvoice(i.id); toast.success('Invoice e-mailed again'); } catch (err) { toast.error(apiError(err)); } }}>Resend</button></>}</td>
+                <ActionsCell><button type="button" className="btn btn-ghost btn-sm" onClick={() => pdf(() => esrApiAdmin.invoicePdf(i.id), i.invoice_number)}><Download size={13} /> PDF</button>
+                  {i.status === 'ISSUED' && <><button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdjustInv(i)} data-testid="adjust-bill">Adjust bill</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPayInv(i)}>Record payment</button><button type="button" className="btn btn-ghost btn-sm" onClick={async () => { try { await esrApiAdmin.resendInvoice(i.id); toast.success('Invoice e-mailed again'); } catch (err) { toast.error(apiError(err)); } }}>Resend</button></>}</ActionsCell>
               </tr>
             ))}
           </Table>
