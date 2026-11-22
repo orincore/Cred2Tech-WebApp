@@ -4,7 +4,8 @@ import { LogOut, Search, ChevronUp, MoreHorizontal, MessageSquarePlus, Sun, Moon
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from '../../constants/navItems';
-import { FEEDBACK_SUBMITTER_ROLES } from '../../constants/roles';
+import { FEEDBACK_SUBMITTER_ROLES, API_CLIENT_ROLES } from '../../constants/roles';
+import useEsrApiFeatures from '../../hooks/useEsrApiFeatures';
 import Badge from '../ui/Badge';
 import { getInitials } from '../../utils/helpers';
 import Logo from '../Logo';
@@ -20,6 +21,9 @@ const UNREAD_POLL_MS = 30000;
 
 const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
   const { user, logout, hasRole } = useAuth();
+  // ESR API clients: which of their sidebar sections to show comes from the server's feature flags (no request at all for any other role).
+  const isApiClient = hasRole(API_CLIENT_ROLES);
+  const esrFeatures = useEsrApiFeatures({ enabled: isApiClient });
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,6 +114,7 @@ const Sidebar = ({ isOpen, isMobile, showMobile, onClose }) => {
     .filter((item) => {
       if (item.roles && !item.roles.some((r) => hasRole(r))) return false;
       if (isVirtualWorkspaceGated && !restrictedNavItemIds.includes(item.id)) return false;
+      if (item.esrFlags && !item.esrFlags.some((f) => esrFeatures.flag(f))) return false;
       if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })

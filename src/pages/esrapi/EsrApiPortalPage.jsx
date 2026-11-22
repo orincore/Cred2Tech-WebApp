@@ -17,14 +17,14 @@ import PlaygroundTab from './PlaygroundTab';
 // The ESR API client dashboard. The set of tabs, and everything inside them, is decided by the server's feature flags (useEsrApiFeatures):
 // this page never looks at the billing plan, the user's role or the account status itself.
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: () => true, Component: OverviewTab },
-  { id: 'access', label: 'Keys & IP addresses', icon: KeyRound, show: (f) => f('keys.view') || f('ip.view'), Component: AccessTab },
-  { id: 'logs', label: 'Call log', icon: FileSearch, show: (f) => f('logs.view'), Component: LogsTab },
-  { id: 'usage', label: 'Usage', icon: BarChart3, show: (f) => f('usage.view'), Component: UsageTab },
-  { id: 'billing', label: 'Billing', icon: CreditCard, show: (f) => f('billing.balance') || f('billing.credit_limit') || f('billing.invoices') || f('billing.ledger'), Component: BillingTab },
-  { id: 'team', label: 'Team', icon: Users, show: (f) => f('team.view'), Component: TeamTab },
-  { id: 'docs', label: 'API docs', icon: BookOpen, show: () => true, Component: DocsTab },
-  { id: 'playground', label: 'Playground', icon: Play, show: () => true, Component: PlaygroundTab },
+  { id: 'overview', label: 'Overview', subtitle: 'Your account at a glance', icon: LayoutDashboard, show: () => true, Component: OverviewTab },
+  { id: 'access', label: 'Keys & IP addresses', subtitle: 'API keys and the addresses allowed to call', icon: KeyRound, show: (f) => f('keys.view') || f('ip.view'), Component: AccessTab },
+  { id: 'logs', label: 'Call log', subtitle: 'Every call made with your keys', icon: FileSearch, show: (f) => f('logs.view'), Component: LogsTab },
+  { id: 'usage', label: 'Usage', subtitle: 'Calls, success rate and spend over time', icon: BarChart3, show: (f) => f('usage.view'), Component: UsageTab },
+  { id: 'billing', label: 'Billing', subtitle: 'Balance, payments, invoices and statement', icon: CreditCard, show: (f) => f('billing.balance') || f('billing.credit_limit') || f('billing.invoices') || f('billing.ledger'), Component: BillingTab },
+  { id: 'team', label: 'Team', subtitle: 'People who can sign in to this account', icon: Users, show: (f) => f('team.view'), Component: TeamTab },
+  { id: 'docs', label: 'API docs', subtitle: 'How to call the API', icon: BookOpen, show: () => true, Component: DocsTab },
+  { id: 'playground', label: 'Playground', subtitle: 'Try a request from your browser', icon: Play, show: () => true, Component: PlaygroundTab },
 ];
 
 export default function EsrApiPortalPage() {
@@ -40,9 +40,9 @@ export default function EsrApiPortalPage() {
   const goTo = (id) => navigate(id === 'overview' ? '/esr-api' : `/esr-api/${id}`);
   const Current = current.Component;
 
+  // The sections are in the sidebar now (constants/navItems.js, gated by the same flags), so the page has no tab bar: its header names the section.
   return (
-    <PageFrame icon={Plug} title="ESR API" subtitle="Eligibility as a service for your own systems"
-      tabs={visible.map(({ id, label, icon }) => ({ id, label, icon }))} tab={current.id} onTab={goTo}>
+    <PageFrame icon={current.icon} title={current.label} subtitle={current.subtitle}>
       <Sharp><Current flag={flag} goTo={goTo} reloadFeatures={reload} /></Sharp>
     </PageFrame>
   );

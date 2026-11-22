@@ -29,6 +29,12 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Plug,
+  KeyRound,
+  FileSearch,
+  BarChart3,
+  CreditCard,
+  BookOpen,
+  Play,
 } from 'lucide-react';
 
 // MSME direct-portal navigation — used by MsmeSidebar, and by the main
@@ -317,14 +323,16 @@ export const NAV_ITEMS = [
   },
 
 
-  // ESR Public API clients: one entry, the dashboard's own tabs are driven by the server's feature flags
-  {
-    id: 'esr-api',
-    label: 'ESR API',
-    path: '/esr-api',
-    icon: Plug,
-    roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'],
-  },
+  // ESR Public API clients: the dashboard's sections, one sidebar item each. `esrFlags` (any of) are the server's feature flags that decide whether the
+  // item is shown (Sidebar.jsx fetches them for these roles only); an item with none is always shown.
+  { id: 'esr-overview', label: 'Overview', path: '/esr-api', icon: LayoutDashboard, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'] },
+  { id: 'esr-access', label: 'Keys & IP addresses', path: '/esr-api/access', icon: KeyRound, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'], esrFlags: ['keys.view', 'ip.view'] },
+  { id: 'esr-logs', label: 'Call log', path: '/esr-api/logs', icon: FileSearch, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'], esrFlags: ['logs.view'] },
+  { id: 'esr-usage', label: 'Usage', path: '/esr-api/usage', icon: BarChart3, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'], esrFlags: ['usage.view'] },
+  { id: 'esr-billing', label: 'Billing', path: '/esr-api/billing', icon: CreditCard, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'], esrFlags: ['billing.balance', 'billing.credit_limit', 'billing.invoices', 'billing.ledger'] },
+  { id: 'esr-team', label: 'Team', path: '/esr-api/team', icon: Users, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'], esrFlags: ['team.view'] },
+  { id: 'esr-docs', label: 'API docs', path: '/esr-api/docs', icon: BookOpen, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'] },
+  { id: 'esr-playground', label: 'Playground', path: '/esr-api/playground', icon: Play, roles: ['API_CLIENT_ADMIN', 'API_CLIENT_MEMBER'] },
 
   // DSA_MEMBER / Shared Views
   {
