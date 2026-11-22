@@ -61,6 +61,7 @@ export const esrApiAdmin = {
   clients: (params) => api.get(`${A}/clients`, { params }).then(data),
   client: (id) => api.get(`${A}/clients/${id}`).then(data),
   createClient: (body) => api.post(`${A}/clients`, body).then(data),
+  updateContact: (id, body) => api.patch(`${A}/clients/${id}/contact`, body).then(data),
   updateSettings: (id, settings, reason) => api.patch(`${A}/clients/${id}/settings`, { settings, reason }).then(data),
   changeBillingMode: (id, body) => api.post(`${A}/clients/${id}/billing-mode`, body).then(data),
 
