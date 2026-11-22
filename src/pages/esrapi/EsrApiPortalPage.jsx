@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BarChart3, BookOpen, CreditCard, FileSearch, KeyRound, LayoutDashboard, Play, Plug, Users } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import NotificationBell from '../../components/notifications/NotificationBell';
 import useEsrApiFeatures from '../../hooks/useEsrApiFeatures';
 import { PageFrame } from '../whitelabel/atoms';
 import { Notice, Sharp } from './common';
@@ -32,8 +33,10 @@ export default function EsrApiPortalPage() {
   const navigate = useNavigate();
   const { flag, loading, error, reload } = useEsrApiFeatures();
 
-  if (loading) return <PageFrame icon={Plug} title="ESR API" subtitle="Eligibility as a service"><LoadingSpinner /></PageFrame>;
-  if (error) return <PageFrame icon={Plug} title="ESR API" subtitle="Eligibility as a service"><Notice tone="error">{error}</Notice></PageFrame>;
+  // The notification bell (opens the app-wide panel, which shows admin announcements sent to API clients) sits in every header of this dashboard.
+  const bell = <NotificationBell />;
+  if (loading) return <PageFrame icon={Plug} title="ESR API" subtitle="Eligibility as a service" actions={bell}><LoadingSpinner /></PageFrame>;
+  if (error) return <PageFrame icon={Plug} title="ESR API" subtitle="Eligibility as a service" actions={bell}><Notice tone="error">{error}</Notice></PageFrame>;
 
   const visible = TABS.filter((t) => t.show(flag));
   const current = visible.find((t) => t.id === tab) || visible[0];
@@ -42,7 +45,7 @@ export default function EsrApiPortalPage() {
 
   // The sections are in the sidebar now (constants/navItems.js, gated by the same flags), so the page has no tab bar: its header names the section.
   return (
-    <PageFrame icon={current.icon} title={current.label} subtitle={current.subtitle}>
+    <PageFrame icon={current.icon} title={current.label} subtitle={current.subtitle} actions={bell}>
       <Sharp><Current flag={flag} goTo={goTo} reloadFeatures={reload} /></Sharp>
     </PageFrame>
   );

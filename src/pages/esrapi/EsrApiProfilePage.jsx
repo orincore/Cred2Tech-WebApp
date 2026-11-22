@@ -8,6 +8,7 @@ import { apiError } from '../../api/esrApiService';
 import { ROLES } from '../../constants/roles';
 import { getInitials } from '../../utils/helpers';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
+import NotificationBell from '../../components/notifications/NotificationBell';
 import { Notice, Sharp, dt, useAsync } from './common';
 
 // The profile page for ESR API client users (API_CLIENT_ADMIN / API_CLIENT_MEMBER). The existing profile page belongs to the sourcing-partner app and is not for these roles,
@@ -57,7 +58,7 @@ export default function EsrApiProfilePage() {
   };
 
   return (
-    <PageFrame icon={UserCircle} title="My profile" subtitle="Your account on the Cred2Tech ESR API">
+    <PageFrame icon={UserCircle} title="My profile" subtitle="Your account on the Cred2Tech ESR API" actions={<NotificationBell />}>
       <Sharp>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16, alignItems: 'stretch', maxWidth: 1100 }}>
 
