@@ -12,6 +12,8 @@ import { Modal, Notice, SecretModal, Table, dt, td, useAsync, ENV_TONE, STATUS_T
 export default function AccessTab({ flag }) {
   const keys = useAsync(() => esrApiPortal.keys(), []);
   const ips = useAsync(() => esrApiPortal.ips(), []);
+  const blocked = useAsync(() => esrApiPortal.blockedIps(), []);
+  const refreshIps = () => { ips.reload(); blocked.reload(); keys.reload(); };
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState(null);       // { title, key, warnings }: shown once, never stored
   const [revoking, setRevoking] = useState(null);
@@ -69,7 +71,7 @@ export default function AccessTab({ flag }) {
                     <td style={td}><Pill tone={ENV_TONE[i.environment]}>{i.environment}</Pill></td>
                     <td style={td}>{i.label || '—'}</td>
                     <td style={td}>{i.active_now ? <Pill tone="success">Active</Pill> : <Pill tone="warning" title={dt(i.active_from)}>From {dt(i.active_from)}</Pill>}</td>
-                    <td style={td}>{flag('ip.manage') && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => { if (await act(() => esrApiPortal.removeIp(i.id), 'Address removed')) ips.reload(); }}><Trash2 size={13} /> Remove</button>}</td>
+                    <td style={td}>{flag('ip.manage') && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={async () => { if (await act(() => esrApiPortal.removeIp(i.id), 'Address removed')) refreshIps(); }}><Trash2 size={13} /> Remove</button>}</td>
                   </tr>
                 ))}
               </Table>
@@ -78,8 +80,35 @@ export default function AccessTab({ flag }) {
         )}
       </Card>
 
+      {blocked.data && blocked.data.blocked.length > 0 && (
+        <>
+          <div style={{ height: 16 }} />
+          <Card title="Blocked attempts" subtitle="These addresses called the API with one of your valid keys in the last 7 days, but were refused because they are not on your allow-list.">
+            <Notice tone="warning" title="Only allow an address if it is one of your own servers">
+              If you do not recognise an address, do not allow it: instead rotate or revoke the key it used, because someone else may have a copy of it.
+            </Notice>
+            <Table head={['Address', 'Environment', 'Attempts', 'Last seen', '']}>
+              {blocked.data.blocked.map((b) => (
+                <tr key={`${b.environment}-${b.ip}`}>
+                  <td style={{ ...td, fontFamily: 'ui-monospace, Menlo, monospace' }}>{b.ip}</td>
+                  <td style={td}><Pill tone={ENV_TONE[b.environment]}>{b.environment}</Pill></td>
+                  <td style={td}>{b.attempts}</td>
+                  <td style={td}>{dt(b.last_seen)}</td>
+                  <td style={td}>
+                    {flag('ip.manage')
+                      ? <button type="button" className="btn btn-primary btn-sm" disabled={busy} data-testid="allow-blocked-ip"
+                        onClick={async () => { if (await act(() => esrApiPortal.addIp({ environment: b.environment, cidr: b.ip, label: 'Added from a blocked attempt' }), b.environment === 'PRODUCTION' ? `${b.ip} added. A production address starts working in ${ips.data?.production_activation_delay_minutes ?? 15} minutes.` : `${b.ip} added`)) refreshIps(); }}>Allow this address</button>
+                      : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>An administrator can allow it</span>}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </Card>
+        </>
+      )}
+
       {creating && <NewKeyModal flag={flag} onClose={() => setCreating(false)} onCreated={(r) => { setCreating(false); setSecret({ title: 'Your new API key', key: r.key, warnings: r.warnings || [] }); keys.reload(); }} />}
-      {addingIp && <AddIpModal flag={flag} onClose={() => setAddingIp(false)} onAdded={() => { setAddingIp(false); ips.reload(); keys.reload(); }} />}
+      {addingIp && <AddIpModal flag={flag} onClose={() => setAddingIp(false)} onAdded={() => { setAddingIp(false); refreshIps(); }} />}
       {secret && <SecretModal title={secret.title} secret={secret.key} warnings={secret.warnings} onClose={() => setSecret(null)} />}
       <ConfirmModal isOpen={!!rotating} onClose={() => setRotating(null)} isLoading={busy} danger={false} title="Rotate this key?" confirmLabel="Rotate"
         message="A new key is created. The old key keeps working for 24 hours so you can switch over, then stops."

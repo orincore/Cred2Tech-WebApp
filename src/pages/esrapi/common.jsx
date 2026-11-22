@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import CopyButton from '../../components/ui/CopyButton';
 
 import './esrApi.css';
@@ -60,18 +60,26 @@ export const Modal = ({ title, onClose, children, width = 520, footer }) => {
 };
 
 /** A secret that is shown exactly once. It is held only in this component's state and gone when the dialog closes. */
-export const SecretModal = ({ title, secret, warnings = [], onClose }) => (
+export const SecretModal = ({ title, secret, warnings = [], onClose }) => {
+  // Hidden by default (so it is not on screen for anyone looking over a shoulder or sharing a screen). While hidden the real key is NOT in the page text:
+  // only dots of the same length are drawn. Copy always copies the real key.
+  const [shown, setShown] = useState(false);
+  return (
   <Modal title={title} onClose={onClose} width={620} footer={<button type="button" className="btn btn-primary btn-sm" onClick={onClose}>I have saved it</button>}>
     <p style={{ margin: '0 0 10px', fontSize: 13 }}>
       <AlertTriangle size={14} style={{ verticalAlign: '-2px', color: 'var(--warning-dark, var(--warning))' }} /> Copy this key now. For security it is shown <strong>only once</strong> and cannot be shown again.
     </p>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, wordBreak: 'break-all' }}>
-      <span data-testid="api-key-secret" style={{ flex: 1 }}>{secret}</span>
+      <span data-testid="api-key-secret" aria-live="polite" style={{ flex: 1, letterSpacing: shown ? undefined : 2 }}>{shown ? secret : '•'.repeat(Math.min(secret.length, 40))}</span>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShown((s) => !s)} aria-pressed={shown} aria-label={shown ? 'Hide key' : 'Show key'} data-testid="toggle-key-visibility">
+        {shown ? <EyeOff size={14} /> : <Eye size={14} />} {shown ? 'Hide' : 'Show'}
+      </button>
       <CopyButton text={secret} label="Key copied" size={14} />
     </div>
     {warnings.map((w) => <Notice key={w} tone="warning">{w}</Notice>)}
   </Modal>
-);
+  );
+};
 
 export const Pager = ({ total, limit, offset, onOffset }) => {
   if (!total || total <= limit) return null;

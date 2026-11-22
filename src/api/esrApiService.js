@@ -24,6 +24,7 @@ export const esrApiPortal = {
   revokeKey: (id, reason) => api.post(`${P}/keys/${id}/revoke`, { reason }).then(data),
 
   ips: () => api.get(`${P}/ip-allowlist`).then(data),
+  blockedIps: () => api.get(`${P}/ip-allowlist/blocked`).then(data),
   addIp: (body) => api.post(`${P}/ip-allowlist`, body).then(data),
   removeIp: (id) => api.delete(`${P}/ip-allowlist/${id}`).then(data),
 
