@@ -54,23 +54,24 @@ export default function PlaygroundTab({ flag }) {
   return (
     <>
       <Notice tone="info">Runs through the real API pipeline using your session. {environment === 'UAT' ? 'This uses one of your free test credits.' : 'This is a PRODUCTION call: it is billed to your account.'}</Notice>
-      <Card title="Request" subtitle="Edit the JSON or start from a sample. Large requests are best sent with the API directly.">
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'flex-end' }}>
+      <Card title="Request" subtitle="Edit the JSON or start from a sample. We assess Home Loan (HL) and Loan Against Property (LAP) only. Large requests are best sent with the API directly.">
+        {/* One row of three equal columns, labels and dropdowns on the same lines (no per-field hints: a hint on one field pushed the others out of line) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0 16px', alignItems: 'start', marginBottom: 12 }}>
           <Field label="Environment" htmlFor="pg-env">
-            <select id="pg-env" className="form-control" value={environment} onChange={(e) => { setEnvironment(e.target.value); setConfirm(false); setOut(null); }}>
+            <select id="pg-env" className="form-control" style={{ width: '100%' }} value={environment} onChange={(e) => { setEnvironment(e.target.value); setConfirm(false); setOut(null); }}>
               {canUat && <option value="UAT">Test (UAT): free test credit</option>}
               {canProd && <option value="PRODUCTION">Production: billed</option>}
             </select>
           </Field>
-          <Field label="Product" hint="We assess Home Loan and Loan Against Property only" htmlFor="pg-product">
-            <select id="pg-product" className="form-control" value={parsed.ok && PRODUCTS.some((p) => p.id === parsed.value.product) ? parsed.value.product : ''} disabled={!parsed.ok}
+          <Field label="Product" htmlFor="pg-product">
+            <select id="pg-product" className="form-control" style={{ width: '100%' }} value={parsed.ok && PRODUCTS.some((p) => p.id === parsed.value.product) ? parsed.value.product : ''} disabled={!parsed.ok}
               onChange={(e) => { setText(JSON.stringify({ ...parsed.value, product: e.target.value }, null, 2)); setIdemKey(newKey()); setOut(null); }}>
               {!(parsed.ok && PRODUCTS.some((p) => p.id === parsed.value.product)) && <option value="">Select a product</option>}
               {PRODUCTS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </Field>
           <Field label="Sample" htmlFor="pg-sample">
-            <select id="pg-sample" className="form-control" value={sampleId} onChange={(e) => pick(e.target.value)}>{docs.data.samples.map((s) => <option key={s.id} value={s.id}>{s.title.split(',')[0]}</option>)}</select>
+            <select id="pg-sample" className="form-control" style={{ width: '100%' }} value={sampleId} onChange={(e) => pick(e.target.value)}>{docs.data.samples.map((s) => <option key={s.id} value={s.id}>{s.title.split(',')[0]}</option>)}</select>
           </Field>
         </div>
         <textarea aria-label="Request JSON" className="form-control" value={text} onChange={(e) => { setText(e.target.value); setIdemKey(newKey()); }} spellCheck={false}

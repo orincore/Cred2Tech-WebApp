@@ -49,6 +49,7 @@ const SuperadminWalletDetail = lazy(() => import('../pages/SuperadminWalletDetai
 const SuperadminApiLogsPage = lazy(() => import('../pages/SuperadminApiLogsPage'));
 // ESR Public API: the client's own dashboard and the Super Admin console
 const EsrApiPortalPage = lazy(() => import('../pages/esrapi/EsrApiPortalPage'));
+const EsrApiProfilePage = lazy(() => import('../pages/esrapi/EsrApiProfilePage'));
 const AdminEsrApiPage = lazy(() => import('../pages/esrapi/AdminEsrApiPage'));
 const AdminEsrApiClientPage = lazy(() => import('../pages/esrapi/AdminEsrApiClientPage'));
 const SystemStatusPage = lazy(() => import('../pages/SystemStatusPage'));
@@ -100,6 +101,12 @@ const MsmePaymentGate = lazy(() => import('../components/MsmePaymentGate'));
 const HomeForRole = () => {
   const { hasRole } = useAuth();
   return hasRole(API_CLIENT_ROLES) ? <Navigate to="/esr-api" replace /> : <DashboardPage />;
+};
+
+// The sidebar's profile button goes to /profile for everyone. ESR API clients get their own profile page; every other role gets the existing one, unchanged.
+const ProfileForRole = () => {
+  const { hasRole } = useAuth();
+  return hasRole(API_CLIENT_ROLES) ? <EsrApiProfilePage /> : <ProfilePage />;
 };
 
 const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
@@ -198,8 +205,8 @@ const AppRouter = () => (
               </ProtectedRoute>
             } />
             <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER']}>
-                <ProfilePage />
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'DSA_ADMIN', 'DSA_MEMBER', 'SUB_DSA', 'DSA', 'ADMIN', 'CRED2TECH_MEMBER', ...API_CLIENT_ROLES]}>
+                <ProfileForRole />
               </ProtectedRoute>
             } />
             <Route path="/storage/manage" element={
