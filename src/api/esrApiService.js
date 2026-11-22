@@ -64,9 +64,7 @@ export const esrApiAdmin = {
   updateSettings: (id, settings, reason) => api.patch(`${A}/clients/${id}/settings`, { settings, reason }).then(data),
   changeBillingMode: (id, body) => api.post(`${A}/clients/${id}/billing-mode`, body).then(data),
 
-  createKey: (id, body) => api.post(`${A}/clients/${id}/keys`, body).then(data),
-  rotateKey: (id, keyId, body = {}) => api.post(`${A}/clients/${id}/keys/${keyId}/rotate`, body).then(data),
-  revokeKey: (id, keyId, reason) => api.post(`${A}/clients/${id}/keys/${keyId}/revoke`, { reason }).then(data),
+  // (No key calls here on purpose: the admin panel never creates, rotates, revokes or lists a client's keys.)
   addIp: (id, body) => api.post(`${A}/clients/${id}/ip-allowlist`, body).then(data),
   removeIp: (id, ipId) => api.delete(`${A}/clients/${id}/ip-allowlist/${ipId}`).then(data),
 

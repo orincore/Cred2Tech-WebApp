@@ -5,9 +5,9 @@ import { ArrowLeft, Download, Plug } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
-import { Modal, Notice, Pager, SecretModal, Sharp, Stat, StatRow, Table, day, dt, inr, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
+import { Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
 
-const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Keys & IPs' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }];
+const TABS = [{ id: 'summary', label: 'Summary' }, { id: 'access', label: 'Access' }, { id: 'pricing', label: 'Pricing' }, { id: 'money', label: 'Money' }];
 const rupeesToPaise = (v) => Math.round(Number(v) * 100);
 
 export default function AdminEsrApiClientPage() {
@@ -152,26 +152,15 @@ function PlanModal({ cl, onClose, onSaved }) {
 
 function Access({ d, reload }) {
   const id = d.client.id;
-  const [secret, setSecret] = useState(null);
   const [ip, setIp] = useState({ environment: 'UAT', cidr: '', label: '' });
-  const [key, setKey] = useState({ environment: 'UAT', name: '' });
   const run = async (fn, ok) => { try { const r = await fn(); if (ok) toast.success(ok); reload(); return r; } catch (err) { toast.error(apiError(err)); return null; } };
   return (
     <>
-      <Card title="Keys" subtitle="Admin can create, rotate and revoke on the client's behalf. A new secret is shown once.">
-        <Table head={['Name', 'Key', 'Environment', 'Status', 'Last used', '']}>
-          {d.keys.map((k) => (
-            <tr key={k.id}><td style={td}>{k.name}</td><td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>{k.prefix}…</td><td style={td}><Pill tone={ENV_TONE[k.environment]}>{k.environment}</Pill></td><td style={td}>{k.status}</td><td style={td}>{dt(k.last_used_at)}</td>
-              <td style={td}>{k.status === 'ACTIVE' && <>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={async () => { const r = await run(() => esrApiAdmin.rotateKey(id, k.id)); if (r) setSecret({ key: r.key, warnings: r.warnings || [] }); }}>Rotate</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { const reason = window.prompt('Reason for revoking this key (at least 5 characters)'); if (reason) run(() => esrApiAdmin.revokeKey(id, k.id, reason), 'Revoked'); }}>Revoke</button></>}</td></tr>
-          ))}
-        </Table>
-        <form style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }} onSubmit={async (e) => { e.preventDefault(); const r = await run(() => esrApiAdmin.createKey(id, key)); if (r) { setSecret({ key: r.key, warnings: r.warnings || [] }); setKey({ ...key, name: '' }); } }}>
-          <input className="form-control" style={{ flex: '1 1 160px' }} placeholder="Key name" value={key.name} onChange={(e) => setKey({ ...key, name: e.target.value })} aria-label="Key name" />
-          <select className="form-control" style={{ width: 'auto' }} value={key.environment} onChange={(e) => setKey({ ...key, environment: e.target.value })} aria-label="Key environment"><option value="UAT">Test</option><option value="PRODUCTION">Production</option></select>
-          <button type="submit" className="btn btn-primary btn-sm" disabled={!key.name.trim()}>Create key</button>
-        </form>
+      <Card title="API keys" subtitle="Keys belong to the client. They are created, rotated and revoked by the client's own administrators and are never shown here.">
+        <p style={{ margin: 0, fontSize: 13 }} data-testid="admin-key-counts">
+          Live keys: <strong>{d.key_counts.UAT}</strong> test, <strong>{d.key_counts.PRODUCTION}</strong> production.
+        </p>
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-tertiary)' }}>To stop all of this client's access immediately, suspend the account (Summary, Access and limits).</p>
       </Card>
       <div style={{ height: 16 }} />
       <Card title="Allowed IP addresses" subtitle="Admin additions to production are active at once (the 15-minute delay applies to the client's own).">
@@ -185,7 +174,6 @@ function Access({ d, reload }) {
           <button type="submit" className="btn btn-primary btn-sm" disabled={!ip.cidr.trim()}>Add</button>
         </form>
       </Card>
-      {secret && <SecretModal title="New API key" secret={secret.key} warnings={secret.warnings} onClose={() => setSecret(null)} />}
     </>
   );
 }
