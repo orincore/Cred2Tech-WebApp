@@ -57,6 +57,8 @@ async function checkout({ order, description, confirm }) {
   return new Promise((resolve, reject) => {
     const rzp = createRazorpayCheckout(Razorpay, {
       key: order.key_id, amount: order.amount, currency: order.currency || 'INR', order_id: order.order_id, description,
+      // name, e-mail and phone come from the account's details (server-built), so nothing is typed at payment
+      ...(order.prefill && Object.keys(order.prefill).length ? { prefill: order.prefill } : {}),
       handler: async (response) => {
         let lastErr;
         for (let attempt = 1; attempt <= 3; attempt += 1) {

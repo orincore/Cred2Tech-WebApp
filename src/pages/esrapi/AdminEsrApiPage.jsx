@@ -87,13 +87,14 @@ function ClientsPanel() {
 }
 
 function NewClientModal({ onClose, onCreated }) {
-  const [f, setF] = useState({ name: '', email: '', gst_number: '', state: '', admin_name: '', admin_email: '', billing_mode: 'PREPAID', credit_limit_inr: '', uat_credits_total: '50', prod_enabled: false });
+  const [f, setF] = useState({ name: '', email: '', mobile: '', gst_number: '', state: '', city: '', pincode: '', address_line: '', admin_name: '', admin_email: '', admin_mobile: '', billing_mode: 'PREPAID', credit_limit_inr: '', uat_credits_total: '50', prod_enabled: false });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      const body = { name: f.name, email: f.email, gst_number: f.gst_number || undefined, state: f.state || undefined, admin_name: f.admin_name, admin_email: f.admin_email, billing_mode: f.billing_mode, uat_credits_total: Number(f.uat_credits_total) || 0, prod_enabled: f.prod_enabled };
+      if (!f.state) { toast.error('Select the state.'); setBusy(false); return; }
+      const body = { name: f.name, email: f.email, mobile: f.mobile, gst_number: f.gst_number || undefined, state: f.state, city: f.city, pincode: f.pincode, address_line: f.address_line, admin_name: f.admin_name, admin_email: f.admin_email, admin_mobile: f.admin_mobile, billing_mode: f.billing_mode, uat_credits_total: Number(f.uat_credits_total) || 0, prod_enabled: f.prod_enabled };
       if (f.billing_mode === 'POSTPAID') body.credit_limit_paise = Math.round(Number(f.credit_limit_inr || 0) * 100);
       onCreated(await esrApiAdmin.createClient(body));
     } catch (err) { toast.error(apiError(err)); setBusy(false); }
@@ -104,16 +105,21 @@ function NewClientModal({ onClose, onCreated }) {
         <Field label="Organisation name" required htmlFor="nc-name"><input id="nc-name" className="form-control" value={f.name} onChange={set('name')} required autoFocus /></Field>
         <Field label="Organisation e-mail" required htmlFor="nc-email"><input id="nc-email" type="email" className="form-control" value={f.email} onChange={set('email')} required /></Field>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 14 }}>
+          <Field label="Organisation phone" required hint="10-digit mobile; payment opens with it filled in" htmlFor="nc-mobile"><input id="nc-mobile" type="tel" className="form-control" value={f.mobile} onChange={set('mobile')} required /></Field>
           <Field label="GSTIN" hint="Blank = invoiced as unregistered (B2C)" htmlFor="nc-gst"><input id="nc-gst" className="form-control" value={f.gst_number} onChange={set('gst_number')} maxLength={15} style={{ textTransform: 'uppercase' }} /></Field>
-          <Field label="State" hint="Decides CGST+SGST or IGST" htmlFor="nc-state">
+          <Field label="State" required hint="Decides CGST+SGST or IGST" htmlFor="nc-state">
             <CustomSelect id="nc-state" name="state" className="form-control" searchable searchPlaceholder="Search state" placeholder="Select a state" style={{ width: '100%' }}
               value={f.state} onChange={(e) => setF((s) => ({ ...s, state: e.target.value }))}>
               <option value="">Select a state</option>
               {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
             </CustomSelect>
           </Field>
+          <Field label="City" required htmlFor="nc-city"><input id="nc-city" className="form-control" value={f.city} onChange={set('city')} required /></Field>
+          <Field label="PIN code" required htmlFor="nc-pin"><input id="nc-pin" className="form-control" inputMode="numeric" maxLength={6} value={f.pincode} onChange={(e) => setF((s) => ({ ...s, pincode: e.target.value.replace(/\D/g, '') }))} required /></Field>
+          <Field label="Address" required htmlFor="nc-addr"><input id="nc-addr" className="form-control" value={f.address_line} onChange={set('address_line')} required minLength={5} /></Field>
           <Field label="First administrator" required htmlFor="nc-an"><input id="nc-an" className="form-control" value={f.admin_name} onChange={set('admin_name')} required /></Field>
           <Field label="Administrator e-mail" required htmlFor="nc-ae"><input id="nc-ae" type="email" className="form-control" value={f.admin_email} onChange={set('admin_email')} required /></Field>
+          <Field label="Administrator mobile" required htmlFor="nc-am"><input id="nc-am" type="tel" className="form-control" value={f.admin_mobile} onChange={set('admin_mobile')} required /></Field>
           <Field label="Billing plan" htmlFor="nc-mode"><select id="nc-mode" className="form-control" value={f.billing_mode} onChange={set('billing_mode')}><option value="PREPAID">Prepaid (balance)</option><option value="POSTPAID">Postpaid (monthly invoice)</option></select></Field>
           {f.billing_mode === 'POSTPAID' && <Field label="Credit limit (₹)" htmlFor="nc-limit"><input id="nc-limit" className="form-control" inputMode="numeric" value={f.credit_limit_inr} onChange={set('credit_limit_inr')} /></Field>}
           <Field label="Free test (UAT) calls" htmlFor="nc-uat"><input id="nc-uat" className="form-control" inputMode="numeric" value={f.uat_credits_total} onChange={set('uat_credits_total')} /></Field>

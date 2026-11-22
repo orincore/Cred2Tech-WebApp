@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { ArrowLeft, Download, Plug, Receipt } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import CustomSelect from '../../components/CustomSelect';
+import { INDIAN_STATES } from '../whitelabel/OrgDetailsForm';
 import { esrApiAdmin, apiError, saveBlob } from '../../api/esrApiService';
 import { Card, Field, PageFrame, Pill } from '../whitelabel/atoms';
 import { ActionsCell, Modal, Notice, Pager, Sharp, Stat, StatRow, Table, day, dt, inr, inrSigned, num, td, useAsync, ENV_TONE, STATUS_TONE } from './common';
@@ -39,6 +41,7 @@ function Summary({ d, reload }) {
   const cl = d.client;
   const [editing, setEditing] = useState(null);
   const [plan, setPlan] = useState(false);
+  const [contact, setContact] = useState(false);
   return (
     <>
       {cl.status === 'SUSPENDED' && <Notice tone="warning" title="Suspended">{cl.suspended_reason}</Notice>}
@@ -48,11 +51,13 @@ function Summary({ d, reload }) {
         <Stat label="Not yet invoiced" value={inr(d.unbilled_usage.taxable_inr)} sub={`${num(d.unbilled_usage.calls)} calls, before GST`} />
       </StatRow>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-        <Card title="Organisation">
+        <Card title="Organisation" actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setContact(true)}>Edit contact details</button>}>
           <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: 13 }}>
             <dt>E-mail</dt><dd style={{ margin: 0 }}>{d.organisation.email}</dd>
+            <dt>Phone</dt><dd style={{ margin: 0 }}>{d.organisation.mobile || '—'}</dd>
+            <dt>Billing e-mail</dt><dd style={{ margin: 0 }}>{d.organisation.billing_email || '—'}</dd>
             <dt>GSTIN</dt><dd style={{ margin: 0 }}>{d.organisation.gst_number || 'None (invoiced as unregistered)'}</dd>
-            <dt>State</dt><dd style={{ margin: 0 }}>{d.organisation.state || '—'}</dd>
+            <dt>Address</dt><dd style={{ margin: 0 }}>{[d.organisation.address_line, d.organisation.city, d.organisation.state, d.organisation.pincode].filter(Boolean).join(', ') || '—'}</dd>
             <dt>Created</dt><dd style={{ margin: 0 }}>{dt(cl.created_at)}</dd>
           </dl>
         </Card>
@@ -77,7 +82,46 @@ function Summary({ d, reload }) {
       </div>
       {editing && <SettingsModal cl={cl} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
       {plan && <PlanModal cl={cl} onClose={() => setPlan(false)} onSaved={() => { setPlan(false); reload(); }} />}
+      {contact && <ContactModal cl={cl} org={d.organisation} onClose={() => setContact(false)} onSaved={() => { setContact(false); reload(); }} />}
     </>
+  );
+}
+
+// Phone, address and billing e-mail: what invoices show and what the payment window opens with already filled in.
+function ContactModal({ cl, org, onClose, onSaved }) {
+  const [f, setF] = useState({ mobile: org.mobile || '', address_line: org.address_line || '', city: org.city || '', state: org.state || '', pincode: org.pincode || '', billing_email: org.billing_email || '' });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!f.state) { toast.error('Select the state.'); return; }
+    setBusy(true);
+    try { await esrApiAdmin.updateContact(cl.id, { ...f, billing_email: f.billing_email || null }); toast.success('Contact details saved'); onSaved(); }
+    catch (err) { toast.error(apiError(err)); setBusy(false); }
+  };
+  return (
+    <Modal title="Edit contact details" onClose={onClose} width={620}>
+      <form onSubmit={submit}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: 14 }}>
+          <Field label="Organisation phone" required hint="10-digit mobile" htmlFor="ct-mobile"><input id="ct-mobile" type="tel" className="form-control" value={f.mobile} onChange={set('mobile')} required autoFocus /></Field>
+          <Field label="Billing e-mail" hint="Invoices are also sent here" htmlFor="ct-be"><input id="ct-be" type="email" className="form-control" value={f.billing_email} onChange={set('billing_email')} /></Field>
+          <Field label="State" required hint="Decides CGST+SGST or IGST" htmlFor="ct-state">
+            <CustomSelect id="ct-state" name="state" className="form-control" searchable searchPlaceholder="Search state" placeholder="Select a state" style={{ width: '100%' }}
+              value={f.state} onChange={(e) => setF((s) => ({ ...s, state: e.target.value }))}>
+              <option value="">Select a state</option>
+              {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </CustomSelect>
+          </Field>
+          <Field label="City" required htmlFor="ct-city"><input id="ct-city" className="form-control" value={f.city} onChange={set('city')} required /></Field>
+          <Field label="PIN code" required htmlFor="ct-pin"><input id="ct-pin" className="form-control" inputMode="numeric" maxLength={6} value={f.pincode} onChange={(e) => setF((s) => ({ ...s, pincode: e.target.value.replace(/\D/g, '') }))} required /></Field>
+          <Field label="Address" required htmlFor="ct-addr"><input id="ct-addr" className="form-control" value={f.address_line} onChange={set('address_line')} required minLength={5} /></Field>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>Save</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
