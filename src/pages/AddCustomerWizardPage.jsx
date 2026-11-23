@@ -1896,7 +1896,7 @@ const AddCustomerWizardPage = ({ mode = 'DSA' }) => {
                           name="business_mobile"
                           required
                           disabled={formData.mobile_verified}
-                          hint={!formData.mobile_verified ? 'Use the number registered with this PAN — consent is sent only to it.' : undefined}
+                          hint={!formData.mobile_verified ? 'Enter the mobile number linked with Aadhaar — consent is sent only to it.' : undefined}
                         >
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                             <input type="tel" value={formData.business_mobile} onChange={e => setFormData({ ...formData, business_mobile: e.target.value })} className="form-control" placeholder="9820012345" disabled={formData.mobile_verified} />
