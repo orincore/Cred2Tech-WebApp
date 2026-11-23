@@ -96,6 +96,29 @@ export const caseService = {
     const response = await axiosInstance.post(`/verification/bureau/run/${caseId}`, { applicantId });
     return response.data;
   },
+  // Bureau-linked number + consent. Used when the bureau has no record for the number entered on Stage 1:
+  // the server holds the report until the owner of the bureau-linked number approves. The page only shows
+  // what these return; every rule is enforced server-side.
+  getBureauContactState: async (caseId) => {
+    const response = await axiosInstance.get(`/verification/bureau/contact/${caseId}/state`);
+    return response.data;
+  },
+  submitBureauNumber: async (caseId, applicantId, mobile) => {
+    const response = await axiosInstance.post(`/verification/bureau/contact/${caseId}/number`, { applicantId, mobile });
+    return response.data;
+  },
+  resendBureauConsent: async (caseId, id) => {
+    const response = await axiosInstance.post(`/verification/bureau/contact/${caseId}/${id}/resend`);
+    return response.data;
+  },
+  cancelBureauConsent: async (caseId, id) => {
+    const response = await axiosInstance.post(`/verification/bureau/contact/${caseId}/${id}/cancel`);
+    return response.data;
+  },
+  approveBureauConsentSelf: async (caseId, id, otp) => {
+    const response = await axiosInstance.post(`/verification/bureau/contact/${caseId}/${id}/approve-self`, { otp });
+    return response.data;
+  },
   getObligations: async (caseId) => {
     const response = await axiosInstance.get(`/cases/${caseId}/bureau-obligations`);
     return response.data;
