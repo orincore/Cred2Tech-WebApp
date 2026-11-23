@@ -4,8 +4,9 @@ import { toast } from 'react-hot-toast';
 import {
   ArrowLeft, Building2, Wallet, LayoutGrid, ShieldCheck, ShieldOff, Repeat, Tag, Gift, XCircle,
   Users, PlusCircle, MinusCircle, LayoutDashboard, CalendarClock, Trash2, Ban, MonitorSmartphone,
-  ChevronLeft, ChevronRight, Pencil, Save, HardDrive, RotateCcw, Download,
+  ChevronLeft, ChevronRight, Pencil, Save, HardDrive, RotateCcw, Download, ScrollText,
 } from 'lucide-react';
+import TenantApiLogsTab from '../components/admin/TenantApiLogsTab';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
 import { adminTransactionsService } from '../api/adminTransactionsService';
 import StorageMeter from '../components/storage/StorageMeter';
@@ -133,6 +134,7 @@ const TABS = [
   { id: 'refunds', label: 'Refunds', icon: RotateCcw },
   { id: 'team', label: 'Team & Allocation', icon: Users },
   { id: 'sessions', label: 'Sessions & Devices', icon: MonitorSmartphone },
+  { id: 'logs', label: 'Logs', icon: ScrollText },
 ];
 
 // Same lists CreateTenantPage.jsx / OrganizationProfilePage.jsx use for
@@ -1241,6 +1243,8 @@ const AdminTenantManagePage = () => {
               {detailsTarget && <TransactionDetailsModal row={detailsTarget} onClose={() => setDetailsTarget(null)} onRefund={() => {}} />}
             </>
           )}
+
+          {tab === 'logs' && <TenantApiLogsTab tenantId={id} />}
 
           {tab === 'team' && (
             <Card icon={Users} title="Team & Credit Allocation" subtitle="Move credits between this tenant's own wallet and a member's (Sub-Sourcing Partner/employee) wallet">

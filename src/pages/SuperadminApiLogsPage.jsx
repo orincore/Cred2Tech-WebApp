@@ -279,6 +279,26 @@ const ENV_TAG = {
   development: { label: 'Dev server', color: 'var(--warning)' },
   local: { label: 'Localhost', color: 'var(--info, #7c5cff)' },
 };
+// A row that was a fallback attempt, or a step of the bureau-number consent flow, says so, and carries the
+// explanation the server recorded (which vendor failed and why, or which bureau number was used / consented).
+const TRIGGER_TAGS = {
+  FALLBACK: { label: 'Fallback used', color: '#b45309' },
+  BUREAU_CONSENT: { label: 'Bureau consent', color: '#4338ca' },
+  BUREAU_NUMBER_CHECK: { label: 'Bureau number check', color: '#0f766e' },
+};
+const LogNote = ({ l }) => {
+  const tag = TRIGGER_TAGS[l.trigger_source];
+  if (!tag && !l.note) return null;
+  return (
+    <div style={{ marginTop: 4, wordBreak: 'break-word' }}>
+      {tag && (
+        <span style={{ color: tag.color, fontWeight: 800, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.04em' }}>{tag.label}</span>
+      )}
+      {l.note && <div style={{ fontSize: 11, color: 'var(--on-muted)', marginTop: tag ? 2 : 0 }}>{l.note}</div>}
+    </div>
+  );
+};
+
 const EnvironmentTag = ({ l }) => {
   const tag = ENV_TAG[l.environment];
   if (!tag) return null;
@@ -307,6 +327,7 @@ const SuperadminApiLogsPage = () => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [caseSearch, setCaseSearch] = useState('');
   const [smsBalance, setSmsBalance] = useState(null);
   const [smsBalanceError, setSmsBalanceError] = useState(false);
   const [vendors, setVendors] = useState([]);
@@ -331,7 +352,7 @@ const SuperadminApiLogsPage = () => {
   // Filters
   const [filters, setFilters] = useState({
     page: 1, limit: 50, org_id: 'all', status: '', api_code: '', vendor: '', environment: '',
-    date_from: '', date_to: '', search: '', sort_by: 'timestamp', sort_dir: 'desc',
+    date_from: '', date_to: '', search: '', case_id: '', sort_by: 'timestamp', sort_dir: 'desc',
   });
   const [totalPages, setTotalPages] = useState(1);
   const [showSummary, setShowSummary] = useState(false);
@@ -361,6 +382,15 @@ const SuperadminApiLogsPage = () => {
     }, 400);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Same debounce for the Case ID filter: shows everything that happened on one case.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const digits = caseSearch.replace(/\D/g, '');
+      setFilters((f) => (f.case_id === digits ? f : { ...f, case_id: digits, page: 1 }));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [caseSearch]);
 
   const fetchSummary = async () => {
     try {
@@ -493,11 +523,12 @@ const SuperadminApiLogsPage = () => {
 
   const hasError = (l) => !!l.error_message || l.status === 'FAILED' || l.status === 'REFUNDED' || String(l.status || '').startsWith('BLOCKED');
 
-  const hasActiveFilters = search || filters.api_code || filters.status || filters.vendor || filters.environment || filters.date_from || filters.date_to || filters.org_id !== 'all';
+  const hasActiveFilters = search || filters.case_id || filters.api_code || filters.status || filters.vendor || filters.environment || filters.date_from || filters.date_to || filters.org_id !== 'all';
 
   const clearAllFilters = () => {
     setSearch('');
-    setFilters((f) => ({ ...f, org_id: 'all', api_code: '', status: '', vendor: '', environment: '', date_from: '', date_to: '', search: '', page: 1 }));
+    setCaseSearch('');
+    setFilters((f) => ({ ...f, org_id: 'all', api_code: '', status: '', vendor: '', environment: '', date_from: '', date_to: '', search: '', case_id: '', page: 1 }));
   };
 
   return (
@@ -614,6 +645,19 @@ const SuperadminApiLogsPage = () => {
               style={{ ...underlineInput(!!search), paddingLeft: 20, fontSize: isMobile ? 13 : 13 }}
             />
           </div>
+        </div>
+
+        {/* Case ID: every call, fallback and consent step on one case */}
+        <div style={{ flex: isMobile ? 1 : 1, minWidth: isMobile ? 100 : 110, maxWidth: isMobile ? 140 : 150 }}>
+          <span style={{ ...labelSm, fontSize: isMobile ? 10 : 11 }}>Case ID</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="e.g. 7891801"
+            value={caseSearch}
+            onChange={e => setCaseSearch(e.target.value.replace(/\D/g, '').slice(0, 9))}
+            style={{ ...underlineInput(!!caseSearch), fontSize: 13, fontFamily: 'monospace' }}
+          />
         </div>
 
         {/* Mobile: the rest of the filters collapse behind this toggle so
@@ -854,6 +898,10 @@ const SuperadminApiLogsPage = () => {
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Cost</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)' }}>{l.credits_used}</div>
                       </div>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Case ID</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--on-surface)', fontFamily: 'monospace' }}>{l.case_reference || '—'}</div>
+                      </div>
                       <div style={{ gridColumn: 'span 2' }}>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--on-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
                           {l.source === 'SMS' ? 'Mobile' : 'Customer Email'}
@@ -863,6 +911,7 @@ const SuperadminApiLogsPage = () => {
                         </div>
                         <EnvironmentTag l={l} />
                         <ReportReference l={l} />
+                        <LogNote l={l} />
                         {hasError(l) && (
                           l.source !== 'API' ? (
                             <div style={{ marginTop: 4, display: 'flex', alignItems: 'flex-start', gap: 4, color: 'var(--error)', fontSize: 11, fontWeight: 600 }}>
@@ -892,6 +941,8 @@ const SuperadminApiLogsPage = () => {
                   {l.org_name && <span style={{ display: 'block', fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>{l.org_name}</span>}
                 </span>
               ) },
+              // Case the call belongs to (when it belongs to one), so a failure can be traced to its case.
+              { key: 'case_reference', label: 'Case ID', width: '6%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600, wordBreak: 'break-all' }}>{l.case_reference || '—'}</span> },
               { key: 'vendor', label: 'Vendor', width: '8%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => <span style={{ fontSize: 12 }}>{l.vendor || '—'}</span> },
               { key: 'api_code', label: 'API Triggered', width: '12%', sortable: true, padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
                 <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, wordBreak: 'break-word' }}>
@@ -920,13 +971,14 @@ const SuperadminApiLogsPage = () => {
                   </span>
                 );
               }},
-              { key: 'customer_email', label: 'Customer / Failure reason', width: '37%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
+              { key: 'customer_email', label: 'Customer / Failure reason', width: '31%', padding: '9px 8px', whiteSpace: 'normal', render: (l) => (
                 <div style={{ wordBreak: 'break-word' }}>
                   <span style={{ fontSize: 12, fontWeight: 500 }}>
                     {l.source === 'SMS' ? (l.mobile || '—') : (l.customer_email || 'System Gen')}
                   </span>
                   <EnvironmentTag l={l} />
                   <ReportReference l={l} />
+                  <LogNote l={l} />
                   {hasError(l) && (
                     l.source !== 'API' ? (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, color: '#dc2626', fontSize: 11, fontWeight: 600, marginTop: 4 }}>
