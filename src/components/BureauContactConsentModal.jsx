@@ -17,6 +17,9 @@ import PullingIndicator from './ui/PullingIndicator';
 
 const errMessage = (e, fallback) => e?.response?.data?.error || fallback;
 
+/** Whole seconds from now until an ISO time (0 if it is in the past or missing). */
+const secondsUntil = (iso) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 1000)) : 0);
+
 function timeLeft(expiresAt, now) {
   const ms = new Date(expiresAt).getTime() - now;
   if (!(ms > 0)) return 'expired';
@@ -51,6 +54,21 @@ const BureauContactConsentModal = ({ caseId, item, moreCount = 0, onChanged, onA
     const t = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(t);
   }, []);
+
+  // Seconds until "Resend" may be used again (the server tells when; it enforces the limit too). Ticks every
+  // second only while there is a wait, so an idle popup costs nothing.
+  const [resendLeft, setResendLeft] = useState(() => secondsUntil(item?.resend_available_at));
+  useEffect(() => {
+    const compute = () => secondsUntil(item?.resend_available_at);
+    setResendLeft(compute());
+    if (compute() <= 0) return undefined;
+    const t = setInterval(() => {
+      const left = compute();
+      setResendLeft(left);
+      if (left <= 0) clearInterval(t);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [item?.id, item?.resend_available_at]);
 
   if (!item) return null;
 
@@ -104,7 +122,9 @@ const BureauContactConsentModal = ({ caseId, item, moreCount = 0, onChanged, onA
       toast.success(self ? 'A new code was sent.' : 'A new consent message was sent.');
       await onChanged?.();
     } catch (err) {
+      // The server says exactly how long to wait; re-read the state too so the button's countdown matches it.
       setError(errMessage(err, 'Could not send the message again. Please try again shortly.'));
+      if (err?.response?.data?.code === 'RESEND_COOLDOWN') await onChanged?.();
     } finally {
       setBusy(false);
     }
@@ -267,8 +287,10 @@ const BureauContactConsentModal = ({ caseId, item, moreCount = 0, onChanged, onA
               </p>
 
               <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <button type="button" className="btn btn-ghost" onClick={resend} disabled={busy}>
+                <button type="button" className="btn btn-ghost" onClick={resend} disabled={busy || resendLeft > 0}
+                  title={resendLeft > 0 ? 'You can send it again shortly. The earlier link stops working when you do.' : 'Send it again (the earlier link stops working)'}>
                   <Send size={14} /> {self ? 'Resend code' : 'Resend SMS'}
+                  {resendLeft > 0 && ` in ${Math.floor(resendLeft / 60)}:${String(resendLeft % 60).padStart(2, '0')}`}
                 </button>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setMinimized(true)} disabled={busy}>Minimize</button>
