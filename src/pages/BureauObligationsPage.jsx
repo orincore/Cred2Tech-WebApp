@@ -7,7 +7,7 @@ import { listDocuments, downloadDocument } from '../api/documentHelper';
 import Skeleton from '../components/ui/Skeleton';
 import Panel from '../components/ui/Panel';
 import MetricTile from '../components/ui/MetricTile';
-import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw } from 'lucide-react';
+import { PlusCircle, ChevronLeft, Zap, AlertTriangle, BarChart3, CheckCircle2, PenLine, X, FileDown, Trash2, Fingerprint, RotateCcw, Smartphone } from 'lucide-react';
 import PriceTag from '../components/PriceTag';
 
 import CustomSelect from '../components/CustomSelect';
@@ -261,13 +261,16 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
   // The server owns this state (valid 24 hours), so reading it here on every mount is what keeps the popup alive
   // across a refresh, a logout/login, or another device. consentItems holds only what the server says is open.
   const [consentItems, setConsentItems] = useState([]);
+  // { [applicantId]: { bureau_mobile, approved_at } }: the number a report was pulled with after the customer consented.
+  const [bureauNumberUsed, setBureauNumberUsed] = useState({});
   const waitingBeforeRef = useRef(new Set());   // applicant ids that were waiting for consent at the last read
   const cancelledByMeRef = useRef(new Set());   // ...and that this user cancelled, so their end is not "unexplained"
 
   const loadConsentState = useCallback(async () => {
     try {
-      const { items } = await caseService.getBureauContactState(caseId);
+      const { items, used } = await caseService.getBureauContactState(caseId);
       setConsentItems(items || []);
+      setBureauNumberUsed(Object.fromEntries((used || []).map((u) => [u.applicant_id, u])));
       return items || [];
     } catch (e) {
       return null; // non-fatal: keep showing what we last knew
@@ -661,7 +664,18 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
             </div>
           </div>
 
-
+          {/* The report was pulled with a bureau-linked number other than Stage 1's, after its owner consented. */}
+          {bureauNumberUsed[applicant.id] && (
+            <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--border)', background: 'var(--primary-subtle)', display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              <Smartphone size={14} color="var(--primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                Bureau report pulled using mobile number <strong style={{ color: 'var(--text-primary)' }}>{bureauNumberUsed[applicant.id].bureau_mobile}</strong>, with the customer&apos;s consent on{' '}
+                <strong style={{ color: 'var(--text-primary)' }}>
+                  {new Date(bureauNumberUsed[applicant.id].approved_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                </strong>.
+              </span>
+            </div>
+          )}
 
           {/* Obligations */}
           {obligations.length > 0 ? (
