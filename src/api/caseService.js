@@ -12,6 +12,12 @@ export const caseService = {
     return response.data;
   },
 
+  // Live bureau-consent status for the cases on the customers list: ids is a comma-separated list of case ids.
+  getBureauStatus: async (ids) => {
+    const response = await axiosInstance.get('/cases/bureau-status', { params: { ids } });
+    return response.data;
+  },
+
   getCaseById: async (id) => {
     const response = await axiosInstance.get(`/cases/${id}`);
     return response.data;
