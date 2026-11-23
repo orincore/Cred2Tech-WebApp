@@ -280,6 +280,95 @@ const PullAlertBadge = ({ pending, unseenCompleted, isDark, compact }) => {
 
 const PULL_LABELS = [['gst', 'GST'], ['itr', 'ITR'], ['bank', 'BANK']];
 
+// How long until a pending bureau consent lapses, for the badge tooltip.
+const timeLeftLabel = (expiresAt) => {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (!(ms > 0)) return 'expired';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+};
+
+/**
+ * Bureau-number consent status for a case row (see bureauContactConsent.service.js): the bureau had no record for
+ * the Stage 1 mobile number, so the report is pulled with the bureau-linked number once its owner consents.
+ *  - CONSENT_PENDING: waiting for the customer to approve (animated, like the other in-flight pulls)
+ *  - NUMBER_NEEDED:   the bureau-linked number still has to be entered on the Bureau page
+ *  - PULLED:          the customer consented and the bureau report was pulled
+ * Cases that never needed this show nothing.
+ */
+const BureauConsentBadge = ({ status, isDark, compact }) => {
+  if (!status || !status.state) return null;
+  const fontSize = compact ? 10 : 11;
+  const padding = compact ? '2px 6px' : '3px 8px';
+  const base = { display: 'inline-flex', alignItems: 'center', gap: 4, padding, borderRadius: 4, fontSize, fontWeight: 700 };
+  if (status.state === 'CONSENT_PENDING') {
+    const c = isDark ? '#FDE68A' : '#92400E';
+    return (
+      <div style={{ ...base, background: isDark ? '#78350F' : '#FEF3C7', color: c }}
+        title={`Waiting for the customer to approve the bureau consent sent to ${status.masked_mobile || 'the bureau-linked number'}${status.expires_at ? ` · ${timeLeftLabel(status.expires_at)}` : ''}`}>
+        <WorkingDots color={c} /> Bureau consent pending
+      </div>
+    );
+  }
+  if (status.state === 'NUMBER_NEEDED') {
+    return (
+      <div style={{ ...base, background: isDark ? '#7c2d12' : '#FFEDD5', color: isDark ? '#fdba74' : '#9a3412' }}
+        title="The bureau has no record for the Stage 1 number. Open the case's Bureau step and enter the bureau-linked number.">
+        <AlertTriangle size={compact ? 10 : 11} /> Bureau number needed
+      </div>
+    );
+  }
+  if (status.state === 'PULLED') {
+    return (
+      <div style={{ ...base, background: isDark ? '#064e3b' : '#D1FAE5', color: isDark ? '#6ee7b7' : '#065F46' }}
+        title={status.consented_at ? `Bureau report pulled with the customer's consent on ${new Date(status.consented_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}` : "Bureau report pulled with the customer's consent"}>
+        <CheckCircle2 size={compact ? 10 : 11} /> Bureau pulled
+      </div>
+    );
+  }
+  return null;
+};
+
+/**
+ * Keeps the bureau badges live. The first paint comes with the pipeline response (case.bureau_consent); while any
+ * case on screen is waiting for consent, ask the server for just those cases every few seconds, so "consent
+ * pending" turns into "bureau pulled" without a refresh. Coming back to the tab refreshes everything on screen once.
+ * A fresh pipeline load replaces whatever was polled.
+ */
+const BUREAU_POLL_MS = 8000;
+function useLiveBureauStatus(cases) {
+  const [live, setLive] = useState({});
+  const effective = useCallback((c) => (c.id in live ? live[c.id] : (c.bureau_consent || null)), [live]);
+
+  useEffect(() => { setLive({}); }, [cases]);
+
+  const pendingKey = cases.filter((c) => effective(c)?.state === 'CONSENT_PENDING').map((c) => c.id).join(',');
+  const allKey = cases.map((c) => c.id).join(',');
+
+  const refresh = useCallback(async (idsCsv) => {
+    if (!idsCsv) return;
+    try {
+      const { statuses } = await caseService.getBureauStatus(idsCsv);
+      if (statuses) setLive((prev) => ({ ...prev, ...statuses }));
+    } catch (e) { /* a missed refresh just keeps the last known badge */ }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingKey) return undefined;
+    const timer = setInterval(() => refresh(pendingKey), BUREAU_POLL_MS);
+    return () => clearInterval(timer);
+  }, [pendingKey, refresh]);
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(allKey); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [allKey, refresh]);
+
+  return effective;
+}
+
 /**
  * Live-updates the current page's pending/unseen-completed pull badges over
  * the same case-room sockets the case detail page itself uses (see
@@ -412,6 +501,9 @@ const CustomersListPage = () => {
       .filter((t) => !pending.includes(t));
     return { pending, unseenCompleted };
   }, [livePullStatusByCase]);
+
+  // Live bureau-number consent status ("Bureau consent pending" -> "Bureau pulled") — see useLiveBureauStatus.
+  const getBureau = useLiveBureauStatus(pagedCases);
 
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
 
@@ -654,6 +746,11 @@ const CustomersListPage = () => {
                     </div>
                   );
                 })()}
+                {getBureau(c)?.state && (
+                  <div style={{ marginBottom: 10 }}>
+                    <BureauConsentBadge status={getBureau(c)} isDark={isDark} />
+                  </div>
+                )}
                 {c.alert_flag === 'PDD_PENDING' && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>
                     <AlertTriangle size={12} /> PDD Pending
@@ -770,6 +867,7 @@ const CustomersListPage = () => {
                             <PullAlertBadge pending={pending} unseenCompleted={unseenCompleted} isDark={isDark} compact />
                           );
                         })()}
+                        {getBureau(c)?.state && <BureauConsentBadge status={getBureau(c)} isDark={isDark} compact />}
                         {c.alert_flag === 'PDD_PENDING' && (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: isDark ? '#78350F' : '#FEF3C7', color: isDark ? '#FDE68A' : '#92400E', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>
                             <AlertTriangle size={10} /> PDD
