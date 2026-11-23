@@ -76,6 +76,27 @@ const BureauContactConsentModal = ({ caseId, item, moreCount = 0, onChanged, onA
   const self = item.mode === 'SELF';
   const name = item.applicant_name || 'the applicant';
 
+  // The customer approved and the report is being saved (a few seconds). Nothing to do but wait; the page reloads
+  // itself with the report and the download button when the server says it is really done.
+  if (item.phase === 'RELEASING') {
+    return (
+      <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Fetching the bureau report">
+        <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <div style={{ width: 42, height: 42, background: 'var(--success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <ShieldCheck size={20} color="var(--success)" />
+            </div>
+            <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>Customer approved</h2>
+          </div>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
+            The consent was approved. Fetching and saving the bureau report for <strong>{name}</strong>. This takes a few seconds.
+          </p>
+          <PullingIndicator label="Saving the report…" />
+        </div>
+      </div>
+    );
+  }
+
   const submitNumber = async (e) => {
     e?.preventDefault();
     setError('');

@@ -281,22 +281,37 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   // While a request waits for the customer, keep asking the server; this runs in the background even when the
   // popup is minimized, so the report appears here as soon as the customer approves.
+  // RELEASING (the customer approved, the report is being saved, a few seconds) is polled faster so the page
+  // picks the finished report up as soon as it exists.
   useEffect(() => {
-    if (!consentItems.some(i => i.phase === 'WAITING_CONSENT')) return undefined;
-    const timer = setInterval(loadConsentState, 5000);
+    const inFlight = consentItems.some(i => i.phase === 'WAITING_CONSENT' || i.phase === 'RELEASING');
+    if (!inFlight) return undefined;
+    const fast = consentItems.some(i => i.phase === 'RELEASING');
+    const timer = setInterval(loadConsentState, fast ? 2000 : 5000);
     return () => clearInterval(timer);
   }, [consentItems, loadConsentState]);
 
   // A request that was waiting and is no longer listed has ended: approved (the report is now saved), cancelled,
   // or expired. Refresh the page data, and say which.
   useEffect(() => {
-    const nowWaiting = new Set(consentItems.filter(i => i.phase === 'WAITING_CONSENT').map(i => i.applicant_id));
+    // "In flight" = waiting for the customer, or approved and being saved (RELEASING). The server keeps a request
+    // listed as RELEASING until the report is really saved, so "no longer listed" below means it is truly finished.
+    const nowWaiting = new Set(consentItems.filter(i => i.phase === 'WAITING_CONSENT' || i.phase === 'RELEASING').map(i => i.applicant_id));
     const ended = [...waitingBeforeRef.current].filter(id => !nowWaiting.has(id) && !consentItems.some(i => i.applicant_id === id));
     waitingBeforeRef.current = nowWaiting;
     if (ended.length === 0) return;
     (async () => {
       try { await caseService.syncObligations(caseId); } catch (e) { /* the report may simply not exist */ }
-      const fresh = await load();
+      let fresh = await load();
+      // Belt and braces: if the page still does not show the report as fetched (and this user did not cancel),
+      // look again a few times before concluding the request ended without approval.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const stillMissing = ended.some((id) =>
+          !cancelledByMeRef.current.has(id) && !(fresh?.grouped || []).find(g => g.applicant.id === id)?.applicant?.bureau_fetched);
+        if (!stillMissing) break;
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        fresh = await load();
+      }
       ended.forEach((applicantId) => {
         const applicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
         if (applicant?.bureau_fetched) toast.success('The customer approved. The bureau report is now available.', { duration: 6000 });
