@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { caseService } from '../api/caseService';
+import BureauContactConsentModal from '../components/BureauContactConsentModal';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { listDocuments, downloadDocument } from '../api/documentHelper';
@@ -256,6 +257,52 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Bureau-linked number + customer consent (see BureauContactConsentModal) ───────────────────────────────
+  // The server owns this state (valid 24 hours), so reading it here on every mount is what keeps the popup alive
+  // across a refresh, a logout/login, or another device. consentItems holds only what the server says is open.
+  const [consentItems, setConsentItems] = useState([]);
+  const waitingBeforeRef = useRef(new Set());   // applicant ids that were waiting for consent at the last read
+  const cancelledByMeRef = useRef(new Set());   // ...and that this user cancelled, so their end is not "unexplained"
+
+  const loadConsentState = useCallback(async () => {
+    try {
+      const { items } = await caseService.getBureauContactState(caseId);
+      setConsentItems(items || []);
+      return items || [];
+    } catch (e) {
+      return null; // non-fatal: keep showing what we last knew
+    }
+  }, [caseId]);
+
+  useEffect(() => { loadConsentState(); }, [loadConsentState]);
+
+  // While a request waits for the customer, keep asking the server; this runs in the background even when the
+  // popup is minimized, so the report appears here as soon as the customer approves.
+  useEffect(() => {
+    if (!consentItems.some(i => i.phase === 'WAITING_CONSENT')) return undefined;
+    const timer = setInterval(loadConsentState, 5000);
+    return () => clearInterval(timer);
+  }, [consentItems, loadConsentState]);
+
+  // A request that was waiting and is no longer listed has ended: approved (the report is now saved), cancelled,
+  // or expired. Refresh the page data, and say which.
+  useEffect(() => {
+    const nowWaiting = new Set(consentItems.filter(i => i.phase === 'WAITING_CONSENT').map(i => i.applicant_id));
+    const ended = [...waitingBeforeRef.current].filter(id => !nowWaiting.has(id) && !consentItems.some(i => i.applicant_id === id));
+    waitingBeforeRef.current = nowWaiting;
+    if (ended.length === 0) return;
+    (async () => {
+      try { await caseService.syncObligations(caseId); } catch (e) { /* the report may simply not exist */ }
+      const fresh = await load();
+      ended.forEach((applicantId) => {
+        const applicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
+        if (applicant?.bureau_fetched) toast.success('The customer approved. The bureau report is now available.', { duration: 6000 });
+        else if (!cancelledByMeRef.current.has(applicantId)) toast('The consent request ended without approval. Use the pull button to start again.', { duration: 6000 });
+        cancelledByMeRef.current.delete(applicantId);
+      });
+    })();
+  }, [consentItems, caseId, load]);
+
   // `load()` also re-syncs bureau data and can re-run bureau verification —
   // necessary on initial mount, but massive overkill (and a jarring full-page
   // spinner, since it flips `loading` and this component returns a full-page
@@ -341,6 +388,17 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
     setRetryingFor(applicantId);
     try {
       const result = await caseService.runBureauVerification(caseId, applicantId);
+
+      // The bureau has no record for the Stage 1 number (or a consent request is already waiting): this is not a
+      // failure. The popup asks for the bureau-linked number / shows the wait; nothing else to do here.
+      const needsConsentFlow = (result?.errors || []).some(e =>
+        String(e.applicantId) === String(applicantId) && ['BUREAU_NUMBER_REQUIRED', 'BUREAU_CONSENT_PENDING'].includes(e.code)
+      );
+      if (needsConsentFlow) {
+        await loadConsentState();
+        return;
+      }
+
       await caseService.syncObligations(caseId);
       const fresh = await load();
       const freshApplicant = (fresh?.grouped || []).find(g => g.applicant.id === applicantId)?.applicant;
@@ -884,6 +942,16 @@ export default function BureauObligationsPage({ caseId, onNext, onBack, mode, wa
           ) : null}
         </div>
       </div>
+
+      {/* Bureau-linked number / waiting for the customer's consent. An overlay, so the page layout is unchanged. */}
+      <BureauContactConsentModal
+        caseId={caseId}
+        item={consentItems[0]}
+        moreCount={Math.max(0, consentItems.length - 1)}
+        onChanged={loadConsentState}
+        onCancelled={() => { if (consentItems[0]) cancelledByMeRef.current.add(consentItems[0].applicant_id); }}
+        onApproved={async () => { await loadConsentState(); }}
+      />
     </div>
   );
 }
