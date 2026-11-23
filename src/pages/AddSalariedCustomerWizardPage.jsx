@@ -1077,7 +1077,7 @@ const AddSalariedCustomerWizardPage = () => {
                           name="business_mobile"
                           required
                           disabled={formData.mobile_verified}
-                          hint={!formData.mobile_verified ? 'Use the number registered with this PAN — consent is sent only to it.' : undefined}
+                          hint={!formData.mobile_verified ? 'Enter the mobile number linked with Aadhaar — consent is sent only to it.' : undefined}
                         >
                           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                             <input
