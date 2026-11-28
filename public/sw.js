@@ -174,7 +174,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (p.startsWith('/assets/')) { event.respondWith(cacheFirstAsset(event)); return; }
-  if (p === '/manifest.webmanifest' || STATIC_PATH.test(p)) {
+  if (p === '/manifest.json' || STATIC_PATH.test(p)) {
     event.respondWith((async () => {
       const shelled = await caches.match(request, { cacheName: SHELL_CACHE, ignoreVary: true });
       return shelled || staleWhileRevalidate(event, STATIC_CACHE);

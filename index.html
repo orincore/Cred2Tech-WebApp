@@ -15,7 +15,8 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="manifest" href="/manifest.webmanifest" data-c2t-brand />
+    <!-- .json (not .webmanifest): every web server already serves it as JSON, so installability never depends on a MIME setting. -->
+    <link rel="manifest" href="/manifest.json" data-c2t-brand />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" data-c2t-brand />
     <!-- iOS shows these while an installed app starts (it cannot take one from the manifest). Static twin of the splash below. -->
     <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />

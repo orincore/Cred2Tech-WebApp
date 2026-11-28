@@ -13,7 +13,7 @@ import path from 'node:path'
 function c2tServiceWorker() {
   let outDir
   const SHELL_FILES = [
-    'index.html', 'offline.html', 'manifest.webmanifest',
+    'index.html', 'offline.html', 'manifest.json',
     'icons/icon-192.png', 'icons/icon-512.png', 'icons/splash-mark.png', 'icons/splash-wordmark.png',
     'logos/favicon.png', 'logos/black-logo.png', 'logos/white-logo.png',
   ]

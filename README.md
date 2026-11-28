@@ -22,7 +22,7 @@ The WebApp installs to a phone's home screen or a desktop as "Cred2Tech" and ope
 
 | Piece | Where |
 |---|---|
-| Manifest (name, icons, colours) | `public/manifest.webmanifest` |
+| Manifest (name, icons, colours) | `public/manifest.json` (not `.webmanifest`: servers serve `.json` correctly with no extra MIME setting) |
 | Icons, iOS launch images, splash artwork | `public/icons/` (generated from the logo; any-purpose, maskable, 180px Apple icon) |
 | Animated launch splash | inline in `index.html`; shown only in an installed (standalone) window, removed once the app has rendered (`window.__c2tSplashHide`, called from `src/main.jsx`). Says "still loading" after 7s and offers Reload after 16s |
 | Service worker | `public/sw.js` (caching, offline fallback, web push). `vite.config.js` (`c2tServiceWorker`) stamps each release's file list into `dist/sw.js` at build time |
