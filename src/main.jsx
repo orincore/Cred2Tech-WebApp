@@ -13,15 +13,21 @@ import { initBranding } from './branding/brandingStore'
 // silently blocked by a guard flag left over from a previous deploy's fix.
 try { sessionStorage.removeItem('c2t_chunk_reload_attempted'); } catch { /* ignore */ }
 
-// Registers public/sw.js, whose only job is swapping the browser's own bare
-// "no internet" page (the Chrome dino game and equivalents elsewhere) for
-// our branded public/offline.html when a full-page navigation fails offline
-// — a case OfflineOverlay.jsx can't cover since that requires the app's own
-// JS to already be running. Registered after `load` so it never competes
+// Registers public/sw.js: the installable-app shell + low-bandwidth caching, the branded offline fallback
+// (replacing the browser's bare "no internet" page), and web push. Registered after `load` so it never competes
 // with the current page's own startup for the network/CPU.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* best-effort only */ });
+    navigator.serviceWorker.register('/sw.js').then((registration) => {
+      // An installed app can stay open for days and never "navigate", which is the browser's own trigger to look for a
+      // new sw.js. Ask again whenever the app comes back to the foreground (at most once every 30 minutes).
+      let lastCheck = Date.now();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || Date.now() - lastCheck < 30 * 60 * 1000) return;
+        lastCheck = Date.now();
+        registration.update().catch(() => { /* offline: try again next time */ });
+      });
+    }).catch(() => { /* best-effort only */ });
   });
 }
 
@@ -56,4 +62,7 @@ initBranding().then((branding) => {
       </React.StrictMode>
     ),
   )
+  // Installed-app launch splash (index.html): only exists in a standalone window, a no-op everywhere else. It waits
+  // out its own minimum animation time and any route chunk still downloading before fading away.
+  requestAnimationFrame(() => { if (typeof window.__c2tSplashHide === 'function') window.__c2tSplashHide(); })
 })

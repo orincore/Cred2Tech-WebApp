@@ -30,7 +30,7 @@ const CustomerTypeModal = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="c2t-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div
             onClick={handleSelectMSME}
             style={{ border: '2px solid var(--border)', borderRadius: 0, padding: '22px 20px', cursor: 'pointer', transition: 'all 0.2s', background: 'var(--bg-elevated)' }}

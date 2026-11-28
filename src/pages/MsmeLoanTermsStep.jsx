@@ -239,7 +239,7 @@ export default function MsmeLoanTermsStep({ caseId, lenders = [], existingApplic
               </div>
 
               {emi > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '14px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                <div className="c2t-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '14px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 }}>
                   <div>
                     <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly EMI</div>
                     <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>{formatDynamicCurrency(emi)}</div>

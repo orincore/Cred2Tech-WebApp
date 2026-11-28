@@ -931,6 +931,8 @@ const MyWalletPage = () => {
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               padding: '0 24px', background: 'var(--primary)', color: '#fff', border: 'none',
               fontSize: 13, fontWeight: 700, cursor: 'pointer', minWidth: isMobile ? '100%' : 160,
+              // On a phone this wraps to its own row, where stretch no longer gives it the cards' height: keep a real tap target.
+              minHeight: isMobile ? 46 : undefined,
             }}
           >
             <Plus size={16} /> Recharge Wallet

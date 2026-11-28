@@ -511,7 +511,7 @@ export default function CaseDetailPage() {
   // detail cards, table card) so the load reads as "this page is filling in"
   // rather than a blank screen with a spinner.
   if (loading) return (
-    <div className="hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }} role="status" aria-label="Loading case">
+    <div className="c2t-top-offset hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }} role="status" aria-label="Loading case">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 20, flexWrap: 'wrap' }}>
         <div>
           <Skeleton width={190} height={12} style={{ marginBottom: 10 }} />
@@ -585,7 +585,7 @@ export default function CaseDetailPage() {
   const { isLenderLocked, isProductTypeLocked } = sanctionContext;
 
   return (
-    <div className="case-detail-page hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
+    <div className="case-detail-page c2t-top-offset hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '24px 20px' }}>
       <style>{`
         .case-detail-page .card, .case-detail-page .btn, .case-detail-page .form-control,
         .case-detail-page .modal-box, .case-detail-page .notice {

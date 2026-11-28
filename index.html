@@ -6,13 +6,150 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Cred2Tech - Sourcing Partner & MSME Platform" />
     <title>Cred2Tech | Login</title>
+
+    <!-- PWA: installable app. Everything in this block that carries the Cred2Tech name or logo is marked data-c2t-brand;
+         the script below removes it on a white-label organisation's host, so an org's site is never presented as Cred2Tech. -->
+    <meta name="application-name" content="Cred2Tech" data-c2t-brand />
+    <meta name="apple-mobile-web-app-title" content="Cred2Tech" data-c2t-brand />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" data-c2t-brand />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" data-c2t-brand />
+    <!-- iOS shows these while an installed app starts (it cannot take one from the manifest). Static twin of the splash below. -->
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-1242x2208.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" data-c2t-brand href="/icons/launch-640x1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+
+    <!-- Runs before first paint. (1) Is this a white-label organisation's host? Same rule as isOrgCandidateHost() in
+         src/branding/brandingCore.js: exactly one label under a configured base domain, and not a listed main host.
+         If so, strip the Cred2Tech PWA identity above. (2) Is this an installed app (standalone window)? Then show
+         the animated splash below until the app has rendered (see window.__c2tSplashHide, called from src/main.jsx). -->
+    <script>
+      (function () {
+        var d = document, root = d.documentElement;
+        function list(v) { return (v && v.charAt(0) !== '%' ? v : '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean); }
+        var bases = list('%VITE_WL_BASE_DOMAINS%'), mains = list('%VITE_MAIN_APP_HOSTS%');
+        var h = String(location.hostname || '').toLowerCase().replace(/\.$/, '');
+        var org = false;
+        if (h && mains.indexOf(h) === -1) {
+          for (var i = 0; i < bases.length; i++) {
+            var b = bases[i].replace(/^\.+|\.+$/g, '');
+            if (b && h.length > b.length + 1 && h.slice(-(b.length + 1)) === '.' + b && h.slice(0, -(b.length + 1)).indexOf('.') === -1) { org = true; break; }
+          }
+        }
+        var standalone = false;
+        try {
+          standalone = !!(navigator.standalone === true ||
+            (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: minimal-ui)').matches)));
+        } catch (e) {}
+        if (org) {
+          var nodes = d.querySelectorAll('[data-c2t-brand]');
+          for (var n = 0; n < nodes.length; n++) nodes[n].parentNode.removeChild(nodes[n]);
+          root.classList.add('c2t-org');
+        }
+        if (standalone) root.classList.add('c2t-standalone');
+
+        // The browser's install offer can fire before React mounts: keep it for src/components/InstallPrompt.jsx.
+        window.addEventListener('beforeinstallprompt', function (e) {
+          e.preventDefault(); // we show our own prompt (small screens); the desktop address-bar install icon is unaffected
+          window.__c2tInstall = e;
+          window.dispatchEvent(new Event('c2t-install-ready'));
+        });
+
+        var started = Date.now(), MIN_MS = 1100, hidden = false;
+        // Called once the app has rendered. Waits out the minimum animation time and any route chunk still loading.
+        window.__c2tSplashHide = function () {
+          if (hidden) return;
+          var tries = 0;
+          (function attempt() {
+            var loading = d.querySelector('[data-c2t-loading]');
+            var wait = MIN_MS - (Date.now() - started);
+            if ((wait > 0 || loading) && tries++ < 80) { setTimeout(attempt, Math.max(60, Math.min(wait, 120))); return; }
+            hidden = true;
+            var el = d.getElementById('c2t-splash');
+            root.classList.remove('c2t-standalone');
+            if (!el) return;
+            el.classList.add('c2t-splash-out');
+            setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 450);
+          })();
+        };
+        // Slow connection: say so, then offer a reload. Never hides the splash by itself (the app may still arrive).
+        if (standalone) {
+          setTimeout(function () { var s = d.getElementById('c2t-splash'); if (s && !hidden) s.classList.add('c2t-slow'); }, 7000);
+          setTimeout(function () { var s = d.getElementById('c2t-splash'); if (s && !hidden) s.classList.add('c2t-stuck'); }, 16000);
+        }
+      })();
+    </script>
+    <style>
+      /* Animated launch splash. Only ever displayed in an installed (standalone) window; in a normal browser tab it is display:none. */
+      #c2t-splash { display: none; }
+      html.c2t-standalone #c2t-splash {
+        position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: #ffffff; color: #11103f; transition: opacity .4s ease; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      #c2t-splash.c2t-splash-out { opacity: 0; pointer-events: none; }
+      .c2t-stage { position: relative; display: flex; flex-direction: column; align-items: center; }
+      .c2t-ring { position: absolute; left: 50%; top: 50px; width: 150px; height: 150px; margin: -75px 0 0 -75px; border-radius: 50%; border: 1.5px solid rgba(17, 15, 63, .22); opacity: 0; transform: scale(.6); animation: c2t-ring 2.4s ease-out .5s infinite; }
+      .c2t-ring.r2 { animation-delay: 1.3s; }
+      .c2t-mark { position: relative; width: 120px; height: auto; animation: c2t-mark-in .9s cubic-bezier(.16, 1, .3, 1) both, c2t-float 3s ease-in-out 1s infinite; }
+      .c2t-mark img { display: block; width: 100%; height: auto; }
+      .c2t-shine { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .85) 50%, transparent 65%) 130% 0 / 260% 100% no-repeat; animation: c2t-shine 2.2s ease-in-out 1s infinite; }
+      #c2t-splash .c2t-word { display: block; width: 200px; height: auto; margin-top: 24px; animation: c2t-word-in .7s cubic-bezier(.16, 1, .3, 1) .45s both; }
+      .c2t-hint { position: absolute; left: 0; right: 0; bottom: max(36px, env(safe-area-inset-bottom)); text-align: center; font-size: 13px; line-height: 1.5; padding: 0 28px; opacity: 0; transition: opacity .4s ease; pointer-events: none; }
+      #c2t-splash.c2t-slow .c2t-hint { opacity: .7; }
+      .c2t-retry { display: none; margin: 12px auto 0; padding: 10px 22px; border-radius: 10px; border: 1px solid rgba(17, 15, 63, .3); background: transparent; color: inherit; font: inherit; font-weight: 600; }
+      #c2t-splash.c2t-stuck .c2t-hint { opacity: 1; pointer-events: auto; }
+      #c2t-splash.c2t-stuck .c2t-retry { display: block; }
+      /* An organisation's host never shows Cred2Tech artwork: neutral splash with just a soft pulse. */
+      html.c2t-org .c2t-mark, html.c2t-org .c2t-word { display: none; }
+      html.c2t-org .c2t-ring { top: 0; margin-top: -75px; }
+      @keyframes c2t-mark-in { from { opacity: 0; transform: translateY(14px) scale(.86); clip-path: inset(0 100% 0 0); } 55% { clip-path: inset(0 0 0 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); } }
+      @keyframes c2t-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+      @keyframes c2t-shine { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+      @keyframes c2t-ring { 0% { opacity: 0; transform: scale(.6); } 25% { opacity: .9; } 100% { opacity: 0; transform: scale(1.7); } }
+      @keyframes c2t-word-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) {
+        .c2t-ring, .c2t-shine { display: none; }
+        .c2t-mark, #c2t-splash .c2t-word { animation: c2t-fade .5s ease both; }
+        @keyframes c2t-fade { from { opacity: 0; } to { opacity: 1; } }
+      }
+    </style>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-    <script src="/lottie/lottie-player.js"></script>
   </head>
   <body>
+    <div id="c2t-splash" role="status" aria-label="Loading Cred2Tech">
+      <div class="c2t-stage">
+        <span class="c2t-ring"></span><span class="c2t-ring r2"></span>
+        <div class="c2t-mark"><img id="c2t-splash-mark" alt="" width="120" height="100" decoding="async" /><span class="c2t-shine" id="c2t-shine"></span></div>
+        <img id="c2t-splash-word" class="c2t-word" alt="Cred2Tech" width="200" height="46" decoding="async" />
+      </div>
+      <div class="c2t-hint">Still loading. Your connection looks slow, hang tight.<button type="button" class="c2t-retry" onclick="location.reload()">Reload</button></div>
+    </div>
+    <script>
+      // Artwork is only requested inside an installed app on the Cred2Tech host (the SW serves it from cache after the first launch).
+      (function () {
+        var r = document.documentElement.classList;
+        if (!r.contains('c2t-standalone') || r.contains('c2t-org')) return;
+        var m = document.getElementById('c2t-splash-mark'), w = document.getElementById('c2t-splash-word'), s = document.getElementById('c2t-shine');
+        m.src = '/icons/splash-mark.png'; w.src = '/icons/splash-wordmark.png';
+        s.style.webkitMask = s.style.mask = 'url(/icons/splash-mark.png) center / contain no-repeat';
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

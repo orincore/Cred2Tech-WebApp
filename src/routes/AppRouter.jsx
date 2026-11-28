@@ -8,6 +8,7 @@ import ProtectedRoute from './ProtectedRoute';
 import RouteTitle from './RouteTitle';
 import MainAppOnly from './MainAppOnly';
 import SessionRevokedModal from '../components/SessionRevokedModal';
+import InstallPrompt from '../components/InstallPrompt';
 import { DASHBOARD_ROLES, API_CLIENT_ROLES } from '../constants/roles';
 
 // Lazy-load pages for better performance
@@ -75,6 +76,7 @@ const AdminTicketDetailPage = lazy(() => import('../pages/AdminTicketDetailPage'
 const AdminTicketRecipientsPage = lazy(() => import('../pages/AdminTicketRecipientsPage'));
 const AdminTransactionsPage = lazy(() => import('../pages/AdminTransactionsPage'));
 const AdminWalletRevenuePage = lazy(() => import('../pages/AdminWalletRevenuePage'));
+const AdminDeviceAnalyticsPage = lazy(() => import('../pages/AdminDeviceAnalyticsPage'));
 const AdminDataPurgePage = lazy(() => import('../pages/AdminDataPurgePage'));
 const AdminSendNotificationPage = lazy(() => import('../pages/AdminSendNotificationPage'));
 const AdminNotificationAnalyticsPage = lazy(() => import('../pages/AdminNotificationAnalyticsPage'));
@@ -109,7 +111,8 @@ const ProfileForRole = () => {
   return hasRole(API_CLIENT_ROLES) ? <EsrApiProfilePage /> : <ProfilePage />;
 };
 
-const PageLoader = () => <div style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
+// data-c2t-loading: the installed-app splash (index.html) stays up until no route loader is on screen.
+const PageLoader = () => <div data-c2t-loading="" style={{ minHeight: '100dvh', background: 'var(--bg-base, var(--bg))' }} />;
 
 // Mounted at /SUNBY/:token and /c/:token — the DLT-registered SMS link shape
 // is domain/senderId/<opaque-token> with no further path segments (see
@@ -142,6 +145,7 @@ const AppRouter = () => (
   <BrowserRouter>
     <AuthProvider>
       <RouteTitle />
+      <InstallPrompt />
       <SessionRevokedModal />
       {/* NotificationProvider is inside AuthProvider so it can read auth.user;
           NotificationPanel is rendered here so it overlays all routes. */}
@@ -350,6 +354,9 @@ const AppRouter = () => (
             } />
             <Route path="/admin/wallet-revenue" element={
                <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminWalletRevenuePage /></ProtectedRoute>
+            } />
+            <Route path="/admin/device-analytics" element={
+               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}><AdminDeviceAnalyticsPage /></ProtectedRoute>
             } />
             {/* Manual data purge (CT-004-DPP right-to-erasure requests) —
                 Cred2Tech's own admin only, never DSA_ADMIN. */}

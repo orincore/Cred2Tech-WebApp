@@ -21,6 +21,7 @@ import {
   HandCoins,
   MessageSquare,
   Receipt,
+  MonitorSmartphone,
   Trash2,
   ServerCog,
   Tag,
@@ -131,6 +132,13 @@ export const NAV_ITEMS = [
     label: 'Wallet Revenue & GST',
     path: '/admin/wallet-revenue',
     icon: Receipt,
+    roles: ['SUPER_ADMIN'],
+  },
+  {
+    id: 'admin-device-analytics',
+    label: 'Device Analytics',
+    path: '/admin/device-analytics',
+    icon: MonitorSmartphone,
     roles: ['SUPER_ADMIN'],
   },
   {

@@ -6,6 +6,7 @@ import MsmeSidebar from '../components/layout/MsmeSidebar';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
+import UsageTracker from '../components/UsageTracker';
 
 // Shell for the MSME direct portal. Mirrors AppLayout's responsive sidebar
 // behavior; the /msme/login route renders bare (no chrome).
@@ -192,6 +193,7 @@ const MsmeLayout = () => (
   <MsmeAuthProvider>
     <LayoutContent />
     <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
+    <UsageTracker />
   </MsmeAuthProvider>
 );
 

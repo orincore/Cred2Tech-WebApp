@@ -52,6 +52,9 @@ export const ThemeProvider = ({ children }) => {
       document.documentElement.style.setProperty('--on-surface', colors.onSurface);
       document.documentElement.style.setProperty('--on-muted', colors.onMuted);
       document.documentElement.style.setProperty('--outline', colors.outline);
+      // Colours the phone's status bar / installed-app title bar to match the app's own header in each theme.
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) themeMeta.setAttribute('content', colors.surface);
     }
   }, [theme, mounted]);
 

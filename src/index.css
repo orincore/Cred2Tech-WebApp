@@ -654,6 +654,13 @@ tbody td {
    pulse instead — no spinning anywhere in the app. */
 .icon-loading { animation: pulse 1.2s ease-in-out infinite; }
 
+/* Two/three-up grids that read badly on a phone: stack them below 560px (nothing changes above that). */
+@media (max-width: 560px) {
+  .c2t-stack-sm {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 768px) {
   .app-main {
@@ -674,5 +681,40 @@ tbody td {
      outrank on specificity alone. */
   input, select, textarea, .form-control {
     font-size: 16px !important;
+  }
+
+  /* ---- Phone-only layout fixes (installed-app / mobile pass). Nothing here applies above 768px. ---- */
+
+  /* PageHeader's action group (wallet chip, bell, page buttons) is flex-shrink:0 with no max width, so on a phone it
+     stayed as wide as all its buttons in one row and the page clipped it ("Add Customer", "Edit", "Upgrade Plan").
+     Letting it shrink to the screen width lets its own flex-wrap drop the extra buttons onto a second row. */
+  .c2t-page-header-actions {
+    flex-shrink: 1 !important;
+    max-width: 100%;
+    row-gap: 8px;
+  }
+  .c2t-page-header > div:first-child {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  /* Pages that scroll inside their own container sit under the fixed 60px mobile header unless they add their own
+     top offset (most do; the case page and its loading skeleton did not). */
+  .c2t-top-offset {
+    padding: 76px 16px 24px !important;
+  }
+
+  /* iOS Safari inflates text in landscape unless told not to. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* Touch screens only: tapping a control is a tap, never a double-tap-to-zoom wait (removes the ~300ms delay). */
+@media (pointer: coarse) {
+  a, button, [role='button'], input, select, textarea, label, summary {
+    touch-action: manipulation;
   }
 }

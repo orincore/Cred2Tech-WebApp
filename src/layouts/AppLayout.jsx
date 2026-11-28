@@ -12,6 +12,7 @@ import { useTheme } from '../context/ThemeContext';
 import { getInitials } from '../utils/helpers';
 import { TOAST_OPTIONS } from '../constants/toastOptions';
 import PageTour from '../components/tour/PageTour';
+import UsageTracker from '../components/UsageTracker';
 
 // First-time-visit walkthrough of the app shell itself (nav, search, theme
 // toggle, profile row) — separate step lists for desktop (sidebar is always
@@ -248,6 +249,8 @@ const AppLayout = () => {
           sidebar header (next to the logo) — DSA roles in Sidebar.jsx, MSME
           customers in MsmeSidebar.jsx — so no floating overlay is needed here. */}
       <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
+      {/* Reports device facts + active seconds for the Super Admin Device Analytics page. Renders nothing. */}
+      <UsageTracker />
       {/* First-time app-shell walkthrough — PageTour itself already gates on
           DSA_ADMIN/DSA_MEMBER/SUB_DSA (see DSA_TOUR_ROLES), so this never
           shows for the MSME sidebar rendered above. */}

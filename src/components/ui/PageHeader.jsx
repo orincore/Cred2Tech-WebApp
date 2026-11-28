@@ -36,7 +36,7 @@ const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null, compact
   }, [user?.role]);
 
   return (
-    <div style={{ marginBottom: compact ? 14 : 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', width: '100%' }}>
+    <div className="c2t-page-header" style={{ marginBottom: compact ? 14 : 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', width: '100%' }}>
       <div>
         {breadcrumbs.length > 0 && (
           <nav style={{
@@ -68,7 +68,7 @@ const PageHeader = ({ title, subtitle, breadcrumbs = [], actions = null, compact
 
       {/* Right-hand group: bell + wallet chip + any page-level actions share one
           row and wrap together on narrow screens. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
+      <div className="c2t-page-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
         <NotificationBell />
         {walletBalance !== null && (
           <button
